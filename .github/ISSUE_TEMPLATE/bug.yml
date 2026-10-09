@@ -1,0 +1,17 @@
+name: Bug
+description: Something is broken
+labels: ["type:bug"]
+body:
+  - type: textarea
+    id: expected
+    attributes: { label: Expected vs actual behaviour }
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes: { label: Steps to reproduce }
+    validations: { required: true }
+  - type: textarea
+    id: regression
+    attributes:
+      label: Regression test plan
+      description: The fix PR MUST include a test that fails without the fix.

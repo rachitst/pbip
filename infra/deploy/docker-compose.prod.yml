@@ -1,0 +1,68 @@
+# Production-like stack pulled from GHCR (no build, no published DB/Redis ports).
+# Copy this file + a real .env (see .env.prod.example) to the server, then:
+#   IMAGE_TAG=v0.1.0 docker compose -f docker-compose.prod.yml pull && ... up -d
+name: pbip-prod
+
+x-api-env: &api-env
+  APP_ENV: ${APP_ENV:-staging}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+  REDIS_URL: redis://redis:6379/0
+  JWT_SECRET: ${JWT_SECRET}
+  FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY}
+  CORS_ORIGINS: ${CORS_ORIGINS}
+  COOKIE_SECURE: ${COOKIE_SECURE:-true}
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redisdata:/data]
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 5s, retries: 20 }
+    restart: unless-stopped
+  migrate:
+    image: ${IMAGE_PREFIX}/api:${IMAGE_TAG}
+    environment: *api-env
+    command: ["alembic", "-c", "/app/apps/api/alembic.ini", "upgrade", "head"]
+    depends_on: { db: { condition: service_healthy } }
+    restart: "no"
+  api:
+    image: ${IMAGE_PREFIX}/api:${IMAGE_TAG}
+    environment: *api-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+  worker:
+    image: ${IMAGE_PREFIX}/api:${IMAGE_TAG}
+    environment: *api-env
+    command: ["celery", "-A", "pbip_api.worker.celery_app", "worker", "--loglevel=INFO"]
+    depends_on: { redis: { condition: service_healthy } }
+    restart: unless-stopped
+  beat:
+    image: ${IMAGE_PREFIX}/api:${IMAGE_TAG}
+    environment: *api-env
+    command: ["celery", "-A", "pbip_api.worker.celery_app", "beat", "--loglevel=INFO", "--schedule=/tmp/celerybeat-schedule"]
+    depends_on: { redis: { condition: service_healthy } }
+    restart: unless-stopped
+  web:
+    image: ${IMAGE_PREFIX}/web:${IMAGE_TAG}
+    depends_on: [api]
+    ports: ["${PUBLIC_PORT:-80}:8080"]
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:

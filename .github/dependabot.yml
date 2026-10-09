@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    labels: [type:chore, area:infra]
+  - package-ecosystem: pip
+    directory: /
+    schedule: { interval: weekly }
+    labels: [type:chore, area:api]
+    groups:
+      python-minor-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: npm
+    directory: /apps/web
+    schedule: { interval: weekly }
+    labels: [type:chore, area:web]
+    groups:
+      web-minor-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: docker
+    directory: /apps/api
+    schedule: { interval: weekly }
+    labels: [type:chore, area:infra]
+  - package-ecosystem: docker
+    directory: /apps/web
+    schedule: { interval: weekly }
+    labels: [type:chore, area:infra]

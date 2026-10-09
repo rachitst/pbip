@@ -1,0 +1,78 @@
+# Fast checks on every commit; slower ones at push time; EVERYTHING again in CI.
+# Install:  make setup   (or)  uv run pre-commit install --hook-type pre-commit --hook-type commit-msg --hook-type pre-push
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+        exclude: ^docs/api/openapi\.json$|^apps/web/src/api/schema\.d\.ts$
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=500]
+        exclude: ^uv\.lock$|^apps/web/package-lock\.json$
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.10
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: ^uv\.lock$|^apps/web/package-lock\.json$
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.0.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: [feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert, security]
+
+  - repo: local
+    hooks:
+      - id: web-prettier-eslint
+        name: web - prettier + eslint
+        entry: bash -c 'cd apps/web && npm run format:check --silent && npm run lint --silent'
+        language: system
+        files: ^apps/web/
+        pass_filenames: false
+      - id: mypy-strict
+        name: mypy (strict)
+        entry: uv run mypy apps/api/src ml/src data-gen/src
+        language: system
+        pass_filenames: false
+        types: [python]
+        stages: [pre-push]
+      - id: import-linter
+        name: module boundaries
+        entry: uv run lint-imports
+        language: system
+        pass_filenames: false
+        types: [python]
+        stages: [pre-push]
+      - id: fast-unit-tests
+        name: fast unit tests (no DB)
+        entry: uv run pytest -m "unit" -q -x
+        language: system
+        pass_filenames: false
+        types: [python]
+        stages: [pre-push]
+      - id: openapi-up-to-date
+        name: OpenAPI contract is current
+        entry: uv run python scripts/export_openapi.py --check
+        language: system
+        pass_filenames: false
+        files: ^apps/api/src/
+        stages: [pre-push]

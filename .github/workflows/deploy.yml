@@ -1,0 +1,81 @@
+name: Deploy
+
+# Package -> Deploy -> Smoke test. Runs when you push a version tag (git tag v0.1.0 && git push --tags)
+# or manually. Tags are cut from `main`, which is protected, so CI has already passed on that commit.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  package:
+    name: Build and push images to GHCR
+    runs-on: ubuntu-latest
+    outputs:
+      image_prefix: ${{ steps.meta.outputs.prefix }}
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: meta
+        run: |
+          echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          echo "tag=${GITHUB_REF_NAME//\//-}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.prefix }}/api:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.prefix }}/api:latest
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.prefix }}/web:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.prefix }}/web:latest
+
+  deploy:
+    name: Deploy to staging and smoke test
+    needs: package
+    # Enable by setting repository VARIABLE DEPLOY_ENABLED=true plus the secrets listed in README.
+    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Copy compose file
+        env: { HOST: "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" }
+        run: scp -i ~/.ssh/id_deploy infra/deploy/docker-compose.prod.yml "$HOST":~/pbip/docker-compose.prod.yml
+      - name: Pull and restart
+        env:
+          HOST: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+          IMAGE_PREFIX: ${{ needs.package.outputs.image_prefix }}
+          IMAGE_TAG: ${{ needs.package.outputs.tag }}
+        run: |
+          ssh -i ~/.ssh/id_deploy "$HOST" \
+            "cd ~/pbip && IMAGE_PREFIX='$IMAGE_PREFIX' IMAGE_TAG='$IMAGE_TAG' docker compose -f docker-compose.prod.yml pull \
+             && IMAGE_PREFIX='$IMAGE_PREFIX' IMAGE_TAG='$IMAGE_TAG' docker compose -f docker-compose.prod.yml up -d --remove-orphans"
+      - name: Smoke test
+        env: { URL: "${{ vars.STAGING_URL }}" }
+        run: bash scripts/smoke_test.sh "$URL"

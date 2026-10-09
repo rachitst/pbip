@@ -1,0 +1,33 @@
+[project]
+name = "pbip-api"
+version = "0.1.0"
+description = "PBIP FastAPI modular monolith"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "pydantic[email]>=2.10",
+    "pydantic-settings>=2.7",
+    "sqlalchemy>=2.0.36",
+    "alembic>=1.14",
+    "psycopg[binary]>=3.2",
+    "redis>=5.2",
+    "celery>=5.4",
+    "structlog>=24.4",
+    "prometheus-client>=0.21",
+    "cryptography>=44",
+    "pbip-ml",
+    "argon2-cffi>=25.1.0",
+    "pyjwt>=2.15.1",
+    "pyotp>=2.10.0",
+]
+
+[tool.uv.sources]
+pbip-ml = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pbip_api"]

@@ -1,0 +1,11 @@
+# Replace BOTH usernames (make setup-owners or sed). Both engineers own everything so GitHub
+# requests a review from the OTHER person on every PR (authors cannot approve their own PR).
+* @YOUR_GITHUB_USERNAME @TEAMMATE_GITHUB_USERNAME
+
+# Money-critical and security-critical paths: always both reviewers, never bypass.
+/apps/api/src/pbip_api/modules/ledger/        @YOUR_GITHUB_USERNAME @TEAMMATE_GITHUB_USERNAME
+/apps/api/src/pbip_api/modules/payments/      @YOUR_GITHUB_USERNAME @TEAMMATE_GITHUB_USERNAME
+/apps/api/src/pbip_api/modules/auth/          @YOUR_GITHUB_USERNAME @TEAMMATE_GITHUB_USERNAME
+/apps/api/src/pbip_api/core/security.py       @YOUR_GITHUB_USERNAME @TEAMMATE_GITHUB_USERNAME
+/apps/api/alembic/                            @YOUR_GITHUB_USERNAME @TEAMMATE_GITHUB_USERNAME
+/.github/                                     @YOUR_GITHUB_USERNAME @TEAMMATE_GITHUB_USERNAME

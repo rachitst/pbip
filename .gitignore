@@ -1,0 +1,49 @@
+# Secrets - never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+coverage.xml
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# Node / web
+node_modules/
+apps/web/dist/
+apps/web/coverage/
+apps/web/playwright-report/
+apps/web/test-results/
+
+# ML / data (large or regenerated)
+ml/data/raw/
+ml/artifacts/
+data-gen/output/
+mlruns/
+mlartifacts/
+*.parquet
+*.ipynb_checkpoints/
+
+# Editors / OS
+.idea/
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Docker
+docker-compose.override.yml
+*.tsbuildinfo

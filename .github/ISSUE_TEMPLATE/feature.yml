@@ -1,0 +1,26 @@
+name: Feature / user story
+description: A user-visible capability
+labels: ["type:feat"]
+body:
+  - type: textarea
+    id: story
+    attributes:
+      label: User story
+      description: "As a <role>, I want <capability>, so that <benefit>."
+    validations: { required: true }
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Testable bullet points (Given/When/Then is fine).
+    validations: { required: true }
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Scope tier
+      options: ["tier:must", "tier:should", "tier:could"]
+    validations: { required: true }
+  - type: textarea
+    id: notes
+    attributes:
+      label: Security / data / API notes

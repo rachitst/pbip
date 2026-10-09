@@ -1,0 +1,28 @@
+groups:
+  - name: pbip
+    rules:
+      - alert: ApiHighErrorRate
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.02
+        for: 5m
+        labels: { severity: page }
+        annotations: { summary: "More than 2% of API requests are failing" }
+      - alert: ApiSlowP95
+        expr: histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m]))) > 0.5
+        for: 10m
+        labels: { severity: ticket }
+        annotations: { summary: "API p95 latency above 500 ms" }
+      - alert: FraudScoringSlow
+        expr: histogram_quantile(0.95, sum by (le) (rate(fraud_inference_seconds_bucket[5m]))) > 0.1
+        for: 10m
+        labels: { severity: ticket }
+        annotations: { summary: "Fraud scoring p95 above 100 ms" }
+      - alert: LoginFailureSpike
+        expr: sum(rate(login_failures_total[5m])) > 1
+        for: 5m
+        labels: { severity: ticket }
+        annotations: { summary: "Sustained failed logins - possible credential stuffing" }
+      - alert: CeleryBacklog
+        expr: redis_key_size{key="celery"} > 100
+        for: 10m
+        labels: { severity: ticket }
+        annotations: { summary: "Celery queue backlog above 100 tasks" }
