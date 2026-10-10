@@ -5,18 +5,21 @@ double-entry ledger, idempotent payments, MFA, object-level authorization, expla
 tamper-evident audit trail, observability and a full CI/CD pipeline. (No real money; synthetic data only.)
 
 * **Start here:** [`docs/PROJECT_BLUEPRINT.md`](docs/PROJECT_BLUEPRINT.md) - architecture, plan, scope, demo.
+* **Complete Setup Guide (Ubuntu & Windows):** [`docs/SETUP_GUIDE.md`](docs/SETUP_GUIDE.md) - zero-assumption setup, native PowerShell, Docker, troubleshooting.
 * **Working with AI assistants:** [`AGENTS.md`](AGENTS.md). **Contributing:** [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Quick start (about 10 minutes)
 
-### 0. Install once
-| Tool | Windows | macOS / Linux |
-|---|---|---|
-| **WSL2 + Ubuntu** (recommended on Windows) | `wsl --install` in an admin PowerShell, reboot, open "Ubuntu". Do **everything below inside Ubuntu**. Keep the repo in the Linux filesystem (`~/pbip`), not `/mnt/c`. | not needed |
-| Git, make, curl | `sudo apt update && sudo apt install -y git make curl` | preinstalled / `brew install git make` |
-| Docker | Docker Desktop with *WSL integration* enabled | Docker Desktop / Docker Engine |
-| uv (Python) | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | same |
-| Node 22 | `curl -fsSL https://deb.nodesource.com/setup_22.x \| sudo -E bash - && sudo apt install -y nodejs` | `brew install node@22` |
+PBIP supports **native Ubuntu Linux** (via `make` or `python scripts/dev.py`) and **native Windows 10/11** (via PowerShell `.\dev.ps1` or `dev.cmd`) without requiring WSL2. For full setup instructions, see [`docs/SETUP_GUIDE.md`](docs/SETUP_GUIDE.md).
+
+### 0. Install prerequisites
+| Tool | Native Windows | Ubuntu / Debian | macOS |
+|---|---|---|---|
+| Git | `winget install Git.Git` | `sudo apt install git` | `brew install git` |
+| uv (Python) | `winget install Astral-sh.uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `brew install uv` |
+| Node.js 22 | `winget install OpenJS.NodeJS.LTS` | `curl -fsSL https://deb.nodesource.com/setup_22.x \| sudo bash -` | `brew install node@22` |
+| Docker | Docker Desktop | Docker Engine / Desktop | Docker Desktop |
+| GitHub CLI | `winget install GitHub.cli` | `sudo apt install gh` | `brew install gh` |
 
 ### 1. Run it
 ```bash
@@ -56,7 +59,7 @@ variable `DEPLOY_ENABLED=true`, deploys over SSH and runs `scripts/smoke_test.sh
 `infra/deploy/.env.prod.example`.
 
 ## Troubleshooting
-* `make: command not found` on Windows -> you are not inside WSL Ubuntu.
+* `make: command not found` on Windows -> use native PowerShell wrapper `.\dev.ps1 <command>` or `dev.cmd <command>` (see `docs/SETUP_GUIDE.md`).
 * Tests skip with "run `make infra-up`" -> PostgreSQL is not running (in CI a missing DB is a hard failure).
 * `NoReferencedTableError` -> a new `models.py` was not added to `pbip_api/modules/__init__.py` and `alembic/env.py`.
 * `alembic check` fails -> model changed without a migration: `alembic revision --autogenerate`.

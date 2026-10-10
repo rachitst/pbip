@@ -79,7 +79,11 @@ def main() -> int:
             user = service.create_user(email, DEMO_PASSWORD, name, [role], meta)
             enrollment = service.begin_mfa_enrollment(user.id)
             now = time.time()
-            service.clock = lambda now=now: now  # type: ignore[method-assign]
+
+            def fixed_clock(saved_now: float = now) -> float:
+                return saved_now
+
+            service.clock = fixed_clock
             service.confirm_mfa_enrollment(
                 user.id, pyotp.TOTP(enrollment.secret).at(int(now)), meta
             )

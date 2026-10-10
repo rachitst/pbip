@@ -4,6 +4,8 @@
 !.env.example
 *.pem
 *.key
+.dev-secrets.txt
+.backlog-state.json
 
 # Python
 __pycache__/

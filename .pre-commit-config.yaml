@@ -44,7 +44,7 @@ repos:
     hooks:
       - id: web-prettier-eslint
         name: web - prettier + eslint
-        entry: bash -c 'cd apps/web && npm run format:check --silent && npm run lint --silent'
+        entry: python scripts/dev.py web-lint
         language: system
         files: ^apps/web/
         pass_filenames: false
