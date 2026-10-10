@@ -9,7 +9,7 @@ COPY apps/web/ ./
 COPY docs/api/openapi.json /app/docs/api/openapi.json
 RUN npm run build
 
-FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
+FROM nginxinc/nginx-unprivileged:1.31-alpine AS runtime
 COPY infra/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY infra/nginx/security-headers.conf /etc/nginx/pbip-security-headers.conf
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
