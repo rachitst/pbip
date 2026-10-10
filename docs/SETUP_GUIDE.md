@@ -17,7 +17,7 @@ PBIP fully supports **native Ubuntu Linux** (via `make` or `python scripts/dev.p
 8. [URLs, Ports, Health Checks & Log Access](#8-urls-ports-health-checks--log-access)
 9. [Stopping Services & Workspace Cleanliness](#9-stopping-services--workspace-cleanliness)
 10. [GitHub CLI Setup & Project Automation](#10-github-cli-setup--project-automation)
-11. [Teammate / Second Contributor Onboarding](#11-teammate--second-contributor-onboarding)
+11. [Team Contributor Onboarding](#11-team-contributor-onboarding)
 12. [Common Troubleshooting & FAQ](#12-common-troubleshooting--faq)
 
 ---
@@ -342,11 +342,11 @@ gh auth login
 ### 10.2 Configure Repository Settings & Milestones (`setup_github.py`)
 Run the GitHub setup script in dry-run mode first:
 ```bash
-python scripts/setup_github.py <OWNER>/<REPO> --teammate <FRIEND_USERNAME> --dry-run
+python scripts/setup_github.py <OWNER>/<REPO> --collaborators <COLLABORATOR_USERNAME> --dry-run
 ```
 When ready to apply configuration (labels, 7 sprint milestones, merge options):
 ```bash
-python scripts/setup_github.py <OWNER>/<REPO> --teammate <FRIEND_USERNAME>
+python scripts/setup_github.py <OWNER>/<REPO> --collaborators <COLLABORATOR_USERNAME>
 ```
 
 ### 10.3 Backlog Validation & Issue Import (`backlog.py`)
@@ -365,27 +365,27 @@ python scripts/backlog.py <OWNER>/<REPO> --project-number 1
 
 ---
 
-## 11. Teammate / Second Contributor Onboarding
+## 11. Team Contributor Onboarding
 
-When your project partner sets up their machine:
+When a new team contributor sets up their machine:
 
-1. Partner clones the repository:
+1. Contributor clones the repository:
    ```bash
    git clone https://github.com/<OWNER>/<REPO>.git
    cd pbip
    ```
-2. Partner runs diagnostics:
+2. Contributor runs diagnostics:
    - Ubuntu: `make doctor`
    - Windows: `.\dev.ps1 doctor`
-3. Partner sets up dependencies and `.env`:
+3. Contributor sets up dependencies and `.env`:
    - Ubuntu: `make setup`
    - Windows: `.\dev.ps1 setup`
-4. Partner boots local databases, runs migrations and seeds data:
+4. Contributor boots local databases, runs migrations and seeds data:
    ```bash
    make infra-up && make migrate && make seed
    # Windows: .\dev.ps1 infra-up; .\dev.ps1 migrate; .\dev.ps1 seed
    ```
-5. Partner validates test suite:
+5. Contributor validates test suite:
    ```bash
    make test-unit && make test-web
    ```
@@ -395,7 +395,7 @@ When your project partner sets up their machine:
    - Branch: `git switch -c feat/<issue-id>-<short-description>`.
    - Write code + tests + verify with `make check`.
    - Open Pull Request referencing the task (e.g. `Resolves #12`).
-   - Partner reviews PR -> CI Gate passes -> Squash-merge to `main`.
+   - Peer review PR -> CI Gate passes -> Squash-merge to `main`.
 
 ---
 

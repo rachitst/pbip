@@ -1,7 +1,7 @@
 # ADR 0003: Idempotency enforced in PostgreSQL, not Redis
 - Status: Accepted
 - Date: 2026-10-07
-- Deciders: A, B
+- Deciders: Architecture Team
 
 ## Context
 Retries must never duplicate a transfer, even after crashes, and concurrent duplicates must collapse to one.

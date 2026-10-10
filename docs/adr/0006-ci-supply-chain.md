@@ -1,7 +1,7 @@
 # ADR 0006: First-party GitHub Actions and locked scanners
 - Status: Accepted
 - Date: 2026-10-07
-- Deciders: A, B
+- Deciders: Architecture Team
 
 ## Context
 Mutable third-party action tags have been used for supply-chain attacks (a popular scanner's action was reported compromised in March 2026).

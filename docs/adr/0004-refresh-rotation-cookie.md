@@ -1,7 +1,7 @@
 # ADR 0004: Rotating refresh tokens in HttpOnly cookies; access token in memory
 - Status: Accepted
 - Date: 2026-10-07
-- Deciders: A, B
+- Deciders: Architecture Team
 
 ## Context
 Tokens in localStorage are exfiltrable by XSS; long-lived JWTs cannot be revoked.

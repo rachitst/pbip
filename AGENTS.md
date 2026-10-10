@@ -14,7 +14,7 @@ Read `docs/PROJECT_BLUEPRINT.md` (source of truth) before any non-trivial change
 4. **If an API changes, update the OpenAPI contract and the relevant tests**: run `make openapi` and commit
    `docs/api/openapi.json` and `apps/web/src/api/schema.d.ts`.
 5. **Explain architectural impact BEFORE any major change** (new module, new dependency, changed contract
-   between the platform and ML lanes, new table, new background job, security-model change). Write it in the
+   between the platform and ML packages/domains, new table, new background job, security-model change). Write it in the
    PR description or an ADR (`docs/adr/`) and wait for confirmation. Do not "just do it".
 6. **Do not modify unrelated files.** Smallest diff that solves the problem. No drive-by refactors, no
    reformatting of untouched code, no dependency bumps inside a feature PR.
@@ -59,7 +59,7 @@ nothing by hand. Justify every new dependency in the PR (maintenance, licence, s
 * **Models registry:** every new `models.py` MUST be added to `pbip_api/modules/__init__.py` and
   `alembic/env.py`. (Without this, Celery/scripts fail with `NoReferencedTableError` - regression-tested.)
 * **ML separation:** training code never runs on the request path. The API depends only on
-  `pbip_ml.*.contract` and inference modules. Changing a `contract.py` is a cross-lane decision (ADR).
+  `pbip_ml.*.contract` and inference modules. Changing a `contract.py` is an architectural cross-domain decision (ADR).
 * **Node.js is build tooling only.** There is no Node runtime in production (static files behind nginx).
 
 ## 3. Code standards
@@ -93,7 +93,7 @@ staging/production must refuse to boot with dev secrets (tested).
 * One use case = one DB transaction. Failure paths that must persist evidence (failed logins, lockouts,
   token-family revocation) `commit()` before raising; business failures must leave NO partial state.
 * Money-moving POST endpoints require the `Idempotency-Key` header and must be replay-safe.
-* Any change in `ledger/`, `payments/`, `auth/`, `core/security.py`, `alembic/` requires BOTH engineers'
+* Any change in `ledger/`, `payments/`, `auth/`, `core/security.py`, `alembic/` requires peer
   review (CODEOWNERS) and concurrency/negative tests.
 
 ## 5. Security checklist (apply to EVERY endpoint and PR)
@@ -177,7 +177,7 @@ staging/production must refuse to boot with dev secrets (tested).
 
 * Short-lived branches `feat/...`, `fix/...`, `docs/...`; **Conventional Commits** (`feat(payments): ...`;
   enforced by hook). One concern per PR, ideally < 400 changed lines. Squash-merge only.
-* The **other engineer reviews every PR**; CI (`CI Gate`) must pass. Never push to `main`, never `--no-verify`,
+* **Peer review is required for every PR**; CI (`CI Gate`) must pass. Never push to `main`, never `--no-verify`,
   never force-push shared branches, never disable a hook or CI job to get unblocked.
 * PR description: what/why, tests added, architectural impact, how to verify (use the template).
 
@@ -196,4 +196,4 @@ without a one-line reason - hand-edit generated files (`schema.d.ts`, `openapi.j
 ## 14. Definition of done
 
 Code + tests + migration (if schema) + regenerated contract (if API) + docs updated + `make check` green +
-security checklist (section 5) ticked + PR reviewed by the other engineer + CI Gate green.
+security checklist (section 5) ticked + peer-reviewed PR approved + CI Gate green.

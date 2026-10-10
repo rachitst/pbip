@@ -14,7 +14,7 @@
 - [ ] Docs updated (README / blueprint / ADR if architecture changed)
 
 ## Architectural impact
-<!-- "None" or explain: new module, new dependency, changed contract between lanes, etc. -->
+<!-- "None" or explain: new module, new dependency, changed contract between modules/domains, etc. -->
 
 ## How to verify
 <!-- Commands / screenshots / demo script -->

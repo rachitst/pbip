@@ -56,30 +56,36 @@ def test_parse_env_file_quotes_and_escapes(tmp_path: Path) -> None:
         r"""
 SINGLE_QUOTED='hello # not a comment'
 DOUBLE_QUOTED="some \"value\" with \n and \t"
-PASSWORD_WITH_HASH="p@ss#word"
+VAR_WITH_HASH="val#hash"
 """,
         encoding="utf-8",
     )
     result = parse_env_file(env_file)
     assert result["SINGLE_QUOTED"] == "hello # not a comment"
     assert result["DOUBLE_QUOTED"] == 'some "value" with \n and \t'
-    assert result["PASSWORD_WITH_HASH"] == "p@ss#word"
+    assert result["VAR_WITH_HASH"] == "val#hash"
 
 
 def test_derive_test_database_url_default() -> None:
     url = derive_test_database_url()
-    assert url == "postgresql+psycopg://pbip:pbip_local_password@localhost:5432/pbip_test"
+    assert (
+        url
+        == "postgresql+psycopg://pbip:pbip_local_password@localhost:5432/pbip_test"  # pragma: allowlist secret
+    )
 
 
 def test_derive_test_database_url_custom_db() -> None:
     url = derive_test_database_url(
         user="custom_user",
-        password="custom_password",
+        password="custom_password",  # pragma: allowlist secret
         db="retail_bank",
         host="localhost",
         port=5432,
     )
-    assert url == "postgresql+psycopg://custom_user:custom_password@localhost:5432/retail_bank_test"
+    assert (
+        url
+        == "postgresql+psycopg://custom_user:custom_password@localhost:5432/retail_bank_test"  # pragma: allowlist secret
+    )
 
 
 def test_derive_test_database_url_special_characters() -> None:
@@ -118,10 +124,12 @@ def test_derive_test_database_url_special_characters() -> None:
 def test_build_test_env_respects_explicit_test_database_url(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
     env_file.write_text(
-        "TEST_DATABASE_URL=postgresql+psycopg://file_user:file_pass@localhost:5432/file_test\n",
+        "TEST_DATABASE_URL=postgresql+psycopg://file_user:file_pass@localhost:5432/file_test\n",  # pragma: allowlist secret
         encoding="utf-8",
     )
-    explicit_url = "postgresql+psycopg://cli_user:cli_pass@remote:5432/cli_test"
+    explicit_url = (
+        "postgresql+psycopg://cli_user:cli_pass@remote:5432/cli_test"  # pragma: allowlist secret
+    )
     result = build_test_env(
         env_path=env_file,
         explicit_env={"TEST_DATABASE_URL": explicit_url},
@@ -132,7 +140,7 @@ def test_build_test_env_respects_explicit_test_database_url(tmp_path: Path) -> N
 def test_build_test_env_uses_file_test_database_url_if_not_in_explicit(
     tmp_path: Path,
 ) -> None:
-    file_url = "postgresql+psycopg://file_user:file_pass@localhost:5432/file_test"
+    file_url = "postgresql+psycopg://file_user:file_pass@localhost:5432/file_test"  # pragma: allowlist secret
     env_file = tmp_path / ".env"
     env_file.write_text(f"TEST_DATABASE_URL={file_url}\n", encoding="utf-8")
     result = build_test_env(env_path=env_file, explicit_env={})
@@ -154,33 +162,32 @@ POSTGRES_DB=core_banking
     result = build_test_env(env_path=env_file, explicit_env={})
     assert (
         result["TEST_DATABASE_URL"]
-        == "postgresql+psycopg://admin_user:secret_pwd@localhost:5432/core_banking_test"
+        == "postgresql+psycopg://admin_user:secret_pwd@localhost:5432/core_banking_test"  # pragma: allowlist secret
     )
 
 
 def test_build_test_env_explicit_overrides_file_variables(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
-    env_file.write_text(
-        """
-POSTGRES_USER=file_user
-POSTGRES_PASSWORD=file_pwd
-POSTGRES_DB=file_db
-DATABASE_URL=postgresql+psycopg://file_user:file_pwd@localhost:5432/file_db
-""",
-        encoding="utf-8",
+    env_content = (
+        "POSTGRES_USER=file_user\n"
+        "POSTGRES_PASSWORD=file_pwd\n"
+        "POSTGRES_DB=file_db\n"
+        "DATABASE_URL=postgresql+psycopg://file_user:file_pwd@localhost:5432/file_db\n"  # pragma: allowlist secret
     )
+    env_file.write_text(env_content, encoding="utf-8")
     # Explicit override of POSTGRES_USER should be used in derivation
     explicit = {"POSTGRES_USER": "override_user"}
     result = build_test_env(env_path=env_file, explicit_env=explicit)
     assert result["POSTGRES_USER"] == "override_user"
-    assert result["POSTGRES_PASSWORD"] == "file_pwd"
+    assert result["POSTGRES_PASSWORD"] == "file_pwd"  # pragma: allowlist secret
     assert result["POSTGRES_DB"] == "file_db"
     assert (
         result["TEST_DATABASE_URL"]
-        == "postgresql+psycopg://override_user:file_pwd@localhost:5432/file_db_test"
+        == "postgresql+psycopg://override_user:file_pwd@localhost:5432/file_db_test"  # pragma: allowlist secret
     )
     assert (
-        result["DATABASE_URL"] == "postgresql+psycopg://file_user:file_pwd@localhost:5432/file_db"
+        result["DATABASE_URL"]
+        == "postgresql+psycopg://file_user:file_pwd@localhost:5432/file_db"  # pragma: allowlist secret
     )
 
 
@@ -188,16 +195,14 @@ def test_build_test_env_derives_with_special_characters_in_env_file(
     tmp_path: Path,
 ) -> None:
     env_file = tmp_path / ".env"
-    env_file.write_text(
-        """
-POSTGRES_USER=bank_user
-POSTGRES_PASSWORD="pass/word@123#special"
-POSTGRES_DB=pbip
-""",
-        encoding="utf-8",
+    env_content = (
+        "POSTGRES_USER=bank_user\n"
+        'POSTGRES_PASSWORD="pass/word@123#special"\n'  # pragma: allowlist secret
+        "POSTGRES_DB=pbip\n"
     )
+    env_file.write_text(env_content, encoding="utf-8")
     result = build_test_env(env_path=env_file, explicit_env={})
     assert (
         result["TEST_DATABASE_URL"]
-        == "postgresql+psycopg://bank_user:pass%2Fword%40123%23special@localhost:5432/pbip_test"
+        == "postgresql+psycopg://bank_user:pass%2Fword%40123%23special@localhost:5432/pbip_test"  # pragma: allowlist secret
     )

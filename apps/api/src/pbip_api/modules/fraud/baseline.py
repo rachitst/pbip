@@ -1,8 +1,8 @@
-"""Baseline, fully explainable rules scorer (A-owned stop-gap until the ML engine ships).
+"""Baseline, fully explainable rules scorer (deterministic stop-gap until the ML engine ships).
 
 Implements the ``FraudScorer`` contract. Every point of score is attributed to a named rule with
-a human-readable message, so an analyst can always see WHY a transfer was flagged. Person B's
-hybrid engine (rules + LightGBM + Isolation Forest + SHAP) replaces/wraps this behind the same
+a human-readable message, so an analyst can always see WHY a transfer was flagged. The downstream
+hybrid engine (rules + LightGBM + Isolation Forest + SHAP) wraps this behind the same
 interface; these rules become its deterministic layer.
 """
 
