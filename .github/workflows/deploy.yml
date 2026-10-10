@@ -30,7 +30,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/api/Dockerfile
@@ -38,7 +38,7 @@ jobs:
           tags: |
             ${{ steps.meta.outputs.prefix }}/api:${{ steps.meta.outputs.tag }}
             ${{ steps.meta.outputs.prefix }}/api:latest
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/web/Dockerfile
