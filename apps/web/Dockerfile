@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Build context is apps/web/ ... but nginx config lives in infra/, so use the REPO ROOT as context:
 #   docker build -f apps/web/Dockerfile .
-FROM node:22-alpine AS build
+FROM node:25-alpine AS build
 WORKDIR /app/apps/web
 COPY apps/web/package.json apps/web/package-lock.json ./
 RUN npm ci
