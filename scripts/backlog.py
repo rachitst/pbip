@@ -215,7 +215,9 @@ def validate_backlog(tasks: list[Task]) -> tuple[bool, list[str]]:
     return len(errors) == 0, errors
 
 
-def print_backlog_statistics(tasks: list[Task]) -> None:
+def print_backlog_statistics(
+    tasks: list[Task], capacity_days: float = BUFFER_CAPACITY_DAYS
+) -> None:
     """Print detailed workload breakdown and capacity analysis."""
     sys.stdout.write("\n=======================================================\n")
     sys.stdout.write("      PBIP 7-Sprint Backlog Workload & Capacity Report\n")
@@ -251,9 +253,9 @@ def print_backlog_statistics(tasks: list[Task]) -> None:
         total_person_days += p_days
 
         status = "BALANCED"
-        if p_days > BUFFER_CAPACITY_DAYS * 1.5:
+        if p_days > capacity_days * 1.5:
             status = "OVERLOADED (Requires deferral/split)"
-        elif p_days > BUFFER_CAPACITY_DAYS:
+        elif p_days > capacity_days:
             status = "TIGHT (Near capacity)"
 
         sys.stdout.write(
@@ -285,9 +287,10 @@ def print_backlog_statistics(tasks: list[Task]) -> None:
         f"\nPriority Distribution: Must={must_cnt}, Should={should_cnt}, Could={could_cnt}\n"
     )
     sys.stdout.write(
-        "Capacity: 2 devs, 10 days/sprint = 20 person-days nominal.\n"
-        "Reserve: 25% for peer review, pair debugging, university commitments.\n"
-        "Net Productive Capacity: ~15 person-days (24-30 points) per sprint.\n\n"
+        "Planning Guideline: Capacity scales with available team size and sprint duration.\n"
+        "Reserve: 20-25% buffer recommended for peer review, integration testing,\n"
+        "and unforeseen complexity.\n"
+        f"Baseline Reference Capacity: ~{capacity_days:.1f} person-days per sprint.\n\n"
     )
 
 
@@ -413,7 +416,8 @@ def import_tasks(
     return 0
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """Build argument parser for backlog CLI."""
     parser = argparse.ArgumentParser(description="PBIP Backlog Validator & GitHub Importer")
     parser.add_argument("repo", nargs="?", help="Target GitHub repository (OWNER/REPO)")
     parser.add_argument(
@@ -426,10 +430,23 @@ def main() -> int:
         "--dry-run", action="store_true", help="Preview GitHub Issue creation without executing"
     )
     parser.add_argument(
-        "--project-number", type=int, help="Optional GitHub Project (v2) number to add issues to"
+        "--project-number",
+        type=int,
+        default=None,
+        help="Optional GitHub Project (v2) number to add issues to",
+    )
+    parser.add_argument(
+        "--capacity-days",
+        type=float,
+        default=BUFFER_CAPACITY_DAYS,
+        help=f"Configurable sprint person-day capacity threshold (default: {BUFFER_CAPACITY_DAYS})",
     )
     parser.add_argument("--file", type=Path, default=BACKLOG_FILE, help="Path to backlog.toml")
+    return parser
 
+
+def main() -> int:
+    parser = build_parser()
     args = parser.parse_args()
 
     tasks = load_backlog(args.file)
@@ -443,7 +460,7 @@ def main() -> int:
 
     if args.validate or args.stats or not args.repo:
         sys.stdout.write(f"[VALID] Successfully validated {len(tasks)} tasks in {args.file}.\n")
-        print_backlog_statistics(tasks)
+        print_backlog_statistics(tasks, capacity_days=args.capacity_days)
         if not args.repo:
             return 0
 

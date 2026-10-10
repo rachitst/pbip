@@ -240,7 +240,7 @@ acceptance_criteria = [
     "No WSL requirement for Windows developers to run native commands",
 ]
 dependencies = ["TASK-001", "TASK-002"]
-definition_of_done = "Reviewed by both teammates, tested against fresh clone on Ubuntu and Windows."
+definition_of_done = "Peer-reviewed, tested against fresh clone on Ubuntu and Windows."
 
 # ==============================================================================
 # SPRINT 2 (Weeks 3-4): Money-Movement Complete & Fraud Data v2
@@ -493,7 +493,7 @@ acceptance_criteria = [
     "Sequence diagrams for double-entry ledger lock ordering and idempotency resolution",
 ]
 dependencies = ["TASK-014", "TASK-015"]
-definition_of_done = "Reviewed by both teammates, committed to docs/architecture/LLD.md."
+definition_of_done = "Peer-reviewed, committed to docs/architecture/LLD.md."
 
 [[tasks]]
 id = "TASK-028"
@@ -965,7 +965,7 @@ acceptance_criteria = [
     "Scalability analysis and production migration roadmap",
 ]
 dependencies = []
-definition_of_done = "Committed to docs/architecture/HLD.md, reviewed by both team members."
+definition_of_done = "Committed to docs/architecture/HLD.md, peer-reviewed and approved."
 
 # ==============================================================================
 # SPRINT 5 (Weeks 9-10): Intelligence Layer, AI Assistant & Wealth
@@ -1353,7 +1353,7 @@ acceptance_criteria = [
     "Incident response playbooks for fraud spike and compromised staff session",
 ]
 dependencies = []
-definition_of_done = "Reviewed by both teammates, committed to docs/operations/runbook.md."
+definition_of_done = "Peer-reviewed, committed to docs/operations/runbook.md."
 
 [[tasks]]
 id = "TASK-076"
@@ -1568,7 +1568,7 @@ acceptance_criteria = [
     "Documents concurrency stress test outcomes and deadlock prevention proof",
 ]
 dependencies = ["TASK-077", "TASK-078"]
-definition_of_done = "Committed to docs/testing/test-strategy-and-report.md, reviewed by both teammates."
+definition_of_done = "Committed to docs/testing/test-strategy-and-report.md, peer-reviewed and approved."
 
 [[tasks]]
 id = "TASK-088"
@@ -1678,4 +1678,4 @@ acceptance_criteria = [
     "High-definition video backup recorded and archived in repository artifacts",
 ]
 dependencies = ["TASK-081", "TASK-092"]
-definition_of_done = "Rehearsed 3 times by both teammates, presentation deck committed to demo/."
+definition_of_done = "Rehearsed by the development team, presentation deck committed to demo/."

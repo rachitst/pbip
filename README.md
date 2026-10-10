@@ -44,7 +44,7 @@ uv run python demo/demo_scenarios.py bola              # Bob cannot read Alice's
 
 ## Daily workflow
 `git switch -c feat/short-name` -> code + tests -> `make check` -> `git commit -m "feat(scope): ..."` ->
-`git push -u origin HEAD` -> open PR -> the **other** engineer reviews -> CI Gate green -> squash-merge.
+`git push -u origin HEAD` -> open PR -> peer review -> CI Gate green -> squash-merge.
 Useful: `make help`, `make openapi` (after API changes), `make test-unit` (no DB), `make infra-up` before `make test`.
 
 ## Layout

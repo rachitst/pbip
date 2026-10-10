@@ -1,7 +1,7 @@
 # ADR NNNN: Title
 - Status: Proposed | Accepted | Superseded by ADR-XXXX
 - Date: YYYY-MM-DD
-- Deciders: A, B
+- Deciders: Architecture Team
 
 ## Context
 What forces are at play? What problem are we solving?

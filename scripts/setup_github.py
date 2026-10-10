@@ -5,12 +5,12 @@ Configures:
 1. Squash-only merges and branch deletion on merge.
 2. Standard PBIP labels with colors and descriptions.
 3. 7 two-week sprint milestones starting from a given date.
-4. Collaborator invite with write access.
+4. Collaborator invites with write access.
 5. Branch ruleset for 'main' (from .github/rulesets/main.json).
 6. GitHub Project board creation and linking.
 
 Usage:
-    python scripts/setup_github.py OWNER/REPO --teammate FRIEND --start YYYY-MM-DD
+    python scripts/setup_github.py OWNER/REPO --collaborators USER1 USER2 --start YYYY-MM-DD
     python scripts/setup_github.py OWNER/REPO --dry-run
 """
 
@@ -169,23 +169,23 @@ def setup_milestones(repo: str, start_date_str: str, dry_run: bool) -> None:
             sys.stdout.write(f"    Created {title} (due {due.isoformat()})\n")
 
 
-def invite_teammate(repo: str, teammate: str, dry_run: bool) -> None:
+def invite_collaborator(repo: str, username: str, dry_run: bool) -> None:
     """Invite collaborator with push permissions."""
-    sys.stdout.write(f"==> Inviting collaborator @{teammate} to {repo}...\n")
+    sys.stdout.write(f"==> Inviting collaborator @{username} to {repo}...\n")
     args = [
         "api",
         "-X",
         "PUT",
-        f"repos/{repo}/collaborators/{teammate}",
+        f"repos/{repo}/collaborators/{username}",
         "-f",
         "permission=push",
     ]
     res = run_gh(args, check=False, dry_run=dry_run)
     if not dry_run and res.returncode == 0:
-        sys.stdout.write(f"    Invitation sent to @{teammate}.\n")
+        sys.stdout.write(f"    Invitation sent to @{username}.\n")
     elif not dry_run:
         sys.stdout.write(
-            f"    Notice: could not invite @{teammate} automatically. "
+            f"    Notice: could not invite @{username} automatically. "
             "Add manually via Settings > Collaborators.\n"
         )
 
@@ -252,10 +252,19 @@ def setup_project_board(repo: str, title: str, dry_run: bool) -> None:
         )
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """Build command-line argument parser."""
     parser = argparse.ArgumentParser(description="Cross-platform GitHub setup for PBIP")
     parser.add_argument("repo", help="Target repository in OWNER/REPO format")
-    parser.add_argument("--teammate", help="GitHub username of your teammate/collaborator")
+    parser.add_argument(
+        "--collaborators",
+        "--collaborator",
+        "--teammate",
+        nargs="*",
+        default=[],
+        dest="collaborators",
+        help="GitHub username(s) of collaborator(s) to invite with push access",
+    )
     parser.add_argument(
         "--start",
         default="2026-10-12",
@@ -279,16 +288,11 @@ def main() -> int:
         default="PBIP Delivery Board",
         help="Title for the GitHub Project board",
     )
+    return parser
 
-    args = parser.parse_args()
 
-    sys.stdout.write(f"PBIP GitHub Repository Setup: {args.repo}\n")
-    if args.dry_run:
-        sys.stdout.write("MODE: DRY RUN (no modifications will be made to GitHub)\n\n")
-
-    if not args.dry_run and not check_prerequisites():
-        return 1
-
+def _run_configuration_steps(args: argparse.Namespace) -> bool:
+    """Run enabled configuration steps. Returns True on success, False on error."""
     if not args.skip_settings:
         configure_merge_settings(args.repo, args.dry_run)
 
@@ -300,16 +304,34 @@ def main() -> int:
             setup_milestones(args.repo, args.start, args.dry_run)
         except ValueError as exc:
             sys.stderr.write(f"Error parsing start date: {exc}\n")
-            return 1
+            return False
 
-    if args.teammate and not args.skip_collab:
-        invite_teammate(args.repo, args.teammate, args.dry_run)
+    if args.collaborators and not args.skip_collab:
+        for collab in args.collaborators:
+            invite_collaborator(args.repo, collab, args.dry_run)
 
     if not args.skip_ruleset:
         setup_ruleset(args.repo, args.dry_run)
 
     if not args.skip_project:
         setup_project_board(args.repo, args.project_title, args.dry_run)
+
+    return True
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+
+    sys.stdout.write(f"PBIP GitHub Repository Setup: {args.repo}\n")
+    if args.dry_run:
+        sys.stdout.write("MODE: DRY RUN (no modifications will be made to GitHub)\n\n")
+
+    if not args.dry_run and not check_prerequisites():
+        return 1
+
+    if not _run_configuration_steps(args):
+        return 1
 
     sys.stdout.write(
         "\nSetup completed successfully!\n"

@@ -1,12 +1,12 @@
 # PBIP Engineering Blueprint (source of truth)
 
 **Personal Banking Intelligence Platform** - a final-year project built to the engineering standards of a
-regulated bank. Two engineers, 14 weeks, AI-assisted. This document is authoritative: if code and this
+regulated bank. AI-assisted collaborative engineering over 14 weeks. This document is authoritative: if code and this
 document disagree, fix one of them in the same PR. Decisions with trade-offs get an ADR in `docs/adr/`.
 
-Owners: **Person A = Platform** (backend core, security, ledger, payments, DevOps, observability) and
-**Person B = Intelligence** (data generation, fraud ML, analytics, forecasting, recommendations, AI assistant).
-Both write tests, review each other's PRs, and must be able to explain the whole system.
+Functional domains: **Platform Core** (backend core, security, ledger, payments, DevOps, observability) and
+**Intelligence Layer** (data generation, fraud ML, analytics, forecasting, recommendations, AI assistant).
+All contributors write tests, participate in peer review, and understand the full architecture.
 
 ---
 
@@ -47,11 +47,11 @@ to a VM, and documentation deliverables. See section 17-18.
 | Fast unit tests on every commit | Fast checks on **commit**, mypy + fast tests on **push**, everything in **CI** | Keep commits fast; never skip CI |
 | Async SQLAlchemy | **Synchronous** SQLAlchemy 2.0 + psycopg3 | Ledger correctness and Celery sharing matter more than raw concurrency; easier to reason about locks |
 | Node.js "not needed" | Node is **build tooling only** (Vite); production is static files behind nginx | One runtime language in production: Python |
-| Cut scope for 2 people | **Nothing is cut.** Scope is *sequenced* by tier with checkpoints and a slip policy (section 17) | You asked for a top-tier project; the plan protects Tier-1 quality if time slips |
+| Scope planning | **Full scope sequenced by priority tier.** Scope is *sequenced* by tier with checkpoints and a slip policy (section 17) | Plan protects Tier-1 quality if time slips |
 
-> Honest note on "2 engineers + AI = 4": AI accelerates typing, not review, integration, debugging or
+> Honest note on AI-assisted development: AI accelerates typing, not review, integration, debugging or
 > understanding. The rules in `AGENTS.md`, the test suite and mandatory peer review are what keep AI-generated
-> code safe. Plan on AI producing ~1.5-2x throughput, not 2x people.
+> code safe. Plan on AI accelerating iteration while preserving rigorous engineering standards.
 
 ---
 
@@ -71,7 +71,7 @@ Browser --HTTPS--> nginx (static React build, security headers, proxies /api)
         \_______ Prometheus <- /metrics     Loki <- Alloy (container logs)     Grafana _______/
 ```
 
-* **One deployable backend.** No microservices: with two engineers the dominant risk is integration cost, not
+* **One deployable backend.** No microservices: for the development team the dominant risk is integration cost, not
   scale. Statelessness + containers still give horizontal scalability and a clean path to splitting later
   (the fraud scorer already sits behind an interface).
 * **ML is logically separate, physically in-process.** `ml/` (package `pbip_ml`) holds contracts, features,
@@ -197,9 +197,9 @@ Planned: `statements`, `bill-payments`, `scheduled-transfers`, `loans/*`, `wealt
 forecast,health-score}`, `recommendations`, `assistant/chat`, `insights/*` (RM), `events` (clickstream),
 `fraud/stats`, `fraud/simulator/*` (demo only, disabled in production).
 
-Cross-lane contracts (change only via ADR): `pbip_ml.fraud.contract`, `forecasting.contract`,
-`recommendations.contract`. Platform calls them; ML implements them. Until B's engine lands, A uses the
-baseline scorer / test doubles, so neither lane blocks the other.
+Cross-domain contracts (change only via ADR): `pbip_ml.fraud.contract`, `forecasting.contract`,
+`recommendations.contract`. Banking core calls them; ML implements them. During early development, the platform uses the
+baseline scorer / test doubles, so neither domain blocks the other.
 
 ## 6. Authentication and security architecture
 
@@ -307,7 +307,7 @@ TransactionContext --> [feature provider] --> rules engine (deterministic, weigh
   rules-only, never ALLOW-all. Every decision is stored (`fraud_events`) for audit and retraining; analyst
   outcomes become labels (`FALSE_POSITIVE` / `CONFIRMED_FRAUD`).
 * **Today:** the baseline rules scorer implements NEW_PAYEE(+LARGE_AMOUNT), AMOUNT_SPIKE, VELOCITY_BURST,
-  LARGE_AMOUNT. Person B wraps/extends it into the hybrid engine behind the same interface.
+  LARGE_AMOUNT. The hybrid fraud engine wraps/extends it behind the same interface.
 
 **Fraud scenarios** (generator injects them with labels; MUST ones are built first)
 
@@ -345,7 +345,7 @@ fraud" is 99% accurate). **PR-AUC** focuses on the rare class; the operating thr
 **MLOps.** MLflow: experiments, params, metrics, artifacts, **model registry** with aliases (`champion`,
 `challenger`). Model + feature code versioned together; `model_version` is stamped on every decision.
 
-**Analytics & forecasting (Person B).** Spending trends/category/MoM (SQL + materialised monthly aggregates via
+**Analytics & forecasting.** Spending trends/category/MoM (SQL + materialised monthly aggregates via
 Celery), financial-health score (savings rate, expense volatility, EMI-to-income, buffer months, overdraft
 frequency; explainable components), forecasts with **prediction intervals** (statsforecast ETS/AutoARIMA; fallback
 seasonal-naive for short histories; rolling-origin backtests reporting sMAPE and interval coverage), end-of-month
@@ -447,8 +447,8 @@ third-party action to a commit SHA; Dependabot updates actions/pip/npm/docker.
 
 GitHub Issues + Projects (no Jira). Flow: **feature branch -> PR -> automated checks -> peer review -> squash merge**.
 Short-lived branches (`feat/`, `fix/`, `docs/`), Conventional Commits (hook-enforced), PR template with security
-checklist, issue templates (feature/story, bug with regression plan), `CODEOWNERS` (both engineers -> the *other*
-person is always requested; money/auth/migrations paths always need both), ruleset `protect-main`: PR required,
+checklist, issue templates (feature/story, bug with regression plan), `CODEOWNERS` (team handles configured so peer review
+is always requested; money/auth/migrations paths require approval), ruleset `protect-main`: PR required,
 1 approval from someone other than the last pusher, dismiss stale approvals, conversations resolved, linear history,
 squash only, required check `CI Gate`, no force-push/deletion, no bypass. Labels `type:*`, `area:*`, `tier:*`;
 milestones = sprints; Project board columns Backlog / Ready / In progress / In review / Done.
@@ -466,19 +466,20 @@ updates, error standards, security checklist, docs updates, test-before-commit, 
 architecture bypass, no unrelated edits, architectural-impact explanation before major changes, and the four verbatim
 rules (modify behaviour -> tests; failing test -> root cause; schema -> migration; API -> OpenAPI + tests).
 
-## 16. Two-person ownership
+## 16. Collaborative Ownership & Functional Areas
 
-| | **Person A - Platform** | **Person B - Intelligence** |
+PBIP is structured into modular functional domains. Any contributor can pick up available tasks across domains based on dependencies and project priorities:
+
+| | **Platform & Banking Core** | **Intelligence & Data Layer** |
 |---|---|---|
-| Owns | auth/RBAC/MFA hardening, accounts, ledger, payments, payees, statements, bill pay, scheduled transfers, loans, wealth, compliance, notifications, CI/CD, Docker, deploy, observability, E2E + perf, security testing, threat model | data-gen, feature pipeline, fraud engine (rules+ML+anomaly+SHAP), evaluation + model cards, MLflow, analytics, forecasting, segmentation, recommendations, AI assistant (+ adversarial suite), clickstream + behavioural analytics, attack simulator |
+| Scope | auth/RBAC/MFA hardening, accounts, ledger, payments, payees, statements, bill pay, scheduled transfers, loans, wealth, compliance, notifications, CI/CD, Docker, deploy, observability, E2E + perf, security testing, threat model | data-gen, feature pipeline, fraud engine (rules+ML+anomaly+SHAP), evaluation + model cards, MLflow, analytics, forecasting, segmentation, recommendations, AI assistant (+ adversarial suite), clickstream + behavioural analytics, attack simulator |
 | UI | app shell, customer banking pages, staff layout, auth screens | fraud-ops dashboard, analytics/forecast charts, RM insights, assistant chat |
 | Docs | HLD, LLD, deployment guide, support/ops guide, test strategy/report, threat model | ML/fraud methodology, model evaluation report, data dictionary, analytics spec |
 | Shared | requirements, user stories, use cases, ER diagram, user manual, ADRs, demo script | same |
 
-**Avoiding hard dependencies:** work against the contracts in `pbip_ml.*.contract`. A uses the baseline scorer and
-`pbip_ml.fraud.testing` doubles; B publishes mock-backed endpoints first (`/analytics/*`, `/recommendations`) so A's UI
-integrates immediately and real models drop in later. **Cross-review rule:** every PR is reviewed by the other person;
-each engineer must pair-walk the other lane's code once per sprint (so either can present any part).
+**Avoiding hard dependencies:** Work against the contracts in `pbip_ml.*.contract`. The banking core uses the baseline scorer and
+`pbip_ml.fraud.testing` doubles; mock-backed endpoints (`/analytics/*`, `/recommendations`) allow UI integration immediately while real models are trained and integrated in parallel. **Cross-review rule:** Every PR requires peer review;
+regular cross-functional walkthroughs ensure all contributors understand the entire codebase.
 
 ## 17. Scope matrix (nothing is deleted; tiers set ORDER and the slip policy)
 
@@ -493,11 +494,11 @@ evaluation report. End W8: analytics + forecasting + loans. End W10: assistant +
 End W11: **feature freeze**. If a gate is missed: drop COULD items first, then reduce SHOULD items *in depth*
 (e.g. loans without repayment-schedule UI); **never** trade away Tier-1 quality, tests, security or docs.
 
-## 18. 14-week plan (7 two-week sprints; A | B | Both)
+## 18. 14-week plan (7 two-week sprints; Platform | Intelligence | Shared)
 
-| Sprint | Theme | Person A | Person B | Both / docs |
+| Sprint | Theme | Platform Core | Intelligence Layer | Team / Docs |
 |---|---|---|---|---|
-| 1 (W1-2) | Foundations | Open-account endpoint, profile + device registration (`X-Device-ID`), password change + revoke-all-sessions, admin disable user, pagination, k6 baseline | data-gen v1 (personas, calendars, salary/bills/EMI/spend; bulk load via COPY), EDA notebook, feature definitions, MLflow up | Repo + GitHub setup, read each other's lane, ADRs, requirements + user stories, ER review |
+| 1 (W1-2) | Foundations | Open-account endpoint, profile + device registration (`X-Device-ID`), password change + revoke-all-sessions, admin disable user, pagination, k6 baseline | data-gen v1 (personas, calendars, salary/bills/EMI/spend; bulk load via COPY), EDA notebook, feature definitions, MLflow up | Repo + GitHub setup, cross-domain architecture review, ADRs, requirements + user stories, ER review |
 | 2 (W3-4) | Money-movement complete | Bill payments, scheduled/recurring transfers (Celery, idempotent per occurrence), statements PDF/CSV, transaction search/filter, notifications UI, customer dashboard shell | data-gen v2 with fraud injectors F1-F6 + labels, feature pipeline (offline/online parity tests), rules-engine registry | **Gate W4**; use cases, LLD v1 |
 | 3 (W5-6) | Fraud engine v1 | Analyst UI (queue, detail with reasons + SHAP bars), Redis velocity counters, device/geo capture, step-up UI | LightGBM + Isolation Forest + combiner + SHAP reasons, time-split evaluation report v1, MLflow registry + champion loading, `HybridFraudScorer`, fraud stats APIs | **Gate W6**; threat model v1, ML methodology draft |
 | 4 (W7-8) | Analytics, forecasting, loans | Loans (catalogue, EMI, eligibility, applications, disbursal via ledger), compliance dashboard UI, customer analytics UI (Recharts) | Spend trends/category/MoM, health score, forecasting + backtests, balance projection, segmentation v1, nightly Celery jobs | **Gate W8**; HLD, API docs |
@@ -535,8 +536,8 @@ synthetic data? how would this scale? (stateless replicas, partitioned ledger by
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Scope overload for two people | Late/shallow features | Tiering + gates + slip policy; Tier-1 already built; weekly burn-down |
-| One lane blocks the other | Idle time | Contracts + test doubles; mock-backed endpoints first |
+| Scope overload | Late/shallow features | Tiering + gates + slip policy; Tier-1 already built; weekly burn-down |
+| Cross-domain dependency blocks | Idle time | Contracts + test doubles; mock-backed endpoints first |
 | Synthetic-data circularity inflates ML metrics | Weak credibility | Held-out scenario variants, noise, public-dataset benchmark, honest limitations section |
 | Fraud false positives annoy customers | Poor UX story | Threshold from cost model; STEP_UP before REVIEW; analyst feedback loop |
 | LLM unreliable / heavy on laptops | Demo failure | Small model, deterministic fallback, record fallback video |
@@ -546,6 +547,6 @@ synthetic data? how would this scale? (stateless replicas, partitioned ledger by
 | Secret leakage | Security incident | `.env` ignored, detect-secrets hook + CI, validated config, redacted logs |
 | Supply-chain compromise (CI actions/deps) | Pipeline takeover | First-party actions, SHA pinning, lockfiles, Dependabot, pip-audit/npm audit |
 | Free-plan GitHub lacks private-repo protection | Governance unenforced | Public repo or Student Pack Pro (section 14) |
-| Alembic multi-head / merge conflicts | Broken deploys | Single-head test, migration changes need both reviewers |
+| Alembic multi-head / merge conflicts | Broken deploys | Single-head test, migration changes require peer review |
 | Deployment failure on demo day | Embarrassment | Deploy early (Sprint 5), smoke test, rollback by tag, recorded backup |
 | Burn-out / uneven workload | Quality drop | Weekly check-in, rotate review load, freeze at W11 |

@@ -1,6 +1,6 @@
 # Contributing
 
-Two engineers, one rule: **nothing reaches `main` without the other person's review and a green CI Gate.**
+Core rule: **nothing reaches `main` without peer review and a green CI Gate.**
 
 1. Pick/create a GitHub Issue (template: feature or bug). Assign yourself; label `area:*` and `tier:*`; set the sprint milestone.
 2. Branch from fresh `main`: `git switch main && git pull && git switch -c feat/<short-name>` (`fix/`, `docs/`, `chore/`).
@@ -14,4 +14,4 @@ Two engineers, one rule: **nothing reaches `main` without the other person's rev
 7. Never use `--no-verify`, never push to `main`, never force-push a shared branch, never merge on red.
 
 Review SLA: respond within one working day; keep PRs under ~400 lines so that is realistic.
-Pairing: once per sprint each engineer walks the other through their lane (so both can present everything).
+Knowledge sharing: regularly conduct cross-domain walkthroughs so all contributors understand the entire codebase.

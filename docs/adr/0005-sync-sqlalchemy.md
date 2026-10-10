@@ -1,7 +1,7 @@
 # ADR 0005: Synchronous SQLAlchemy 2.0
 - Status: Accepted
 - Date: 2026-10-07
-- Deciders: A, B
+- Deciders: Architecture Team
 
 ## Context
 Ledger correctness and lock reasoning matter more than raw async throughput; Celery and scripts share the same code.

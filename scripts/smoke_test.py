@@ -99,7 +99,10 @@ def main() -> int:
     status, _, _ = http_request(
         f"{base}/api/v1/auth/login",
         method="POST",
-        data={"email": "nobody@example.com", "password": "definitely-wrong-123"},
+        data={
+            "email": "nobody@example.com",
+            "password": "definitely-wrong-123",  # pragma: allowlist secret
+        },
     )
     check("bad credentials rejected", 401, status)
 

@@ -8,7 +8,8 @@
 **/.ruff_cache
 .env
 .env.*
-docs
+docs/**
+!docs/api/openapi.json
 demo
 apps/web/dist
 apps/web/coverage

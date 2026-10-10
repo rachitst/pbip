@@ -1,7 +1,7 @@
 # ADR 0002: Double-entry ledger with immutable entries
 - Status: Accepted
 - Date: 2026-10-07
-- Deciders: A, B
+- Deciders: Architecture Team
 
 ## Context
 A mutable `balance` column plus source/destination columns cannot explain history, prove consistency, or support reversals and audit.

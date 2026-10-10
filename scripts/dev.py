@@ -518,7 +518,7 @@ def parse_env_file(path: Path) -> dict[str, str]:
     return env_vars
 
 
-_DEFAULT_TEST_PASSWORD = "pbip_local_password"  # noqa: S105
+_DEFAULT_TEST_PASSWORD = "pbip_local_password"  # noqa: S105  # pragma: allowlist secret
 
 
 def derive_test_database_url(
