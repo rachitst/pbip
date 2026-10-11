@@ -67,6 +67,8 @@ services:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
     restart: unless-stopped
+    healthcheck:
+      test: ["NONE"]
 
   beat:
     build: *api-build
@@ -75,6 +77,8 @@ services:
     depends_on:
       redis: { condition: service_healthy }
     restart: unless-stopped
+    healthcheck:
+      test: ["NONE"]
 
   web:
     build:
