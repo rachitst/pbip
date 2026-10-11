@@ -276,6 +276,16 @@ def _print_instructions(missing_tools: list[str]) -> None:
         )
 
 
+def _check_python_version() -> bool:
+    """Verify host Python meets minimum version (>= 3.12)."""
+    py_ver = f"{sys.version_info[0]}.{sys.version_info[1]}.{sys.version_info[2]}"
+    is_supported = sys.version_info >= (3, 12)
+    status_label = "[OK]     " if is_supported else "[WARN]   "
+    note = "" if is_supported else " -> Python 3.12+ required for PBIP"
+    sys.stdout.write(f"Host Python      : {status_label} {py_ver} ({sys.executable}){note}\n\n")
+    return is_supported
+
+
 def cmd_doctor(_args: list[str]) -> int:
     """Run environment and platform diagnostics."""
     sys.stdout.write("PBIP Environment Diagnostics (dev doctor)\n")
@@ -284,8 +294,7 @@ def cmd_doctor(_args: list[str]) -> int:
     os_name = platform.system()
     os_release = platform.release()
     sys.stdout.write(f"Operating System : {os_name} {os_release} ({sys.platform})\n")
-    py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    sys.stdout.write(f"Host Python      : {py_ver} ({sys.executable})\n\n")
+    _check_python_version()
 
     missing = _check_tools()
     _check_docker_status()

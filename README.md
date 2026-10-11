@@ -47,6 +47,9 @@ uv run python demo/demo_scenarios.py bola              # Bob cannot read Alice's
 `git push -u origin HEAD` -> open PR -> peer review -> CI Gate green -> squash-merge.
 Useful: `make help`, `make openapi` (after API changes), `make test-unit` (no DB), `make infra-up` before `make test`.
 
+Repository configuration (labels, sprint milestones, ruleset) can be initialized or updated via:
+`python scripts/setup_github.py <OWNER>/<REPO> [--dry-run]`
+
 ## Layout
 `apps/api` FastAPI modular monolith - `apps/web` React/TypeScript - `ml` ML contracts/features/inference -
 `data-gen` synthetic data - `infra` nginx/Prometheus/Grafana/Loki/deploy - `docs` blueprint, ADRs, security -

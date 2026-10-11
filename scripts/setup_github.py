@@ -201,13 +201,27 @@ def invite_collaborator(repo: str, username: str, dry_run: bool) -> None:
         )
 
 
+def _get_ruleset_name(ruleset_file: Path) -> str:
+    """Read the configured ruleset name from JSON file."""
+    try:
+        with ruleset_file.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict) and "name" in data:
+                return str(data["name"])
+    except (json.JSONDecodeError, OSError):
+        pass
+    return "main"
+
+
 def setup_ruleset(repo: str, dry_run: bool) -> None:
-    """Import or create the protect-main ruleset."""
+    """Import or create the branch ruleset for 'main'."""
     sys.stdout.write("==> Setting up branch ruleset for 'main'...\n")
     ruleset_file = ROOT / ".github" / "rulesets" / "main.json"
     if not ruleset_file.exists():
         sys.stderr.write(f"    Warning: Ruleset file {ruleset_file} not found.\n")
         return
+
+    target_name = _get_ruleset_name(ruleset_file)
 
     if not dry_run:
         res = run_gh(["api", f"repos/{repo}/rulesets"], check=False)
@@ -216,9 +230,12 @@ def setup_ruleset(repo: str, dry_run: bool) -> None:
                 data = json.loads(res.stdout)
                 if isinstance(data, list):
                     for item in data:
-                        if isinstance(item, dict) and item.get("name") == "protect-main":
+                        if isinstance(item, dict) and item.get("name") in (
+                            target_name,
+                            "protect-main",
+                        ):
                             sys.stdout.write(
-                                "    Ruleset 'protect-main' already exists. Skipping.\n"
+                                f"    Ruleset '{item.get('name')}' already exists. Skipping.\n"
                             )
                             return
             except json.JSONDecodeError:
@@ -234,7 +251,7 @@ def setup_ruleset(repo: str, dry_run: bool) -> None:
     ]
     res = run_gh(args, check=False, dry_run=dry_run)
     if not dry_run and res.returncode == 0:
-        sys.stdout.write("    Successfully created ruleset 'protect-main'.\n")
+        sys.stdout.write(f"    Successfully created ruleset '{target_name}'.\n")
     elif not dry_run:
         sys.stdout.write(
             "    Notice: Could not automatically create ruleset via API.\n"

@@ -15,3 +15,10 @@ Core rule: **nothing reaches `main` without peer review and a green CI Gate.**
 
 Review SLA: respond within one working day; keep PRs under ~400 lines so that is realistic.
 Knowledge sharing: regularly conduct cross-domain walkthroughs so all contributors understand the entire codebase.
+
+## Repository and GitHub Setup
+Maintainers can configure labels, sprint milestones, and branch protection rulesets using `scripts/setup_github.py`:
+```bash
+python scripts/setup_github.py <OWNER>/<REPO> --dry-run
+python scripts/setup_github.py <OWNER>/<REPO> [--collaborators user1,user2]
+```
