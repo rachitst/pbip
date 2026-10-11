@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -27,19 +28,29 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 LABELS: list[tuple[str, str, str]] = [
+    # Work item types
     ("type:feat", "1D76DB", "New capability"),
     ("type:bug", "D73A4A", "Something is broken"),
     ("type:chore", "CFD3D7", "Maintenance / tooling"),
     ("type:docs", "0075CA", "Documentation"),
     ("type:security", "B60205", "Security-relevant"),
     ("type:test", "0E8A16", "Tests only"),
+    # Functional / technical areas
     ("area:api", "5319E7", "Backend"),
     ("area:web", "FBCA04", "Frontend"),
     ("area:ml", "0E8A16", "Data / ML"),
     ("area:infra", "006B75", "CI / Docker / ops"),
+    ("area:security", "B60205", "Security, auth & fraud controls"),
+    ("area:compliance", "0052CC", "Regulatory & compliance"),
+    ("area:analytics", "5319E7", "Analytics & telemetry"),
+    ("area:docs", "0075CA", "Documentation & guides"),
+    ("area:test", "0E8A16", "Testing & QA"),
+    ("area:chore", "CFD3D7", "Tooling & maintenance"),
+    # Prioritization tiers
     ("tier:must", "B60205", "Must have"),
     ("tier:should", "D93F0B", "Should have"),
     ("tier:could", "FEF2C0", "Could have"),
+    # State flags
     ("blocked", "000000", "Waiting on something"),
 ]
 
@@ -232,10 +243,69 @@ def setup_ruleset(repo: str, dry_run: bool) -> None:
         )
 
 
+def find_existing_project(owner: str, title: str) -> dict[str, int | str] | None:
+    """Check if a project board with the given title already exists under the owner."""
+    res = subprocess.run(
+        ["gh", "project", "list", "--owner", owner, "--format", "json"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if res.returncode == 0 and res.stdout.strip():
+        try:
+            data = json.loads(res.stdout)
+            projects = data if isinstance(data, list) else data.get("projects", [])
+            for p in projects:
+                if (
+                    isinstance(p, dict)
+                    and str(p.get("title", "")).strip().lower() == title.strip().lower()
+                ):
+                    return {
+                        "number": int(p.get("number", 0)),
+                        "title": str(p.get("title", "")),
+                        "id": str(p.get("id", "")),
+                        "url": str(p.get("url", "")),
+                    }
+        except (json.JSONDecodeError, ValueError, TypeError):
+            pass
+
+    # Fallback to plain-text listing if JSON output format is not supported
+    res_plain = subprocess.run(
+        ["gh", "project", "list", "--owner", owner],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if res_plain.returncode == 0 and res_plain.stdout.strip():
+        for line in res_plain.stdout.splitlines():
+            if title.lower() in line.lower():
+                match = re.search(r"(?:#|^|\s)(\d+)\b", line)
+                if match:
+                    num = int(match.group(1))
+                    return {
+                        "number": num,
+                        "title": title,
+                        "id": "",
+                        "url": f"https://github.com/users/{owner}/projects/{num}",
+                    }
+    return None
+
+
 def setup_project_board(repo: str, title: str, dry_run: bool) -> None:
-    """Create or link a GitHub Project board."""
+    """Create or link a GitHub Project board, reusing existing project if found."""
     sys.stdout.write(f"==> Setting up GitHub Project board: '{title}'...\n")
     owner = repo.split("/")[0]
+
+    existing = find_existing_project(owner, title)
+    if existing:
+        p_num = existing["number"]
+        p_url = existing["url"] or f"https://github.com/users/{owner}/projects/{p_num}"
+        prefix = "[dry-run] " if dry_run else "    "
+        sys.stdout.write(
+            f"{prefix}Found existing project board '{title}' (#{p_num}: {p_url}). "
+            "Reusing existing project.\n"
+        )
+        return
 
     if dry_run:
         sys.stdout.write(f"[dry-run] would create project '{title}' under owner '{owner}'\n")
