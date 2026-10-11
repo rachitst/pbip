@@ -153,7 +153,7 @@ cd pbip
 .\dev.ps1 doctor
 # Or: python scripts/dev.py doctor
 ```
-Address any missing tools marked with `[FAIL]` or `[WARN]`.
+Address any missing tools marked with `[MISSING]` or `[WARN]`.
 
 ### 4.6 Run First-Time Setup
 ```powershell
@@ -239,7 +239,7 @@ make up-all
 # Windows
 .\dev.ps1 up-all
 ```
-- Grafana: **http://localhost:3000** (admin / pbip-dev)
+- Grafana: **http://localhost:3000** (admin / configured `GRAFANA_ADMIN_PASSWORD` from `.env`, defaults to `admin_local_password` in `.env.example`)
 - Prometheus: **http://localhost:9090**
 - MLflow: **http://localhost:5000**
 
@@ -292,9 +292,9 @@ make smoke              # or .\dev.ps1 smoke
 
 | Service | Host Port | Protocol | Purpose / Description | Health Endpoint |
 |---|---|---|---|---|
-| **API Dev** | `8000` | HTTP | FastAPI uvicorn reload server | `http://localhost:8000/healthz` |
+| **API Dev** | `8000` | HTTP | FastAPI uvicorn reload server | `http://localhost:8000/api/health/live`, `http://localhost:8000/api/health/ready` |
 | **Web Dev** | `5173` | HTTP | Vite development server | `http://localhost:5173/` |
-| **Nginx Ingress** | `8080` | HTTP | Docker compose unified web gateway | `http://localhost:8080/healthz` |
+| **Nginx Ingress** | `8080` | HTTP | Docker compose unified web gateway | `http://localhost:8080/api/health/live`, `http://localhost:8080/api/health/ready` |
 | **PostgreSQL** | `5432` | TCP | Relational DB & Ledger storage | Docker healthcheck |
 | **Redis** | `6379` | TCP | Token cache, locks, rate limits | `redis-cli ping` |
 | **Grafana** | `3000` | HTTP | System dashboards & logs | `http://localhost:3000/api/health` |
@@ -354,12 +354,16 @@ Validate the 93-task backlog DAG:
 ```bash
 python scripts/backlog.py --validate
 ```
-Test issue creation in dry-run mode:
+Test issue creation in dry-run mode (e.g., for Sprint 1):
 ```bash
-python scripts/backlog.py <OWNER>/<REPO> --dry-run
+python scripts/backlog.py <OWNER>/<REPO> --sprint 1 --dry-run
 ```
-Import all issues to GitHub with milestone assignment and project tracking:
+Import issues to GitHub with milestone assignment and project tracking:
 ```bash
+# Import a specific sprint (e.g., Sprint 1)
+python scripts/backlog.py <OWNER>/<REPO> --sprint 1 --project-number 1
+
+# Or import all sprints
 python scripts/backlog.py <OWNER>/<REPO> --project-number 1
 ```
 
