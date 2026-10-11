@@ -276,6 +276,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/customers/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List my registered devices */
+        get: operations["list_my_devices_api_v1_customers_devices_get"];
+        put?: never;
+        /** Register or touch active device fingerprint */
+        post: operations["register_device_api_v1_customers_devices_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers/devices/{device_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one of my registered devices */
+        get: operations["get_my_device_api_v1_customers_devices__device_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get my customer profile */
+        get: operations["get_my_profile_api_v1_customers_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fraud/alerts": {
         parameters: {
             query?: never;
@@ -627,6 +679,37 @@ export interface components {
             /** Valid */
             valid: boolean;
         };
+        /**
+         * CustomerProfileOut
+         * @description Authenticated customer profile details. Sensitive PII like phone is masked.
+         */
+        CustomerProfileOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Date Of Birth */
+            date_of_birth?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Full Name */
+            full_name: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kyc Status */
+            kyc_status: string;
+            /** Phone Masked */
+            phone_masked?: string | null;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
         /** DecisionRequest */
         DecisionRequest: {
             /**
@@ -636,6 +719,51 @@ export interface components {
             action: "RELEASE" | "REJECT";
             /** Note */
             note?: string | null;
+        };
+        /**
+         * DeviceOut
+         * @description Device metadata returned to client.
+         *
+         *     Raw fingerprints and fingerprint hashes are never exposed.
+         */
+        DeviceOut: {
+            /** Device Age Days */
+            device_age_days: number;
+            /**
+             * First Seen At
+             * Format: date-time
+             */
+            first_seen_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string | null;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Trusted */
+            trusted: boolean;
+        };
+        /**
+         * DeviceRegisterRequest
+         * @description Device registration payload. The raw fingerprint is never stored or logged in plain text.
+         */
+        DeviceRegisterRequest: {
+            /**
+             * Fingerprint
+             * @description Raw client device fingerprint string or hardware identifier
+             */
+            fingerprint?: string | null;
+            /**
+             * Label
+             * @description Optional human-readable label for the device
+             */
+            label?: string | null;
         };
         /** EntriesPage */
         EntriesPage: {
@@ -1385,6 +1513,112 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChainStatusOut"];
+                };
+            };
+        };
+    };
+    list_my_devices_api_v1_customers_devices_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceOut"][];
+                };
+            };
+        };
+    };
+    register_device_api_v1_customers_devices_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Device-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceRegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_device_api_v1_customers_devices__device_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_profile_api_v1_customers_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerProfileOut"];
                 };
             };
         };

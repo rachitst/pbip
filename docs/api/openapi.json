@@ -380,6 +380,77 @@
         "title": "ChainStatusOut",
         "type": "object"
       },
+      "CustomerProfileOut": {
+        "description": "Authenticated customer profile details. Sensitive PII like phone is masked.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "date_of_birth": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Of Birth"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "full_name": {
+            "title": "Full Name",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kyc_status": {
+            "title": "Kyc Status",
+            "type": "string"
+          },
+          "phone_masked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone Masked"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "full_name",
+          "kyc_status",
+          "created_at"
+        ],
+        "title": "CustomerProfileOut",
+        "type": "object"
+      },
       "DecisionRequest": {
         "properties": {
           "action": {
@@ -407,6 +478,89 @@
           "action"
         ],
         "title": "DecisionRequest",
+        "type": "object"
+      },
+      "DeviceOut": {
+        "description": "Device metadata returned to client.\n\nRaw fingerprints and fingerprint hashes are never exposed.",
+        "properties": {
+          "device_age_days": {
+            "title": "Device Age Days",
+            "type": "integer"
+          },
+          "first_seen_at": {
+            "format": "date-time",
+            "title": "First Seen At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "trusted": {
+            "title": "Trusted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "first_seen_at",
+          "last_seen_at",
+          "trusted",
+          "device_age_days"
+        ],
+        "title": "DeviceOut",
+        "type": "object"
+      },
+      "DeviceRegisterRequest": {
+        "description": "Device registration payload. The raw fingerprint is never stored or logged in plain text.",
+        "properties": {
+          "fingerprint": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Raw client device fingerprint string or hardware identifier",
+            "title": "Fingerprint"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional human-readable label for the device",
+            "title": "Label"
+          }
+        },
+        "title": "DeviceRegisterRequest",
         "type": "object"
       },
       "EntriesPage": {
@@ -1852,6 +2006,172 @@
         "summary": "Re-verify the audit hash chain end to end",
         "tags": [
           "compliance"
+        ]
+      }
+    },
+    "/api/v1/customers/devices": {
+      "get": {
+        "operationId": "list_my_devices_api_v1_customers_devices_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DeviceOut"
+                  },
+                  "title": "Response List My Devices Api V1 Customers Devices Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List my registered devices",
+        "tags": [
+          "customers"
+        ]
+      },
+      "post": {
+        "operationId": "register_device_api_v1_customers_devices_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Device-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Device-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceRegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Register or touch active device fingerprint",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/api/v1/customers/devices/{device_id}": {
+      "get": {
+        "operationId": "get_my_device_api_v1_customers_devices__device_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get one of my registered devices",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/api/v1/customers/me": {
+      "get": {
+        "operationId": "get_my_profile_api_v1_customers_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get my customer profile",
+        "tags": [
+          "customers"
         ]
       }
     },

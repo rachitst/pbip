@@ -14,6 +14,8 @@ pytestmark = [pytest.mark.integration, pytest.mark.security]
 
 def test_endpoints_require_authentication(client: TestClient) -> None:
     for method, path in [
+        ("get", "/api/v1/customers/me"),
+        ("get", "/api/v1/customers/devices"),
         ("get", "/api/v1/accounts"),
         ("get", "/api/v1/payees"),
         ("get", "/api/v1/fraud/alerts"),
@@ -48,6 +50,8 @@ def test_staff_have_no_customer_profile(
     client: TestClient, make_staff: Callable[..., Actor]
 ) -> None:
     analyst = make_staff(RoleName.FRAUD_ANALYST)
+    assert client.get("/api/v1/customers/me", headers=analyst.headers).status_code == 403
+    assert client.get("/api/v1/customers/devices", headers=analyst.headers).status_code == 403
     assert client.get("/api/v1/accounts", headers=analyst.headers).status_code == 403
 
 
@@ -115,10 +119,17 @@ def _victim_resources(
         },
     )
     assert transfer.status_code == 201, transfer.text
+    device = client.post(
+        "/api/v1/customers/devices",
+        headers=alice.headers,
+        json={"fingerprint": "alice-victim-device-fp"},
+    )
+    assert device.status_code == 201, device.text
     return {
         "account": str(alice.account_id),
         "payee": payee["id"],
         "transfer": transfer.json()["id"],
+        "device": device.json()["id"],
     }
 
 
@@ -174,6 +185,7 @@ def test_bola_customer_b_cannot_touch_customer_a_objects(
             },
         ),
         "random uuid account": client.get(f"/api/v1/accounts/{uuid.uuid4()}", headers=h),
+        "get victim device": client.get(f"/api/v1/customers/devices/{ids['device']}", headers=h),
     }
     for name, response in attempts.items():
         assert response.status_code == 404, f"{name}: expected 404 got {response.status_code}"
@@ -189,3 +201,17 @@ def test_listings_only_contain_the_callers_own_objects(
     listed = client.get("/api/v1/accounts", headers=alice.headers).json()
     assert [a["id"] for a in listed] == [str(alice.account_id)]
     assert str(bob.account_id) not in str(listed)
+
+    alice_dev = client.post(
+        "/api/v1/customers/devices",
+        headers=alice.headers,
+        json={"fingerprint": "alice-device-own"},
+    ).json()
+    bob_dev = client.post(
+        "/api/v1/customers/devices",
+        headers=bob.headers,
+        json={"fingerprint": "bob-device-own"},
+    ).json()
+    devices_listed = client.get("/api/v1/customers/devices", headers=alice.headers).json()
+    assert [d["id"] for d in devices_listed] == [alice_dev["id"]]
+    assert bob_dev["id"] not in [d["id"] for d in devices_listed]
