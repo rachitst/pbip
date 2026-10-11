@@ -39,7 +39,9 @@ def test_label_coverage_for_all_backlog_tasks() -> None:
             all_required_labels.add(f"area:{lbl}")
 
     missing_labels = all_required_labels - configured_label_names
-    assert not missing_labels, f"The following backlog labels are missing from setup_github.LABELS: {missing_labels}"
+    assert not missing_labels, (
+        f"The following backlog labels are missing from setup_github.LABELS: {missing_labels}"
+    )
 
 
 def test_area_security_label_is_configured() -> None:

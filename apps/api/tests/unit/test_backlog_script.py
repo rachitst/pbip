@@ -219,8 +219,14 @@ def test_import_tasks_dry_run_prevents_github_mutations(capsys: pytest.CaptureFi
         out = capsys.readouterr().out
         assert "MODE: DRY RUN" in out
         assert "==> Importing 2 tasks (Sprint 1) into rachitst/pbip..." in out
-        assert "[DRY-RUN] Would create issue: [TASK-001] Test Task (Milestone: Sprint 1) (Project #1)" in out
-        assert "[DRY-RUN] Would create issue: [TASK-002] Test Task (Milestone: Sprint 1) (Project #1)" in out
+        assert (
+            "[DRY-RUN] Would create issue: [TASK-001] Test Task (Milestone: Sprint 1) (Project #1)"
+            in out
+        )
+        assert (
+            "[DRY-RUN] Would create issue: [TASK-002] Test Task (Milestone: Sprint 1) (Project #1)"
+            in out
+        )
 
 
 def test_import_tasks_prevents_accidental_import_of_other_sprints(
@@ -236,7 +242,9 @@ def test_import_tasks_prevents_accidental_import_of_other_sprints(
         patch("scripts.backlog.save_state"),
         patch("subprocess.run") as mock_subproc,
     ):
-        mock_res_create = MagicMock(returncode=0, stdout="https://github.com/rachitst/pbip/issues/1", stderr="")
+        mock_res_create = MagicMock(
+            returncode=0, stdout="https://github.com/rachitst/pbip/issues/1", stderr=""
+        )
         mock_subproc.return_value = mock_res_create
 
         code = import_tasks(
@@ -393,7 +401,9 @@ def test_load_state_malformed_json_recovery(tmp_path: pytest.TempPathFactory) ->
 
     # 2. Corrupted / truncated JSON (missing closing brace and trailing comma)
     corrupt_file = tmp_path / "corrupt_state.json"  # type: ignore[operator]
-    corrupt_file.write_text('{\n  "TASK-001": 12,\n  "TASK-002": 13,\n  "TASK-003": 14', encoding="utf-8")
+    corrupt_file.write_text(
+        '{\n  "TASK-001": 12,\n  "TASK-002": 13,\n  "TASK-003": 14', encoding="utf-8"
+    )
     recovered = load_state(corrupt_file)
     assert recovered == {"TASK-001": 12, "TASK-002": 13, "TASK-003": 14}
 
@@ -434,7 +444,9 @@ def test_safe_resume_after_partial_import(capsys: pytest.CaptureFixture[str]) ->
         patch("scripts.backlog.save_state") as mock_save,
         patch("subprocess.run") as mock_subproc,
     ):
-        mock_res_create = MagicMock(returncode=0, stdout="https://github.com/rachitst/pbip/issues/15", stderr="")
+        mock_res_create = MagicMock(
+            returncode=0, stdout="https://github.com/rachitst/pbip/issues/15", stderr=""
+        )
         mock_res_proj = MagicMock(returncode=0, stdout="", stderr="")
         mock_subproc.side_effect = [mock_res_create, mock_res_proj]
 
@@ -507,5 +519,3 @@ def test_create_single_issue_self_heals_missing_labels(capsys: pytest.CaptureFix
         out = capsys.readouterr().out
         assert "[LABEL-FIX] Ensuring labels on rachitst/pbip and retrying TASK-004..." in out
         assert "[CREATED] TASK-004 -> Issue #15" in out
-
-
