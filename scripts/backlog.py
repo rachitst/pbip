@@ -7,7 +7,8 @@ actionable tasks into GitHub Issues and Projects.
 Usage:
     python scripts/backlog.py --validate
     python scripts/backlog.py OWNER/REPO --dry-run
-    python scripts/backlog.py OWNER/REPO --project-number 1
+    python scripts/backlog.py OWNER/REPO --sprint 1 --dry-run
+    python scripts/backlog.py OWNER/REPO --sprint 1 --project-number 1
 """
 
 from __future__ import annotations
@@ -294,24 +295,55 @@ def print_backlog_statistics(
     )
 
 
-def load_state() -> dict[str, int]:
-    """Load local task ID to GitHub issue number mapping."""
-    if not STATE_FILE.exists():
+def _extract_state_from_dict(data: dict[object, object]) -> dict[str, int]:
+    """Extract valid task mappings from parsed JSON dictionary."""
+    state: dict[str, int] = {}
+    for k, v in data.items():
+        if isinstance(k, str) and re.match(r"^TASK-\d{3}$", k):
+            try:
+                if isinstance(v, (int, str)):
+                    num = int(v)
+                    if num > 0:
+                        state[k] = num
+            except (ValueError, TypeError):
+                pass
+    return state
+
+
+def load_state(path: Path = STATE_FILE) -> dict[str, int]:
+    """Load local task ID to GitHub issue number mapping with malformed state recovery."""
+    if not path.exists():
         return {}
     try:
-        with STATE_FILE.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-            if isinstance(data, dict):
-                return {k: int(v) for k, v in data.items()}
-    except (json.JSONDecodeError, OSError):
+        raw_text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        sys.stderr.write(f"Warning: Could not read state file at {path}: {exc}\n")
         return {}
-    return {}
+
+    try:
+        data = json.loads(raw_text)
+        if isinstance(data, dict):
+            dict_state = _extract_state_from_dict(data)
+            if dict_state:
+                return dict_state
+    except json.JSONDecodeError:
+        sys.stderr.write(f"Warning: Malformed JSON in {path}, attempting partial recovery...\n")
+
+    # Fallback regex extraction to recover valid mappings from truncated or corrupted JSON
+    fallback_state: dict[str, int] = {}
+    for match in re.finditer(r'"(TASK-\d{3})"\s*:\s*(\d+)', raw_text):
+        fallback_state[match.group(1)] = int(match.group(2))
+
+    return fallback_state
 
 
-def save_state(state: dict[str, int]) -> None:
-    """Save task ID to issue number mapping locally."""
-    with STATE_FILE.open("w", encoding="utf-8") as f:
+def save_state(state: dict[str, int], path: Path = STATE_FILE) -> None:
+    """Save task ID to issue number mapping locally with atomic file replacement."""
+    tmp_file = path.with_suffix(f"{path.suffix}.tmp")
+    with tmp_file.open("w", encoding="utf-8") as f:
         json.dump(state, f, indent=2)
+        f.write("\n")
+    tmp_file.replace(path)
 
 
 def format_issue_body(task: Task) -> str:
@@ -338,16 +370,141 @@ def format_issue_body(task: Task) -> str:
 """
 
 
+def filter_tasks_by_sprint(tasks: list[Task], sprint: int | None) -> list[Task]:
+    """Filter tasks by sprint number if specified; otherwise return all tasks."""
+    if sprint is None:
+        return tasks
+    return [t for t in tasks if t.sprint == sprint]
+
+
+def _auto_create_missing_labels(repo: str, labels: list[str]) -> None:
+    """Ensure missing labels exist on GitHub repository if creation fails."""
+    label_colors: dict[str, str] = {
+        "area:security": "B60205",
+        "area:compliance": "0052CC",
+        "area:analytics": "5319E7",
+        "area:docs": "0075CA",
+        "area:test": "0E8A16",
+        "area:chore": "CFD3D7",
+        "area:api": "5319E7",
+        "area:web": "FBCA04",
+        "area:ml": "0E8A16",
+        "area:infra": "006B75",
+        "tier:must": "B60205",
+        "tier:should": "D93F0B",
+        "tier:could": "FEF2C0",
+        "type:feat": "1D76DB",
+        "type:chore": "CFD3D7",
+    }
+    for lbl in labels:
+        color = label_colors.get(lbl, "5319E7")
+        subprocess.run(
+            [
+                "gh",
+                "label",
+                "create",
+                lbl,
+                "--repo",
+                repo,
+                "--color",
+                color,
+                "--description",
+                f"PBIP label {lbl}",
+                "--force",
+            ],
+            capture_output=True,
+            check=False,
+        )
+
+
+def _create_single_issue(
+    task: Task,
+    repo: str,
+    project_number: int | None,
+    owner: str,
+    state: dict[str, int],
+) -> bool:
+    """Create a single GitHub issue and optionally link to project board."""
+    title = f"[{task.id}] {task.title}"
+    body = format_issue_body(task)
+    milestone = f"Sprint {task.sprint}"
+    labels = [f"type:{'feat' if task.priority == 'must' else 'chore'}", f"tier:{task.priority}"]
+    for lbl in task.labels:
+        labels.append(f"area:{lbl}")
+
+    cmd = [
+        "gh",
+        "issue",
+        "create",
+        "--repo",
+        repo,
+        "--title",
+        title,
+        "--body",
+        body,
+        "--milestone",
+        milestone,
+    ]
+    for lbl in labels:
+        cmd.extend(["--label", lbl])
+
+    res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if res.returncode != 0 and "label" in res.stderr.lower():
+        sys.stdout.write(f"  [LABEL-FIX] Ensuring labels on {repo} and retrying {task.id}...\n")
+        _auto_create_missing_labels(repo, labels)
+        res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+
+    if res.returncode != 0:
+        sys.stderr.write(f"  [FAIL] Failed to create issue for {task.id}: {res.stderr.strip()}\n")
+        return False
+
+    issue_url = res.stdout.strip()
+    match = re.search(r"/issues/(\d+)$", issue_url)
+    issue_num = int(match.group(1)) if match else 0
+    state[task.id] = issue_num
+    save_state(state)
+    sys.stdout.write(f"  [CREATED] {task.id} -> Issue #{issue_num} ({issue_url})\n")
+
+    if project_number and issue_url:
+        p_cmd = [
+            "gh",
+            "project",
+            "item-add",
+            str(project_number),
+            "--owner",
+            owner,
+            "--url",
+            issue_url,
+        ]
+        p_res = subprocess.run(p_cmd, capture_output=True, text=True, check=False)
+        if p_res.returncode != 0:
+            sys.stderr.write(
+                f"  [WARN] Failed to add {task.id} to Project #{project_number}: "
+                f"{p_res.stderr.strip()}\n"
+            )
+
+    return True
+
+
 def import_tasks(
     tasks: list[Task],
     repo: str,
     project_number: int | None = None,
     dry_run: bool = False,
+    sprint: int | None = None,
 ) -> int:
     """Import tasks into GitHub Issues and optionally link to Project board."""
-    sys.stdout.write(f"==> Importing {len(tasks)} tasks into {repo}...\n")
+    if sprint is not None:
+        tasks = filter_tasks_by_sprint(tasks, sprint)
+
+    sprint_label = f" (Sprint {sprint})" if sprint is not None else ""
+    sys.stdout.write(f"==> Importing {len(tasks)} tasks{sprint_label} into {repo}...\n")
     if dry_run:
         sys.stdout.write("MODE: DRY RUN (no GitHub Issues will be created)\n\n")
+
+    if not tasks:
+        sys.stdout.write("No tasks to import.\n")
+        return 0
 
     state = load_state()
     owner = repo.split("/")[0]
@@ -357,57 +514,17 @@ def import_tasks(
             sys.stdout.write(f"  [EXISTS] {t.id} -> Issue #{state[t.id]}. Skipping.\n")
             continue
 
-        title = f"[{t.id}] {t.title}"
-        body = format_issue_body(t)
-        milestone = f"Sprint {t.sprint}"
-        labels = [f"type:{'feat' if t.priority == 'must' else 'chore'}", f"tier:{t.priority}"]
-        for lbl in t.labels:
-            labels.append(f"area:{lbl}")
-
         if dry_run:
-            sys.stdout.write(f"  [DRY-RUN] Would create issue: {title} (Milestone: {milestone})\n")
+            proj_info = f" (Project #{project_number})" if project_number else ""
+            sys.stdout.write(
+                f"  [DRY-RUN] Would create issue: [{t.id}] {t.title} "
+                f"(Milestone: Sprint {t.sprint}){proj_info}\n"
+            )
             continue
 
-        cmd = [
-            "gh",
-            "issue",
-            "create",
-            "--repo",
-            repo,
-            "--title",
-            title,
-            "--body",
-            body,
-            "--milestone",
-            milestone,
-        ]
-        for lbl in labels:
-            cmd.extend(["--label", lbl])
-
-        res = subprocess.run(cmd, capture_output=True, text=True, check=False)
-        if res.returncode != 0:
-            sys.stderr.write(f"  [FAIL] Failed to create issue for {t.id}: {res.stderr.strip()}\n")
+        if not _create_single_issue(t, repo, project_number, owner, state):
             save_state(state)
             return 1
-
-        issue_url = res.stdout.strip()
-        match = re.search(r"/issues/(\d+)$", issue_url)
-        issue_num = int(match.group(1)) if match else 0
-        state[t.id] = issue_num
-        sys.stdout.write(f"  [CREATED] {t.id} -> Issue #{issue_num} ({issue_url})\n")
-
-        if project_number and issue_url:
-            p_cmd = [
-                "gh",
-                "project",
-                "item-add",
-                str(project_number),
-                "--owner",
-                owner,
-                "--url",
-                issue_url,
-            ]
-            subprocess.run(p_cmd, capture_output=True, check=False)
 
     if not dry_run:
         save_state(state)
@@ -434,6 +551,13 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Optional GitHub Project (v2) number to add issues to",
+    )
+    parser.add_argument(
+        "--sprint",
+        type=int,
+        choices=range(1, 8),
+        default=None,
+        help="Optional sprint number (1-7) to filter tasks for preview or import",
     )
     parser.add_argument(
         "--capacity-days",
@@ -468,7 +592,14 @@ def main() -> int:
         if not shutil.which("gh") and not args.dry_run:
             sys.stderr.write("Error: GitHub CLI ('gh') is required to import issues.\n")
             return 1
-        return import_tasks(tasks, args.repo, args.project_number, args.dry_run)
+        tasks_to_import = filter_tasks_by_sprint(tasks, args.sprint)
+        return import_tasks(
+            tasks_to_import,
+            args.repo,
+            args.project_number,
+            args.dry_run,
+            sprint=args.sprint,
+        )
 
     return 0
 

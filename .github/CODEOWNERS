@@ -1,14 +1,8 @@
-# CODEOWNERS TEMPLATE:
-# '@MAINTAINER_HANDLE' is a template placeholder.
-# Real repository owners or team handles (e.g., @your-username or @your-org/team)
-# MUST be configured here before relying on GitHub CODEOWNERS peer review enforcement.
-# Setting code owners ensures GitHub automatically requests peer review on PRs.
-* @MAINTAINER_HANDLE
+* @rachitst
 
-# Money-critical and security-critical paths: peer review required, never bypass.
-/apps/api/src/pbip_api/modules/ledger/        @MAINTAINER_HANDLE
-/apps/api/src/pbip_api/modules/payments/      @MAINTAINER_HANDLE
-/apps/api/src/pbip_api/modules/auth/          @MAINTAINER_HANDLE
-/apps/api/src/pbip_api/core/security.py       @MAINTAINER_HANDLE
-/apps/api/alembic/                            @MAINTAINER_HANDLE
-/.github/                                     @MAINTAINER_HANDLE
+/apps/api/src/pbip_api/modules/ledger/        @rachitst
+/apps/api/src/pbip_api/modules/payments/      @rachitst
+/apps/api/src/pbip_api/modules/auth/          @rachitst
+/apps/api/src/pbip_api/core/security.py       @rachitst
+/apps/api/alembic/                            @rachitst
+/.github/                                     @rachitst
