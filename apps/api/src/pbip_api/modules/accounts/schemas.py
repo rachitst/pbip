@@ -1,7 +1,26 @@
 from datetime import datetime
+from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
+
+
+class OpenAccountType(StrEnum):
+    SAVINGS = "SAVINGS"
+    CHECKING = "CHECKING"
+    CURRENT = "CURRENT"
+
+
+class OpenAccountRequest(BaseModel):
+    account_type: OpenAccountType
+    currency: str = Field(default="INR", min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
+
+    @field_validator("account_type", mode="before")
+    @classmethod
+    def _normalize_account_type(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip().upper()
+        return v
 
 
 class AccountOut(BaseModel):

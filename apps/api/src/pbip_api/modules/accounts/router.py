@@ -1,12 +1,19 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from pbip_api.core.db import get_session
 from pbip_api.modules.accounts import policy, service
 from pbip_api.modules.accounts.models import Account
-from pbip_api.modules.accounts.schemas import AccountOut, EntriesPage, EntryOut
+from pbip_api.modules.accounts.schemas import (
+    AccountOut,
+    EntriesPage,
+    EntryOut,
+    OpenAccountRequest,
+)
+from pbip_api.modules.auth.dependencies import get_request_meta
+from pbip_api.modules.auth.service import RequestMeta
 from pbip_api.modules.customers.dependencies import get_current_customer
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.ledger import service as ledger_service
@@ -26,6 +33,29 @@ def to_account_out(account: Account) -> AccountOut:
         held_minor=account.held_amount,
         available_minor=account.available_balance,
     )
+
+
+@router.post(
+    "",
+    response_model=AccountOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Open a new account",
+)
+def open_my_account(
+    body: OpenAccountRequest,
+    customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+    meta: RequestMeta = Depends(get_request_meta),
+) -> AccountOut:
+    account = service.create_customer_account(
+        session=session,
+        customer=customer,
+        requested_type=body.account_type,
+        currency=body.currency,
+        ip=meta.ip,
+        request_id=meta.request_id,
+    )
+    return to_account_out(account)
 
 
 @router.get("", response_model=list[AccountOut], summary="List my accounts")

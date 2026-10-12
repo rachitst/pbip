@@ -797,6 +797,35 @@
         "title": "NotificationOut",
         "type": "object"
       },
+      "OpenAccountRequest": {
+        "properties": {
+          "account_type": {
+            "$ref": "#/components/schemas/OpenAccountType"
+          },
+          "currency": {
+            "default": "INR",
+            "maxLength": 3,
+            "minLength": 3,
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_type"
+        ],
+        "title": "OpenAccountRequest",
+        "type": "object"
+      },
+      "OpenAccountType": {
+        "enum": [
+          "SAVINGS",
+          "CHECKING",
+          "CURRENT"
+        ],
+        "title": "OpenAccountType",
+        "type": "string"
+      },
       "PayeeCreate": {
         "properties": {
           "account_number": {
@@ -1424,6 +1453,50 @@
           }
         ],
         "summary": "List my accounts",
+        "tags": [
+          "accounts"
+        ]
+      },
+      "post": {
+        "operationId": "open_my_account_api_v1_accounts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Open a new account",
         "tags": [
           "accounts"
         ]

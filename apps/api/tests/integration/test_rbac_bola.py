@@ -17,6 +17,7 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("get", "/api/v1/customers/me"),
         ("get", "/api/v1/customers/devices"),
         ("get", "/api/v1/accounts"),
+        ("post", "/api/v1/accounts"),
         ("get", "/api/v1/payees"),
         ("get", "/api/v1/fraud/alerts"),
         ("get", "/api/v1/compliance/audit-logs"),
@@ -53,6 +54,14 @@ def test_staff_have_no_customer_profile(
     assert client.get("/api/v1/customers/me", headers=analyst.headers).status_code == 403
     assert client.get("/api/v1/customers/devices", headers=analyst.headers).status_code == 403
     assert client.get("/api/v1/accounts", headers=analyst.headers).status_code == 403
+    assert (
+        client.post(
+            "/api/v1/accounts",
+            headers=analyst.headers,
+            json={"account_type": "SAVINGS"},
+        ).status_code
+        == 403
+    )
 
 
 def test_staff_endpoints_demand_mfa_in_the_session(
