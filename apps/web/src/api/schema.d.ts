@@ -48,7 +48,8 @@ export interface paths {
         /** List my accounts */
         get: operations["list_my_accounts_api_v1_accounts_get"];
         put?: never;
-        post?: never;
+        /** Open a new account */
+        post: operations["open_my_account_api_v1_accounts_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -862,6 +863,20 @@ export interface components {
             /** Type */
             type: string;
         };
+        /** OpenAccountRequest */
+        OpenAccountRequest: {
+            account_type: components["schemas"]["OpenAccountType"];
+            /**
+             * Currency
+             * @default INR
+             */
+            currency: string;
+        };
+        /**
+         * OpenAccountType
+         * @enum {string}
+         */
+        OpenAccountType: "SAVINGS" | "CHECKING" | "CURRENT";
         /** PayeeCreate */
         PayeeCreate: {
             /** Account Number */
@@ -1131,6 +1146,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccountOut"][];
+                };
+            };
+        };
+    };
+    open_my_account_api_v1_accounts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

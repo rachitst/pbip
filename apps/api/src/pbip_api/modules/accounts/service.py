@@ -3,14 +3,28 @@
 import secrets
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from pbip_api.core.errors import ConflictError
-from pbip_api.modules.accounts.models import Account, AccountHolder, AccountType, HolderRole
+from pbip_api.core.errors import ConflictError, UnprocessableError
+from pbip_api.modules.accounts.models import (
+    Account,
+    AccountHolder,
+    AccountStatus,
+    AccountType,
+    HolderRole,
+)
+from pbip_api.modules.accounts.schemas import OpenAccountType
+from pbip_api.modules.compliance.service import AuditService
+from pbip_api.modules.customers.models import Customer
 
 _ACCOUNT_NUMBER_PREFIX = "40"
 _MAX_ATTEMPTS = 8
+MAX_ACTIVE_ACCOUNTS_PER_CUSTOMER = 5
+
+
+class AccountLimitExceededError(UnprocessableError):
+    code = "account_limit_exceeded"
 
 
 def luhn_check_digit(payload: str) -> str:
@@ -39,25 +53,118 @@ def mask_account_number(number: str) -> str:
 
 
 def open_account(
-    session: Session, customer_id: UUID, account_type: AccountType, currency: str = "INR"
+    session: Session,
+    customer_id: UUID,
+    account_type: AccountType,
+    currency: str = "INR",
+    *,
+    actor_user_id: UUID | None = None,
+    ip: str | None = None,
+    request_id: str | None = None,
+    commit: bool = False,
 ) -> Account:
+    if account_type == AccountType.SYSTEM:
+        raise UnprocessableError("cannot open system accounts through this use case")
+
+    # Serialize per-customer account creation to prevent race conditions bypassing limits
+    session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:cid))"),
+        {"cid": str(customer_id)},
+    )
+
+    active_count = session.execute(
+        select(func.count(Account.id))
+        .join(AccountHolder, AccountHolder.account_id == Account.id)
+        .where(
+            AccountHolder.customer_id == customer_id,
+            Account.status == AccountStatus.ACTIVE,
+        )
+    ).scalar_one()
+
+    if active_count >= MAX_ACTIVE_ACCOUNTS_PER_CUSTOMER:
+        raise AccountLimitExceededError(
+            f"customer cannot have more than {MAX_ACTIVE_ACCOUNTS_PER_CUSTOMER} active accounts"
+        )
+
     for _ in range(_MAX_ATTEMPTS):
         number = generate_account_number()
         if (
             session.execute(select(Account.id).where(Account.account_number == number)).first()
             is None
         ):
-            account = Account(account_number=number, account_type=account_type, currency=currency)
+            account = Account(
+                account_number=number,
+                account_type=account_type,
+                currency=currency,
+                status=AccountStatus.ACTIVE,
+                ledger_balance=0,
+                held_amount=0,
+                overdraft_limit=0,
+            )
             session.add(account)
             session.flush()
             session.add(
                 AccountHolder(
-                    account_id=account.id, customer_id=customer_id, holder_role=HolderRole.PRIMARY
+                    account_id=account.id,
+                    customer_id=customer_id,
+                    holder_role=HolderRole.PRIMARY,
                 )
             )
             session.flush()
+
+            effective_actor_user_id = actor_user_id
+            if effective_actor_user_id is None:
+                effective_actor_user_id = session.execute(
+                    select(Customer.user_id).where(Customer.id == customer_id)
+                ).scalar_one_or_none()
+
+            AuditService(session).record(
+                actor_user_id=effective_actor_user_id,
+                action="ACCOUNT_OPENED",
+                resource_type="account",
+                resource_id=str(account.id),
+                ip=ip,
+                request_id=request_id,
+                details={
+                    "account_number": mask_account_number(account.account_number),
+                    "account_type": account.account_type.value,
+                    "currency": account.currency,
+                },
+            )
+
+            if commit:
+                session.commit()
+
             return account
+
     raise ConflictError("could not allocate an account number, please retry")
+
+
+def create_customer_account(
+    session: Session,
+    customer: Customer,
+    requested_type: OpenAccountType,
+    currency: str = "INR",
+    ip: str | None = None,
+    request_id: str | None = None,
+) -> Account:
+    if requested_type in (OpenAccountType.CHECKING, OpenAccountType.CURRENT):
+        account_type = AccountType.CURRENT
+    elif requested_type == OpenAccountType.SAVINGS:
+        account_type = AccountType.SAVINGS
+    else:
+        raise UnprocessableError("unsupported account type")
+
+    return open_account(
+        session=session,
+        customer_id=customer.id,
+        account_type=account_type,
+        currency=currency,
+        actor_user_id=customer.user_id,
+        ip=ip,
+        request_id=request_id,
+        commit=True,
+    )
 
 
 def list_accounts(session: Session, customer_id: UUID) -> list[Account]:
