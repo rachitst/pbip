@@ -57,3 +57,8 @@ class AdminCreateUserRequest(BaseModel):
     password: str = Field(min_length=1, max_length=256)
     full_name: str = Field(min_length=2, max_length=200)
     roles: list[str] = Field(min_length=1)
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=1, max_length=256)

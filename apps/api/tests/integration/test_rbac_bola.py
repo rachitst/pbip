@@ -22,6 +22,7 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("get", "/api/v1/fraud/alerts"),
         ("get", "/api/v1/compliance/audit-logs"),
         ("get", "/api/v1/notifications"),
+        ("post", "/api/v1/auth/password-change"),
     ]:
         assert getattr(client, method)(path).status_code == 401, path
 

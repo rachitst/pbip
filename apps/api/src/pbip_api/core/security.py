@@ -21,6 +21,7 @@ from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatc
 
 from pbip_api.core.config import Settings
 from pbip_api.core.errors import UnauthorizedError, UnprocessableError
+from pbip_api.core.passwords_blocklist import validate_not_breached_or_common
 
 TokenType = Literal["access", "mfa_challenge"]
 _ALGORITHM = "HS256"
@@ -70,6 +71,7 @@ def validate_password_strength(password: str, email: str) -> None:
         raise UnprocessableError("password must not contain your email name")
     if not re.search(r"[A-Za-z]", password) or not re.search(r"[0-9\W_]", password):
         raise UnprocessableError("password must mix letters with digits or symbols")
+    validate_not_breached_or_common(password)
 
 
 @dataclass(frozen=True, slots=True)

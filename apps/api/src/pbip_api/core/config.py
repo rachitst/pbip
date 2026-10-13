@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     login_lock_base_seconds: int = 60
     rate_limit_login_per_minute: int = 10
     rate_limit_register_per_hour: int = 10
+    rate_limit_password_change_per_minute: int = 5
     allow_self_registration: bool = True
 
     # Banking limits (INTEGER MINOR UNITS)
