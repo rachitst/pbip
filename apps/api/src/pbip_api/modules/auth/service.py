@@ -332,6 +332,60 @@ class AuthService:
             .values(revoked_at=self._now())
         )
 
+    def _revoke_all_user_sessions(self, user_id: UUID) -> None:
+        self.session.execute(
+            update(RefreshToken)
+            .where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
+            .values(revoked_at=self._now())
+        )
+
+    def change_password(
+        self,
+        user_id: UUID,
+        current_password: str,
+        new_password: str,
+        meta: RequestMeta,
+    ) -> None:
+        user = self.session.execute(
+            select(User).where(User.id == user_id).with_for_update()
+        ).scalar_one_or_none()
+        if user is None or user.status != UserStatus.ACTIVE:
+            raise UnauthorizedError("invalid or expired token")
+
+        if self._is_locked(user):
+            self._event(SecurityEventType.LOGIN_BLOCKED_LOCKED, user.id, meta)
+            self.session.commit()
+            raise AccountLockedError("account temporarily locked, try again later")
+
+        if not self.passwords.verify(user.password_hash, current_password):
+            self._register_failure(user, meta, "bad_password")
+            self.session.commit()
+            raise UnauthorizedError("incorrect current password")
+
+        if current_password == new_password or self.passwords.verify(
+            user.password_hash, new_password
+        ):
+            raise UnprocessableError("new password must not match the current password")
+
+        validate_password_strength(new_password, user.email)
+
+        user.password_hash = self.passwords.hash(new_password)
+        user.password_changed_at = self._now()
+        self._reset_failures(user)
+
+        self._revoke_all_user_sessions(user.id)
+        self._event(SecurityEventType.PASSWORD_CHANGED, user.id, meta)
+        self.audit.record(
+            user.id,
+            "PASSWORD_CHANGED",
+            "user",
+            str(user.id),
+            ip=meta.ip,
+            request_id=meta.request_id,
+            details={},
+        )
+        self.session.commit()
+
     def refresh(self, raw_token: str, meta: RequestMeta) -> SessionTokens:
         row = self.session.execute(
             select(RefreshToken)

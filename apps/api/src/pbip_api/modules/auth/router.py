@@ -15,6 +15,7 @@ from pbip_api.modules.auth.schemas import (
     MfaConfirmRequest,
     MfaEnrollmentOut,
     MfaVerifyRequest,
+    PasswordChangeRequest,
     RecoveryCodesOut,
     RegisterRequest,
     TokenResponse,
@@ -29,6 +30,9 @@ _COOKIE_PATH = "/api/v1/auth"
 
 login_limiter = rate_limit("login", lambda s: s.rate_limit_login_per_minute, 60)
 register_limiter = rate_limit("register", lambda s: s.rate_limit_register_per_hour, 3600)
+password_change_limiter = rate_limit(
+    "password_change", lambda s: s.rate_limit_password_change_per_minute, 60
+)
 
 
 def _set_refresh_cookie(response: Response, tokens: SessionTokens, settings: Settings) -> None:
@@ -183,3 +187,20 @@ def confirm_mfa(
 ) -> RecoveryCodesOut:
     codes = service.confirm_mfa_enrollment(principal.user_id, body.code, meta)
     return RecoveryCodesOut(recovery_codes=codes)
+
+
+@router.post(
+    "/password-change",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(password_change_limiter)],
+    summary="Change user password and invalidate all active session tokens",
+)
+def change_password(
+    body: PasswordChangeRequest,
+    response: Response,
+    principal: Principal = Depends(get_current_principal),
+    service: AuthService = Depends(get_auth_service),
+    meta: RequestMeta = Depends(get_request_meta),
+) -> None:
+    service.change_password(principal.user_id, body.current_password, body.new_password, meta)
+    response.delete_cookie(REFRESH_COOKIE, path=_COOKIE_PATH)

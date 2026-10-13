@@ -826,6 +826,28 @@
         "title": "OpenAccountType",
         "type": "string"
       },
+      "PasswordChangeRequest": {
+        "properties": {
+          "current_password": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Current Password",
+            "type": "string"
+          },
+          "new_password": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "New Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "title": "PasswordChangeRequest",
+        "type": "object"
+      },
       "PayeeCreate": {
         "properties": {
           "account_number": {
@@ -1890,6 +1912,45 @@
           }
         },
         "summary": "Complete login with a TOTP (or recovery) code",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/password-change": {
+      "post": {
+        "operationId": "change_password_api_v1_auth_password_change_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Change user password and invalidate all active session tokens",
         "tags": [
           "auth"
         ]

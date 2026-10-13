@@ -58,6 +58,7 @@ class SecurityEventType(StrEnum):
     TOKEN_REFRESHED = "TOKEN_REFRESHED"  # noqa: S105
     TOKEN_REUSE_DETECTED = "TOKEN_REUSE_DETECTED"  # noqa: S105
     LOGOUT = "LOGOUT"
+    PASSWORD_CHANGED = "PASSWORD_CHANGED"  # noqa: S105  # pragma: allowlist secret
     STEP_UP_SUCCESS = "STEP_UP_SUCCESS"
     STEP_UP_FAILURE = "STEP_UP_FAILURE"
 
