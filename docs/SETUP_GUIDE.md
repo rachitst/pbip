@@ -187,6 +187,18 @@ Alternatively, invoke the batch wrapper directly: `dev.cmd setup` or `python scr
 
 ---
 
+### 4.7 Windows verification status (honest)
+The Windows-specific paths were fixed in Sprint 1 but have **not yet been run on a real Windows machine**.
+
+| Behaviour | How it was verified | Still to verify on Windows 10/11 |
+|---|---|---|
+| `dev.cmd` returns the command's exit code | static regression test (`test_dev_cmd_propagates_exit_codes`); CMD semantics of bare `exit /b` | `dev.cmd lint` with a lint error must exit non-zero (`echo %ERRORLEVEL%`) |
+| `dev-worker`: solo pool, beat as a separate process | unit tests with mocked processes; Celery source (`-B option does not work on Windows`) | worker and beat both start, a beat task runs, Ctrl+C stops both |
+| `dev.ps1` forwards arguments and exit codes | code review | `.\dev.ps1 test-unit` passes; a failing command sets `$LASTEXITCODE` |
+| Doctor, setup, clean, perf (k6 via Docker Desktop) | unit tests | full run from a fresh clone, as the TASK-013 definition of done requires |
+
+Please record the result (Windows version, Python, Docker Desktop) in the PR or issue when you run these.
+
 ## 5. Starting Services & Local Development
 
 For an interactive development workflow (hot-reloading on both frontend and backend):
