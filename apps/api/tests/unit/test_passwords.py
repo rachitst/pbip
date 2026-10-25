@@ -1,12 +1,17 @@
 import base64
+import re
+import time
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 from pbip_api.core.errors import UnprocessableError
 from pbip_api.core.passwords_blocklist import (
     check_common_or_breached,
     has_keyboard_sequence,
     is_seasonal_pattern,
     normalize_password_core,
+    strip_trailing_affix,
     validate_not_breached_or_common,
 )
 from pbip_api.core.security import validate_password_strength
@@ -97,3 +102,28 @@ def test_validate_password_strength_rules() -> None:
     # Missing digits or symbols
     with pytest.raises(UnprocessableError, match="mix letters with digits or symbols"):
         validate_password_strength("ValidLengthLettersOnly", "user@example.com")
+
+
+# The original trailing-affix regex, kept as the oracle for the linear-time rewrite.
+_ORIGINAL_TRAILING_AFFIX = re.compile(r"(?:[\W_]*\d{2,}[\W_]*|[\W_]+|\d+[\W_]*)$")
+
+
+@given(st.text(alphabet="ab0123!@_ #9Z\u00e9", max_size=40))
+def test_linear_trailing_affix_strip_matches_the_original_regex(text: str) -> None:
+    assert strip_trailing_affix(text) == _ORIGINAL_TRAILING_AFFIX.sub("", text)
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [("Password2024!", "Password"), ("admin!!", "admin"), ("letmein1", "letmein"), ("abc", "abc")],
+)
+def test_trailing_affix_examples(raw: str, expected: str) -> None:
+    assert strip_trailing_affix(raw) == expected
+
+
+def test_normalisation_is_linear_on_adversarial_input() -> None:
+    """Regression (CodeQL py/polynomial-redos): this input took ~15 s with the old regex."""
+    adversarial = "a" + "0" * 20_000 + "!a"
+    started = time.perf_counter()
+    normalize_password_core(adversarial)
+    assert time.perf_counter() - started < 0.5

@@ -373,7 +373,15 @@ _LEET_TRANSLATION: Final[dict[int, str]] = str.maketrans(
     }
 )
 
-_TRAILING_AFFIX_RE: Final[re.Pattern[str]] = re.compile(r"(?:[\W_]*\d{2,}[\W_]*|[\W_]+|\d+[\W_]*)$")
+# Trailing affixes: the longest suffix of the form symbols*digits{2,}symbols*, symbols+, or
+# digits+symbols*. A `$`-anchored regex for this is retried at every offset - quadratic on inputs
+# such as "a" + "0" * n + "!a" (CodeQL py/polynomial-redos). Matching the REVERSED string from its
+# start tries one offset only; each alternative is matched greedily and the longest one wins.
+_REVERSED_TRAILING_AFFIX_RES: Final[tuple[re.Pattern[str], ...]] = (
+    re.compile(r"[\W_]*\d{2,}[\W_]*"),
+    re.compile(r"[\W_]+"),
+    re.compile(r"[\W_]*\d+"),  # reversed form of digits+symbols*
+)
 _LEADING_AFFIX_RE: Final[re.Pattern[str]] = re.compile(r"^(?:[\W_]*\d{2,}[\W_]*|[\W_]+|^[\W_]*\d+)")
 _EMBEDDED_I_RE: Final[re.Pattern[str]] = re.compile(r"(?<=[a-z])[1!|](?=[a-z])")
 
@@ -397,11 +405,21 @@ _SEASONAL_RE: Final[re.Pattern[str]] = re.compile(
 )
 
 
+def strip_trailing_affix(text: str) -> str:
+    """Remove a trailing year/counter/symbol affix in linear time (see the patterns above)."""
+    reversed_text = text[::-1]
+    longest = max(
+        (len(m.group()) for p in _REVERSED_TRAILING_AFFIX_RES if (m := p.match(reversed_text))),
+        default=0,
+    )
+    return text[: len(text) - longest]
+
+
 def normalize_password_core(password: str) -> str:
     """De-obfuscate leetspeak, strip non-alpha borders, and collapse repeated characters."""
     # 1. Strip outer multi-digit numbers (years/counters) and boundary symbols
     trimmed = _LEADING_AFFIX_RE.sub("", password)
-    trimmed = _TRAILING_AFFIX_RE.sub("", trimmed)
+    trimmed = strip_trailing_affix(trimmed)
     lowered = trimmed.lower()
     # 2. Translate high-confidence symbol-to-letter leetspeak substitutions
     translated = lowered.translate(_LEET_TRANSLATION)
