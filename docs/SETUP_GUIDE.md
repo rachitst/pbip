@@ -243,6 +243,11 @@ make up-all
 - Prometheus: **http://localhost:9090**
 - MLflow: **http://localhost:5000**
 
+### Performance baseline (k6)
+With the API running (`make dev-api` or `make up`): `make perf` / `.\dev.ps1 perf`. Uses a native
+`k6` if installed, otherwise the `grafana/k6` Docker image. Thresholds, options and the recorded
+baseline are in `infra/k6/README.md`.
+
 ### MLflow only (ML work without the whole stack)
 ```bash
 make ml-up            # or .\dev.ps1 ml-up     -> docker compose --profile ml up -d --wait mlflow

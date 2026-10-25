@@ -387,6 +387,42 @@ def cmd_mlflow_smoke(args: list[str]) -> int:
     return _run(["uv", "run", "python", "-m", "pbip_ml.tracking_smoke", *args])
 
 
+K6_IMAGE = "grafana/k6:1.3.0"
+
+
+def build_k6_command(
+    script: str, base_url: str | None, has_native_k6: bool, extra: list[str]
+) -> tuple[list[str], dict[str, str]]:
+    """Native k6 when installed, otherwise the official image.
+
+    Linux: the container shares the host network, so ``localhost:8000`` reaches an API bound to
+    loopback (``dev-api``) as well as the compose port. Docker Desktop (macOS/Windows) has no host
+    networking for this, but forwards ``host.docker.internal`` to the host's loopback.
+    """
+    linux = not IS_WINDOWS and sys.platform != "darwin"
+    if has_native_k6:
+        url = base_url or "http://localhost:8000"
+        return ["k6", "run", f"infra/k6/{script}", *extra], {"BASE_URL": url}
+    url = base_url or ("http://localhost:8000" if linux else "http://host.docker.internal:8000")
+    cmd = ["docker", "run", "--rm", "-i", "-e", f"BASE_URL={url}"]
+    for name in ("VUS", "DURATION", "THINK_SECONDS"):
+        if os.environ.get(name):
+            cmd += ["-e", f"{name}={os.environ[name]}"]
+    if linux:
+        cmd += ["--network", "host"]
+    k6_dir = (ROOT / "infra" / "k6").as_posix()
+    cmd += ["-v", f"{k6_dir}:/scripts:ro", K6_IMAGE, "run", f"/scripts/{script}", *extra]
+    return cmd, {}
+
+
+def cmd_perf(args: list[str]) -> int:
+    """Run the k6 performance baseline (infra/k6/baseline.js) against a running API."""
+    cmd, env = build_k6_command(
+        "baseline.js", os.environ.get("BASE_URL"), _find_tool("k6") is not None, args
+    )
+    return _run(cmd, env=env)
+
+
 def cmd_dev_api(args: list[str]) -> int:
     """Run FastAPI development server with auto-reload on :8000."""
     return _run(["uv", "run", "uvicorn", "pbip_api.main:app", "--reload", "--port", "8000", *args])
@@ -711,6 +747,7 @@ COMMANDS = {
     "test-int": "Run integration tests (requires PostgreSQL)",
     "test-web": "Run Vitest frontend tests",
     "test-e2e": "Run Playwright end-to-end tests",
+    "perf": "k6 baseline: health endpoints at 50 VUs, p95 < 50 ms (needs a running API)",
     "smoke": "Run smoke test against localhost:8080 or custom URL",
     "check": "Run full CI verification suite locally",
     "clean": "Remove cache files and build outputs",

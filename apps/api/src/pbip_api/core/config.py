@@ -8,7 +8,7 @@ Rules enforced here (see AGENTS.md section 6):
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DEV_JWT_SECRET = "local-dev-only-change-me-local-dev-only-change-me"  # noqa: S105
@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     rate_limit_register_per_hour: int = 10
     rate_limit_password_change_per_minute: int = 5
     allow_self_registration: bool = True
+    # The readiness probe is public; caching its DB+Redis result bounds the load anyone can push
+    # onto the database through it. 0 disables caching.
+    health_ready_cache_seconds: float = Field(default=1.0, ge=0, le=30)
 
     # Banking limits (INTEGER MINOR UNITS)
     internal_bank_code: str = "PBIP0001"

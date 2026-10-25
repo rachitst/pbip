@@ -15,6 +15,7 @@ from pbip_api.modules.auth.router import router as auth_router
 from pbip_api.modules.compliance.router import router as compliance_router
 from pbip_api.modules.customers.router import router as customers_router
 from pbip_api.modules.fraud.router import router as fraud_router
+from pbip_api.modules.health.router import ReadinessCache
 from pbip_api.modules.health.router import router as health_router
 from pbip_api.modules.notifications.router import router as notifications_router
 from pbip_api.modules.payees.router import router as payees_router
@@ -67,6 +68,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware, hsts=settings.cookie_secure)
     app.add_middleware(RequestContextMiddleware)
 
+    app.state.readiness_cache = ReadinessCache(settings.health_ready_cache_seconds)
     register_error_handlers(app)
     for router in ROUTERS:
         app.include_router(router)

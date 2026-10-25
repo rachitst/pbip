@@ -198,3 +198,39 @@ def test_ml_commands_target_the_mlflow_service_and_smoke_module() -> None:
         ]  # fmt: skip
         dev_mod.cmd_mlflow_smoke(["--require-server"])
         assert mock_run.call_args[0][0][-2:] == ["pbip_ml.tracking_smoke", "--require-server"]
+
+
+def test_perf_uses_native_k6_when_installed() -> None:
+    cmd, env = dev_mod.build_k6_command("baseline.js", None, True, ["--quiet"])
+    assert cmd == ["k6", "run", "infra/k6/baseline.js", "--quiet"]
+    assert env == {"BASE_URL": "http://localhost:8000"}
+
+
+def test_perf_falls_back_to_docker_with_host_networking_on_linux() -> None:
+    with patch("scripts.dev.IS_WINDOWS", False), patch("scripts.dev.sys.platform", "linux"):
+        cmd, env = dev_mod.build_k6_command("baseline.js", None, False, [])
+    assert env == {}
+    assert cmd[:4] == ["docker", "run", "--rm", "-i"]
+    assert "BASE_URL=http://localhost:8000" in cmd and "--network" in cmd
+    assert dev_mod.K6_IMAGE in cmd and cmd[-1] == "/scripts/baseline.js"
+
+
+def test_perf_uses_host_docker_internal_on_docker_desktop() -> None:
+    with patch("scripts.dev.IS_WINDOWS", True):
+        cmd, _ = dev_mod.build_k6_command("baseline.js", None, False, [])
+    assert "BASE_URL=http://host.docker.internal:8000" in cmd and "--network" not in cmd
+    custom, _ = dev_mod.build_k6_command("baseline.js", "http://web:8080", False, [])
+    assert "BASE_URL=http://web:8080" in custom
+
+
+def test_k6_baseline_keeps_its_acceptance_thresholds() -> None:
+    """Guard against silently weakening TASK-012's pass/fail criteria."""
+    script = (dev_mod.ROOT / "infra" / "k6" / "baseline.js").read_text(encoding="utf-8")
+    for required in (
+        'http_req_failed: ["rate<0.001"]',
+        'http_req_duration: ["p(95)<50"]',
+        "/api/health/live",
+        "/api/health/ready",
+        "VUS || 50",
+    ):
+        assert required in script, required
