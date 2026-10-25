@@ -72,11 +72,11 @@
 
 ### Sprint 1
 
-All 13 tasks are **merged** (actual completion = merge date) and re-audited on 2026-10-25 (section 8). Two are
-not yet accepted: TASK-001 and TASK-013 still need real Windows verification (checklist in `docs/SETUP_GUIDE.md`
-section 4.7), and TASK-005 awaits the product owner's decision on its ledger-initialisation wording (section 8). Owners are accountable for any follow-up defects; no re-implementation is required.
+All 13 tasks are **merged** (merge date shown below; for Done tasks it is also the actual completion date) and re-audited on 2026-10-25 (section 8). TASK-005 was
+accepted on 2026-10-26 with a clarified criterion (section 8). TASK-001 and TASK-013 are **In Review**, not Done:
+they still need real Windows verification (checklist in `docs/SETUP_GUIDE.md` section 4.7). Owners are accountable for any follow-up defects; no re-implementation is required.
 
-| Task | Title | Owner | Merged in | Actual completion | Issue |
+| Task | Title | Owner | Merged in | Merged on | Issue |
 |---|---|---|---|---|---|
 | TASK-001 | Cross-Platform Developer Command Runner (dev.py, dev.ps1, dev.cmd) | Rachit | #10/#25/#26 | Sun 11 Oct | #12 |
 | TASK-002 | Cross-Platform Setup & Environment Doctor Diagnostic Tool | Rachit | #10/#25/#26 | Sun 11 Oct | #13 |
@@ -243,14 +243,14 @@ section 4.7), and TASK-005 awaits the product owner's decision on its ledger-ini
 
 - **Issue:** #12 | **Sprint:** 1 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Rachit (`rachitst`)
-- **Target deadline:** met | **Actual completion:** Sun 11 Oct (merged in #10/#25/#26) | **Status:** Done | **Risk:** Low
+- **Target deadline:** met | **Actual completion:** merged Sun 11 Oct (#10/#25/#26); not Done until verified on real Windows | **Status:** In Review | **Risk:** Low
 - **Depends on:** none
-- **Mode:** Done
+- **Mode:** In Review (awaiting real Windows verification)
 - **Goal:** A single, cross-platform CLI runner that works identically on Ubuntu/Linux, macOS, and native Windows PowerShell/CMD.
 - **Expected end result / acceptance criteria:**
   - [x] scripts/dev.py implements setup, doctor, infra-up, infra-down, up, dev-api, dev-web, dev-worker, test, lint, check, clean
-  - [x] dev.ps1 and dev.cmd allow Windows developers to execute commands identically to make on Linux
-  - [x] Celery dev-worker adds --pool=solo on Windows to avoid unsupported prefork crashes
+  - [ ] dev.ps1 and dev.cmd allow Windows developers to execute commands identically to make on Linux *(implemented; Linux and simulated-Windows tests pass; real Windows run pending, see `docs/SETUP_GUIDE.md` section 4.7)*
+  - [ ] Celery dev-worker adds --pool=solo on Windows to avoid unsupported prefork crashes *(implemented; Linux and simulated-Windows tests pass; real Windows run pending, see `docs/SETUP_GUIDE.md` section 4.7)*
   - [x] Clean command purges cache directories cross-platform without bash or rm -rf
 - **Definition of done (evidence):** Strictly typed, ruff clean, tested on Linux and Windows PowerShell, documented in SETUP_GUIDE.md.
 - **Required checks:**
@@ -336,7 +336,7 @@ section 4.7), and TASK-005 awaits the product owner's decision on its ledger-ini
 - **Expected end result / acceptance criteria:**
   - [x] POST /api/v1/accounts allows opening a new account with account_type in {CHECKING, SAVINGS}
   - [x] Generates unique, compliant account numbers using bank prefix and checksum
-  - [x] Integrates with double-entry ledger initializing zero-balance ledger entry header
+  - [x] Registers the new account with the double-entry ledger at a zero balance (no zero-value posting; the opening is recorded in the audit log) *(accepted clarification 2026-10-26, issue #16; original: "Integrates with double-entry ledger initializing zero-balance ledger entry header")*
   - [x] Enforces per-customer active account limits (max 5 accounts per customer)
 - **Definition of done (evidence):** Unit and integration tests pass, ledger triggers verified, OpenAPI contract regenerated.
 - **Required checks:**
@@ -495,9 +495,9 @@ section 4.7), and TASK-005 awaits the product owner's decision on its ledger-ini
 
 - **Issue:** #24 | **Sprint:** 1 | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Kalpak (`Patil-Kalpak`)
-- **Target deadline:** met | **Actual completion:** Sun 11 Oct (merged in #25/#26) | **Status:** Done | **Risk:** Low
+- **Target deadline:** met | **Actual completion:** merged Sun 11 Oct (#25/#26); not Done until verified on real Windows | **Status:** In Review | **Risk:** Low
 - **Depends on:** TASK-001 (#12, Rachit), TASK-002 (#13, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** Done
+- **Mode:** In Review (awaiting a fresh-clone run on real Windows)
 - **Goal:** Clear, beginner-friendly setup guide covering native Ubuntu, macOS, and native Windows PowerShell.
 - **Expected end result / acceptance criteria:**
   - [x] Separate step-by-step instructions for native Ubuntu and native Windows PowerShell
@@ -2868,10 +2868,10 @@ section 4.7), and TASK-005 awaits the product owner's decision on its ledger-ini
 | Task | Status | What is pending | Owner of the decision |
 |---|---|---|---|
 | TASK-001, TASK-013 | In Review | Real Windows 10/11 run of the checklist in `docs/SETUP_GUIDE.md` section 4.7 (no Windows machine was available; Linux checks pass) | Rachit (TASK-001), Kalpak (TASK-013), or any teammate with Windows |
-| TASK-005 | In Review | Product-owner acceptance of the ledger-initialisation interpretation (below) | Product owner (Rachit) |
+| TASK-005 | **Done (accepted 2026-10-26)** | Nothing: the product owner accepted the clarified criterion below; issue #16 closed | - |
 
-**TASK-005 recommendation.**
-- **The criterion:** it asks for a "zero-balance ledger entry header".
+**TASK-005 decision (accepted 2026-10-26).**
+- **The original criterion:** asked for a "zero-balance ledger entry header".
 - **The implementation:** account opening registers the account with the ledger at a zero materialised balance
   (`ledger.initialize_account`) and posts nothing.
 - **Why nothing is posted:** the database forbids zero-amount headers, entries and holds (`CHECK amount > 0`).
@@ -2879,7 +2879,8 @@ section 4.7), and TASK-005 awaits the product owner's decision on its ledger-ini
   `ledger.entry_balance` proves it (`test_new_account_is_initialised_by_the_ledger_and_reconciles`).
 - **Auditability:** the opening is recorded as a hash-chained `ACCOUNT_OPENED` audit row
   (`test_open_account_audit_trail`).
-- **Recommendation:** accept the behaviour and amend the criterion's wording to: *"Registers the new account with
-  the double-entry ledger at a zero balance (no zero-value posting; the opening is recorded in the audit log)."*
-  No code change is needed; weakening `CHECK amount > 0` to allow a symbolic zero posting would remove a
-  financial-integrity safeguard.
+- **Decision:** the product owner accepted the behaviour on 2026-10-26, and the criterion in
+  `docs/backlog/backlog.toml` now reads: *"Registers the new account with the double-entry ledger at a zero balance
+  (no zero-value posting; the opening is recorded in the audit log)."* This is an explicitly accepted clarification
+  of the original wording, not a change of behaviour. No code changed, and `CHECK amount > 0` stays: allowing a
+  symbolic zero posting would remove a financial-integrity safeguard.
