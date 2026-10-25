@@ -3,13 +3,13 @@
     make seed        (or)    uv run python scripts/seed_dev.py
 
 Refuses to run against staging/production. Safe to re-run: existing users are skipped.
-Staff TOTP secrets are written to .dev-secrets.txt (git-ignored) so you can add them to an
-authenticator app, or generate codes with:  uv run python scripts/totp.py analyst@demo.pbip
+Staff MFA secrets live only in the database, encrypted like any other user's; generate a login
+code with:  uv run python scripts/totp.py analyst@demo.pbip
+Neither the demo password nor any MFA secret is printed or written to a file.
 """
 
 import sys
 import time
-from pathlib import Path
 
 import pyotp
 from pbip_api.core.config import get_settings
@@ -25,7 +25,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 DEMO_PASSWORD = "Demo-Password-2026!"  # noqa: S105 - local demo data only
-SECRETS_FILE = Path(".dev-secrets.txt")
 
 CUSTOMERS = [
     ("alice@demo.pbip", "Alice Demo", 25_000_000),  # 2,50,000.00
@@ -48,7 +47,6 @@ def main() -> int:
         return 1
 
     factory = sessionmaker(bind=get_engine(), expire_on_commit=False)
-    secrets_lines: list[str] = []
     with factory() as session:
         service = AuthService(
             session,
@@ -87,14 +85,12 @@ def main() -> int:
             service.confirm_mfa_enrollment(
                 user.id, pyotp.TOTP(enrollment.secret).at(int(now)), meta
             )
-            secrets_lines.append(f"{email} {enrollment.secret}")
             sys.stdout.write(f"staff    {email}  ({role.value}, MFA enrolled)\n")
 
-    if secrets_lines:
-        with SECRETS_FILE.open("a", encoding="utf-8") as handle:
-            handle.write("\n".join(secrets_lines) + "\n")
-        sys.stdout.write(f"\nTOTP secrets written to {SECRETS_FILE} (git-ignored).\n")
-    sys.stdout.write(f"All demo passwords: {DEMO_PASSWORD}\n")
+    sys.stdout.write(
+        "\nDemo password (all users): the DEMO_PASSWORD constant in scripts/seed_dev.py.\n"
+        "Staff MFA code: uv run python scripts/totp.py <staff email>\n"
+    )
     return 0
 
 
