@@ -30,7 +30,7 @@
 | Pranay | `pranaysanap` | Fraud ML engine & data generation | 009, 010 | 12 | 28 | 8.2 | Mon 02 Nov |
 | Krishna | `LetRock1` | Analytics, forecasting & recommendations | 011 | 14 | 29 | 8.5 | Mon 02 Nov |
 
-> `SUJALGPM` has a pending repository invitation (sent 2026-10-25). GitHub cannot assign issues to him until he accepts; his 14 issues name him as planned owner and will be assigned once he has access.
+> `SUJALGPM` accepted the repository invitation; his 14 planned issues were assigned to him on 2026-10-26 (no other tasks were added).
 
 ## 3. Using AI tools without lowering the bar
 
@@ -2857,7 +2857,6 @@ they still need real Windows verification (checklist in `docs/SETUP_GUIDE.md` se
 |---|---|---|
 | Required 3.4x speed-up not achieved | Tasks miss Nov 3 | Measure at Day 3 and Day 5; report forecast shortfall; team decides scope explicitly |
 | Longest chain 023 -> ... -> 091 (fraud engine -> staff UI -> attack lab -> bug bash -> release) | Release task last | Pranay starts 023 immediately; contracts published early; Kalpak/Krishna build against merged interfaces |
-| `SUJALGPM` cannot be assigned until he accepts the invitation | 14 core-banking tasks lack a GitHub assignee | Planned owner recorded on each issue; assign as soon as access is accepted |
 | Integration crunch on Nov 2-3 | Late merge conflicts | Small PRs, rebase daily, Day 9 rule: everything open must be In Review |
 | Windows paths not yet run on real Windows | Setup issues for Windows users | Manual checks listed in `docs/SETUP_GUIDE.md` section 4.7 |
 
