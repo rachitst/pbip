@@ -3,7 +3,9 @@ import type { Page } from "@playwright/test";
 
 // Sprint 1 customer journey against the full stack (nginx -> API -> PostgreSQL/Redis).
 // Each run registers a fresh customer, so the test needs no seed data and leaves others alone.
-const PASSWORD = `E2e-Journey-${Date.now().toString(36)}-Pw!`; // pragma: allowlist secret
+// Random per run for a throwaway test user (never a real credential); the suffix satisfies the
+// letters + digits/symbols rule.
+const PASSWORD = `${crypto.randomUUID()}Aa1!`;
 const NEW_PASSWORD = `${PASSWORD}-Rotated`;
 
 async function signIn(page: Page, email: string, password: string) {
