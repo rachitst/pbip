@@ -66,6 +66,13 @@ class AccountLockedError(DomainError):
     code = "account_locked"
 
 
+class InvalidCurrentPasswordError(ForbiddenError):
+    """403, not 401: the caller IS authenticated. A 401 would make clients treat it as an
+    expired access token, silently refresh and replay - counting each attempt twice."""
+
+    code = "invalid_current_password"  # pragma: allowlist secret
+
+
 @dataclass(frozen=True, slots=True)
 class RequestMeta:
     ip: str | None = None
@@ -360,7 +367,7 @@ class AuthService:
         if not self.passwords.verify(user.password_hash, current_password):
             self._register_failure(user, meta, "bad_password")
             self.session.commit()
-            raise UnauthorizedError("incorrect current password")
+            raise InvalidCurrentPasswordError("incorrect current password")
 
         if current_password == new_password or self.passwords.verify(
             user.password_hash, new_password

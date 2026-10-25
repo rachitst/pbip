@@ -97,7 +97,7 @@ def test_login_rate_limit_per_ip(client: TestClient, settings: Settings) -> None
         ).status_code
         for _ in range(5)
     ]
-    assert statuses[:3] == [401, 401, 401]
+    assert statuses[:3] == [403, 403, 403]
     assert statuses[3:] == [429, 429]
 
 
@@ -366,8 +366,9 @@ def test_password_change_wrong_current_password_and_lockout(
         headers=alice.headers,
         json={"current_password": WRONG_PASSWORD, "new_password": NEW_PASSWORD},
     )
-    assert resp.status_code == 401
+    assert resp.status_code == 403
     assert resp.json()["title"] == "incorrect current password"
+    assert resp.json()["code"] == "invalid_current_password"
 
     for _ in range(4):
         bad = client.post(
@@ -375,7 +376,7 @@ def test_password_change_wrong_current_password_and_lockout(
             headers=alice.headers,
             json={"current_password": WRONG_PASSWORD, "new_password": NEW_PASSWORD},
         )
-        assert bad.status_code == 401
+        assert bad.status_code == 403
 
     locked = client.post(
         "/api/v1/auth/password-change",
@@ -478,7 +479,7 @@ def test_password_change_rate_limited(
         ).status_code
         for _ in range(5)
     ]
-    assert statuses[:3] == [401, 401, 401]
+    assert statuses[:3] == [403, 403, 403]
     assert statuses[3:] == [429, 429]
 
 
@@ -502,7 +503,7 @@ def test_concurrent_password_change_requests(
         f2 = executor.submit(do_change, new_pwd_2)
         statuses = sorted([f1.result(), f2.result()])
 
-    assert statuses == [204, 401]
+    assert statuses == [204, 403]  # the loser's current password is no longer valid
 
 
 def test_self_registration_disabled(client: TestClient, settings: Settings) -> None:
