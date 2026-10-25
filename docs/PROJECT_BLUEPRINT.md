@@ -181,12 +181,13 @@ erDiagram
 
 ## 5. API and module structure
 
-`/api/v1` for business routes; health at `/api/health`; `/metrics` internal only. Implemented (29 operations):
+`/api/v1` for business routes; health at `/api/health`; `/metrics` internal only. Implemented (Sprint 1 additions marked S1):
 
 | Module | Endpoints |
 |---|---|
-| auth | `POST register, login, mfa/verify, refresh, logout, mfa/enroll, mfa/confirm`, `GET me`; admin `POST /admin/users` |
-| accounts | `GET /accounts`, `/accounts/{id}`, `/accounts/{id}/transactions` (keyset) |
+| auth | `POST register, login, mfa/verify, refresh, logout, mfa/enroll, mfa/confirm, password-change` (S1: revokes every refresh-token family), `GET me`; admin `POST /admin/users`, `GET /admin/users/{id}/lockout`, `POST /admin/users/{id}/unlock` (S1, ADMIN+MFA) |
+| customers | `GET /customers/me`, `POST/GET /customers/devices`, `GET /customers/devices/{id}` (S1) |
+| accounts | `POST /accounts` (S1, INR, max 5 active), `GET /accounts`, `/accounts/{id}`, `/accounts/{id}/transactions` (keyset `cursor`/`limit`/`direction`, ADR 0008) |
 | payees | `POST/GET /payees`, `GET /payees/{id}`, `POST /payees/{id}/verify`, `DELETE /payees/{id}` |
 | payments | `POST /transfers` (Idempotency-Key), `GET /transfers/{id}`, `POST /transfers/{id}/step-up` |
 | fraud | `GET /fraud/alerts`, `/fraud/alerts/{id}`, `POST /fraud/alerts/{id}/decision` |

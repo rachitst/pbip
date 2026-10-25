@@ -1,4 +1,4 @@
-# Threat model v0.1 (STRIDE) - update every sprint
+# Threat model v0.2 (STRIDE) - update every sprint
 
 **Assets:** customer funds/ledger integrity; credentials, MFA secrets, refresh tokens; PII; fraud models and decisions;
 audit trail. **Actors:** anonymous attacker, malicious customer (BOLA), compromised customer account, insider staff, supply chain.
@@ -23,6 +23,18 @@ audit trail. **Actors:** anonymous attacker, malicious customer (BOLA), compromi
 | T15 | **E**levation: staff without MFA, role abuse | analyst session without TOTP | `require_roles(..., mfa=True)` (`amr`) | `test_staff_endpoints_demand_mfa_in_the_session` |
 | T16 | E: insecure deployment config | default secrets in prod | refuse to boot; docs disabled in deployed envs | `test_production_rejects_unsafe_configuration` |
 | T17 | Supply chain | compromised action/dependency | first-party actions, lockfiles, pip-audit/npm audit, Dependabot, SHA pinning | ADR-0006, CI `security` job |
+
+**Sprint 1 additions**
+
+| # | Threat (STRIDE) | Example | Control | Evidence (test / doc) |
+|---|---|---|---|---|
+| T18 | S: password compromise outlives the change | attacker keeps a refresh token after the victim changes password | password change revokes every refresh-token family; Argon2id check of the current password; failures count toward lockout; rate limit. Access JWTs live <= 15 min (documented limit) | `test_password_change_revokes_all_sessions_across_families`, `test_password_change_wrong_current_password_and_lockout` |
+| T19 | S: weak/breached new password | `Summer2025!`, leetspeak of common roots | offline blocklist + structural checks (no network egress of passwords) | `test_passwords.py`, `test_password_change_rejects_policy_failures` |
+| T20 | E: lockout bypass via admin unlock | non-admin or session without TOTP unlocks an account | `require_roles(ADMIN, mfa=True)`; unlock is audited (admin + target ids) and emits ACCOUNT_UNLOCKED | `test_only_mfa_verified_admins_may_inspect_or_unlock`, `test_unlock_is_audited_with_admin_and_target_ids` |
+| T21 | I: cursor tampering on transaction history | crafted cursor to read another account's entries | ownership checked before the cursor is decoded (404); cursor only narrows an owned query; malformed cursor = 422 without echo | `test_ownership_is_checked_before_any_cursor_is_used`, `test_malformed_cursors_are_a_422_not_a_500` |
+| T22 | D: probe amplification | flood `/api/health/ready` to drive DB/Redis load | readiness result cached for 1 s, single-flight refresh | `test_readiness_is_cached_for_the_ttl_then_rechecked`; k6 baseline |
+| T23 | D/T: device-registration race | concurrent first registrations -> 500s | atomic upsert on (customer, fingerprint hash); raw fingerprints never stored or echoed; header length bounded | `test_concurrent_first_registration_of_one_device_never_fails`, `test_oversized_device_header_is_rejected` |
+| T24 | T: synthetic data contaminates the ledger | bulk load writes fake customers/entries into operational tables | separate `synthetic` schema; loader never touches `public`; DB triggers reject orphan/cross-run rows and edits (ADR 0009) | `test_copy_loads_1000_customers_in_under_15_seconds` (ledger untouched), trigger tests |
 
 **Open items:** WAF/TLS termination in deployment (Sprint 5); Schemathesis fuzzing (Sprint 5); assistant adversarial suite
 (Sprint 5); device binding for refresh tokens (COULD); access-token denylist (COULD).
