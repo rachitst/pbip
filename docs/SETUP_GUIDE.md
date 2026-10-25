@@ -25,7 +25,7 @@ PBIP fully supports **native Ubuntu Linux** (via `make` or `python scripts/dev.p
 ## 1. Architecture & Stack Overview
 
 PBIP is engineered as a regulated banking system:
-- **API (`apps/api`):** FastAPI modular monolith (Python 3.12, SQLAlchemy 2 async, Alembic, Celery, Redis, argon2id).
+- **API (`apps/api`):** FastAPI modular monolith (Python 3.12, SQLAlchemy 2 **synchronous** - ADR 0005, Alembic, Celery, Redis, argon2id).
 - **Web Frontend (`apps/web`):** React 19 + TypeScript + Vite, Tailwind CSS / Vanilla CSS components.
 - **ML & Analytics (`ml/`, `data-gen/`):** Isolation contracts, synthetic customer generation, LightGBM fraud models, Optuna, MLflow.
 - **Infrastructure (`infra/`):** PostgreSQL 16, Redis 7, Prometheus, Grafana, Loki, Nginx reverse proxy.
@@ -48,6 +48,24 @@ PBIP uses a single unified runner (`scripts/dev.py`). You can invoke it natively
 | **Start Frontend** | `make dev-web` | `.\dev.ps1 dev-web` | `python scripts/dev.py dev-web` |
 | **Start Celery Worker** | `make dev-worker` | `.\dev.ps1 dev-worker` | `python scripts/dev.py dev-worker` |
 | **Run All CI Checks** | `make check` | `.\dev.ps1 check` | `python scripts/dev.py check` |
+| **Synthetic ML Dataset** | `make datagen` | `.\dev.ps1 datagen` | `python scripts/dev.py datagen` |
+| **Run EDA Notebooks** | `make notebooks` | `.\dev.ps1 notebooks` | `python scripts/dev.py notebooks` |
+| **MLflow Server Only** | `make ml-up` | `.\dev.ps1 ml-up` | `python scripts/dev.py ml-up` |
+| **k6 Perf Baseline** | `make perf` | `.\dev.ps1 perf` | `python scripts/dev.py perf` |
+
+### Prerequisite versions
+
+| Tool | Minimum | Notes |
+|---|---|---|
+| Python | **3.12** | `uv` downloads it automatically if missing (`uv python install 3.12`) |
+| uv | 0.4 | Python package/venv manager; installs to `~/.local/bin` |
+| Node.js / npm | 20 (22 LTS recommended) | Build tooling only - nothing Node runs in production |
+| Docker Engine + Compose v2 | Docker 24, `docker compose` plugin | Docker Desktop on Windows/macOS |
+| git | 2.40 | |
+| GitHub CLI (`gh`) | optional | Only for `scripts/setup_github.py` and backlog import |
+| k6 | optional | `make perf` falls back to the `grafana/k6` Docker image |
+
+`make doctor` / `.\dev.ps1 doctor` checks all of these and the ports below.
 | **Run Unit Tests** | `make test-unit` | `.\dev.ps1 test-unit` | `python scripts/dev.py test-unit` |
 | **Run Web Tests** | `make test-web` | `.\dev.ps1 test-web` | `python scripts/dev.py test-web` |
 | **Regen OpenAPI Contract** | `make openapi` | `.\dev.ps1 openapi` | `python scripts/dev.py openapi` |
@@ -68,7 +86,7 @@ sudo apt install -y git curl build-essential libpq-dev
 ### 3.2 Install `uv` (Fast Python Package Manager)
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
-source ~/.cargo/env  # or restart your terminal
+export PATH="$HOME/.local/bin:$PATH"  # the installer's location (or restart your terminal)
 uv --version         # Verify: uv 0.4+ recommended
 ```
 
@@ -431,10 +449,13 @@ sudo usermod -aG docker $USER
 newgrp docker
 ```
 
-### Q: `Celery: ValueError: not enough values to unpack` or spawn errors on Windows
-**Fix:** Windows does not support Celery `prefork` process pooling. The PBIP dev runner automatically handles this by appending `--pool=solo` when running `.\dev.ps1 dev-worker` on Windows. If invoking Celery manually:
+### Q: `Celery: ValueError: not enough values to unpack`, spawn errors, or `-B option does not work on Windows`
+**Fix:** Windows has no Celery `prefork` pool and Celery refuses `--beat`/`-B` there. `.\dev.ps1 dev-worker`
+runs the worker with `--pool=solo` and starts beat as a separate process automatically. If invoking Celery
+manually, use two terminals:
 ```powershell
 uv run celery -A pbip_api.worker.celery_app worker --loglevel=INFO --pool=solo
+uv run celery -A pbip_api.worker.celery_app beat --loglevel=INFO
 ```
 
 ### Q: `Execution of scripts is disabled on this system` in Windows PowerShell
@@ -451,10 +472,21 @@ make infra-up
 # or .\dev.ps1 infra-up
 ```
 
-### Q: Port 5432 or 6379 already in use
-**Fix:** Another PostgreSQL or Redis server is running locally on your machine.
-- Linux: `sudo systemctl stop postgresql redis-server`
-- Windows: Open Services (`services.msc`) and stop the local `postgresql-x64` or `redis` service before running `make infra-up`.
+### Q: A port is already in use (`bind: address already in use`)
+PBIP uses 5432 (PostgreSQL), 6379 (Redis), 8000 (API), 5173 (Vite), 8080 (web/nginx), 3000 (Grafana),
+9090 (Prometheus) and 5000 (MLflow). `make doctor` reports which ones are taken. Find the owner:
+```bash
+# Linux / macOS
+sudo ss -ltnp 'sport = :8000'          # or: sudo lsof -i :8000
+```
+```powershell
+# Windows PowerShell
+Get-NetTCPConnection -LocalPort 8000 -State Listen | ForEach-Object { Get-Process -Id $_.OwningProcess }
+```
+**Fix:** stop the other process, or stop a stale PBIP stack with `make down` / `.\dev.ps1 down`.
+Common culprits: a native PostgreSQL/Redis service (Linux: `sudo systemctl stop postgresql redis-server`;
+Windows: stop `postgresql-x64-*` / `Redis` in `services.msc`), a second `dev-api` still running (8000), or
+macOS AirPlay Receiver on 5000 (System Settings > General > AirDrop & Handoff).
 
 ### Q: Frontend package installations fail
 **Fix:** Ensure you have Node.js 20+ installed. In `apps/web`, run:
