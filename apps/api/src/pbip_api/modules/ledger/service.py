@@ -267,15 +267,26 @@ def reverse_transaction(
 
 
 def list_account_entries(
-    session: Session, account_id: UUID, limit: int, cursor: int | None
+    session: Session,
+    account_id: UUID,
+    limit: int,
+    after_seq: int | None,
+    newer: bool = False,
 ) -> list[tuple[TransactionEntry, Transaction]]:
+    """Keyset page of an account's entries by posting order (``seq``).
+
+    ``newer=False`` walks back in time (newest first, ``seq < after_seq``); ``newer=True`` walks
+    forward (oldest first, ``seq > after_seq``). The caller authorizes the account first.
+    """
+    order = TransactionEntry.seq.asc() if newer else TransactionEntry.seq.desc()
     stmt = (
         select(TransactionEntry, Transaction)
         .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
         .where(TransactionEntry.account_id == account_id)
-        .order_by(TransactionEntry.seq.desc())
+        .order_by(order)
         .limit(limit)
     )
-    if cursor is not None:
-        stmt = stmt.where(TransactionEntry.seq < cursor)
+    if after_seq is not None:
+        bound = TransactionEntry.seq > after_seq if newer else TransactionEntry.seq < after_seq
+        stmt = stmt.where(bound)
     return [(entry, txn) for entry, txn in session.execute(stmt).all()]

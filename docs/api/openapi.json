@@ -565,6 +565,10 @@
       },
       "EntriesPage": {
         "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/EntryOut"
@@ -581,12 +585,14 @@
                 "type": "null"
               }
             ],
+            "description": "Opaque cursor for the next page in the same direction; null on the last page",
             "title": "Next Cursor"
           }
         },
         "required": [
           "items",
-          "next_cursor"
+          "next_cursor",
+          "has_more"
         ],
         "title": "EntriesPage",
         "type": "object"
@@ -874,6 +880,14 @@
           "CURRENT"
         ],
         "title": "OpenAccountType",
+        "type": "string"
+      },
+      "PageDirection": {
+        "enum": [
+          "older",
+          "newer"
+        ],
+        "title": "PageDirection",
         "type": "string"
       },
       "PasswordChangeRequest": {
@@ -1722,20 +1736,34 @@
             }
           },
           {
+            "description": "Opaque next_cursor from a previous page (legacy integer cursors accepted)",
             "in": "query",
             "name": "cursor",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "minimum": 1,
-                  "type": "integer"
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
+              "description": "Opaque next_cursor from a previous page (legacy integer cursors accepted)",
               "title": "Cursor"
+            }
+          },
+          {
+            "description": "older: newest first, walking back; newer: oldest first, walking forward",
+            "in": "query",
+            "name": "direction",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/PageDirection",
+              "default": "older",
+              "description": "older: newest first, walking back; newer: oldest first, walking forward"
             }
           }
         ],
@@ -1766,7 +1794,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Ledger entries for one of my accounts (newest first, keyset pagination)",
+        "summary": "Ledger entries for one of my accounts (keyset pagination)",
         "tags": [
           "accounts"
         ]

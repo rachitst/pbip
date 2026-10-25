@@ -4,19 +4,18 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from pbip_api.core.db import get_session
+from pbip_api.core.pagination import MAX_CURSOR_LENGTH, PageDirection
 from pbip_api.modules.accounts import policy, service
 from pbip_api.modules.accounts.models import Account
 from pbip_api.modules.accounts.schemas import (
     AccountOut,
     EntriesPage,
-    EntryOut,
     OpenAccountRequest,
 )
 from pbip_api.modules.auth.dependencies import get_request_meta
 from pbip_api.modules.auth.service import RequestMeta
 from pbip_api.modules.customers.dependencies import get_current_customer
 from pbip_api.modules.customers.models import Customer
-from pbip_api.modules.ledger import service as ledger_service
 
 router = APIRouter(prefix="/api/v1/accounts", tags=["accounts"])
 
@@ -78,30 +77,23 @@ def get_my_account(
 @router.get(
     "/{account_id}/transactions",
     response_model=EntriesPage,
-    summary="Ledger entries for one of my accounts (newest first, keyset pagination)",
+    summary="Ledger entries for one of my accounts (keyset pagination)",
 )
 def list_my_account_entries(
     account_id: UUID,
     limit: int = Query(default=25, ge=1, le=100),
-    cursor: int | None = Query(default=None, ge=1),
+    cursor: str | None = Query(
+        default=None,
+        min_length=1,
+        max_length=MAX_CURSOR_LENGTH,
+        description="Opaque next_cursor from a previous page (legacy integer cursors accepted)",
+    ),
+    direction: PageDirection = Query(
+        default=PageDirection.OLDER,
+        description="older: newest first, walking back; newer: oldest first, walking forward",
+    ),
     customer: Customer = Depends(get_current_customer),
     session: Session = Depends(get_session),
 ) -> EntriesPage:
     account = policy.get_owned_account(session, customer.id, account_id)
-    rows = ledger_service.list_account_entries(session, account.id, limit + 1, cursor)
-    page, has_more = rows[:limit], len(rows) > limit
-    items = [
-        EntryOut(
-            entry_seq=entry.seq,
-            transaction_id=txn.id,
-            direction=entry.direction.value,
-            amount_minor=entry.amount,
-            balance_after_minor=entry.balance_after,
-            transaction_type=txn.type.value,
-            transaction_status=txn.status.value,
-            reference=txn.reference,
-            created_at=entry.created_at,
-        )
-        for entry, txn in page
-    ]
-    return EntriesPage(items=items, next_cursor=str(page[-1][0].seq) if has_more and page else None)
+    return service.list_entries_page(session, account, limit, cursor, direction)

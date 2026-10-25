@@ -49,4 +49,7 @@ class EntryOut(BaseModel):
 
 class EntriesPage(BaseModel):
     items: list[EntryOut]
-    next_cursor: str | None
+    next_cursor: str | None = Field(
+        description="Opaque cursor for the next page in the same direction; null on the last page"
+    )
+    has_more: bool

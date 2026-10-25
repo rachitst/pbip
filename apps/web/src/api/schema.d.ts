@@ -80,7 +80,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Ledger entries for one of my accounts (newest first, keyset pagination) */
+        /** Ledger entries for one of my accounts (keyset pagination) */
         get: operations["list_my_account_entries_api_v1_accounts__account_id__transactions_get"];
         put?: never;
         post?: never;
@@ -819,9 +819,14 @@ export interface components {
         };
         /** EntriesPage */
         EntriesPage: {
+            /** Has More */
+            has_more: boolean;
             /** Items */
             items: components["schemas"]["EntryOut"][];
-            /** Next Cursor */
+            /**
+             * Next Cursor
+             * @description Opaque cursor for the next page in the same direction; null on the last page
+             */
             next_cursor: string | null;
         };
         /** EntryOut */
@@ -944,6 +949,11 @@ export interface components {
          * @enum {string}
          */
         OpenAccountType: "SAVINGS" | "CHECKING" | "CURRENT";
+        /**
+         * PageDirection
+         * @enum {string}
+         */
+        PageDirection: "older" | "newer";
         /** PasswordChangeRequest */
         PasswordChangeRequest: {
             /** Current Password */
@@ -1317,7 +1327,10 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
-                cursor?: number | null;
+                /** @description Opaque next_cursor from a previous page (legacy integer cursors accepted) */
+                cursor?: string | null;
+                /** @description older: newest first, walking back; newer: oldest first, walking forward */
+                direction?: components["schemas"]["PageDirection"];
             };
             header?: never;
             path: {
