@@ -11,9 +11,15 @@ class OpenAccountType(StrEnum):
     CURRENT = "CURRENT"
 
 
+class SupportedCurrency(StrEnum):
+    """Single-currency bank (blueprint section 7): the clearing account and every rail are INR."""
+
+    INR = "INR"
+
+
 class OpenAccountRequest(BaseModel):
     account_type: OpenAccountType
-    currency: str = Field(default="INR", min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
+    currency: SupportedCurrency = SupportedCurrency.INR
 
     @field_validator("account_type", mode="before")
     @classmethod
@@ -49,4 +55,7 @@ class EntryOut(BaseModel):
 
 class EntriesPage(BaseModel):
     items: list[EntryOut]
-    next_cursor: str | None
+    next_cursor: str | None = Field(
+        description="Opaque cursor for the next page in the same direction; null on the last page"
+    )
+    has_more: bool

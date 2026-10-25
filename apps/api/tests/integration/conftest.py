@@ -38,6 +38,7 @@ pytestmark = pytest.mark.integration
 def migrated_engine(db_engine: Engine, test_database_url: str) -> Engine:
     with db_engine.begin() as connection:
         connection.execute(text("DROP SCHEMA public CASCADE"))
+        connection.execute(text("DROP SCHEMA IF EXISTS synthetic CASCADE"))  # migration 0002
         connection.execute(text("CREATE SCHEMA public"))
     os.environ["ALEMBIC_DATABASE_URL"] = test_database_url
     command.upgrade(Config(str(ALEMBIC_INI)), "head")

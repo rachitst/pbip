@@ -1,15 +1,17 @@
 @echo off
 REM PBIP Developer Command Runner for Windows CMD
-set SCRIPT_DIR=%~dp0
+REM "exit /b" without a code keeps the ERRORLEVEL of the command that just ran. Do not write
+REM "exit /b %ERRORLEVEL%" inside ( ): it is expanded when the block is parsed (always 0).
+REM No goto labels: the repo stores this file with LF endings, where label lookup is fragile.
 where uv >nul 2>nul
-if %ERRORLEVEL% equ 0 (
-    uv run python "%SCRIPT_DIR%scripts\dev.py" %*
-    exit /b %ERRORLEVEL%
+if not errorlevel 1 (
+    uv run python "%~dp0scripts\dev.py" %*
+    exit /b
 )
 where python >nul 2>nul
-if %ERRORLEVEL% equ 0 (
-    python "%SCRIPT_DIR%scripts\dev.py" %*
-    exit /b %ERRORLEVEL%
+if not errorlevel 1 (
+    python "%~dp0scripts\dev.py" %*
+    exit /b
 )
 echo Neither 'uv' nor 'python' was found in PATH.
 exit /b 1

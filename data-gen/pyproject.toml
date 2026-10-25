@@ -7,6 +7,7 @@ dependencies = [
     "numpy>=2.0",
     "pandas>=2.2",
     "faker>=33.0",
+    "psycopg[binary]>=3.2",
 ]
 
 [build-system]

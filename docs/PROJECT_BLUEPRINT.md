@@ -181,12 +181,13 @@ erDiagram
 
 ## 5. API and module structure
 
-`/api/v1` for business routes; health at `/api/health`; `/metrics` internal only. Implemented (29 operations):
+`/api/v1` for business routes; health at `/api/health`; `/metrics` internal only. Implemented (Sprint 1 additions marked S1):
 
 | Module | Endpoints |
 |---|---|
-| auth | `POST register, login, mfa/verify, refresh, logout, mfa/enroll, mfa/confirm`, `GET me`; admin `POST /admin/users` |
-| accounts | `GET /accounts`, `/accounts/{id}`, `/accounts/{id}/transactions` (keyset) |
+| auth | `POST register, login, mfa/verify, refresh, logout, mfa/enroll, mfa/confirm, password-change` (S1: revokes every refresh-token family), `GET me`; admin `POST /admin/users`, `GET /admin/users/{id}/lockout`, `POST /admin/users/{id}/unlock` (S1, ADMIN+MFA) |
+| customers | `GET /customers/me`, `POST/GET /customers/devices`, `GET /customers/devices/{id}` (S1) |
+| accounts | `POST /accounts` (S1, INR, max 5 active), `GET /accounts`, `/accounts/{id}`, `/accounts/{id}/transactions` (keyset `cursor`/`limit`/`direction`, ADR 0008) |
 | payees | `POST/GET /payees`, `GET /payees/{id}`, `POST /payees/{id}/verify`, `DELETE /payees/{id}` |
 | payments | `POST /transfers` (Idempotency-Key), `GET /transfers/{id}`, `POST /transfers/{id}/step-up` |
 | fraud | `GET /fraud/alerts`, `/fraud/alerts/{id}`, `POST /fraud/alerts/{id}/decision` |
@@ -248,7 +249,10 @@ revocation is by short TTL, not a denylist.
 account's balance). Customer deposits/withdrawals to the outside world pass through the internal `SYS-CLEARING`
 account, so **every** transaction has >= 2 entries and `sum(debits) == sum(credits)`.
 `accounts.ledger_balance` is a materialised running balance updated in the same DB transaction; `held_amount`
-tracks holds; `available = ledger - held (+ overdraft)`.
+tracks holds; `available = ledger - held (+ overdraft)`. **Account opening** registers the account with the
+ledger (`ledger.initialize_account`) at a zero materialised balance and posts nothing: a balance is the sum of
+entries, a new account has none, and a zero-value header is forbidden (`CHECK amount > 0`).
+`ledger.entry_balance` recomputes any balance from its entries (reconciliation oracle, tested).
 
 **Lifecycle (state machine).** `INITIATED` (transient) -> `POSTED` | `PENDING_STEP_UP` | `PENDING_REVIEW` |
 `DECLINED`; `PENDING_STEP_UP` -> `POSTED` (valid TOTP); `PENDING_REVIEW` -> `POSTED` (analyst RELEASE: hold

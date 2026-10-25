@@ -1,49 +1,41 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import type { SyntheticEvent } from "react";
-import { api } from "../api/client";
-import type { TransferOut } from "../api/client";
-import { useAuth } from "../auth/AuthContext";
+import { ApiError, api } from "../api/client";
+import type { AccountOut, OpenAccountType, TransferOut } from "../api/client";
 import { formatMinor, parseToMinor } from "../lib/money";
+import { AccountTransactions } from "./AccountTransactions";
+
+const ACCOUNT_LABELS: Record<string, string> = {
+  SAVINGS: "Savings",
+  CURRENT: "Current (checking)",
+  CHECKING: "Current (checking)",
+};
 
 export function Accounts() {
-  const { logout } = useAuth();
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts });
   const payees = useQuery({ queryKey: ["payees"], queryFn: api.payees });
+  const [openedId, setOpenedId] = useState<string | null>(null);
 
   return (
-    <main className="card">
-      <header className="row">
-        <h1>My accounts</h1>
-        <button
-          className="secondary"
-          onClick={() => {
-            void logout();
-          }}
-        >
-          Sign out
-        </button>
-      </header>
+    <main>
+      <h1>My accounts</h1>
       {accounts.isPending && <p>Loading accounts...</p>}
       {accounts.isError && <p role="alert">Could not load accounts.</p>}
+      {accounts.data?.length === 0 && <p className="muted">You have no accounts yet.</p>}
       <ul className="list">
         {accounts.data?.map((account) => (
-          <li key={account.id}>
-            <div>
-              <strong>{account.account_type}</strong>
-              <div className="muted">{account.account_number_masked}</div>
-            </div>
-            <div className="right">
-              <div aria-label="available balance">
-                {formatMinor(account.available_minor, account.currency)}
-              </div>
-              {account.held_minor > 0 && (
-                <div className="muted">{formatMinor(account.held_minor)} on hold</div>
-              )}
-            </div>
-          </li>
+          <AccountRow
+            key={account.id}
+            account={account}
+            expanded={openedId === account.id}
+            onToggle={() => {
+              setOpenedId(openedId === account.id ? null : account.id);
+            }}
+          />
         ))}
       </ul>
+      <OpenAccount />
       {accounts.data?.[0] && (
         <SendMoney
           fromAccountId={accounts.data[0].id}
@@ -51,6 +43,96 @@ export function Accounts() {
         />
       )}
     </main>
+  );
+}
+
+interface AccountRowProps {
+  account: AccountOut;
+  expanded: boolean;
+  onToggle: () => void;
+}
+
+function AccountRow({ account, expanded, onToggle }: AccountRowProps) {
+  const panelId = `transactions-${account.id}`;
+  return (
+    <li className="account">
+      <div className="row">
+        <div>
+          <strong>{ACCOUNT_LABELS[account.account_type] ?? account.account_type}</strong>
+          <div className="muted">{account.account_number_masked}</div>
+        </div>
+        <div className="right">
+          <div aria-label="available balance">
+            {formatMinor(account.available_minor, account.currency)}
+          </div>
+          {account.held_minor > 0 && (
+            <div className="muted">{formatMinor(account.held_minor)} on hold</div>
+          )}
+          <button
+            type="button"
+            className="link"
+            aria-expanded={expanded}
+            aria-controls={panelId}
+            onClick={onToggle}
+          >
+            {expanded ? "Hide transactions" : "Transactions"}
+          </button>
+        </div>
+      </div>
+      {expanded && (
+        <div id={panelId}>
+          <AccountTransactions accountId={account.id} currency={account.currency} />
+        </div>
+      )}
+    </li>
+  );
+}
+
+function OpenAccount() {
+  const queryClient = useQueryClient();
+  const [accountType, setAccountType] = useState<OpenAccountType>("SAVINGS");
+  const open = useMutation({
+    mutationFn: (type: OpenAccountType) => api.openAccount(type),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+  });
+
+  return (
+    <section>
+      <h2>Open an account</h2>
+      <form
+        className="inline"
+        onSubmit={(event) => {
+          event.preventDefault();
+          open.mutate(accountType);
+        }}
+      >
+        <label>
+          Account type
+          <select
+            value={accountType}
+            onChange={(event) => {
+              setAccountType(event.target.value === "CHECKING" ? "CHECKING" : "SAVINGS");
+            }}
+          >
+            <option value="SAVINGS">Savings</option>
+            <option value="CHECKING">Current (checking)</option>
+          </select>
+        </label>
+        <button type="submit" disabled={open.isPending}>
+          {open.isPending ? "Opening..." : "Open account"}
+        </button>
+      </form>
+      {open.isSuccess && (
+        <p role="status" className="ok">
+          Account {open.data.account_number_masked} opened.
+        </p>
+      )}
+      {open.isError && (
+        <p role="alert" className="error">
+          {open.error instanceof ApiError ? open.error.message : "Could not open the account."}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -85,6 +167,7 @@ function SendMoney({ fromAccountId, payees }: SendMoneyProps) {
       setResult(transfer);
       setIntentKey(crypto.randomUUID()); // intent finished: next submit is a NEW intent
       await queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      await queryClient.invalidateQueries({ queryKey: ["entries"] });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Transfer failed.");
     }

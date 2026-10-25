@@ -6,7 +6,8 @@ import hashlib
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import Boolean, func, literal_column, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from pbip_api.core.config import Settings
@@ -96,30 +97,28 @@ class CustomerService:
         Never logs or exposes the raw fingerprint.
         """
         fingerprint_hash = hashlib.sha256(raw_fingerprint.encode("utf-8")).hexdigest()
+        clean_label = label.strip() if label else None
 
-        existing = self.session.execute(
-            select(Device).where(
-                Device.customer_id == customer.id,
-                Device.fingerprint_hash == fingerprint_hash,
-            )
-        ).scalar_one_or_none()
-
-        if existing is not None:
-            existing.last_seen_at = utcnow()
-            if label:
-                existing.label = label.strip()
-            device = existing
-            is_new = False
-        else:
-            device = Device(
-                customer_id=customer.id,
-                fingerprint_hash=fingerprint_hash,
-                label=label.strip() if label else None,
-                trusted=False,
-            )
-            self.session.add(device)
-            self.session.flush()
-            is_new = True
+        # One atomic upsert instead of select-then-insert: concurrent first registrations of the
+        # same device used to race on uq_devices_customer_fingerprint (HTTP 500). `xmax = 0` is
+        # true only for a freshly inserted row, so callers still learn "new" vs "touched".
+        insert = pg_insert(Device).values(
+            customer_id=customer.id,
+            fingerprint_hash=fingerprint_hash,
+            label=clean_label,
+            trusted=False,
+        )
+        upsert = insert.on_conflict_do_update(
+            constraint="uq_devices_customer_fingerprint",
+            set_={
+                "last_seen_at": func.now(),
+                "label": func.coalesce(insert.excluded.label, Device.label),
+            },
+        )
+        inserted = literal_column("(xmax = 0)", Boolean).label("inserted")
+        row = self.session.execute(upsert.returning(Device.id, inserted)).one()
+        device_id, is_new = row.id, bool(row.inserted)
+        device = self.session.get_one(Device, device_id, populate_existing=True)
 
         self.audit.record(
             actor_user_id=customer.user_id,

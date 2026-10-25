@@ -27,6 +27,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# The 14 standard labels (6 type, 4 core areas, 3 tiers, "blocked") plus 6 extra areas that the
+# backlog import (scripts/backlog.py) assigns to issues. Creation uses --force, so re-running the
+# script updates colours/descriptions in place instead of failing or duplicating.
+STANDARD_LABELS = frozenset(
+    {
+        "type:feat", "type:bug", "type:chore", "type:docs", "type:security", "type:test",
+        "area:api", "area:web", "area:ml", "area:infra",
+        "tier:must", "tier:should", "tier:could",
+        "blocked",
+    }
+)  # fmt: skip
+
 LABELS: list[tuple[str, str, str]] = [
     # Work item types
     ("type:feat", "1D76DB", "New capability"),
@@ -261,7 +273,12 @@ def setup_ruleset(repo: str, dry_run: bool) -> None:
 
 
 def find_existing_project(owner: str, title: str) -> dict[str, int | str] | None:
-    """Check if a project board with the given title already exists under the owner."""
+    """Check if a project board with the given title already exists under the owner.
+
+    Read-only, so it also runs in --dry-run; without gh installed there is nothing to look up.
+    """
+    if shutil.which("gh") is None:
+        return None
     res = subprocess.run(
         ["gh", "project", "list", "--owner", owner, "--format", "json"],
         capture_output=True,

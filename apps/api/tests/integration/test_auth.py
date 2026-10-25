@@ -1,17 +1,27 @@
 import base64
 import json
+import uuid
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 from pbip_api.core.config import Settings
+from pbip_api.core.errors import ConflictError, NotFoundError, UnprocessableError
 from pbip_api.core.security import encode_token
+from pbip_api.modules.auth.models import RefreshToken, SecurityEvent, SecurityEventType, User
+from pbip_api.modules.auth.service import RequestMeta
+from pbip_api.modules.compliance.models import AuditLog
 from pbip_test_support import PASSWORD, Actor, FakeClock, login_json, totp_code
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 pytestmark = pytest.mark.integration
 CSRF = {"X-Requested-With": "pbip-web"}
+NEW_PASSWORD = "Correct-Horse-New-9!"  # pragma: allowlist secret
+WRONG_PASSWORD = "WrongPassword-123!"  # pragma: allowlist secret
 
 
 def register(client: TestClient, email: str, password: str = PASSWORD) -> Any:
@@ -275,3 +285,305 @@ def test_failed_login_does_not_leak_secrets_into_logs(
     captured = capsys.readouterr().out
     assert "S3cretPassw0rd-Sentinel" not in captured
     assert "leak@example.com" not in captured
+
+
+def test_password_change_success_and_login_with_new_password(
+    client: TestClient, make_customer: Callable[..., Actor]
+) -> None:
+    alice = make_customer("alice.pwd@example.com")
+    resp = client.post(
+        "/api/v1/auth/password-change",
+        headers=alice.headers,
+        json={"current_password": PASSWORD, "new_password": NEW_PASSWORD},
+    )
+    assert resp.status_code == 204
+    cookie_header = resp.headers.get("set-cookie", "")
+    assert 'pbip_refresh=""' in cookie_header or "Max-Age=0" in cookie_header
+
+    old_login = client.post(
+        "/api/v1/auth/login", json={"email": "alice.pwd@example.com", "password": PASSWORD}
+    )
+    assert old_login.status_code == 401
+
+    new_login = client.post(
+        "/api/v1/auth/login", json={"email": "alice.pwd@example.com", "password": NEW_PASSWORD}
+    )
+    assert new_login.status_code == 200
+    assert new_login.json()["access_token"]
+
+
+def test_password_change_revokes_all_sessions_across_families(
+    client: TestClient, make_customer: Callable[..., Actor], db: Session
+) -> None:
+    alice = make_customer("alice.multisession@example.com")
+    client.post(
+        "/api/v1/auth/login",
+        json={"email": "alice.multisession@example.com", "password": PASSWORD},
+    )
+    cookie1 = client.cookies.get("pbip_refresh")
+    assert cookie1
+
+    client.cookies.clear()
+    client.post(
+        "/api/v1/auth/login",
+        json={"email": "alice.multisession@example.com", "password": PASSWORD},
+    )
+    cookie2 = client.cookies.get("pbip_refresh")
+    assert cookie2 and cookie2 != cookie1
+
+    resp = client.post(
+        "/api/v1/auth/password-change",
+        headers=alice.headers,
+        json={"current_password": PASSWORD, "new_password": NEW_PASSWORD},
+    )
+    assert resp.status_code == 204
+
+    client.cookies.set("pbip_refresh", cookie1)
+    ref1 = client.post("/api/v1/auth/refresh", headers=CSRF)
+    assert ref1.status_code == 401
+
+    client.cookies.set("pbip_refresh", cookie2)
+    ref2 = client.post("/api/v1/auth/refresh", headers=CSRF)
+    assert ref2.status_code == 401
+
+    tokens = (
+        db.execute(select(RefreshToken).where(RefreshToken.user_id == alice.user_id))
+        .scalars()
+        .all()
+    )
+    assert len(tokens) >= 2
+    for tok in tokens:
+        assert tok.revoked_at is not None
+
+
+def test_password_change_wrong_current_password_and_lockout(
+    client: TestClient, make_customer: Callable[..., Actor], settings: Settings
+) -> None:
+    settings.rate_limit_password_change_per_minute = 20
+    alice = make_customer("alice.wrongpwd@example.com")
+    resp = client.post(
+        "/api/v1/auth/password-change",
+        headers=alice.headers,
+        json={"current_password": WRONG_PASSWORD, "new_password": NEW_PASSWORD},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["title"] == "incorrect current password"
+    assert resp.json()["code"] == "invalid_current_password"
+
+    for _ in range(4):
+        bad = client.post(
+            "/api/v1/auth/password-change",
+            headers=alice.headers,
+            json={"current_password": WRONG_PASSWORD, "new_password": NEW_PASSWORD},
+        )
+        assert bad.status_code == 403
+
+    locked = client.post(
+        "/api/v1/auth/password-change",
+        headers=alice.headers,
+        json={"current_password": PASSWORD, "new_password": NEW_PASSWORD},
+    )
+    assert locked.status_code == 423
+
+
+def test_password_change_rejects_unchanged_password(
+    client: TestClient, make_customer: Callable[..., Actor]
+) -> None:
+    alice = make_customer("alice.samepwd@example.com")
+    resp = client.post(
+        "/api/v1/auth/password-change",
+        headers=alice.headers,
+        json={"current_password": PASSWORD, "new_password": PASSWORD},
+    )
+    assert resp.status_code == 422
+    assert resp.json()["title"] == "new password must not match the current password"
+
+
+@pytest.mark.parametrize(
+    "bad_password",
+    [
+        "short1!",
+        "aaaaaaaaaaaaaaaa",
+        "onlylettersandmore",
+        "alice.weak-password-1234!",
+        "P@ssw0rd1234!",
+        "Summer2025!",
+        "123456789012!",
+    ],
+)
+def test_password_change_rejects_policy_failures(
+    client: TestClient, make_customer: Callable[..., Actor], bad_password: str
+) -> None:
+    alice = make_customer("alice.weak@example.com")
+    resp = client.post(
+        "/api/v1/auth/password-change",
+        headers=alice.headers,
+        json={"current_password": PASSWORD, "new_password": bad_password},
+    )
+    assert resp.status_code == 422
+
+
+def test_password_change_requires_authentication(client: TestClient) -> None:
+    resp = client.post(
+        "/api/v1/auth/password-change",
+        json={"current_password": PASSWORD, "new_password": NEW_PASSWORD},
+    )
+    assert resp.status_code == 401
+
+
+def test_password_change_auditing_and_security_events(
+    client: TestClient, make_customer: Callable[..., Actor], db: Session
+) -> None:
+    alice = make_customer("alice.audit@example.com")
+    resp = client.post(
+        "/api/v1/auth/password-change",
+        headers=alice.headers,
+        json={"current_password": PASSWORD, "new_password": NEW_PASSWORD},
+    )
+    assert resp.status_code == 204
+
+    sec_event = db.execute(
+        select(SecurityEvent).where(
+            SecurityEvent.user_id == alice.user_id,
+            SecurityEvent.event_type == SecurityEventType.PASSWORD_CHANGED,
+        )
+    ).scalar_one()
+    assert sec_event is not None
+    assert PASSWORD not in str(sec_event.details)
+    assert NEW_PASSWORD not in str(sec_event.details)
+
+    audit = db.execute(
+        select(AuditLog).where(
+            AuditLog.actor_user_id == alice.user_id,
+            AuditLog.action == "PASSWORD_CHANGED",
+        )
+    ).scalar_one()
+    assert audit is not None
+    assert PASSWORD not in str(audit.details)
+    assert NEW_PASSWORD not in str(audit.details)
+
+    user = db.get(User, alice.user_id)
+    assert user is not None and user.password_changed_at is not None
+
+
+def test_password_change_rate_limited(
+    client: TestClient, make_customer: Callable[..., Actor], settings: Settings
+) -> None:
+    settings.rate_limit_password_change_per_minute = 3
+    alice = make_customer("alice.ratelimit@example.com")
+    statuses = [
+        client.post(
+            "/api/v1/auth/password-change",
+            headers=alice.headers,
+            json={"current_password": WRONG_PASSWORD, "new_password": NEW_PASSWORD},
+        ).status_code
+        for _ in range(5)
+    ]
+    assert statuses[:3] == [403, 403, 403]
+    assert statuses[3:] == [429, 429]
+
+
+def test_concurrent_password_change_requests(
+    client: TestClient, make_customer: Callable[..., Actor]
+) -> None:
+    alice = make_customer("alice.concur@example.com")
+    new_pwd_1 = "Concurrent-Pass-1!"  # pragma: allowlist secret
+    new_pwd_2 = "Concurrent-Pass-2!"  # pragma: allowlist secret
+
+    def do_change(new_pwd: str) -> int:
+        res = client.post(
+            "/api/v1/auth/password-change",
+            headers=alice.headers,
+            json={"current_password": PASSWORD, "new_password": new_pwd},
+        )
+        return res.status_code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        f1 = executor.submit(do_change, new_pwd_1)
+        f2 = executor.submit(do_change, new_pwd_2)
+        statuses = sorted([f1.result(), f2.result()])
+
+    assert statuses == [204, 403]  # the loser's current password is no longer valid
+
+
+def test_self_registration_disabled(client: TestClient, settings: Settings) -> None:
+    settings.allow_self_registration = False
+    resp = client.post(
+        "/api/v1/auth/register",
+        json={"email": "disabled@example.com", "password": PASSWORD, "full_name": "Test User"},
+    )
+    assert resp.status_code == 403
+
+
+def test_mfa_enrollment_edge_cases(
+    client: TestClient, make_customer: Callable[..., Actor], clock: FakeClock
+) -> None:
+    alice = make_customer("alice.mfaedges@example.com")
+    # Confirm without begin enrollment
+    bad_confirm = client.post(
+        "/api/v1/auth/mfa/confirm", headers=alice.headers, json={"code": "123456"}
+    )
+    assert bad_confirm.status_code == 409
+
+    # Begin enrollment
+    enroll = client.post("/api/v1/auth/mfa/enroll", headers=alice.headers)
+    assert enroll.status_code == 200
+    secret = enroll.json()["secret"]
+
+    # Confirm with invalid TOTP code
+    bad_code_confirm = client.post(
+        "/api/v1/auth/mfa/confirm", headers=alice.headers, json={"code": "000000"}
+    )
+    assert bad_code_confirm.status_code == 422
+
+    # Confirm with valid TOTP code
+    good_confirm = client.post(
+        "/api/v1/auth/mfa/confirm",
+        headers=alice.headers,
+        json={"code": totp_code(secret, clock)},
+    )
+    assert good_confirm.status_code == 200
+
+    # Try to enroll again when already enabled
+    again_enroll = client.post("/api/v1/auth/mfa/enroll", headers=alice.headers)
+    assert again_enroll.status_code == 409
+
+    # Try to confirm again when already enabled
+    again_confirm = client.post(
+        "/api/v1/auth/mfa/confirm",
+        headers=alice.headers,
+        json={"code": totp_code(secret, clock)},
+    )
+    assert again_confirm.status_code == 409
+
+
+def test_auth_service_step_up_and_user_lookups(
+    db: Session,
+    auth_service_factory: Callable[[Session], Any],
+    make_customer: Callable[..., Actor],
+    clock: FakeClock,
+) -> None:
+    service = auth_service_factory(db)
+    alice = make_customer("alice.stepup@example.com")
+
+    # verify_step_up before MFA is enabled -> ConflictError
+    with pytest.raises(ConflictError, match="enable MFA"):
+        service.verify_step_up(alice.user_id, "123456", RequestMeta())
+
+    # Enroll and confirm MFA
+    enrollment = service.begin_mfa_enrollment(alice.user_id)
+    service.confirm_mfa_enrollment(
+        alice.user_id, totp_code(enrollment.secret, clock), RequestMeta()
+    )
+
+    # Step up with wrong code -> UnprocessableError
+    with pytest.raises(UnprocessableError, match="invalid verification code"):
+        service.verify_step_up(alice.user_id, "000000", RequestMeta())
+
+    # Step up with correct code -> succeeds
+    clock.advance(30)
+    service.verify_step_up(alice.user_id, totp_code(enrollment.secret, clock), RequestMeta())
+
+    # Unknown user in get_user -> NotFoundError
+    with pytest.raises(NotFoundError, match="user not found"):
+        service.get_user(uuid.uuid4())
