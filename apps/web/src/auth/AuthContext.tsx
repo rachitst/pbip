@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { api, setAccessToken, setSessionLostHandler } from "../api/client";
@@ -21,9 +22,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>("loading");
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     setSessionLostHandler(() => {
+      queryClient.clear(); // never let the next person on this tab see cached customer data
       setStatus("anonymous");
     });
     // Restore a session after reload from the HttpOnly refresh cookie (if any).
@@ -33,7 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       setSessionLostHandler(null);
     };
-  }, []);
+  }, [queryClient]);
 
   const login = useCallback(async (email: string, password: string) => {
     const result = await api.login(email, password);
@@ -57,13 +60,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [mfaToken],
   );
 
-  const logout = useCallback(async (message?: string) => {
-    await api.logout().catch(() => undefined);
-    setAccessToken(null);
-    setMfaToken(null);
-    setNotice(message ?? null);
-    setStatus("anonymous");
-  }, []);
+  const logout = useCallback(
+    async (message?: string) => {
+      await api.logout().catch(() => undefined);
+      setAccessToken(null);
+      setMfaToken(null);
+      // Query keys are not per-user: drop every cached profile/account/device response so the next
+      // person to sign in on this tab never sees the previous customer's data, even briefly.
+      queryClient.clear();
+      setNotice(message ?? null);
+      setStatus("anonymous");
+    },
+    [queryClient],
+  );
 
   const value = useMemo(
     () => ({ status, mfaToken, notice, login, verifyMfa, logout }),
