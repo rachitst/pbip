@@ -372,6 +372,11 @@ def cmd_datagen(args: list[str]) -> int:
     return _run(["uv", "run", "python", "-m", "pbip_datagen", sub, *rest], env=env)
 
 
+def cmd_notebooks(args: list[str]) -> int:
+    """Execute ml/notebooks/*.ipynb head-to-tail and save outputs (``--check`` to only verify)."""
+    return _run(["uv", "run", "python", "scripts/run_notebooks.py", *args])
+
+
 def cmd_dev_api(args: list[str]) -> int:
     """Run FastAPI development server with auto-reload on :8000."""
     return _run(["uv", "run", "uvicorn", "pbip_api.main:app", "--reload", "--port", "8000", *args])
@@ -677,6 +682,7 @@ COMMANDS = {
     "logs": "Tail Docker API service logs",
     "migrate": "Apply Alembic database migrations",
     "seed": "Seed demo users, accounts and staff",
+    "notebooks": "Execute the EDA notebooks head-to-tail (--check: verify only)",
     "datagen": "Generate + COPY-load the synthetic ML dataset (seed 42, 1,000 customers)",
     "dev-api": "Run FastAPI backend on :8000 with auto-reload",
     "dev-worker": "Run Celery worker and beat (solo pool on Windows)",
