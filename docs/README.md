@@ -19,5 +19,6 @@
 | User manual | `docs/user-manual.md` | Team / Shared | S7 | Todo |
 | Test strategy + report | blueprint section 12 -> `docs/test-report.md` | Quality / Testing | S6 | Strategy done |
 | Architecture decision records | `docs/adr/` | Team / Shared | as decided | 10 accepted |
+| Team execution plan (owners, dates, handoffs) | `docs/TEAM_EXECUTION_PLAN.md` | Team / Shared | Oct 25 - Dec 2026 | v1 (Oct 25) |
 
 Rule: a PR that changes behaviour updates the relevant doc in the same PR. Docs are never a week-14 activity.
