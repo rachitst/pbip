@@ -248,7 +248,10 @@ revocation is by short TTL, not a denylist.
 account's balance). Customer deposits/withdrawals to the outside world pass through the internal `SYS-CLEARING`
 account, so **every** transaction has >= 2 entries and `sum(debits) == sum(credits)`.
 `accounts.ledger_balance` is a materialised running balance updated in the same DB transaction; `held_amount`
-tracks holds; `available = ledger - held (+ overdraft)`.
+tracks holds; `available = ledger - held (+ overdraft)`. **Account opening** registers the account with the
+ledger (`ledger.initialize_account`) at a zero materialised balance and posts nothing: a balance is the sum of
+entries, a new account has none, and a zero-value header is forbidden (`CHECK amount > 0`).
+`ledger.entry_balance` recomputes any balance from its entries (reconciliation oracle, tested).
 
 **Lifecycle (state machine).** `INITIATED` (transient) -> `POSTED` | `PENDING_STEP_UP` | `PENDING_REVIEW` |
 `DECLINED`; `PENDING_STEP_UP` -> `POSTED` (valid TOTP); `PENDING_REVIEW` -> `POSTED` (analyst RELEASE: hold

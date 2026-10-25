@@ -859,12 +859,8 @@
             "$ref": "#/components/schemas/OpenAccountType"
           },
           "currency": {
-            "default": "INR",
-            "maxLength": 3,
-            "minLength": 3,
-            "pattern": "^[A-Z]{3}$",
-            "title": "Currency",
-            "type": "string"
+            "$ref": "#/components/schemas/SupportedCurrency",
+            "default": "INR"
           }
         },
         "required": [
@@ -1126,6 +1122,14 @@
         ],
         "title": "StepUpRequest",
         "type": "object"
+      },
+      "SupportedCurrency": {
+        "description": "Single-currency bank (blueprint section 7): the clearing account and every rail are INR.",
+        "enum": [
+          "INR"
+        ],
+        "title": "SupportedCurrency",
+        "type": "string"
       },
       "TokenResponse": {
         "properties": {

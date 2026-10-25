@@ -32,8 +32,11 @@ from pbip_api.modules.accounts.models import (
 from pbip_api.modules.accounts.service import is_valid_account_number, mask_account_number
 from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.compliance.models import AuditLog
+from pbip_api.modules.ledger import service as ledger
+from pbip_api.modules.ledger.models import TransactionEntry
 from pbip_test_support import Actor
-from sqlalchemy import Engine, func, select
+from sqlalchemy import Engine, func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 pytestmark = [pytest.mark.integration, pytest.mark.security]
@@ -228,6 +231,7 @@ def test_staff_cannot_open_customer_account(
 def test_open_account_invalid_inputs(
     client: TestClient,
     make_customer: Callable[..., Actor],
+    db: Session,
 ) -> None:
     alice = make_customer()
 
@@ -262,6 +266,17 @@ def test_open_account_invalid_inputs(
         json={"account_type": "SAVINGS", "currency": "US"},
     )
     assert resp_curr.status_code == 422
+
+    # Well-formed but unsupported currency: the bank (and its clearing account) is INR-only, so a
+    # USD account could never be funded - it must not be created.
+    before = db.execute(select(func.count(Account.id))).scalar_one()
+    resp_usd = client.post(
+        "/api/v1/accounts",
+        headers=alice.headers,
+        json={"account_type": "SAVINGS", "currency": "USD"},
+    )
+    assert resp_usd.status_code == 422
+    assert db.execute(select(func.count(Account.id))).scalar_one() == before
 
 
 def test_open_account_audit_trail(
@@ -338,3 +353,40 @@ def test_open_account_concurrent_safety(
             )
         ).scalar_one()
         assert total_active == 5
+
+
+def test_new_account_is_initialised_by_the_ledger_and_reconciles(
+    client: TestClient, make_customer: Callable[..., Actor], migrated_engine: Engine
+) -> None:
+    """Ledger initialisation: zero materialised balance that equals the (empty) entry history."""
+    alice = make_customer()
+    resp = client.post("/api/v1/accounts", headers=alice.headers, json={"account_type": "SAVINGS"})
+    assert resp.status_code == 201
+    account_id = uuid.UUID(resp.json()["id"])
+
+    with Session(migrated_engine) as session:
+        account = session.get_one(Account, account_id)
+        entries = session.execute(
+            select(func.count())
+            .select_from(TransactionEntry)
+            .where(TransactionEntry.account_id == account_id)
+        ).scalar_one()
+        assert entries == 0
+        assert (account.ledger_balance, account.held_amount) == (0, 0)
+        assert ledger.entry_balance(session, account_id) == account.ledger_balance
+
+        ledger.deposit(session, account_id, 12_345)
+        session.commit()
+        session.refresh(account)
+        assert account.ledger_balance == ledger.entry_balance(session, account_id) == 12_345
+
+
+def test_database_refuses_a_zero_value_opening_transaction(migrated_engine: Engine) -> None:
+    """Why account opening posts nothing: headers must move a positive amount (DB CHECK)."""
+    with pytest.raises(IntegrityError, match="amount_positive"), migrated_engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO transactions (id, type, status, amount, currency, channel) "
+                "VALUES (gen_random_uuid(), 'DEPOSIT', 'POSTED', 0, 'INR', 'WEB')"
+            )
+        )

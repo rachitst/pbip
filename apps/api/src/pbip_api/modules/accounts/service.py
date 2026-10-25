@@ -99,10 +99,9 @@ def open_account(
                 account_type=account_type,
                 currency=currency,
                 status=AccountStatus.ACTIVE,
-                ledger_balance=0,
-                held_amount=0,
                 overdraft_limit=0,
             )
+            ledger_service.initialize_account(account)  # balances are owned by the ledger
             session.add(account)
             session.flush()
             session.add(

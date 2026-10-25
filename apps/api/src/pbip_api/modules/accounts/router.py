@@ -50,7 +50,7 @@ def open_my_account(
         session=session,
         customer=customer,
         requested_type=body.account_type,
-        currency=body.currency,
+        currency=body.currency.value,
         ip=meta.ip,
         request_id=meta.request_id,
     )

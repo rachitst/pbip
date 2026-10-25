@@ -938,11 +938,8 @@ export interface components {
         /** OpenAccountRequest */
         OpenAccountRequest: {
             account_type: components["schemas"]["OpenAccountType"];
-            /**
-             * Currency
-             * @default INR
-             */
-            currency: string;
+            /** @default INR */
+            currency: components["schemas"]["SupportedCurrency"];
         };
         /**
          * OpenAccountType
@@ -1043,6 +1040,12 @@ export interface components {
             /** Code */
             code: string;
         };
+        /**
+         * SupportedCurrency
+         * @description Single-currency bank (blueprint section 7): the clearing account and every rail are INR.
+         * @enum {string}
+         */
+        SupportedCurrency: "INR";
         /** TokenResponse */
         TokenResponse: {
             /** Access Token */

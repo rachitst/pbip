@@ -11,9 +11,15 @@ class OpenAccountType(StrEnum):
     CURRENT = "CURRENT"
 
 
+class SupportedCurrency(StrEnum):
+    """Single-currency bank (blueprint section 7): the clearing account and every rail are INR."""
+
+    INR = "INR"
+
+
 class OpenAccountRequest(BaseModel):
     account_type: OpenAccountType
-    currency: str = Field(default="INR", min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
+    currency: SupportedCurrency = SupportedCurrency.INR
 
     @field_validator("account_type", mode="before")
     @classmethod
