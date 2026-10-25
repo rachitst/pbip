@@ -212,7 +212,9 @@ Open 3 separate terminal tabs:
 
 - **Terminal 3: Celery Background Worker**
   - Ubuntu: `make dev-worker`
-  - Windows: `.\dev.ps1 dev-worker` *(Automatically uses `--pool=solo` on Windows to avoid Celery fork limitations)*
+  - Windows: `.\dev.ps1 dev-worker` *(Celery has no prefork pool and rejects `--beat` on Windows, so the
+    worker runs with `--pool=solo` and the beat scheduler is started as a separate child process; both stop
+    together when you press Ctrl+C)*
 
 ---
 

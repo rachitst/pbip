@@ -194,6 +194,7 @@ def _check_docker_status() -> None:
             capture_output=True,
             text=True,
             check=False,
+            timeout=10,
         )
         if res.returncode == 0:
             sys.stdout.write(f"  [OK]      Docker Compose: {res.stdout.strip()}\n")
@@ -428,22 +429,31 @@ def cmd_dev_api(args: list[str]) -> int:
     return _run(["uv", "run", "uvicorn", "pbip_api.main:app", "--reload", "--port", "8000", *args])
 
 
+_CELERY = ["uv", "run", "celery", "-A", "pbip_api.worker.celery_app"]
+
+
 def cmd_dev_worker(args: list[str]) -> int:
-    """Run Celery worker and beat. Uses --pool=solo on Windows."""
-    cmd = [
-        "uv",
-        "run",
-        "celery",
-        "-A",
-        "pbip_api.worker.celery_app",
-        "worker",
-        "--beat",
-        "--loglevel=INFO",
-    ]
-    if IS_WINDOWS:
-        cmd.append("--pool=solo")
-    cmd.extend(args)
-    return _run(cmd)
+    """Run the Celery worker and beat scheduler.
+
+    Linux/macOS: one process (``worker --beat``). Windows: Celery rejects ``--beat`` ("-B option
+    does not work on Windows") and has no prefork pool, so beat runs as a separate child process
+    and the worker uses ``--pool=solo``; beat is stopped when the worker exits.
+    """
+    if not IS_WINDOWS:
+        return _run([*_CELERY, "worker", "--beat", "--loglevel=INFO", *args])
+    beat_cmd = [*_CELERY, "beat", "--loglevel=INFO"]
+    uv = _find_tool("uv")
+    if uv:
+        beat_cmd[0] = uv
+    beat = subprocess.Popen(beat_cmd, cwd=str(ROOT))
+    try:
+        return _run([*_CELERY, "worker", "--loglevel=INFO", "--pool=solo", *args], check=False)
+    finally:
+        beat.terminate()
+        try:
+            beat.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            beat.kill()
 
 
 def cmd_dev_web(args: list[str]) -> int:
@@ -733,7 +743,7 @@ COMMANDS = {
     "notebooks": "Execute the EDA notebooks head-to-tail (--check: verify only)",
     "datagen": "Generate + COPY-load the synthetic ML dataset (seed 42, 1,000 customers)",
     "dev-api": "Run FastAPI backend on :8000 with auto-reload",
-    "dev-worker": "Run Celery worker and beat (solo pool on Windows)",
+    "dev-worker": "Run Celery worker + beat (Windows: solo pool, beat as a second process)",
     "dev-web": "Run Vite React frontend on :5173",
     "web-lint": "Run prettier and eslint checks in apps/web",
     "lint": "Run ruff and eslint checks",

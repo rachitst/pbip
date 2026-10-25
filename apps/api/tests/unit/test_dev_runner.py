@@ -82,7 +82,7 @@ def test_cmd_help_lists_all_registered_commands(capsys: pytest.CaptureFixture[st
 
 
 def test_cmd_dev_worker_unix() -> None:
-    """Verify Celery dev worker does not include --pool=solo on non-Windows platforms."""
+    """On Linux/macOS worker and beat share one process; no solo pool."""
     with (
         patch("scripts.dev.IS_WINDOWS", False),
         patch("scripts.dev._run", return_value=0) as mock_run,
@@ -92,23 +92,59 @@ def test_cmd_dev_worker_unix() -> None:
         mock_run.assert_called_once()
         cmd_args: list[str] = mock_run.call_args[0][0]
         assert "--pool=solo" not in cmd_args
+        assert "--beat" in cmd_args
         assert cmd_args[-1] == "--concurrency=4"
         assert "celery" in cmd_args
 
 
-def test_cmd_dev_worker_windows() -> None:
-    """Verify Celery dev worker appends --pool=solo on Windows platforms."""
+def test_cmd_dev_worker_windows_runs_beat_separately() -> None:
+    """Celery rejects --beat on Windows: beat must be a separate process, worker uses solo."""
+    beat = MagicMock()
     with (
         patch("scripts.dev.IS_WINDOWS", True),
-        patch("scripts.dev._run", return_value=0) as mock_run,
+        patch("scripts.dev._find_tool", return_value="uv"),
+        patch("scripts.dev.subprocess.Popen", return_value=beat) as mock_popen,
+        patch("scripts.dev._run", return_value=3) as mock_run,
     ):
         code = cmd_dev_worker(["--concurrency=1"])
-        assert code == 0
-        mock_run.assert_called_once()
-        cmd_args: list[str] = mock_run.call_args[0][0]
-        assert "--pool=solo" in cmd_args
-        assert cmd_args[-1] == "--concurrency=1"
-        assert "celery" in cmd_args
+    assert code == 3  # the worker's exit code is propagated
+    beat_args: list[str] = mock_popen.call_args[0][0]
+    assert beat_args[-2:] == ["beat", "--loglevel=INFO"]
+    worker_args: list[str] = mock_run.call_args[0][0]
+    assert "--beat" not in worker_args and "-B" not in worker_args
+    assert "--pool=solo" in worker_args and worker_args[-1] == "--concurrency=1"
+    beat.terminate.assert_called_once()  # beat never outlives the worker
+
+
+def test_cmd_dev_worker_windows_stops_beat_even_if_the_worker_crashes() -> None:
+    beat = MagicMock()
+    with (
+        patch("scripts.dev.IS_WINDOWS", True),
+        patch("scripts.dev._find_tool", return_value=None),
+        patch("scripts.dev.subprocess.Popen", return_value=beat),
+        patch("scripts.dev._run", side_effect=KeyboardInterrupt),
+        pytest.raises(KeyboardInterrupt),
+    ):
+        cmd_dev_worker([])
+    beat.terminate.assert_called_once()
+
+
+def test_dev_cmd_propagates_exit_codes() -> None:
+    """Regression: %ERRORLEVEL% inside a parenthesised block is expanded when the block is
+    parsed (always 0 there), so dev.cmd exited 0 even when the command failed."""
+    lines = [
+        ln.strip() for ln in (dev_mod.ROOT / "dev.cmd").read_text(encoding="utf-8").splitlines()
+    ]
+    depth = 0
+    for line in lines:
+        if depth > 0 and not line.upper().startswith("REM"):
+            assert "%ERRORLEVEL%" not in line.upper(), line
+        depth += line.count("(") - line.count(")")
+    runs = [i for i, line in enumerate(lines) if line.endswith('scripts\\dev.py" %*')]
+    assert len(runs) == 2
+    for index in runs:  # bare "exit /b" keeps the ERRORLEVEL of the command that just ran
+        assert lines[index + 1].lower() == "exit /b"
+    assert not any(line.startswith(":") for line in lines)  # no labels (LF-stored file)
 
 
 def test_run_success_exit_code() -> None:
