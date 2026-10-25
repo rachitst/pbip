@@ -62,3 +62,19 @@ class AdminCreateUserRequest(BaseModel):
 class PasswordChangeRequest(BaseModel):
     current_password: str = Field(min_length=1, max_length=256)
     new_password: str = Field(min_length=1, max_length=256)
+
+
+class LockoutStatusOut(BaseModel):
+    user_id: UUID
+    failed_login_count: int
+    locked_until: datetime | None
+    is_locked: bool
+    last_failure_at: datetime | None
+
+
+class UnlockResultOut(LockoutStatusOut):
+    previous_failed_login_count: int
+    was_locked: bool
+    rate_limit_counters_cleared: int | None = Field(
+        description="Redis rate-limit counters removed; null if Redis was unavailable"
+    )

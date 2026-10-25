@@ -107,6 +107,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/users/{user_id}/lockout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect a user's progressive lockout state (ADMIN with MFA) */
+        get: operations["get_lockout_api_v1_admin_users__user_id__lockout_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{user_id}/unlock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Clear a user's lockout and login rate-limit counters (ADMIN with MFA) */
+        post: operations["unlock_user_api_v1_admin_users__user_id__unlock_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -830,6 +864,22 @@ export interface components {
              */
             status: "ok";
         };
+        /** LockoutStatusOut */
+        LockoutStatusOut: {
+            /** Failed Login Count */
+            failed_login_count: number;
+            /** Is Locked */
+            is_locked: boolean;
+            /** Last Failure At */
+            last_failure_at: string | null;
+            /** Locked Until */
+            locked_until: string | null;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
         /** LoginRequest */
         LoginRequest: {
             /**
@@ -1065,6 +1115,31 @@ export interface components {
              */
             to_account_id?: string | null;
         };
+        /** UnlockResultOut */
+        UnlockResultOut: {
+            /** Failed Login Count */
+            failed_login_count: number;
+            /** Is Locked */
+            is_locked: boolean;
+            /** Last Failure At */
+            last_failure_at: string | null;
+            /** Locked Until */
+            locked_until: string | null;
+            /** Previous Failed Login Count */
+            previous_failed_login_count: number;
+            /**
+             * Rate Limit Counters Cleared
+             * @description Redis rate-limit counters removed; null if Redis was unavailable
+             */
+            rate_limit_counters_cleared: number | null;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** Was Locked */
+            was_locked: boolean;
+        };
         /** UserOut */
         UserOut: {
             /** Created At */
@@ -1292,6 +1367,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_lockout_api_v1_admin_users__user_id__lockout_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LockoutStatusOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlock_user_api_v1_admin_users__user_id__unlock_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnlockResultOut"];
                 };
             };
             /** @description Validation Error */

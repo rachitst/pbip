@@ -680,6 +680,56 @@
         "title": "LiveResponse",
         "type": "object"
       },
+      "LockoutStatusOut": {
+        "properties": {
+          "failed_login_count": {
+            "title": "Failed Login Count",
+            "type": "integer"
+          },
+          "is_locked": {
+            "title": "Is Locked",
+            "type": "boolean"
+          },
+          "last_failure_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Failure At"
+          },
+          "locked_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locked Until"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "failed_login_count",
+          "locked_until",
+          "is_locked",
+          "last_failure_at"
+        ],
+        "title": "LockoutStatusOut",
+        "type": "object"
+      },
       "LoginRequest": {
         "properties": {
           "email": {
@@ -1294,6 +1344,79 @@
         "title": "TransferRequest",
         "type": "object"
       },
+      "UnlockResultOut": {
+        "properties": {
+          "failed_login_count": {
+            "title": "Failed Login Count",
+            "type": "integer"
+          },
+          "is_locked": {
+            "title": "Is Locked",
+            "type": "boolean"
+          },
+          "last_failure_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Failure At"
+          },
+          "locked_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locked Until"
+          },
+          "previous_failed_login_count": {
+            "title": "Previous Failed Login Count",
+            "type": "integer"
+          },
+          "rate_limit_counters_cleared": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Redis rate-limit counters removed; null if Redis was unavailable",
+            "title": "Rate Limit Counters Cleared"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          },
+          "was_locked": {
+            "title": "Was Locked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "user_id",
+          "failed_login_count",
+          "locked_until",
+          "is_locked",
+          "last_failure_at",
+          "previous_failed_login_count",
+          "was_locked",
+          "rate_limit_counters_cleared"
+        ],
+        "title": "UnlockResultOut",
+        "type": "object"
+      },
       "UserOut": {
         "properties": {
           "created_at": {
@@ -1690,6 +1813,102 @@
           }
         ],
         "summary": "Create a user with explicit roles (ADMIN with MFA)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/users/{user_id}/lockout": {
+      "get": {
+        "operationId": "get_lockout_api_v1_admin_users__user_id__lockout_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LockoutStatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Inspect a user's progressive lockout state (ADMIN with MFA)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/users/{user_id}/unlock": {
+      "post": {
+        "operationId": "unlock_user_api_v1_admin_users__user_id__unlock_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnlockResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Clear a user's lockout and login rate-limit counters (ADMIN with MFA)",
         "tags": [
           "admin"
         ]

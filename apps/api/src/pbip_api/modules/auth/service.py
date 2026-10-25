@@ -16,7 +16,8 @@ from uuid import UUID, uuid4
 
 import pyotp
 import structlog
-from sqlalchemy import select, update
+from redis import Redis
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -31,6 +32,7 @@ from pbip_api.core.errors import (
     UnprocessableError,
 )
 from pbip_api.core.metrics import LOGIN_FAILURES_TOTAL
+from pbip_api.core.ratelimit import clear_rate_limits
 from pbip_api.core.security import (
     PasswordService,
     decode_token,
@@ -59,6 +61,16 @@ _TOTP_STEP_SECONDS = 30
 _RECOVERY_CODE_COUNT = 8
 _MAX_LOCK_SECONDS = 3600
 INVALID_CREDENTIALS = "invalid email or password"
+# Per-IP limiters an admin unlock resets, and how far back to look for the IPs a user failed
+# from. One hour covers the longest of these windows (login and password change: 60 s).
+_UNLOCK_RATE_LIMITERS = ("login", "password_change")
+_UNLOCK_IP_LOOKBACK = timedelta(hours=1)
+_UNLOCK_MAX_IPS = 50
+_FAILURE_EVENTS = (
+    SecurityEventType.LOGIN_FAILURE,
+    SecurityEventType.LOGIN_BLOCKED_LOCKED,
+    SecurityEventType.ACCOUNT_LOCKED,
+)
 
 
 class AccountLockedError(DomainError):
@@ -92,6 +104,23 @@ class SessionTokens:
 class LoginOutcome:
     tokens: SessionTokens | None = None
     mfa_token: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LockoutStatus:
+    user_id: UUID
+    failed_login_count: int
+    locked_until: datetime | None
+    is_locked: bool
+    last_failure_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class UnlockResult:
+    status: LockoutStatus
+    previous_failed_login_count: int
+    was_locked: bool
+    rate_limit_counters_cleared: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -515,6 +544,76 @@ class AuthService:
             raise UnprocessableError("invalid verification code")
         self._event(SecurityEventType.STEP_UP_SUCCESS, user.id, meta)
         # no commit here: the caller commits together with the business change
+
+    # ------------------------------------------------------------ administration
+    def _lockout_status(self, user: User) -> LockoutStatus:
+        last_failure_at = self.session.execute(
+            select(func.max(SecurityEvent.created_at)).where(
+                SecurityEvent.user_id == user.id,
+                SecurityEvent.event_type == SecurityEventType.LOGIN_FAILURE,
+            )
+        ).scalar_one()
+        return LockoutStatus(
+            user_id=user.id,
+            failed_login_count=user.failed_login_count,
+            locked_until=user.locked_until,
+            is_locked=self._is_locked(user),
+            last_failure_at=last_failure_at,
+        )
+
+    def get_lockout_status(self, user_id: UUID) -> LockoutStatus:
+        return self._lockout_status(self.get_user(user_id))
+
+    def _recent_failure_ips(self, user_id: UUID) -> list[str]:
+        rows = self.session.execute(
+            select(SecurityEvent.ip)
+            .where(
+                SecurityEvent.user_id == user_id,
+                SecurityEvent.event_type.in_(_FAILURE_EVENTS),
+                SecurityEvent.ip.is_not(None),
+                SecurityEvent.created_at >= func.now() - _UNLOCK_IP_LOOKBACK,
+            )
+            .group_by(SecurityEvent.ip)
+            .order_by(func.max(SecurityEvent.created_at).desc())
+            .limit(_UNLOCK_MAX_IPS)
+        ).scalars()
+        return [ip for ip in rows if ip]
+
+    def admin_unlock_user(
+        self, target_user_id: UUID, admin_user_id: UUID, meta: RequestMeta, redis_client: Redis
+    ) -> UnlockResult:
+        """Clear the progressive lockout (DB) and the per-IP rate-limit counters (Redis).
+
+        The rate limiter is keyed by client IP, not by user, so the counters cleared are the
+        ones for IPs this user failed from recently. Redis is cleared only after the DB change
+        commits; if Redis is down the unlock still stands and the counters expire by themselves.
+        """
+        user = self.session.execute(
+            select(User).where(User.id == target_user_id).with_for_update()
+        ).scalar_one_or_none()
+        if user is None:
+            raise NotFoundError("user not found")
+        previous_failures, was_locked = user.failed_login_count, self._is_locked(user)
+        ips = self._recent_failure_ips(user.id)
+        self._reset_failures(user)
+        self._event(SecurityEventType.ACCOUNT_UNLOCKED, user.id, meta, by_admin=str(admin_user_id))
+        self.audit.record(
+            admin_user_id,
+            "USER_UNLOCKED",
+            "user",
+            str(user.id),
+            ip=meta.ip,
+            request_id=meta.request_id,
+            details={
+                "admin_user_id": str(admin_user_id),
+                "target_user_id": str(user.id),
+                "previous_failed_login_count": previous_failures,
+                "was_locked": was_locked,
+            },
+        )
+        self.session.commit()
+        cleared = clear_rate_limits(redis_client, _UNLOCK_RATE_LIMITERS, ips)
+        return UnlockResult(self._lockout_status(user), previous_failures, was_locked, cleared)
 
     # ----------------------------------------------------------------- profile
     def get_user(self, user_id: UUID) -> User:
