@@ -377,6 +377,16 @@ def cmd_notebooks(args: list[str]) -> int:
     return _run(["uv", "run", "python", "scripts/run_notebooks.py", *args])
 
 
+def cmd_ml_up(args: list[str]) -> int:
+    """Start only the MLflow tracking server (:5000) and wait until it is healthy."""
+    return _run(["docker", "compose", "--profile", "ml", "up", "-d", "--wait", "mlflow", *args])
+
+
+def cmd_mlflow_smoke(args: list[str]) -> int:
+    """Log a dummy MLflow run (server if reachable, else local SQLite fallback) and read it back."""
+    return _run(["uv", "run", "python", "-m", "pbip_ml.tracking_smoke", *args])
+
+
 def cmd_dev_api(args: list[str]) -> int:
     """Run FastAPI development server with auto-reload on :8000."""
     return _run(["uv", "run", "uvicorn", "pbip_api.main:app", "--reload", "--port", "8000", *args])
@@ -682,6 +692,8 @@ COMMANDS = {
     "logs": "Tail Docker API service logs",
     "migrate": "Apply Alembic database migrations",
     "seed": "Seed demo users, accounts and staff",
+    "ml-up": "Start only the MLflow tracking server on :5000 (compose profile ml)",
+    "mlflow-smoke": "Log + read back a dummy MLflow run (--require-server to forbid fallback)",
     "notebooks": "Execute the EDA notebooks head-to-tail (--check: verify only)",
     "datagen": "Generate + COPY-load the synthetic ML dataset (seed 42, 1,000 customers)",
     "dev-api": "Run FastAPI backend on :8000 with auto-reload",

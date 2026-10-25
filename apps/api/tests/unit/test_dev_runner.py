@@ -188,3 +188,13 @@ def test_cmd_datagen_defaults_to_load_and_passes_env(tmp_path: Path) -> None:
 
         cmd_datagen(["export", "--out", "data"])
         assert mock_run.call_args[0][0][-4:] == ["pbip_datagen", "export", "--out", "data"]
+
+
+def test_ml_commands_target_the_mlflow_service_and_smoke_module() -> None:
+    with patch("scripts.dev._run", return_value=0) as mock_run:
+        dev_mod.cmd_ml_up([])
+        assert mock_run.call_args[0][0] == [
+            "docker", "compose", "--profile", "ml", "up", "-d", "--wait", "mlflow",
+        ]  # fmt: skip
+        dev_mod.cmd_mlflow_smoke(["--require-server"])
+        assert mock_run.call_args[0][0][-2:] == ["pbip_ml.tracking_smoke", "--require-server"]

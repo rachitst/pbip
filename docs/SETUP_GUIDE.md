@@ -243,6 +243,18 @@ make up-all
 - Prometheus: **http://localhost:9090**
 - MLflow: **http://localhost:5000**
 
+### MLflow only (ML work without the whole stack)
+```bash
+make ml-up            # or .\dev.ps1 ml-up     -> docker compose --profile ml up -d --wait mlflow
+make mlflow-smoke     # or .\dev.ps1 mlflow-smoke   -> logs a dummy run and reads it back
+docker compose ps mlflow   # STATUS shows "(healthy)"
+```
+Training code calls `pbip_ml.tracking.configure_tracking()`. It uses `MLFLOW_TRACKING_URI`
+(default `http://localhost:5000`) when the server answers `/health`, and otherwise falls back to a
+local SQLite store in `./mlruns/` (git-ignored) with a logged warning. Artifacts are proxied by the
+server, so clients never need access to the container's volume. Add `--require-server` to the smoke
+command to fail instead of falling back.
+
 ---
 
 ## 7. Running Tests, Linting & Verification

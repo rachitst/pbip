@@ -89,15 +89,24 @@ services:
     restart: unless-stopped
 
   # ---- optional profiles: `docker compose --profile ml up -d`, `--profile monitoring up -d` ----
+  # Tracking + registry with a SQLite backend. Artifacts are PROXIED by the server
+  # (--artifacts-destination), so clients upload over HTTP instead of writing to a
+  # container-only path. Host allow-list covers the host port and the compose network.
   mlflow:
     profiles: [ml]
     image: ghcr.io/mlflow/mlflow:v3.5.0
     command: >
-      mlflow server --host 0.0.0.0 --port 5000
+      mlflow server --host 0.0.0.0 --port 5000 --workers 2
       --backend-store-uri sqlite:////mlflow/mlflow.db
-      --default-artifact-root /mlflow/artifacts
+      --artifacts-destination /mlflow/artifacts
+      --allowed-hosts localhost,localhost:5000,127.0.0.1,127.0.0.1:5000,mlflow,mlflow:5000
     volumes: [mlflow:/mlflow]
     ports: ["127.0.0.1:5000:5000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   prometheus:
     profiles: [monitoring]

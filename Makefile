@@ -3,7 +3,7 @@
 # On Windows, use dev.ps1 or dev.cmd instead of make.
 .DEFAULT_GOAL := help
 .PHONY: help doctor setup env infra-up infra-down up up-all down logs migrate seed \
-	datagen notebooks dev-api dev-worker dev-web lint fmt typecheck imports security openapi \
+	datagen notebooks ml-up mlflow-smoke dev-api dev-worker dev-web lint fmt typecheck imports security openapi \
 	test test-unit test-int test-web test-e2e smoke check clean
 
 PYTHON ?= python3
@@ -49,6 +49,12 @@ datagen: ## Generate + COPY-load the synthetic ML dataset (seed 42, 1,000 custom
 
 notebooks: ## Execute the EDA notebooks head-to-tail and save outputs
 	@$(PYTHON) scripts/dev.py notebooks
+
+ml-up: ## Start only the MLflow tracking server on :5000
+	@$(PYTHON) scripts/dev.py ml-up
+
+mlflow-smoke: ## Log + read back a dummy MLflow run (server, else local fallback)
+	@$(PYTHON) scripts/dev.py mlflow-smoke
 
 dev-api: ## Run the API with auto-reload on :8000
 	@$(PYTHON) scripts/dev.py dev-api
