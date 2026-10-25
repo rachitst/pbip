@@ -1780,6 +1780,7 @@ dependencies = [
     { name = "faker" },
     { name = "numpy" },
     { name = "pandas" },
+    { name = "psycopg", extra = ["binary"] },
 ]
 
 [package.metadata]
@@ -1787,6 +1788,7 @@ requires-dist = [
     { name = "faker", specifier = ">=33.0" },
     { name = "numpy", specifier = ">=2.0" },
     { name = "pandas", specifier = ">=2.2" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
 ]
 
 [[package]]

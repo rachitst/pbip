@@ -360,6 +360,18 @@ def cmd_seed(args: list[str]) -> int:
     return _run(["uv", "run", "python", "scripts/seed_dev.py", *args])
 
 
+def cmd_datagen(args: list[str]) -> int:
+    """Generate the synthetic dataset and COPY it into the local DB (``synthetic`` schema).
+
+    Defaults: seed 42, 1,000 customers, 12 months. Extra arguments are passed through, e.g.
+    ``datagen --seed 7 --customers 200``. Use ``datagen export --out data/`` for CSV instead.
+    """
+    env = parse_env_file(ROOT / ".env")
+    sub = args[0] if args and args[0] in ("load", "export") else "load"
+    rest = args[1:] if args and args[0] in ("load", "export") else args
+    return _run(["uv", "run", "python", "-m", "pbip_datagen", sub, *rest], env=env)
+
+
 def cmd_dev_api(args: list[str]) -> int:
     """Run FastAPI development server with auto-reload on :8000."""
     return _run(["uv", "run", "uvicorn", "pbip_api.main:app", "--reload", "--port", "8000", *args])
@@ -665,6 +677,7 @@ COMMANDS = {
     "logs": "Tail Docker API service logs",
     "migrate": "Apply Alembic database migrations",
     "seed": "Seed demo users, accounts and staff",
+    "datagen": "Generate + COPY-load the synthetic ML dataset (seed 42, 1,000 customers)",
     "dev-api": "Run FastAPI backend on :8000 with auto-reload",
     "dev-worker": "Run Celery worker and beat (solo pool on Windows)",
     "dev-web": "Run Vite React frontend on :5173",

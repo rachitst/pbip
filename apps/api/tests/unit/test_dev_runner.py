@@ -22,6 +22,7 @@ from scripts.dev import (
     _needs_resolution,
     _run,
     cmd_clean,
+    cmd_datagen,
     cmd_dev_worker,
     cmd_help,
     main,
@@ -170,3 +171,20 @@ def test_cmd_clean_removes_cache_directories(
         assert not cov_file.exists()
         out = capsys.readouterr().out
         assert "Cleaned cache and build artifacts." in out
+
+
+def test_cmd_datagen_defaults_to_load_and_passes_env(tmp_path: Path) -> None:
+    """datagen loads by default, forwards options, and gets DATABASE_URL from .env."""
+    env_file = tmp_path / ".env"
+    env_file.write_text("DATABASE_URL=postgresql+psycopg://u:p@localhost/db\n", encoding="utf-8")
+    with (
+        patch("scripts.dev.ROOT", tmp_path),
+        patch("scripts.dev._run", return_value=0) as mock_run,
+    ):
+        assert cmd_datagen(["--seed", "7"]) == 0
+        cmd_args: list[str] = mock_run.call_args[0][0]
+        assert cmd_args[-4:] == ["pbip_datagen", "load", "--seed", "7"]
+        assert mock_run.call_args.kwargs["env"]["DATABASE_URL"].startswith("postgresql")
+
+        cmd_datagen(["export", "--out", "data"])
+        assert mock_run.call_args[0][0][-4:] == ["pbip_datagen", "export", "--out", "data"]
