@@ -432,7 +432,8 @@ Pyramid target by count: ~70% unit/integration-service, ~25% API/integration, <5
 **Local:** pre-commit (whitespace/yaml/json/private-key, ruff lint+format, detect-secrets, prettier+eslint for web,
 Conventional Commit check) -> **pre-push** (mypy strict, import-linter, fast unit tests, OpenAPI contract current).
 
-**Pull request (`.github/workflows/ci.yml`, all required via the single `CI Gate`):**
+**Pull request (`.github/workflows/ci.yml`, all required via the single `CI Gate`, which passes only if every job
+succeeded; a skipped job fails it):**
 
 | PBIP requirement | Jobs |
 |---|---|
@@ -450,7 +451,8 @@ third-party action to a commit SHA; Dependabot updates actions/pip/npm/docker.
 ## 14. Git and GitHub governance
 
 GitHub Issues + Projects (no Jira). Flow: **feature branch -> PR -> automated checks -> peer review -> squash merge**.
-Short-lived branches (`feat/`, `fix/`, `docs/`), Conventional Commits (hook-enforced), PR template with security
+Short-lived branches (`feat/`, `fix/`, `docs/`), Conventional Commits (commit-msg hook locally; the PR title, which
+becomes the squash commit, is checked by `.github/workflows/pr-title.yml`), PR template with security
 checklist, issue templates (feature/story, bug with regression plan), `CODEOWNERS` (team handles configured so peer review
 is always requested; money/auth/migrations paths require approval), ruleset `protect-main`: PR required,
 1 approval from someone other than the last pusher, dismiss stale approvals, conversations resolved, linear history,

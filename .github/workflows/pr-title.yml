@@ -1,0 +1,33 @@
+name: PR title
+
+# Squash merge is the only allowed merge method, so the PR title becomes the commit message on `main`.
+# The local commit-msg hook never sees that title; this applies the same Conventional Commit types
+# (.pre-commit-config.yaml) to it. Separate from ci.yml so editing a title does not re-run the whole pipeline.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  conventional-title:
+    name: PR title - Conventional Commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Title uses an allowed Conventional Commit type
+        # The title is passed through env, never interpolated into the script (script injection).
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          types='feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|security'
+          if printf '%s' "$TITLE" | grep -Eq "^(${types})(\([a-z0-9._/-]+\))?!?: [^ ].*$"; then
+            echo "PR title is a valid Conventional Commit."
+          else
+            echo "::error::PR title must look like 'type(scope): summary' with type one of: ${types//|/, }"
+            exit 1
+          fi
