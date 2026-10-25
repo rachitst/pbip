@@ -20,5 +20,5 @@ Knowledge sharing: regularly conduct cross-domain walkthroughs so all contributo
 Maintainers can configure labels, sprint milestones, and branch protection rulesets using `scripts/setup_github.py`:
 ```bash
 python scripts/setup_github.py <OWNER>/<REPO> --dry-run
-python scripts/setup_github.py <OWNER>/<REPO> [--collaborators user1,user2]
+python scripts/setup_github.py <OWNER>/<REPO> [--collaborators user1 user2] [--dry-run]
 ```

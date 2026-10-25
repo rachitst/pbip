@@ -37,7 +37,7 @@ def get_my_profile(
 def register_device(
     response: Response,
     body: DeviceRegisterRequest,
-    x_device_id: str | None = Header(default=None, alias="X-Device-ID"),
+    x_device_id: str | None = Header(default=None, alias="X-Device-ID", max_length=512),
     customer: Customer = Depends(get_current_customer),
     service: CustomerService = Depends(get_customer_service),
     meta: RequestMeta = Depends(get_request_meta),

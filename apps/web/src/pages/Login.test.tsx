@@ -1,22 +1,13 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App } from "../App";
-import { AuthProvider } from "../auth/AuthContext";
+import { renderApp } from "../test-utils";
 
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json" },
   });
-}
-
-function renderApp() {
-  return render(
-    <AuthProvider>
-      <App />
-    </AuthProvider>,
-  );
 }
 
 describe("login flow", () => {

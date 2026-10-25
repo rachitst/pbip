@@ -3,8 +3,8 @@
 # On Windows, use dev.ps1 or dev.cmd instead of make.
 .DEFAULT_GOAL := help
 .PHONY: help doctor setup env infra-up infra-down up up-all down logs migrate seed \
-	dev-api dev-worker dev-web lint fmt typecheck imports security openapi \
-	test test-unit test-int test-web test-e2e smoke check clean
+	datagen notebooks ml-up mlflow-smoke dev-api dev-worker dev-web lint fmt typecheck imports security openapi \
+	test test-unit test-int test-web test-e2e smoke perf check clean
 
 PYTHON ?= python3
 
@@ -43,6 +43,18 @@ migrate: ## Apply database migrations (local DB)
 
 seed: ## Seed demo users, accounts and MFA-enrolled staff (local only)
 	@$(PYTHON) scripts/dev.py seed
+
+datagen: ## Generate + COPY-load the synthetic ML dataset (seed 42, 1,000 customers)
+	@$(PYTHON) scripts/dev.py datagen
+
+notebooks: ## Execute the EDA notebooks head-to-tail and save outputs
+	@$(PYTHON) scripts/dev.py notebooks
+
+ml-up: ## Start only the MLflow tracking server on :5000
+	@$(PYTHON) scripts/dev.py ml-up
+
+mlflow-smoke: ## Log + read back a dummy MLflow run (server, else local fallback)
+	@$(PYTHON) scripts/dev.py mlflow-smoke
 
 dev-api: ## Run the API with auto-reload on :8000
 	@$(PYTHON) scripts/dev.py dev-api
@@ -88,6 +100,9 @@ test-e2e: ## Playwright end-to-end (needs make up)
 
 smoke: ## Post-deploy smoke test
 	@$(PYTHON) scripts/dev.py smoke
+
+perf: ## k6 baseline on health endpoints (50 VUs, p95 < 50 ms); needs a running API
+	@$(PYTHON) scripts/dev.py perf
 
 check: ## EVERYTHING CI runs. Run before opening a PR.
 	@$(PYTHON) scripts/dev.py check

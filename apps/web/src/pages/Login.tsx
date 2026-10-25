@@ -4,7 +4,7 @@ import { ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 
 export function Login() {
-  const { login, verifyMfa, mfaToken } = useAuth();
+  const { login, verifyMfa, mfaToken, notice } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -28,6 +28,11 @@ export function Login() {
   return (
     <main className="card narrow">
       <h1>Sign in</h1>
+      {notice && (
+        <p role="status" className="ok">
+          {notice}
+        </p>
+      )}
       <form onSubmit={(event) => void submit(event)}>
         {mfaToken ? (
           <label>

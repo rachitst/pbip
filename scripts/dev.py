@@ -194,6 +194,7 @@ def _check_docker_status() -> None:
             capture_output=True,
             text=True,
             check=False,
+            timeout=10,
         )
         if res.returncode == 0:
             sys.stdout.write(f"  [OK]      Docker Compose: {res.stdout.strip()}\n")
@@ -316,9 +317,21 @@ def cmd_infra_down(_args: list[str]) -> int:
     return _run(["docker", "compose", "stop", "db", "redis"])
 
 
+_READY_MESSAGE = (
+    "\nPBIP is up: web http://localhost:8080 | API docs http://localhost:8000/docs\n"
+    "Demo users: python scripts/dev.py seed (prints the demo password)\n"
+)
+
+
 def cmd_up(args: list[str]) -> int:
-    """Build and start the full PBIP Docker stack."""
-    return _run(["docker", "compose", "up", "-d", "--build", *args])
+    """Build and start the full PBIP Docker stack; returns once services report healthy.
+
+    Without --wait the command returned while the API was still starting, so the first page
+    load through nginx was a 502.
+    """
+    code = _run(["docker", "compose", "up", "-d", "--build", "--wait", *args])
+    sys.stdout.write(_READY_MESSAGE)
+    return code
 
 
 def cmd_up_all(args: list[str]) -> int:
@@ -334,6 +347,7 @@ def cmd_up_all(args: list[str]) -> int:
             "up",
             "-d",
             "--build",
+            "--wait",
             *args,
         ]
     )
@@ -360,27 +374,99 @@ def cmd_seed(args: list[str]) -> int:
     return _run(["uv", "run", "python", "scripts/seed_dev.py", *args])
 
 
+def cmd_datagen(args: list[str]) -> int:
+    """Generate the synthetic dataset and COPY it into the local DB (``synthetic`` schema).
+
+    Defaults: seed 42, 1,000 customers, 12 months. Extra arguments are passed through, e.g.
+    ``datagen --seed 7 --customers 200``. Use ``datagen export --out data/`` for CSV instead.
+    """
+    env = parse_env_file(ROOT / ".env")
+    sub = args[0] if args and args[0] in ("load", "export") else "load"
+    rest = args[1:] if args and args[0] in ("load", "export") else args
+    return _run(["uv", "run", "python", "-m", "pbip_datagen", sub, *rest], env=env)
+
+
+def cmd_notebooks(args: list[str]) -> int:
+    """Execute ml/notebooks/*.ipynb head-to-tail and save outputs (``--check`` to only verify)."""
+    return _run(["uv", "run", "python", "scripts/run_notebooks.py", *args])
+
+
+def cmd_ml_up(args: list[str]) -> int:
+    """Start only the MLflow tracking server (:5000) and wait until it is healthy."""
+    return _run(["docker", "compose", "--profile", "ml", "up", "-d", "--wait", "mlflow", *args])
+
+
+def cmd_mlflow_smoke(args: list[str]) -> int:
+    """Log a dummy MLflow run (server if reachable, else local SQLite fallback) and read it back."""
+    return _run(["uv", "run", "python", "-m", "pbip_ml.tracking_smoke", *args])
+
+
+K6_IMAGE = "grafana/k6:1.3.0"
+
+
+def build_k6_command(
+    script: str, base_url: str | None, has_native_k6: bool, extra: list[str]
+) -> tuple[list[str], dict[str, str]]:
+    """Native k6 when installed, otherwise the official image.
+
+    Linux: the container shares the host network, so ``localhost:8000`` reaches an API bound to
+    loopback (``dev-api``) as well as the compose port. Docker Desktop (macOS/Windows) has no host
+    networking for this, but forwards ``host.docker.internal`` to the host's loopback.
+    """
+    linux = not IS_WINDOWS and sys.platform != "darwin"
+    if has_native_k6:
+        url = base_url or "http://localhost:8000"
+        return ["k6", "run", f"infra/k6/{script}", *extra], {"BASE_URL": url}
+    url = base_url or ("http://localhost:8000" if linux else "http://host.docker.internal:8000")
+    cmd = ["docker", "run", "--rm", "-i", "-e", f"BASE_URL={url}"]
+    for name in ("VUS", "DURATION", "THINK_SECONDS"):
+        if os.environ.get(name):
+            cmd += ["-e", f"{name}={os.environ[name]}"]
+    if linux:
+        cmd += ["--network", "host"]
+    k6_dir = (ROOT / "infra" / "k6").as_posix()
+    cmd += ["-v", f"{k6_dir}:/scripts:ro", K6_IMAGE, "run", f"/scripts/{script}", *extra]
+    return cmd, {}
+
+
+def cmd_perf(args: list[str]) -> int:
+    """Run the k6 performance baseline (infra/k6/baseline.js) against a running API."""
+    cmd, env = build_k6_command(
+        "baseline.js", os.environ.get("BASE_URL"), _find_tool("k6") is not None, args
+    )
+    return _run(cmd, env=env)
+
+
 def cmd_dev_api(args: list[str]) -> int:
     """Run FastAPI development server with auto-reload on :8000."""
     return _run(["uv", "run", "uvicorn", "pbip_api.main:app", "--reload", "--port", "8000", *args])
 
 
+_CELERY = ["uv", "run", "celery", "-A", "pbip_api.worker.celery_app"]
+
+
 def cmd_dev_worker(args: list[str]) -> int:
-    """Run Celery worker and beat. Uses --pool=solo on Windows."""
-    cmd = [
-        "uv",
-        "run",
-        "celery",
-        "-A",
-        "pbip_api.worker.celery_app",
-        "worker",
-        "--beat",
-        "--loglevel=INFO",
-    ]
-    if IS_WINDOWS:
-        cmd.append("--pool=solo")
-    cmd.extend(args)
-    return _run(cmd)
+    """Run the Celery worker and beat scheduler.
+
+    Linux/macOS: one process (``worker --beat``). Windows: Celery rejects ``--beat`` ("-B option
+    does not work on Windows") and has no prefork pool, so beat runs as a separate child process
+    and the worker uses ``--pool=solo``; beat is stopped when the worker exits.
+    """
+    if not IS_WINDOWS:
+        return _run([*_CELERY, "worker", "--beat", "--loglevel=INFO", *args])
+    beat_cmd = [*_CELERY, "beat", "--loglevel=INFO"]
+    uv = _find_tool("uv")
+    if uv:
+        beat_cmd[0] = uv
+    beat = subprocess.Popen(beat_cmd, cwd=str(ROOT))
+    try:
+        return _run([*_CELERY, "worker", "--loglevel=INFO", "--pool=solo", *args], check=False)
+    finally:
+        beat.terminate()
+        try:
+            beat.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            beat.kill()
 
 
 def cmd_dev_web(args: list[str]) -> int:
@@ -665,8 +751,12 @@ COMMANDS = {
     "logs": "Tail Docker API service logs",
     "migrate": "Apply Alembic database migrations",
     "seed": "Seed demo users, accounts and staff",
+    "ml-up": "Start only the MLflow tracking server on :5000 (compose profile ml)",
+    "mlflow-smoke": "Log + read back a dummy MLflow run (--require-server to forbid fallback)",
+    "notebooks": "Execute the EDA notebooks head-to-tail (--check: verify only)",
+    "datagen": "Generate + COPY-load the synthetic ML dataset (seed 42, 1,000 customers)",
     "dev-api": "Run FastAPI backend on :8000 with auto-reload",
-    "dev-worker": "Run Celery worker and beat (solo pool on Windows)",
+    "dev-worker": "Run Celery worker + beat (Windows: solo pool, beat as a second process)",
     "dev-web": "Run Vite React frontend on :5173",
     "web-lint": "Run prettier and eslint checks in apps/web",
     "lint": "Run ruff and eslint checks",
@@ -680,6 +770,7 @@ COMMANDS = {
     "test-int": "Run integration tests (requires PostgreSQL)",
     "test-web": "Run Vitest frontend tests",
     "test-e2e": "Run Playwright end-to-end tests",
+    "perf": "k6 baseline: health endpoints at 50 VUs, p95 < 50 ms (needs a running API)",
     "smoke": "Run smoke test against localhost:8080 or custom URL",
     "check": "Run full CI verification suite locally",
     "clean": "Remove cache files and build outputs",

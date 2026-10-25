@@ -4,7 +4,7 @@ Fails OPEN if Redis is unreachable (availability over strictness) - the database
 account lockout remains the brute-force backstop. The failure is logged and metered.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 
 import structlog
 from fastapi import Depends, Request
@@ -22,6 +22,26 @@ def client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def rate_limit_key(name: str, ip: str) -> str:
+    return f"rl:{name}:{ip}"
+
+
+def clear_rate_limits(redis_client: Redis, names: Iterable[str], ips: Iterable[str]) -> int | None:
+    """Delete the fixed-window counters for every (limiter, ip) pair.
+
+    Returns the number of counters removed, or ``None`` if Redis is unreachable: callers treat
+    clearing as best effort because the windows expire on their own.
+    """
+    keys = [rate_limit_key(name, ip) for name in names for ip in ips]
+    if not keys:
+        return 0
+    try:
+        return int(redis_client.delete(*keys))
+    except RedisError as exc:
+        _logger.warning("rate_limit_clear_unavailable", error_type=type(exc).__name__)
+        return None
+
+
 def rate_limit(
     name: str, limit: Callable[[Settings], int], window_seconds: int
 ) -> Callable[..., None]:
@@ -32,7 +52,7 @@ def rate_limit(
         redis_client: Redis = Depends(get_redis),
         settings: Settings = Depends(get_settings),
     ) -> None:
-        key = f"rl:{name}:{client_ip(request)}"
+        key = rate_limit_key(name, client_ip(request))
         try:
             count = int(redis_client.incr(key))
             if count == 1:
