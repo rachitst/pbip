@@ -21,6 +21,8 @@ customer-facing endpoints. `pbip_datagen` must not import `pbip_api`.
   reject any insert whose `(customer_id, run_id)` has no matching customer, cascade customer
   deletes, and make rows immutable (a run is replaced, never edited). `TRUNCATE customers` is
   refused while transactions exist. `customers.run_id` keeps an ordinary FK (1 row per customer).
+  The insert check first takes `FOR KEY SHARE` on the referenced customers - the lock a real FK
+  would take - so a concurrent run deletion cannot commit orphans under READ COMMITTED.
 - `ANALYZE synthetic.customers` before copying transactions, so the integrity check hash-joins
   (a never-analysed table planned a nested loop: 29 s vs 4.6 s).
 

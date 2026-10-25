@@ -19,7 +19,7 @@ import structlog
 from redis import Redis
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from pbip_api.core.config import Settings
 from pbip_api.core.crypto import FieldCipher
@@ -394,7 +394,7 @@ class AuthService:
             raise AccountLockedError("account temporarily locked, try again later")
 
         if not self.passwords.verify(user.password_hash, current_password):
-            self._register_failure(user, meta, "bad_password")
+            self._register_failure(user, meta, "bad_current_password")
             self.session.commit()
             raise InvalidCurrentPasswordError("incorrect current password")
 
@@ -565,13 +565,31 @@ class AuthService:
         return self._lockout_status(self.get_user(user_id))
 
     def _recent_failure_ips(self, user_id: UUID) -> list[str]:
+        """IPs that recently failed against THIS user only.
+
+        An IP that also failed against other accounts is spraying credentials; resetting its
+        per-IP window as a side effect of unlocking one victim would help the attacker.
+        """
+        since = func.now() - _UNLOCK_IP_LOOKBACK
+        other = aliased(SecurityEvent)
+        sprays_others = (
+            select(other.id)
+            .where(
+                other.ip == SecurityEvent.ip,
+                other.user_id != user_id,
+                other.event_type.in_(_FAILURE_EVENTS),
+                other.created_at >= since,
+            )
+            .exists()
+        )
         rows = self.session.execute(
             select(SecurityEvent.ip)
             .where(
                 SecurityEvent.user_id == user_id,
                 SecurityEvent.event_type.in_(_FAILURE_EVENTS),
                 SecurityEvent.ip.is_not(None),
-                SecurityEvent.created_at >= func.now() - _UNLOCK_IP_LOOKBACK,
+                SecurityEvent.created_at >= since,
+                ~sprays_others,
             )
             .group_by(SecurityEvent.ip)
             .order_by(func.max(SecurityEvent.created_at).desc())

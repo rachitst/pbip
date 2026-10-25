@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 pytestmark = [pytest.mark.integration, pytest.mark.security]
 
 WRONG = "Definitely-Not-It-42"  # pragma: allowlist secret
+NEW_PASSWORD = "Another-Strong-Pass-77!"  # pragma: allowlist secret
 
 
 def _lock_out(client: TestClient, email: str, attempts: int = 5) -> None:
@@ -182,3 +183,44 @@ def test_unlock_still_clears_the_db_lockout_when_redis_is_down(
     assert response.json()["rate_limit_counters_cleared"] is None
     assert response.json()["is_locked"] is False
     assert _login_status(client, alice.email) == 200
+
+
+def test_unlock_does_not_reset_the_limiter_of_an_ip_spraying_other_accounts(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_staff: Callable[..., Actor],
+    fake_redis: FakeRedis,
+    settings: Settings,
+) -> None:
+    """Review finding: an IP that failed against several users is spraying; unlocking one
+    victim must not clear that IP's rate-limit window as a side effect."""
+    settings.rate_limit_login_per_minute = 50
+    admin = make_staff(RoleName.ADMIN)
+    alice, bob = make_customer(), make_customer()
+    _lock_out(client, alice.email)
+    _lock_out(client, bob.email, attempts=1)  # same client IP also failed against Bob
+
+    unlocked = client.post(f"/api/v1/admin/users/{alice.user_id}/unlock", headers=admin.headers)
+    assert unlocked.status_code == 200
+    assert unlocked.json()["is_locked"] is False  # the account itself is unlocked
+    assert unlocked.json()["rate_limit_counters_cleared"] == 0
+    assert fake_redis.get("rl:login:testclient") is not None  # the spraying IP keeps its limit
+
+
+def test_wrong_current_password_is_logged_distinctly_from_a_login_failure(
+    client: TestClient, make_customer: Callable[..., Actor], db: Session
+) -> None:
+    alice = make_customer()
+    response = client.post(
+        "/api/v1/auth/password-change",
+        headers=alice.headers,
+        json={"current_password": WRONG, "new_password": NEW_PASSWORD},
+    )
+    assert response.status_code == 403
+    reasons = db.execute(
+        select(SecurityEvent.details["reason"].astext).where(
+            SecurityEvent.user_id == alice.user_id,
+            SecurityEvent.event_type == SecurityEventType.LOGIN_FAILURE,
+        )
+    ).scalars()
+    assert list(reasons) == ["bad_current_password"]
