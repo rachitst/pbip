@@ -454,9 +454,16 @@ GitHub Issues + Projects (no Jira). Flow: **feature branch -> PR -> automated ch
 Short-lived branches (`feat/`, `fix/`, `docs/`), Conventional Commits (commit-msg hook locally; the PR title, which
 becomes the squash commit, is checked by `.github/workflows/pr-title.yml`), PR template with security
 checklist, issue templates (feature/story, bug with regression plan), `CODEOWNERS` (team handles configured so peer review
-is always requested; money/auth/migrations paths require approval), ruleset `protect-main`: PR required,
-1 approval from someone other than the last pusher, dismiss stale approvals, conversations resolved, linear history,
-squash only, required check `CI Gate`, no force-push/deletion, no bypass. Labels `type:*`, `area:*`, `tier:*`;
+is always requested; money/auth/migrations paths require approval), two layered rulesets on
+`main` (committed in `.github/rulesets/`; GitHub enforces every applicable rule from every ruleset):
+`main.json` - PR required, dismiss stale approvals, conversations resolved, linear history, squash only, branch up to
+date, required checks `CI Gate` and `PR title - Conventional Commit` (both accepted only from the GitHub Actions app),
+no force-push/deletion, **no bypass for anyone**; `main-merge-restriction.json` - "Restrict updates": only the
+repository admin role may update `main`, and only by merging a PR (bypass mode `pull_request`). That bypass covers the
+update rule alone, so admin merges still need both required checks; teammates (write role) cannot merge. Required
+approvals are 0 so the admin can merge their own PRs (GitHub forbids self-approval); review is a team process. Repo
+auto-merge is disabled. `scripts/setup_github.py` imports only `main.json`; on a new repository import
+`main-merge-restriction.json` via Settings > Rules > Rulesets > Import. Labels `type:*`, `area:*`, `tier:*`;
 milestones = sprints; Project board columns Backlog / Ready / In progress / In review / Done.
 
 > **Plan caveat:** branch protection/rulesets on a **private** repo need GitHub Pro/Team (the free plan enforces them
