@@ -270,3 +270,13 @@ def test_k6_baseline_keeps_its_acceptance_thresholds() -> None:
         "VUS || 50",
     ):
         assert required in script, required
+
+
+def test_up_waits_for_healthy_services(capsys: pytest.CaptureFixture[str]) -> None:
+    """`up` must not return while the API is still starting (first page load was a 502)."""
+    with patch("scripts.dev._run", return_value=0) as mock_run:
+        assert dev_mod.cmd_up([]) == 0
+        assert mock_run.call_args[0][0] == ["docker", "compose", "up", "-d", "--build", "--wait"]
+        dev_mod.cmd_up_all([])
+        assert "--wait" in mock_run.call_args[0][0]
+    assert "http://localhost:8080" in capsys.readouterr().out

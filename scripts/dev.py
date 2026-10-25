@@ -317,9 +317,21 @@ def cmd_infra_down(_args: list[str]) -> int:
     return _run(["docker", "compose", "stop", "db", "redis"])
 
 
+_READY_MESSAGE = (
+    "\nPBIP is up: web http://localhost:8080 | API docs http://localhost:8000/docs\n"
+    "Demo users: python scripts/dev.py seed (prints the demo password)\n"
+)
+
+
 def cmd_up(args: list[str]) -> int:
-    """Build and start the full PBIP Docker stack."""
-    return _run(["docker", "compose", "up", "-d", "--build", *args])
+    """Build and start the full PBIP Docker stack; returns once services report healthy.
+
+    Without --wait the command returned while the API was still starting, so the first page
+    load through nginx was a 502.
+    """
+    code = _run(["docker", "compose", "up", "-d", "--build", "--wait", *args])
+    sys.stdout.write(_READY_MESSAGE)
+    return code
 
 
 def cmd_up_all(args: list[str]) -> int:
@@ -335,6 +347,7 @@ def cmd_up_all(args: list[str]) -> int:
             "up",
             "-d",
             "--build",
+            "--wait",
             *args,
         ]
     )
