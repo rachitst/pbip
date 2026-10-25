@@ -188,8 +188,15 @@ Alternatively, invoke the batch wrapper directly: `dev.cmd setup` or `python scr
 ---
 
 ### 4.7 Windows verification status (honest)
-The Windows-specific paths (TASK-001 runner, TASK-013 guide) have **not yet been run on a real Windows machine**.
-Until someone completes the checklist below on Windows 10/11, TASK-001 and TASK-013 stay **In Review**, not Done.
+The Windows-specific paths (TASK-001 runner, TASK-012 k6 runner, TASK-013 guide) have **not yet been run on a real
+Windows machine**. Until someone completes the checklist below on Windows 10/11, TASK-001, TASK-012 and TASK-013 stay
+**In Review**, not Done. One native Windows run of steps 0-8 is the evidence for all three:
+
+| Task (issue) | Steps that prove its Windows criteria |
+|---|---|
+| TASK-001 (#12) runner | 3, 5, 6, 8 (exit codes in PowerShell and `cmd.exe`, solo pool + separate beat, clean) |
+| TASK-012 (#23) k6 baseline | 7 ("Cross-platform execution script works on Windows and Linux") |
+| TASK-013 (#24) guide | 0-4 from a fresh clone, plus the whole run following only this guide |
 
 **Verified on Linux (Ubuntu, kernel 7.0, Python 3.12, 2026-10-25):**
 - 62 unit tests for the runner, doctor and setup scripts pass, including the Windows code paths exercised by
@@ -199,7 +206,7 @@ Until someone completes the checklist below on Windows 10/11, TASK-001 and TASK-
 No Windows environment (PowerShell, `cmd.exe`, Wine) was available, so the Windows behaviour itself is unverified.
 
 **Copy-paste checklist (Windows 10/11, PowerShell; Docker Desktop running).** Paste the output of steps 0-8 into
-issue #12 (TASK-001) and #24 (TASK-013).
+issues #12 (TASK-001), #23 (TASK-012) and #24 (TASK-013).
 
 ```powershell
 # 0. Environment (record it)
@@ -237,15 +244,22 @@ dev.cmd help & echo exit=%ERRORLEVEL%
 .\dev.ps1 dev-worker
 Get-Process | Where-Object { $_.ProcessName -match 'celery|python' } | Select-Object Id, ProcessName
 
-# 7. k6 baseline through Docker Desktop (TASK-012 runner): in terminal A run `.\dev.ps1 dev-api`; in terminal B:
-.\dev.ps1 perf; "exit=$LASTEXITCODE"      # expect thresholds ticked and exit=0
+# 7. k6 baseline (TASK-012): in terminal A run `.\dev.ps1 dev-api`; in terminal B run the two commands below.
+#    Record which k6 ran: native `k6` if `Get-Command k6` finds it (API at localhost:8000), otherwise the Docker
+#    image (API reached at host.docker.internal:8000). Expect a ramp to 50 VUs, then every threshold ticked:
+#    http_req_failed rate<0.001, http_req_duration p(95)<50 (overall, {endpoint:live}, {endpoint:ready}),
+#    checks rate>0.999, and exit=0. If k6 runs but a latency threshold fails, paste the summary anyway: the
+#    runner works but the threshold criterion is not met, which is a finding, not a pass.
+Get-Command k6 -ErrorAction SilentlyContinue
+.\dev.ps1 perf; "exit=$LASTEXITCODE"
+cmd /c "dev.cmd perf & echo exit=%ERRORLEVEL%"
 
 # 8. Clean (TASK-001): expect caches removed and exit=0
 .\dev.ps1 clean; "exit=$LASTEXITCODE"
 ```
 
 Pass criteria: every expected result above holds. Any deviation is a defect: open a `type:bug` issue linked to
-TASK-001/013 with the output.
+TASK-001/012/013 with the output. None of the three issues moves to Done until this evidence is posted on it.
 
 ## 5. Starting Services & Local Development
 

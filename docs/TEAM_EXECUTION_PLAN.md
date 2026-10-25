@@ -73,7 +73,7 @@
 ### Sprint 1
 
 All 13 tasks are **merged** (merge date shown below; for Done tasks it is also the actual completion date) and re-audited on 2026-10-25 (section 8). TASK-005 was
-accepted on 2026-10-26 with a clarified criterion (section 8). TASK-001 and TASK-013 are **In Review**, not Done:
+accepted on 2026-10-26 with a clarified criterion (section 8). TASK-001, TASK-012 and TASK-013 are **In Review**, not Done:
 they still need real Windows verification (checklist in `docs/SETUP_GUIDE.md` section 4.7). Owners are accountable for any follow-up defects; no re-implementation is required.
 
 | Task | Title | Owner | Merged in | Merged on | Issue |
@@ -475,14 +475,14 @@ they still need real Windows verification (checklist in `docs/SETUP_GUIDE.md` se
 
 - **Issue:** #23 | **Sprint:** 1 | **Priority:** must | **Size:** S (0.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Rachit (`rachitst`)
-- **Target deadline:** met | **Actual completion:** Sun 25 Oct (merged in #36) | **Status:** Done | **Risk:** Low
+- **Target deadline:** met | **Actual completion:** merged Sun 25 Oct (#36); not Done until verified on real Windows | **Status:** In Review | **Risk:** Low
 - **Depends on:** TASK-001 (#12, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** Done
+- **Mode:** In Review (awaiting real Windows verification, `docs/SETUP_GUIDE.md` section 4.7 step 7)
 - **Goal:** Initial k6 script benchmarking baseline latency on health and unauthenticated endpoints.
 - **Expected end result / acceptance criteria:**
   - [x] Script tests /api/health/live and /api/health/ready at 50 virtual users (VUs)
   - [x] Validates p95 latency < 50ms and error rate < 0.1%
-  - [x] Cross-platform execution script works on Windows and Linux
+  - [ ] Cross-platform execution script works on Windows and Linux *(implemented; Linux and simulated-Windows tests pass; real Windows run pending, see `docs/SETUP_GUIDE.md` section 4.7)*
 - **Definition of done (evidence):** k6 script committed to infra/k6/baseline.js, README instructions verified.
 - **Required checks:**
   - Automated: CI job or `scripts/dev.py` command exercised in tests; works from a fresh clone; the suite itself runs in CI or via a documented command and asserts its thresholds
@@ -2867,7 +2867,7 @@ they still need real Windows verification (checklist in `docs/SETUP_GUIDE.md` se
 
 | Task | Status | What is pending | Owner of the decision |
 |---|---|---|---|
-| TASK-001, TASK-013 | In Review | Real Windows 10/11 run of the checklist in `docs/SETUP_GUIDE.md` section 4.7 (no Windows machine was available; Linux checks pass) | Rachit (TASK-001), Kalpak (TASK-013), or any teammate with Windows |
+| TASK-001, TASK-012, TASK-013 | In Review | One real Windows 10/11 run of the checklist in `docs/SETUP_GUIDE.md` section 4.7, with output posted on #12, #23 and #24 (no Windows machine was available; Linux checks pass) | Rachit (TASK-001, TASK-012), Kalpak (TASK-013), or any teammate with Windows |
 | TASK-005 | **Done (accepted 2026-10-26)** | Nothing: the product owner accepted the clarified criterion below; issue #16 closed | - |
 
 **TASK-005 decision (accepted 2026-10-26).**
