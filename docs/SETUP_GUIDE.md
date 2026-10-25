@@ -188,16 +188,63 @@ Alternatively, invoke the batch wrapper directly: `dev.cmd setup` or `python scr
 ---
 
 ### 4.7 Windows verification status (honest)
-The Windows-specific paths were fixed in Sprint 1 but have **not yet been run on a real Windows machine**.
+The Windows-specific paths (TASK-001 runner, TASK-013 guide) have **not yet been run on a real Windows machine**.
+Until someone completes the checklist below on Windows 10/11, TASK-001 and TASK-013 stay **In Review**, not Done.
 
-| Behaviour | How it was verified | Still to verify on Windows 10/11 |
-|---|---|---|
-| `dev.cmd` returns the command's exit code | static regression test (`test_dev_cmd_propagates_exit_codes`); CMD semantics of bare `exit /b` | `dev.cmd lint` with a lint error must exit non-zero (`echo %ERRORLEVEL%`) |
-| `dev-worker`: solo pool, beat as a separate process | unit tests with mocked processes; Celery source (`-B option does not work on Windows`) | worker and beat both start, a beat task runs, Ctrl+C stops both |
-| `dev.ps1` forwards arguments and exit codes | code review | `.\dev.ps1 test-unit` passes; a failing command sets `$LASTEXITCODE` |
-| Doctor, setup, clean, perf (k6 via Docker Desktop) | unit tests | full run from a fresh clone, as the TASK-013 definition of done requires |
+**Verified on Linux (Ubuntu, kernel 7.0, Python 3.12, 2026-10-25):**
+- 62 unit tests for the runner, doctor and setup scripts pass, including the Windows code paths exercised by
+  patching the platform flag (solo pool and separate beat, `dev.cmd` exit-code regression).
+- `python scripts/dev.py <unknown>` exits 1 and `help` exits 0; `doctor` reports 12 OK, 0 WARN, 0 MISSING.
 
-Please record the result (Windows version, Python, Docker Desktop) in the PR or issue when you run these.
+No Windows environment (PowerShell, `cmd.exe`, Wine) was available, so the Windows behaviour itself is unverified.
+
+**Copy-paste checklist (Windows 10/11, PowerShell; Docker Desktop running).** Paste the output of steps 0-8 into
+issue #12 (TASK-001) and #24 (TASK-013).
+
+```powershell
+# 0. Environment (record it)
+[System.Environment]::OSVersion.VersionString; python --version; uv --version; node --version; git --version
+docker version --format '{{.Server.Version}}'
+
+# 1. Fresh clone + diagnostics (TASK-002/013): expect [OK]/[WARN] lines and exit code 0
+git clone https://github.com/rachitst/pbip.git pbip-wincheck; cd pbip-wincheck
+.\dev.ps1 doctor; "exit=$LASTEXITCODE"
+
+# 2. Setup from the guide (TASK-013): expect .env created, Python + npm deps installed, exit 0
+.\dev.ps1 setup; "exit=$LASTEXITCODE"
+
+# 3. dev.ps1 propagates exit codes (TASK-001): expect exit=1, then exit=0
+.\dev.ps1 not-a-command; "exit=$LASTEXITCODE"
+.\dev.ps1 help; "exit=$LASTEXITCODE"
+
+# 4. Infrastructure, migrations, fast tests (TASK-013): expect exit=0 for each
+.\dev.ps1 infra-up; "exit=$LASTEXITCODE"
+.\dev.ps1 migrate; "exit=$LASTEXITCODE"
+.\dev.ps1 test-unit; "exit=$LASTEXITCODE"
+```
+
+```bat
+:: 5. dev.cmd propagates exit codes (TASK-001), in cmd.exe from the repo root: expect 1, then 0
+dev.cmd not-a-command & echo exit=%ERRORLEVEL%
+dev.cmd help & echo exit=%ERRORLEVEL%
+```
+
+```powershell
+# 6. Celery on Windows (TASK-001): expect worker banner with "pool: solo" (or concurrency 1 (solo)) AND a separate
+#    "beat: Starting..." line; no "-B option does not work on Windows" error. Then press Ctrl+C and confirm no
+#    celery process remains:
+.\dev.ps1 dev-worker
+Get-Process | Where-Object { $_.ProcessName -match 'celery|python' } | Select-Object Id, ProcessName
+
+# 7. k6 baseline through Docker Desktop (TASK-012 runner): in terminal A run `.\dev.ps1 dev-api`; in terminal B:
+.\dev.ps1 perf; "exit=$LASTEXITCODE"      # expect thresholds ticked and exit=0
+
+# 8. Clean (TASK-001): expect caches removed and exit=0
+.\dev.ps1 clean; "exit=$LASTEXITCODE"
+```
+
+Pass criteria: every expected result above holds. Any deviation is a defect: open a `type:bug` issue linked to
+TASK-001/013 with the output.
 
 ## 5. Starting Services & Local Development
 

@@ -72,7 +72,9 @@
 
 ### Sprint 1
 
-All 13 tasks are **merged** (actual completion = merge date) and re-audited on 2026-10-25 (section 8). Owners are accountable for any follow-up defects; no re-implementation is required.
+All 13 tasks are **merged** (actual completion = merge date) and re-audited on 2026-10-25 (section 8). Two are
+not yet accepted: TASK-001 and TASK-013 still need real Windows verification (checklist in `docs/SETUP_GUIDE.md`
+section 4.7), and TASK-005 awaits the product owner's decision on its ledger-initialisation wording (section 8). Owners are accountable for any follow-up defects; no re-implementation is required.
 
 | Task | Title | Owner | Merged in | Actual completion | Issue |
 |---|---|---|---|---|---|
@@ -2860,3 +2862,24 @@ All 13 tasks are **merged** (actual completion = merge date) and re-audited on 2
 | Windows paths not yet run on real Windows | Setup issues for Windows users | Manual checks listed in `docs/SETUP_GUIDE.md` section 4.7 |
 
 **Implementation audit (2026-10-25):** 13 of 93 tasks are implemented (Sprint 1) and were re-audited against AGENTS.md, the blueprint and their acceptance criteria. The independent review found and fixed 4 defects in PR #36 before merge, plus ledger guard-path coverage (85% -> 99%). Evidence is posted on each Sprint 1 issue. The other 80 tasks have no implementation yet; they are Todo and unverified by definition.
+
+### Open decisions and verification (2026-10-25)
+
+| Task | Status | What is pending | Owner of the decision |
+|---|---|---|---|
+| TASK-001, TASK-013 | In Review | Real Windows 10/11 run of the checklist in `docs/SETUP_GUIDE.md` section 4.7 (no Windows machine was available; Linux checks pass) | Rachit (TASK-001), Kalpak (TASK-013), or any teammate with Windows |
+| TASK-005 | In Review | Product-owner acceptance of the ledger-initialisation interpretation (below) | Product owner (Rachit) |
+
+**TASK-005 recommendation.**
+- **The criterion:** it asks for a "zero-balance ledger entry header".
+- **The implementation:** account opening registers the account with the ledger at a zero materialised balance
+  (`ledger.initialize_account`) and posts nothing.
+- **Why nothing is posted:** the database forbids zero-amount headers, entries and holds (`CHECK amount > 0`).
+  Under double entry a balance *is* the sum of its entries, so a new account with no entries is exactly zero, and
+  `ledger.entry_balance` proves it (`test_new_account_is_initialised_by_the_ledger_and_reconciles`).
+- **Auditability:** the opening is recorded as a hash-chained `ACCOUNT_OPENED` audit row
+  (`test_open_account_audit_trail`).
+- **Recommendation:** accept the behaviour and amend the criterion's wording to: *"Registers the new account with
+  the double-entry ledger at a zero balance (no zero-value posting; the opening is recorded in the audit log)."*
+  No code change is needed; weakening `CHECK amount > 0` to allow a symbolic zero posting would remove a
+  financial-integrity safeguard.
