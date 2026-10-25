@@ -16,6 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import scripts.setup_github as setup_github
 from scripts.backlog import BACKLOG_FILE, load_backlog
 from scripts.setup_github import (
     LABELS,
@@ -237,3 +238,24 @@ def test_setup_ruleset_creates_when_no_ruleset_exists(
         assert calls[1][0:3] == ["api", "-X", "POST"]
         out = capsys.readouterr().out
         assert "Successfully created ruleset 'main'." in out
+
+
+def test_all_14_standard_labels_are_created() -> None:
+    names = {name for name, _color, _desc in setup_github.LABELS}
+    assert len(setup_github.STANDARD_LABELS) == 14
+    assert names >= setup_github.STANDARD_LABELS
+    assert len(names) == len(setup_github.LABELS)  # no duplicates
+    for _name, color, desc in setup_github.LABELS:
+        assert len(color) == 6 and int(color, 16) >= 0 and desc
+
+
+def test_dry_run_without_gh_installed_does_not_crash(capsys: pytest.CaptureFixture[str]) -> None:
+    """Regression: --dry-run ran `gh project list` and raised FileNotFoundError without gh."""
+    with patch("scripts.setup_github.shutil.which", return_value=None):
+        setup_github.setup_project_board("owner/repo", "PBIP Delivery Board", dry_run=True)
+    assert "[dry-run] would create project" in capsys.readouterr().out
+
+
+def test_collaborators_are_space_separated() -> None:
+    args = setup_github.build_parser().parse_args(["o/r", "--collaborators", "ann", "bob"])
+    assert args.collaborators == ["ann", "bob"]
