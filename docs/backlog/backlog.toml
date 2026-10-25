@@ -94,7 +94,9 @@ outcome = "Dedicated endpoint allowing authenticated customers to open checking 
 acceptance_criteria = [
     "POST /api/v1/accounts allows opening a new account with account_type in {CHECKING, SAVINGS}",
     "Generates unique, compliant account numbers using bank prefix and checksum",
-    "Integrates with double-entry ledger initializing zero-balance ledger entry header",
+    # Clarified 2026-10-26, accepted by the product owner (issue #16). Original wording: "Integrates with double-entry ledger initializing zero-balance ledger entry header".
+    # A zero-value posting is impossible under CHECK amount > 0, which is deliberately kept.
+    "Registers the new account with the double-entry ledger at a zero balance (no zero-value posting; the opening is recorded in the audit log)",
     "Enforces per-customer active account limits (max 5 accounts per customer)",
 ]
 dependencies = []

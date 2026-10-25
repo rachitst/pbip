@@ -208,6 +208,7 @@ docker version --format '{{.Server.Version}}'
 
 # 1. Fresh clone + diagnostics (TASK-002/013): expect [OK]/[WARN] lines and exit code 0
 git clone https://github.com/rachitst/pbip.git pbip-wincheck; cd pbip-wincheck
+#    If PowerShell refuses to run dev.ps1, apply the execution-policy note in section 4.6 (RemoteSigned, CurrentUser).
 .\dev.ps1 doctor; "exit=$LASTEXITCODE"
 
 # 2. Setup from the guide (TASK-013): expect .env created, Python + npm deps installed, exit 0
