@@ -17,8 +17,10 @@ Verifies:
 from __future__ import annotations
 
 import hashlib
+import threading
 import uuid
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from fastapi.testclient import TestClient
@@ -29,7 +31,7 @@ from pbip_api.modules.customers.models import Customer, Device
 from pbip_api.modules.customers.service import mask_phone_number
 from pbip_test_support import Actor
 from sqlalchemy import select
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 pytestmark = [pytest.mark.integration, pytest.mark.security]
 
@@ -186,6 +188,21 @@ def test_register_device_missing_fingerprint_returns_422(
     assert resp.status_code == 422
 
 
+def test_oversized_device_header_is_rejected(
+    client: TestClient, make_customer: Callable[..., Actor], db: Session
+) -> None:
+    """The X-Device-ID header has the same 512-character bound as the body fingerprint."""
+    alice = make_customer()
+    resp = client.post(
+        "/api/v1/customers/devices",
+        headers={**alice.headers, "X-Device-ID": "d" * 513},
+        json={},
+    )
+    assert resp.status_code == 422
+    assert "ddd" not in resp.text  # never echo the value back
+    assert db.execute(select(Device)).first() is None
+
+
 def test_duplicate_device_registration_preserves_first_seen_and_trusted(
     client: TestClient,
     make_customer: Callable[..., Actor],
@@ -296,3 +313,28 @@ def test_list_and_get_devices_bola_isolation(
     # Alice attempts to get Bob's device: 404
     alice_touch_bob = client.get(f"/api/v1/customers/devices/{bob_dev_id}", headers=alice.headers)
     assert alice_touch_bob.status_code == 404
+
+
+def test_concurrent_first_registration_of_one_device_never_fails(
+    client: TestClient, make_customer: Callable[..., Actor], db: Session
+) -> None:
+    """Regression: two simultaneous first registrations raced on the unique index -> HTTP 500."""
+    alice = make_customer()
+    for attempt in range(5):
+        fingerprint = f"race-fingerprint-{attempt}"
+        barrier = threading.Barrier(6)
+
+        def register(fp: str = fingerprint, gate: threading.Barrier = barrier) -> int:
+            gate.wait()
+            return client.post(
+                "/api/v1/customers/devices",
+                headers=alice.headers,
+                json={"fingerprint": fp, "label": "Race"},
+            ).status_code
+
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            statuses = sorted(pool.map(lambda _i: register(), range(6)))
+        assert statuses == [200] * 5 + [201], statuses  # exactly one creation, the rest touches
+
+    devices = db.execute(select(Device).where(Device.customer_id == alice.customer_id)).scalars()
+    assert len(list(devices)) == 5
