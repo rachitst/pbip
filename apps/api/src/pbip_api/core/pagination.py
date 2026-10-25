@@ -21,6 +21,7 @@ from pbip_api.core.errors import UnprocessableError
 
 _VERSION = 1
 MAX_CURSOR_LENGTH = 200
+MAX_SEQ = 2**63 - 1  # transaction_entries.seq is BIGINT; larger values overflow in SQL (500)
 
 
 class PageDirection(StrEnum):
@@ -49,7 +50,7 @@ def decode_cursor(raw: str) -> Cursor:
         raise _invalid()
     if raw.isascii() and raw.isdigit():
         seq = int(raw)
-        if seq < 1:
+        if not 1 <= seq <= MAX_SEQ:
             raise _invalid()
         return Cursor(seq=seq)
     try:
@@ -58,6 +59,6 @@ def decode_cursor(raw: str) -> Cursor:
         version_ok = payload["v"] == _VERSION
     except (binascii.Error, ValueError, KeyError, TypeError) as exc:
         raise _invalid() from exc
-    if not version_ok or type(seq) is not int or seq < 1 or ts.tzinfo is None:
+    if not version_ok or type(seq) is not int or not 1 <= seq <= MAX_SEQ or ts.tzinfo is None:
         raise _invalid()
     return Cursor(seq=seq, ts=ts)

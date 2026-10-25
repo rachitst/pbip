@@ -26,7 +26,7 @@ def test_cursor_round_trips_seq_and_timestamp(seq: int, ts: datetime) -> None:
     assert decode_cursor(raw) == Cursor(seq=seq, ts=ts)
 
 
-@given(seq=st.integers(min_value=1, max_value=10**12))
+@given(seq=st.integers(min_value=1, max_value=2**63 - 1))
 def test_legacy_integer_cursors_are_still_accepted(seq: int) -> None:
     assert decode_cursor(str(seq)) == Cursor(seq=seq)
 
@@ -40,6 +40,9 @@ def _b64(payload: object) -> str:
     [
         "",
         "0",
+        str(2**63),  # legacy form beyond BIGINT: would overflow in SQL (was a 500)
+        "9" * 30,
+        _b64({"v": 1, "seq": 2**63, "ts": "2026-01-01T00:00:00+00:00"}),
         "x" * (MAX_CURSOR_LENGTH + 1),
         "not base64 !!",
         _b64([1, 2]),

@@ -132,6 +132,7 @@ def test_empty_account_returns_an_empty_last_page(
     [
         {"cursor": "garbage!!"},
         {"cursor": "0"},
+        {"cursor": str(2**63)},  # regression: bigint overflow surfaced as HTTP 500
         {"cursor": "x" * 201},
         {"direction": "sideways"},
         {"limit": 0},
