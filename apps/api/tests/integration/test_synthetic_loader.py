@@ -142,3 +142,49 @@ def test_truncating_customers_while_transactions_exist_is_refused(
     refused = pytest.raises(DBAPIError, match=r"truncate synthetic\.transactions")
     with refused, synthetic.begin() as connection:
         connection.execute(text("TRUNCATE synthetic.customers CASCADE"))
+
+
+def test_concurrent_run_deletion_cannot_orphan_uncommitted_transactions(
+    synthetic: Engine, test_database_url: str
+) -> None:
+    """Review finding: the set-based check took no locks, so deleting a run while another
+    transaction inserted rows for its customers could commit orphans. The insert trigger now
+    takes KEY SHARE locks on the referenced customers, so the delete has to wait."""
+    dataset = generate(GeneratorConfig(seed=11, customers=1, months=1))
+    load_dataset(dataset, test_database_url)
+    customer = dataset.customers[0]
+
+    inserter = synthetic.connect()
+    deleter = synthetic.connect()
+    try:
+        inserter.begin()
+        inserter.execute(
+            text(
+                "INSERT INTO synthetic.transactions (id, run_id, customer_id, occurred_at, "
+                "direction, amount_minor, category, event_type, merchant) VALUES "
+                "(:id, :run, :customer, now(), 'DEBIT', 100, 'dining', 'DISCRETIONARY', 'X')"
+            ),
+            {"id": uuid.uuid4(), "run": dataset.run_id, "customer": customer.id},
+        )  # uncommitted: holds KEY SHARE on the customer row
+
+        deleter.begin()
+        deleter.execute(text("SET LOCAL lock_timeout = '500ms'"))
+        with pytest.raises(DBAPIError, match="lock timeout"):
+            deleter.execute(
+                text("DELETE FROM synthetic.generation_runs WHERE id = :id"),
+                {"id": dataset.run_id},
+            )
+        deleter.rollback()
+        inserter.commit()
+    finally:
+        inserter.close()
+        deleter.close()
+
+    with synthetic.connect() as connection:
+        orphans = connection.execute(
+            text(
+                "SELECT count(*) FROM synthetic.transactions t "
+                "LEFT JOIN synthetic.customers c ON c.id = t.customer_id WHERE c.id IS NULL"
+            )
+        ).scalar_one()
+    assert orphans == 0

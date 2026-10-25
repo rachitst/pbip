@@ -39,6 +39,12 @@ TRIGGERS = (
     CREATE FUNCTION {SCHEMA}.check_transaction_customers() RETURNS trigger
     LANGUAGE plpgsql AS $$
     BEGIN
+        -- Lock the referenced customers like a real FK would (KEY SHARE): a concurrent delete of
+        -- those customers now waits for this transaction, or - if it committed first - the
+        -- check below (a new statement, so a new snapshot) no longer finds them and fails.
+        PERFORM 1 FROM {SCHEMA}.customers c
+        WHERE c.id IN (SELECT DISTINCT n.customer_id FROM new_rows n)
+        FOR KEY SHARE OF c;
         IF EXISTS (
             SELECT 1 FROM new_rows n
             LEFT JOIN {SCHEMA}.customers c ON c.id = n.customer_id AND c.run_id = n.run_id
