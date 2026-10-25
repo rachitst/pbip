@@ -26,13 +26,14 @@ PBIP supports **native Ubuntu Linux** (via `make` or `python scripts/dev.py`) an
 make setup        # .env with generated secrets, Python + Node deps, git hooks
 make infra-up     # PostgreSQL + Redis in Docker
 make migrate      # create the schema
-make seed         # demo users (password printed), funded accounts, MFA-enrolled staff
+make seed         # demo users, funded accounts, MFA-enrolled staff (local DB only)
 make dev-api      # terminal 1 -> http://localhost:8000/docs
 make dev-web      # terminal 2 -> http://localhost:5173
 ```
 Or the whole stack in Docker: `make up` -> http://localhost:8080 (add `make up-all` for Grafana :3000,
-Prometheus :9090, MLflow :5000). Demo logins: `alice@demo.pbip` / `bob@demo.pbip` (password shown by `make seed`).
-Staff TOTP codes: `uv run python scripts/totp.py analyst@demo.pbip`.
+Prometheus :9090, MLflow :5000). Demo logins: `alice@demo.pbip` / `bob@demo.pbip`; the password is the `DEMO_PASSWORD` constant in
+`scripts/seed_dev.py` (never printed). Staff TOTP codes: `uv run python scripts/totp.py analyst@demo.pbip`
+(decrypts the MFA secret from the local database; no secrets file is written).
 
 ### 2. Prove it works
 ```bash
