@@ -5,6 +5,11 @@ export type AccountOut = components["schemas"]["AccountOut"];
 export type PayeeOut = components["schemas"]["PayeeOut"];
 export type TransferOut = components["schemas"]["TransferOut"];
 export type UserOut = components["schemas"]["UserOut"];
+export type CustomerProfileOut = components["schemas"]["CustomerProfileOut"];
+export type DeviceOut = components["schemas"]["DeviceOut"];
+export type EntriesPage = components["schemas"]["EntriesPage"];
+export type EntryOut = components["schemas"]["EntryOut"];
+export type OpenAccountType = components["schemas"]["OpenAccountType"];
 
 export class ApiError extends Error {
   constructor(
@@ -91,6 +96,33 @@ export const api = {
     }),
   me: () => apiFetch<UserOut>("/api/v1/auth/me"),
   accounts: () => apiFetch<AccountOut[]>("/api/v1/accounts"),
+  openAccount: (accountType: OpenAccountType) =>
+    apiFetch<AccountOut>("/api/v1/accounts", {
+      method: "POST",
+      body: JSON.stringify({ account_type: accountType }),
+    }),
+  /** Keyset pagination: pass the previous page's next_cursor to walk further back in time. */
+  accountEntries: (accountId: string, cursor: string | null, limit = 10) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (cursor) params.set("cursor", cursor);
+    return apiFetch<EntriesPage>(
+      `/api/v1/accounts/${encodeURIComponent(accountId)}/transactions?${params.toString()}`,
+    );
+  },
+  profile: () => apiFetch<CustomerProfileOut>("/api/v1/customers/me"),
+  devices: () => apiFetch<DeviceOut[]>("/api/v1/customers/devices"),
+  registerDevice: (deviceId: string, label: string) =>
+    apiFetch<DeviceOut>("/api/v1/customers/devices", {
+      method: "POST",
+      headers: { "X-Device-ID": deviceId },
+      body: JSON.stringify({ label }),
+    }),
+  /** 204 on success; the server revokes every session, so the caller must sign out. */
+  changePassword: (currentPassword: string, newPassword: string) =>
+    apiFetch<undefined>("/api/v1/auth/password-change", {
+      method: "POST",
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }),
   payees: () => apiFetch<PayeeOut[]>("/api/v1/payees"),
   /** One Idempotency-Key per user intent; reuse the SAME key when retrying the same submit. */
   transfer: (

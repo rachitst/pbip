@@ -8,9 +8,11 @@ interface AuthState {
   status: Status;
   /** Non-null while the password was accepted but a TOTP code is still required. */
   mfaToken: string | null;
+  /** Message for the sign-in screen after a forced sign-out (e.g. password changed). */
+  notice: string | null;
   login: (email: string, password: string) => Promise<void>;
   verifyMfa: (code: string) => Promise<void>;
-  logout: () => Promise<void>;
+  logout: (notice?: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -18,6 +20,7 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>("loading");
   const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     setSessionLostHandler(() => {
@@ -34,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const result = await api.login(email, password);
+    setNotice(null);
     if (result.mfa_required && result.mfa_token) {
       setMfaToken(result.mfa_token);
       return;
@@ -53,16 +57,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [mfaToken],
   );
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(async (message?: string) => {
     await api.logout().catch(() => undefined);
     setAccessToken(null);
     setMfaToken(null);
+    setNotice(message ?? null);
     setStatus("anonymous");
   }, []);
 
   const value = useMemo(
-    () => ({ status, mfaToken, login, verifyMfa, logout }),
-    [status, mfaToken, login, verifyMfa, logout],
+    () => ({ status, mfaToken, notice, login, verifyMfa, logout }),
+    [status, mfaToken, notice, login, verifyMfa, logout],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
