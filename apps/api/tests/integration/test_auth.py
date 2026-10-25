@@ -97,7 +97,7 @@ def test_login_rate_limit_per_ip(client: TestClient, settings: Settings) -> None
         ).status_code
         for _ in range(5)
     ]
-    assert statuses[:3] == [403, 403, 403]
+    assert statuses[:3] == [401, 401, 401]
     assert statuses[3:] == [429, 429]
 
 
