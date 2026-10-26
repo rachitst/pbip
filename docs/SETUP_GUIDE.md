@@ -189,9 +189,9 @@ Alternatively, invoke the batch wrapper directly: `dev.cmd setup` or `python scr
 ---
 
 ### 4.7 Windows verification status (honest)
-The Windows-specific paths (TASK-001 runner, TASK-012 k6 runner, TASK-013 guide) have **not yet passed on a real
-Windows machine** (the first run, below, found defects). Until the checklist below passes on Windows 10/11, TASK-001,
-TASK-012 and TASK-013 stay **In Review**, not Done. One native Windows run of steps 0-8 is the evidence for all three:
+The Windows-specific paths (TASK-001 runner, TASK-012 k6 runner, TASK-013 guide) **passed on a real Windows 10 machine**
+on 2026-10-27 (third run, below) after two runs that found and fixed defects. Re-run the checklist after any change to
+the runner, the k6 baseline or this guide. One native Windows run of steps 0-8 is the evidence for all three:
 
 | Task (issue) | Steps that prove its Windows criteria |
 |---|---|
@@ -218,6 +218,16 @@ worker and beat in about 4 s with no process left. **Step 7 still fails its late
 (`ready` p95 81.5 / 100.69 ms, overall 62.73 / 80.94 ms; errors 0.00%, checks 100%, both commands exit 99): #134.
 `.\dev.ps1 check`: 419 passed, coverage 95.78%, all lint/type/security gates green; one TASK-009 COPY-budget
 test took 15.9-17.2 s against 15 s (#135). TASK-001, TASK-012 and TASK-013 therefore stay **In Review**.
+
+**Third native Windows run (same machine, 2026-10-27, `main` `9386b22` with #137 and #138, fresh clone): steps 0-8
+pass.** Setup exit 0 from a clean clone; migrate exit 0; `test-unit` 283 passed; both runners return 1/0 (also through
+`2>&1 | Tee-Object` and `cmd /c`); one console Ctrl+C after a task was received: warm shutdown, task finished, every
+process gone in 1.79 s. Step 7 after #137 (`/ready` no longer takes four thread-pool hops per probe): `dev.cmd perf`
+p95 overall 15.44 / 16.00 ms, live 14.22 / 14.86, ready 16.53 / 16.72; `.\dev.ps1 perf` 38.53 / 35.58 / 41.69 ms; errors
+0.00%, checks 100%, exit 0. One further `.\dev.ps1 perf` run failed (182 ms) while other apps saturated the CPU; `/live`,
+which does no I/O, failed by the same margin, so that run measured the machine, not the endpoint. Thresholds unchanged.
+`.\dev.ps1 check`: 430 passed, coverage 95.79%, all lint/type/security gates green; the TASK-009 COPY-budget test is
+still over 15 s on this 2-core laptop (#135, not part of these tasks' criteria). TASK-001, TASK-012 and TASK-013: **Done**.
 
 **Copy-paste checklist (Windows 10/11, PowerShell; Docker Desktop running).** Paste the output of steps 0-8 into
 issues #12 (TASK-001), #23 (TASK-012) and #24 (TASK-013).
