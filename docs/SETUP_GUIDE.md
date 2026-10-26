@@ -570,6 +570,13 @@ make infra-up
 # or .\dev.ps1 infra-up
 ```
 
+### Q: On Windows the worker hangs on its first task, `/api/health/ready` times out, or `perf` misses p95 < 50 ms
+**Cause:** an older `.env` points `DATABASE_URL`, `TEST_DATABASE_URL` or `REDIS_URL` at `localhost`. Windows
+tries `::1` first, but compose publishes Postgres and Redis on `127.0.0.1` only, so every new connection stalls
+(measured: 15 s per connect with a 15 s timeout, indefinitely without one).
+**Fix:** `.env` is never overwritten, so edit it yourself: replace `localhost` with `127.0.0.1` in those three
+URLs (current `.env.example` already uses it), then restart `dev-api` / `dev-worker`.
+
 ### Q: A port is already in use (`bind: address already in use`)
 PBIP uses 5432 (PostgreSQL), 6379 (Redis), 8000 (API), 5173 (Vite), 8080 (web/nginx), 3000 (Grafana),
 9090 (Prometheus) and 5000 (MLflow). `make doctor` reports which ones are taken. Find the owner:

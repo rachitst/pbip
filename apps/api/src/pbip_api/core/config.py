@@ -21,8 +21,12 @@ class Settings(BaseSettings):
     app_env: Literal["local", "test", "staging", "production"] = "local"
     log_level: str = "INFO"
 
-    database_url: str = "postgresql+psycopg://pbip:pbip_local_password@localhost:5432/pbip"
-    redis_url: str = "redis://localhost:6379/0"
+    # 127.0.0.1: compose publishes on IPv4 only; "localhost" tries ::1 first (stalls on Windows)
+    database_url: str = "postgresql+psycopg://pbip:pbip_local_password@127.0.0.1:5432/pbip"
+    redis_url: str = "redis://127.0.0.1:6379/0"
+    # libpq waits forever by default; a stalled connect then blocks a request or Celery task (and a
+    # worker's warm shutdown) indefinitely. libpq treats values below 2 as 2.
+    database_connect_timeout_seconds: int = Field(default=5, ge=2, le=60)
 
     jwt_secret: SecretStr = SecretStr(_DEV_JWT_SECRET)
     jwt_access_ttl_minutes: int = 15
