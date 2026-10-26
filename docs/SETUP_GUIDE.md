@@ -211,6 +211,14 @@ for a failing command when run as `cmd /c` or from PowerShell, a unit test that 
 `winget` id for uv, and checklist commands in steps 5 and 7 that could never show a failure. The tasks stay
 **In Review** until those fixes are merged and steps 2-8 pass on Windows again.
 
+**Second native Windows run (same machine, 2026-10-26, merged `main` `04df85f` with #132 and #133, fresh clone):**
+steps 0-6 and 8 pass. Setup works from a clean clone; `test-unit` 272 passed; `dev.ps1` and `dev.cmd` return 1/0 as the
+process exit code, including through `2>&1 | Tee-Object` and `*> file`; one console Ctrl+C on a ready worker stops
+worker and beat in about 4 s with no process left. **Step 7 still fails its latency thresholds** on this 2-core laptop
+(`ready` p95 81.5 / 100.69 ms, overall 62.73 / 80.94 ms; errors 0.00%, checks 100%, both commands exit 99): #134.
+`.\dev.ps1 check`: 419 passed, coverage 95.78%, all lint/type/security gates green; one TASK-009 COPY-budget
+test took 15.9-17.2 s against 15 s (#135). TASK-001, TASK-012 and TASK-013 therefore stay **In Review**.
+
 **Copy-paste checklist (Windows 10/11, PowerShell; Docker Desktop running).** Paste the output of steps 0-8 into
 issues #12 (TASK-001), #23 (TASK-012) and #24 (TASK-013).
 

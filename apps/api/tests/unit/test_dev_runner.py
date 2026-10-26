@@ -259,6 +259,26 @@ def test_dev_ps1_forwards_flags_that_look_like_common_parameters(tmp_path: Path)
     assert f"ARGV={[*expected, 'exit=5']!r}" in proc.stdout
 
 
+@pytest.mark.parametrize(
+    "name",
+    [
+        "celerybeat-schedule",
+        "celerybeat-schedule.bak",
+        "celerybeat-schedule.dat",
+        "celerybeat-schedule.dir",
+    ],
+)
+def test_celery_beat_schedule_files_are_ignored(name: str) -> None:
+    """`dev-worker` writes beat's schedule into the repo root: one file on Linux, three dbm files
+    on Windows (left untracked by the native Windows run). None may show up in `git status`."""
+    git = shutil.which("git")
+    assert git is not None
+    proc = subprocess.run(  # noqa: S603
+        [git, "check-ignore", "--no-index", "-q", name], cwd=dev_mod.ROOT, check=False
+    )
+    assert proc.returncode == 0, name
+
+
 def test_run_success_exit_code() -> None:
     """Verify _run returns subprocess returncode 0 on successful execution."""
     with patch("subprocess.run") as mock_subproc:
