@@ -8,6 +8,8 @@
 .backlog-state.json
 
 # Python
+# Celery beat schedule (Linux: one file; Windows dbm: .bak/.dat/.dir)
+celerybeat-schedule*
 __pycache__/
 *.py[cod]
 .venv/

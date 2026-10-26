@@ -75,6 +75,8 @@
 All 13 tasks are **merged** (merge date shown below; for Done tasks it is also the actual completion date) and re-audited on 2026-10-25 (section 8). TASK-005 was
 accepted on 2026-10-26 with a clarified criterion (section 8). TASK-001, TASK-012 and TASK-013 are **In Review**, not Done:
 they still need real Windows verification (checklist in `docs/SETUP_GUIDE.md` section 4.7). Owners are accountable for any follow-up defects; no re-implementation is required.
+Native Windows runs on 2026-10-26 found and fixed #128-#131 (merged in #132 and #133). On merged `main`, steps 0-6 and 8
+pass; step 7 still misses p95 < 50 ms on the test laptop (#134), so all three stay In Review.
 
 | Task | Title | Owner | Merged in | Merged on | Issue |
 |---|---|---|---|---|---|
@@ -2866,7 +2868,7 @@ they still need real Windows verification (checklist in `docs/SETUP_GUIDE.md` se
 
 | Task | Status | What is pending | Owner of the decision |
 |---|---|---|---|
-| TASK-001, TASK-012, TASK-013 | In Review | One real Windows 10/11 run of the checklist in `docs/SETUP_GUIDE.md` section 4.7, with output posted on #12, #23 and #24 (no Windows machine was available; Linux checks pass) | Rachit (TASK-001, TASK-012), Kalpak (TASK-013), or any teammate with Windows |
+| TASK-001, TASK-012, TASK-013 | In Review | A passing Windows 10/11 run of the checklist in `docs/SETUP_GUIDE.md` section 4.7. Runs on 2026-10-26 (evidence on #12, #23, #24): defects #128-#131 fixed and merged; steps 0-6 and 8 now pass; step 7 p95 still above 50 ms on the test laptop (#134) | Rachit (TASK-001, TASK-012), Kalpak (TASK-013), or any teammate with Windows |
 | TASK-005 | **Done (accepted 2026-10-26)** | Nothing: the product owner accepted the clarified criterion below; issue #16 closed | - |
 
 **TASK-005 decision (accepted 2026-10-26).**
