@@ -73,10 +73,9 @@
 ### Sprint 1
 
 All 13 tasks are **merged** (merge date shown below; for Done tasks it is also the actual completion date) and re-audited on 2026-10-25 (section 8). TASK-005 was
-accepted on 2026-10-26 with a clarified criterion (section 8). TASK-001, TASK-012 and TASK-013 are **In Review**, not Done:
-they still need real Windows verification (checklist in `docs/SETUP_GUIDE.md` section 4.7). Owners are accountable for any follow-up defects; no re-implementation is required.
-Native Windows runs on 2026-10-26 found and fixed #128-#131 (merged in #132 and #133). On merged `main`, steps 0-6 and 8
-pass; step 7 still misses p95 < 50 ms on the test laptop (#134), so all three stay In Review.
+accepted on 2026-10-26 with a clarified criterion (section 8). TASK-001, TASK-012 and TASK-013 are **Done (2026-10-27)**:
+native Windows runs found and fixed #128-#131 and #134 (#132, #133, #137), and the third run on `main` `9386b22` passed
+checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, #24). Owners are accountable for any follow-up defects.
 
 | Task | Title | Owner | Merged in | Merged on | Issue |
 |---|---|---|---|---|---|
@@ -2860,7 +2859,7 @@ pass; step 7 still misses p95 < 50 ms on the test laptop (#134), so all three st
 | Required 3.4x speed-up not achieved | Tasks miss Nov 3 | Measure at Day 3 and Day 5; report forecast shortfall; team decides scope explicitly |
 | Longest chain 023 -> ... -> 091 (fraud engine -> staff UI -> attack lab -> bug bash -> release) | Release task last | Pranay starts 023 immediately; contracts published early; Kalpak/Krishna build against merged interfaces |
 | Integration crunch on Nov 2-3 | Late merge conflicts | Small PRs, rebase daily, Day 9 rule: everything open must be In Review |
-| Windows paths not yet run on real Windows | Setup issues for Windows users | Manual checks listed in `docs/SETUP_GUIDE.md` section 4.7 |
+| Windows regressions after the verified run (2026-10-27) | Setup issues for Windows users | Windows-only unit tests (real `cmd.exe`/`powershell.exe`) plus the checklist in `docs/SETUP_GUIDE.md` section 4.7 |
 
 **Implementation audit (2026-10-25):** 13 of 93 tasks are implemented (Sprint 1) and were re-audited against AGENTS.md, the blueprint and their acceptance criteria. The independent review found and fixed 4 defects in PR #36 before merge, plus ledger guard-path coverage (85% -> 99%). Evidence is posted on each Sprint 1 issue. The other 80 tasks have no implementation yet; they are Todo and unverified by definition.
 
@@ -2868,7 +2867,8 @@ pass; step 7 still misses p95 < 50 ms on the test laptop (#134), so all three st
 
 | Task | Status | What is pending | Owner of the decision |
 |---|---|---|---|
-| TASK-001, TASK-012, TASK-013 | In Review | A passing Windows 10/11 run of the checklist in `docs/SETUP_GUIDE.md` section 4.7. Runs on 2026-10-26 (evidence on #12, #23, #24): defects #128-#131 fixed and merged; steps 0-6 and 8 now pass; step 7 p95 still above 50 ms on the test laptop (#134) | Rachit (TASK-001, TASK-012), Kalpak (TASK-013), or any teammate with Windows |
+| TASK-001, TASK-012, TASK-013 | **Done (2026-10-27)** | Nothing: Windows 10 run 3 on `main` `9386b22` passed steps 0-8 of `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, #24); fixes #128-#131, #134 merged | - |
+| TASK-009 | Done (Linux CI) | #135: on a 2-core Windows laptop the 1,000-customer COPY budget test takes 15.7-24.7 s (budget 15 s, unchanged); #138 improved it but it is not reliable there. Needs a run on an idle or more capable Windows machine | Pranay |
 | TASK-005 | **Done (accepted 2026-10-26)** | Nothing: the product owner accepted the clarified criterion below; issue #16 closed | - |
 
 **TASK-005 decision (accepted 2026-10-26).**
