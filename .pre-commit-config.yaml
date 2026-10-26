@@ -42,6 +42,13 @@ repos:
 
   - repo: local
     hooks:
+      # Runs after detect-secrets: on Windows it rewrites the baseline with "\" paths and CRLF.
+      - id: secrets-baseline-posix
+        name: secrets baseline uses POSIX paths
+        entry: uv run python scripts/normalize_secrets_baseline.py
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: web-prettier-eslint
         name: web - prettier + eslint
         entry: python scripts/dev.py web-lint

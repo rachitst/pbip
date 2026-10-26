@@ -556,6 +556,13 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
 Or run the batch entrypoint: `dev.cmd <command>` or `python scripts/dev.py <command>`.
 
+### Q: Passing flags or capturing output with `dev.ps1`
+`.\dev.ps1` forwards every argument unchanged, including flags such as `-p`, `-v`, `-d` or `-k`
+(`.\dev.ps1 test --no-cov -k ledger -v`). PowerShell itself consumes a bare `--`; quote it (`'--'`) to pass it on.
+Capturing output works and keeps the real exit code: `.\dev.ps1 check 2>&1 | Tee-Object check.log` or
+`.\dev.ps1 check *> check.log`. Windows PowerShell 5.1 shows redirected stderr lines as red `NativeCommandError`
+text; that is display only, and the command keeps running.
+
 ### Q: `tests skip with: run make infra-up`
 **Fix:** Integration tests require live Postgres and Redis instances. Start them with:
 ```bash

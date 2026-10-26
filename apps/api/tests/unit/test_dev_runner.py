@@ -179,6 +179,86 @@ def test_dev_cmd_exit_code_reaches_the_calling_process(tmp_path: Path, code: int
     assert proc.returncode == code
 
 
+def test_dev_ps1_is_a_simple_script_that_forwards_args() -> None:
+    """Regression: [CmdletBinding()] made -p/-v/-d bind to -PipelineVariable/-Verbose/-Debug
+    (the runner never ran and exited 0), and $ErrorActionPreference = "Stop" aborted the run
+    on the first stderr line when the caller redirected it under Windows PowerShell 5.1."""
+    code = [
+        ln.strip().lower()
+        for ln in (dev_mod.ROOT / "dev.ps1").read_text(encoding="utf-8").splitlines()
+        if ln.strip() and not ln.strip().startswith("#")
+    ]
+    assert not any(ln.startswith(("[cmdletbinding", "param(")) for ln in code)
+    assert not any(ln.startswith("$erroractionpreference") for ln in code)
+    assert sum('scripts\\dev.py" @args' in ln for ln in code) == 2
+    assert code[-1] == "exit $lastexitcode"
+
+
+def _stub_runner(root: Path, script: str) -> dict[str, str]:
+    """Copy a wrapper next to a stub scripts/dev.py that echoes argv, writes to stderr and
+    exits with the code given as exit=<n>. Returns an env without uv (wrapper uses python)."""
+    shutil.copy(dev_mod.ROOT / script, root / script)
+    (root / "scripts").mkdir()
+    (root / "scripts" / "dev.py").write_text(
+        "import sys\n"
+        "print('ARGV=' + repr(sys.argv[1:]))\n"
+        "sys.stderr.write('stub stderr line\\n')\n"
+        "codes = [int(a[5:]) for a in sys.argv[1:] if a.startswith('exit=')]\n"
+        "raise SystemExit(codes[0] if codes else 0)\n",
+        encoding="utf-8",
+    )
+    system32 = Path(os.environ["SYSTEMROOT"]) / "System32"
+    powershell_dir = system32 / "WindowsPowerShell" / "v1.0"
+    path = os.pathsep.join([str(Path(sys.executable).parent), str(system32), str(powershell_dir)])
+    return {**os.environ, "PATH": path}
+
+
+def _powershell(root: Path, env: dict[str, str], command: str) -> CompletedProcess[str]:
+    exe = Path(os.environ["SYSTEMROOT"]) / "System32" / "WindowsPowerShell" / "v1.0"
+    return subprocess.run(  # noqa: S603
+        [
+            str(exe / "powershell.exe"),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            f"Set-Location -LiteralPath '{root}'; {command}; exit $LASTEXITCODE",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="runs the real Windows PowerShell")
+@pytest.mark.parametrize(
+    ("invocation", "code"),
+    [
+        (r".\dev.ps1 test exit=3", 3),
+        (r".\dev.ps1 test exit=3 2>&1 | Tee-Object -FilePath log.txt", 3),
+        (r".\dev.ps1 test exit=0 *> log.txt", 0),
+        (r".\dev.ps1 test exit=4 *> log.txt", 4),
+    ],
+)
+def test_dev_ps1_keeps_exit_code_when_output_is_redirected(
+    tmp_path: Path, invocation: str, code: int
+) -> None:
+    env = _stub_runner(tmp_path, "dev.ps1")
+    assert _powershell(tmp_path, env, invocation).returncode == code
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="runs the real Windows PowerShell")
+def test_dev_ps1_forwards_flags_that_look_like_common_parameters(tmp_path: Path) -> None:
+    env = _stub_runner(tmp_path, "dev.ps1")
+    proc = _powershell(
+        tmp_path, env, r".\dev.ps1 test -p no:cacheprovider -v -d -ErrorAction x -k name exit=5"
+    )
+    assert proc.returncode == 5, proc.stderr
+    expected = ["test", "-p", "no:cacheprovider", "-v", "-d", "-ErrorAction", "x", "-k", "name"]
+    assert f"ARGV={[*expected, 'exit=5']!r}" in proc.stdout
+
+
 def test_run_success_exit_code() -> None:
     """Verify _run returns subprocess returncode 0 on successful execution."""
     with patch("subprocess.run") as mock_subproc:
