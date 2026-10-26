@@ -11,7 +11,12 @@ Verifies:
 
 from __future__ import annotations
 
-from pathlib import Path
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path, PurePosixPath
 from subprocess import CompletedProcess
 from unittest.mock import MagicMock, patch
 
@@ -131,20 +136,47 @@ def test_cmd_dev_worker_windows_stops_beat_even_if_the_worker_crashes() -> None:
 
 def test_dev_cmd_propagates_exit_codes() -> None:
     """Regression: %ERRORLEVEL% inside a parenthesised block is expanded when the block is
-    parsed (always 0 there), so dev.cmd exited 0 even when the command failed."""
-    lines = [
-        ln.strip() for ln in (dev_mod.ROOT / "dev.cmd").read_text(encoding="utf-8").splitlines()
-    ]
+    parsed (always 0 there), so dev.cmd exited 0 even when the command failed. A bare
+    "exit /b" sets ERRORLEVEL but cmd.exe itself still exits 0 under `cmd /c` or PowerShell
+    (native Windows 10 run, #12), so the code must be passed explicitly via "call"."""
+    text = (dev_mod.ROOT / "dev.cmd").read_text(encoding="utf-8")
+    lines = [ln.strip() for ln in text.splitlines()]
     depth = 0
     for line in lines:
         if depth > 0 and not line.upper().startswith("REM"):
-            assert "%ERRORLEVEL%" not in line.upper(), line
+            assert re.search(r"(?<!%)%ERRORLEVEL%(?!%)", line.upper()) is None, line
         depth += line.count("(") - line.count(")")
     runs = [i for i, line in enumerate(lines) if line.endswith('scripts\\dev.py" %*')]
     assert len(runs) == 2
-    for index in runs:  # bare "exit /b" keeps the ERRORLEVEL of the command that just ran
-        assert lines[index + 1].lower() == "exit /b"
+    for index in runs:
+        assert lines[index + 1].lower() == "call exit /b %%errorlevel%%"
+    # setlocal EnableDelayedExpansion resets ERRORLEVEL to 0 and strips "!" from arguments.
+    code_lines = [line.lower() for line in lines if not line.upper().startswith("REM")]
+    assert not any("enabledelayedexpansion" in line for line in code_lines)
     assert not any(line.startswith(":") for line in lines)  # no labels (LF-stored file)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="runs the real cmd.exe")
+@pytest.mark.parametrize("code", [0, 1, 3])
+def test_dev_cmd_exit_code_reaches_the_calling_process(tmp_path: Path, code: int) -> None:
+    """dev.cmd run through cmd.exe must exit with the runner's code (CI and PowerShell read
+    the process exit code, not ERRORLEVEL). A stub runner stands in for scripts/dev.py."""
+    shutil.copy(dev_mod.ROOT / "dev.cmd", tmp_path / "dev.cmd")
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "dev.py").write_text(
+        "import sys\nraise SystemExit(int(sys.argv[1]))\n", encoding="utf-8"
+    )
+    system32 = Path(os.environ["SYSTEMROOT"]) / "System32"
+    # Only this interpreter's directory and System32 on PATH: no uv, so dev.cmd uses `python`.
+    path = os.pathsep.join([str(Path(sys.executable).parent), str(system32)])
+    env = {**os.environ, "PATH": path}
+    proc = subprocess.run(  # noqa: S603
+        [str(system32 / "cmd.exe"), "/c", str(tmp_path / "dev.cmd"), str(code)],
+        env=env,
+        capture_output=True,
+        check=False,
+    )
+    assert proc.returncode == code
 
 
 def test_run_success_exit_code() -> None:
@@ -174,7 +206,8 @@ def test_run_failure_exit_code_with_check() -> None:
 
 def test_needs_resolution_unix() -> None:
     """Verify _needs_resolution on Unix behaves appropriately."""
-    with patch("scripts.dev.IS_WINDOWS", False):
+    # POSIX path rules too: on a Windows host "/usr/bin/git" has no drive, so is not absolute.
+    with patch("scripts.dev.IS_WINDOWS", False), patch("scripts.dev.Path", PurePosixPath):
         assert _needs_resolution("git") is True
         assert _needs_resolution("/usr/bin/git") is False
         assert _needs_resolution("./script.sh") is False
