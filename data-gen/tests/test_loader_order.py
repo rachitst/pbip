@@ -44,14 +44,30 @@ def test_load_dataset_copies_transactions_in_index_order(monkeypatch: pytest.Mon
         def commit(self) -> None:
             return None
 
-    def fake_copy(_cur: object, table: str, _cols: object, _types: object, rows: Any) -> None:
+    columns: dict[str, tuple[str, ...]] = {}
+
+    def fake_copy(_cur: object, table: str, cols: Any, types: Any, rows: Any) -> None:
+        columns[table] = tuple(cols)
+        assert len(tuple(types)) == len(columns[table])
         copied[table] = list(rows)
 
     monkeypatch.setattr(loader.psycopg, "connect", lambda _url: _Connection())
     monkeypatch.setattr(loader, "_copy", fake_copy)
     report = loader.load_dataset(dataset, "postgresql://unused")
 
-    keys = [(row[2], row[3]) for row in copied["transactions"]]  # customer_id, occurred_at
+    tx = [dict(zip(columns["transactions"], row, strict=True)) for row in copied["transactions"]]
+    keys = [(r["customer_id"], r["occurred_at"]) for r in tx]
     assert keys == sorted(keys)
-    assert len(copied["transactions"]) == report.transactions == len(dataset.transactions)
-    assert {row[0] for row in copied["transactions"]} == {t.id for t in dataset.transactions}
+    assert len(tx) == report.transactions == len(dataset.transactions)
+    # Every column carries the generator's value: same rows, only the order changed.
+    expected = {
+        (t.id, dataset.run_id, t.customer_id, t.occurred_at, t.direction, t.amount_minor,
+         t.category, t.event_type, t.merchant)
+        for t in dataset.transactions
+    }  # fmt: skip
+    got = {
+        (r["id"], r["run_id"], r["customer_id"], r["occurred_at"], r["direction"],
+         r["amount_minor"], r["category"], r["event_type"], r["merchant"])
+        for r in tx
+    }  # fmt: skip
+    assert got == expected
