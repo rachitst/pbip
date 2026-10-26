@@ -438,8 +438,16 @@ def cmd_perf(args: list[str]) -> int:
 
 
 def cmd_dev_api(args: list[str]) -> int:
-    """Run FastAPI development server with auto-reload on :8000."""
-    return _run(["uv", "run", "uvicorn", "pbip_api.main:app", "--reload", "--port", "8000", *args])
+    """Run FastAPI development server with auto-reload on :8000.
+
+    --no-access-log: RequestContextMiddleware already writes the one structured access line;
+    uvicorn's own line duplicated it (with the raw query string) and the extra synchronous console
+    write per request pushed the k6 baseline past p95 50 ms on Windows (#134).
+    """
+    return _run(
+        ["uv", "run", "uvicorn", "pbip_api.main:app", "--reload", "--port", "8000",
+         "--no-access-log", *args]
+    )  # fmt: skip
 
 
 _CELERY = ["uv", "run", "celery", "-A", "pbip_api.worker.celery_app"]

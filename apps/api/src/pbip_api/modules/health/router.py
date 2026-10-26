@@ -1,5 +1,6 @@
 """Health endpoints used by Docker, CI smoke tests and Prometheus blackbox checks."""
 
+import asyncio
 import threading
 import time
 from collections.abc import Callable
@@ -7,6 +8,7 @@ from typing import Literal
 
 import structlog
 from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from redis import Redis
 from sqlalchemy import Engine, text
@@ -59,20 +61,51 @@ class ReadinessCache:
         self.ttl_seconds = ttl_seconds
         self._clock = clock
         self._lock = threading.Lock()
-        self._value: dict[str, CheckResult] | None = None
-        self._expires_at = 0.0
+        # One tuple, replaced atomically, so fresh() can read it without the lock.
+        self._entry: tuple[dict[str, CheckResult], float] | None = None
+        self._refresh: asyncio.Future[dict[str, CheckResult]] | None = None
+
+    def fresh(self) -> dict[str, CheckResult] | None:
+        """The cached result if still valid, else None. Never blocks (safe on the event loop)."""
+        entry = self._entry
+        if self.ttl_seconds <= 0 or entry is None or self._clock() >= entry[1]:
+            return None
+        return entry[0]
 
     def get(self, compute: Callable[[], dict[str, CheckResult]]) -> dict[str, CheckResult]:
         if self.ttl_seconds <= 0:
             return compute()
         with self._lock:  # single flight: concurrent callers wait for one refresh (~ms)
-            if self._value is None or self._clock() >= self._expires_at:
-                self._value = compute()
-                self._expires_at = self._clock() + self.ttl_seconds
-            return self._value
+            value = self.fresh()
+            if value is None:
+                value = compute()
+                self._entry = (value, self._clock() + self.ttl_seconds)
+            return value
+
+    async def get_async(
+        self, compute: Callable[[], dict[str, CheckResult]]
+    ) -> dict[str, CheckResult]:
+        """Cache hit: no thread hop. Miss: ONE thread-pool refresh that concurrent probes share.
+
+        Without the shared task every probe arriving at expiry took its own hop (50 at 50 VUs),
+        which alone pushed p95 past a second on a 2-core Windows host (#134).
+        """
+        value = self.fresh()
+        if value is not None:
+            return value
+        refresh = self._refresh
+        if (
+            refresh is None
+            or refresh.done()
+            or refresh.get_loop() is not asyncio.get_running_loop()
+        ):
+            refresh = asyncio.ensure_future(run_in_threadpool(self.get, compute))
+            self._refresh = refresh
+        return await asyncio.shield(refresh)
 
 
-def get_readiness_cache(request: Request) -> ReadinessCache:
+async def get_readiness_cache(request: Request) -> ReadinessCache:
+    # async: a sync dependency would cost a thread-pool hop on every probe.
     cache = getattr(request.app.state, "readiness_cache", None)
     if not isinstance(cache, ReadinessCache):
         raise RuntimeError("readiness cache not configured (see create_app)")
@@ -91,15 +124,23 @@ async def live() -> LiveResponse:
     summary="Readiness probe (database and Redis reachable)",
     responses={503: {"model": ReadyResponse}},
 )
-def ready(
+async def ready(
+    request: Request,
     response: Response,
-    engine: Engine = Depends(get_engine),
-    redis_client: Redis = Depends(get_redis),
     cache: ReadinessCache = Depends(get_readiness_cache),
 ) -> ReadyResponse:
-    checks = cache.get(
-        lambda: {"database": check_database(engine), "redis": check_redis(redis_client)}
-    )
+    # async with a lock-free cache hit: no thread-pool hop (#134). A sync handler plus the sync
+    # engine/redis dependencies cost four hops per probe, which pushed p95 over 50 ms at 50 VUs
+    # on a 2-core host. get_engine/get_redis are resolved only on a miss, inside the one shared
+    # refresh, honouring dependency_overrides.
+    overrides = request.app.dependency_overrides
+
+    def probe() -> dict[str, CheckResult]:
+        engine: Engine = overrides.get(get_engine, get_engine)()
+        redis_client: Redis = overrides.get(get_redis, get_redis)()
+        return {"database": check_database(engine), "redis": check_redis(redis_client)}
+
+    checks = await cache.get_async(probe)
     healthy = all(result == "ok" for result in checks.values())
     if not healthy:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
