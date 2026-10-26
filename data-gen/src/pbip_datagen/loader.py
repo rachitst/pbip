@@ -12,11 +12,12 @@ ledger tables.
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
+from operator import attrgetter
 
 import psycopg
 from psycopg import sql
 
-from pbip_datagen.generator import GENERATOR_VERSION, SyntheticDataset
+from pbip_datagen.generator import GENERATOR_VERSION, SyntheticDataset, SyntheticTransaction
 
 _CUSTOMER_COLUMNS = (
     "id",
@@ -63,6 +64,17 @@ def to_conninfo(database_url: str) -> str:
         if database_url.startswith(prefix):
             return "postgresql://" + database_url.removeprefix(prefix)
     return database_url
+
+
+def in_index_order(transactions: Iterable[SyntheticTransaction]) -> list[SyntheticTransaction]:
+    """Rows in ix_transactions_customer_id_occurred_at key order (the table's largest index).
+
+    Index maintenance, not COPY itself, dominates the load: the same rows COPY in ~2.8 s into a
+    table without indexes. Inserting in key order appends at the right edge of the B-tree instead
+    of splitting pages across it, which cut a fresh 1,000-customer load from a median 13.7 s to
+    10.9 s on a 2-core Windows host (#135). Only the order changes: same rows, same ids.
+    """
+    return sorted(transactions, key=attrgetter("customer_id", "occurred_at"))
 
 
 def _copy(
@@ -116,7 +128,7 @@ def load_dataset(dataset: SyntheticDataset, database_url: str) -> LoadReport:
             (
                 (t.id, run_id, t.customer_id, t.occurred_at, t.direction, t.amount_minor,
                  t.category, t.event_type, t.merchant)
-                for t in dataset.transactions
+                for t in in_index_order(dataset.transactions)
             ),
         )  # fmt: skip
         connection.commit()
