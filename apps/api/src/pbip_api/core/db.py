@@ -62,7 +62,13 @@ def in_check(column: str, enum_cls: type[StrEnum], name: str) -> CheckConstraint
 
 @lru_cache
 def get_engine() -> Engine:
-    return create_engine(get_settings().database_url, pool_pre_ping=True, pool_size=10)
+    settings = get_settings()
+    return create_engine(
+        settings.database_url,
+        pool_pre_ping=True,
+        pool_size=10,
+        connect_args={"connect_timeout": settings.database_connect_timeout_seconds},
+    )
 
 
 def get_session(engine: Engine = Depends(get_engine)) -> Iterator[Session]:
