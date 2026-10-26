@@ -620,7 +620,7 @@ def derive_test_database_url(
     user: str = "pbip",
     password: str = _DEFAULT_TEST_PASSWORD,
     db: str = "pbip",
-    host: str = "localhost",
+    host: str = "127.0.0.1",
     port: int = 5432,
 ) -> str:
     """Derive PostgreSQL test database URL, safely encoding credentials with special characters."""
@@ -637,8 +637,9 @@ def build_test_env(
     """Build the environment dictionary for running tests.
 
     Loads the project's .env file, respects explicitly supplied variables,
-    and derives TEST_DATABASE_URL targeting localhost:5432/${POSTGRES_DB}_test
-    if absent. Never prints credentials or secrets.
+    and derives TEST_DATABASE_URL targeting 127.0.0.1:5432/${POSTGRES_DB}_test
+    if absent (the address compose publishes on; "localhost" tries ::1 first on Windows).
+    Never prints credentials or secrets.
     """
     current_env = os.environ if explicit_env is None else explicit_env
     file_env = parse_env_file(env_path)
@@ -654,7 +655,7 @@ def build_test_env(
             user=user,
             password=password,
             db=db,
-            host="localhost",
+            host="127.0.0.1",
             port=5432,
         )
 

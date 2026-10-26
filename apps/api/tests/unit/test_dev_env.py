@@ -2,7 +2,8 @@
 
 Verifies:
 - parse_env_file handles basic, quoted, escaped, and exported values.
-- derive_test_database_url targets localhost:5432/${POSTGRES_DB}_test.
+- derive_test_database_url targets 127.0.0.1:5432/${POSTGRES_DB}_test.
+- .env.example points at the loopback address compose publishes db and redis on.
 - Special URL characters in username and password are correctly encoded.
 - build_test_env respects explicit TEST_DATABASE_URL overrides.
 - build_test_env derives TEST_DATABASE_URL when absent.
@@ -15,6 +16,7 @@ from urllib.parse import unquote, urlparse
 import pytest
 
 from scripts.dev import (
+    ROOT,
     build_test_env,
     derive_test_database_url,
     parse_env_file,
@@ -70,7 +72,7 @@ def test_derive_test_database_url_default() -> None:
     url = derive_test_database_url()
     assert (
         url
-        == "postgresql+psycopg://pbip:pbip_local_password@localhost:5432/pbip_test"  # pragma: allowlist secret
+        == "postgresql+psycopg://pbip:pbip_local_password@127.0.0.1:5432/pbip_test"  # pragma: allowlist secret
     )
 
 
@@ -100,7 +102,7 @@ def test_derive_test_database_url_special_characters() -> None:
     # Parse and verify URL scheme, host, port, path
     # Replace postgresql+psycopg with postgresql for standard urllib.parse compatibility
     parsed = urlparse(url.replace("postgresql+psycopg://", "postgresql://"))
-    assert parsed.hostname == "localhost"
+    assert parsed.hostname == "127.0.0.1"
     assert parsed.port == 5432
     assert parsed.path == "/bank_db_test"
 
@@ -109,7 +111,7 @@ def test_derive_test_database_url_special_characters() -> None:
     assert unquote(parsed.password or "") == special_pass
 
     # Ensure raw special characters are percent-encoded in the credentials portion
-    credentials_part = url.split("://", 1)[1].split("@localhost", 1)[0]
+    credentials_part = url.split("://", 1)[1].split("@127.0.0.1", 1)[0]
     assert "@domain" not in credentials_part  # The @ was encoded
     assert "/" not in credentials_part  # Slash in password was encoded as %2F
     assert "%40" in credentials_part  # @ encoded
@@ -162,7 +164,7 @@ POSTGRES_DB=core_banking
     result = build_test_env(env_path=env_file, explicit_env={})
     assert (
         result["TEST_DATABASE_URL"]
-        == "postgresql+psycopg://admin_user:secret_pwd@localhost:5432/core_banking_test"  # pragma: allowlist secret
+        == "postgresql+psycopg://admin_user:secret_pwd@127.0.0.1:5432/core_banking_test"  # pragma: allowlist secret
     )
 
 
@@ -183,7 +185,7 @@ def test_build_test_env_explicit_overrides_file_variables(tmp_path: Path) -> Non
     assert result["POSTGRES_DB"] == "file_db"
     assert (
         result["TEST_DATABASE_URL"]
-        == "postgresql+psycopg://override_user:file_pwd@localhost:5432/file_db_test"  # pragma: allowlist secret
+        == "postgresql+psycopg://override_user:file_pwd@127.0.0.1:5432/file_db_test"  # pragma: allowlist secret
     )
     assert (
         result["DATABASE_URL"]
@@ -204,5 +206,20 @@ def test_build_test_env_derives_with_special_characters_in_env_file(
     result = build_test_env(env_path=env_file, explicit_env={})
     assert (
         result["TEST_DATABASE_URL"]
-        == "postgresql+psycopg://bank_user:pass%2Fword%40123%23special@localhost:5432/pbip_test"  # pragma: allowlist secret
+        == "postgresql+psycopg://bank_user:pass%2Fword%40123%23special@127.0.0.1:5432/pbip_test"  # pragma: allowlist secret
     )
+
+
+def test_env_example_uses_the_address_compose_publishes_on() -> None:
+    """Regression: "localhost" resolves to ::1 first on Windows while compose binds 127.0.0.1
+    only, so every new DB/Redis connection stalled (worker hang, /ready timeouts, k6 p95 over
+    50 ms on the native Windows run). Host-side URLs must use the published address."""
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    example = parse_env_file(ROOT / ".env.example")
+    for port, key in (
+        (5432, "DATABASE_URL"),
+        (5432, "TEST_DATABASE_URL"),
+        (6379, "REDIS_URL"),
+    ):
+        assert f'"127.0.0.1:{port}:{port}"' in compose
+        assert urlparse(example[key]).hostname == "127.0.0.1", key

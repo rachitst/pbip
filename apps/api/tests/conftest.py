@@ -27,7 +27,7 @@ def _skip_or_fail(reason: str) -> None:
 def test_database_url() -> str:
     return os.environ.get(
         "TEST_DATABASE_URL",
-        "postgresql+psycopg://pbip:pbip_local_password@localhost:5432/pbip_test",
+        "postgresql+psycopg://pbip:pbip_local_password@127.0.0.1:5432/pbip_test",
     )
 
 
