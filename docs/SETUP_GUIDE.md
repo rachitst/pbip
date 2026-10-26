@@ -140,12 +140,13 @@ PBIP runs natively on Windows PowerShell without requiring WSL.
 Open PowerShell as **Administrator** and install the tooling using `winget`:
 ```powershell
 winget install --id Git.Git -e --source winget
-winget install --id Astral-sh.uv -e --source winget
+winget install --id astral-sh.uv -e --source winget
 winget install --id OpenJS.NodeJS.LTS -e --source winget
 winget install --id Docker.DockerDesktop -e --source winget
 winget install --id GitHub.cli -e --source winget
 ```
-*Note: Restart PowerShell after installation so environment paths update.*
+*Note: Restart PowerShell after installation so environment paths update. `-e` matches the id
+case-sensitively: it is `astral-sh.uv` (`Astral-sh.uv` fails with "No package found").*
 
 ### 4.2 Start Docker Desktop
 Launch **Docker Desktop** from the Start Menu. Verify that the Docker engine is running by checking the bottom-left icon in Docker Desktop or running:
@@ -188,9 +189,9 @@ Alternatively, invoke the batch wrapper directly: `dev.cmd setup` or `python scr
 ---
 
 ### 4.7 Windows verification status (honest)
-The Windows-specific paths (TASK-001 runner, TASK-012 k6 runner, TASK-013 guide) have **not yet been run on a real
-Windows machine**. Until someone completes the checklist below on Windows 10/11, TASK-001, TASK-012 and TASK-013 stay
-**In Review**, not Done. One native Windows run of steps 0-8 is the evidence for all three:
+The Windows-specific paths (TASK-001 runner, TASK-012 k6 runner, TASK-013 guide) have **not yet passed on a real
+Windows machine** (the first run, below, found defects). Until the checklist below passes on Windows 10/11, TASK-001,
+TASK-012 and TASK-013 stay **In Review**, not Done. One native Windows run of steps 0-8 is the evidence for all three:
 
 | Task (issue) | Steps that prove its Windows criteria |
 |---|---|
@@ -203,7 +204,12 @@ Windows machine**. Until someone completes the checklist below on Windows 10/11,
   patching the platform flag (solo pool and separate beat, `dev.cmd` exit-code regression).
 - `python scripts/dev.py <unknown>` exits 1 and `help` exits 0; `doctor` reports 12 OK, 0 WARN, 0 MISSING.
 
-No Windows environment (PowerShell, `cmd.exe`, Wine) was available, so the Windows behaviour itself is unverified.
+**First native Windows run (Windows 10 Pro 22H2, build 19045, PowerShell 5.1, 2026-10-26, commit `86f94a3`):**
+steps 0, 1, 3 and 8 passed; 2, 4, 5, 6 and 7 found defects (evidence on #12, #23, #24). Fixed here: `setup` failing
+on a fresh clone (`init_env.py` imported `cryptography` before dependencies were installed), `dev.cmd` exiting 0
+for a failing command when run as `cmd /c` or from PowerShell, a unit test that was not portable to Windows, the
+`winget` id for uv, and checklist commands in steps 5 and 7 that could never show a failure. The tasks stay
+**In Review** until those fixes are merged and steps 2-8 pass on Windows again.
 
 **Copy-paste checklist (Windows 10/11, PowerShell; Docker Desktop running).** Paste the output of steps 0-8 into
 issues #12 (TASK-001), #23 (TASK-012) and #24 (TASK-013).
@@ -232,9 +238,20 @@ git clone https://github.com/rachitst/pbip.git pbip-wincheck; cd pbip-wincheck
 ```
 
 ```bat
-:: 5. dev.cmd propagates exit codes (TASK-001), in cmd.exe from the repo root: expect 1, then 0
-dev.cmd not-a-command & echo exit=%ERRORLEVEL%
-dev.cmd help & echo exit=%ERRORLEVEL%
+:: 5a. dev.cmd sets ERRORLEVEL (TASK-001), in cmd.exe from the repo root, one line at a time:
+::     expect exit=1, then exit=0. Do not join them with "&": %ERRORLEVEL% is expanded when the
+::     line is read, before dev.cmd runs, so a one-line "dev.cmd ... & echo %ERRORLEVEL%" always
+::     prints the previous value.
+dev.cmd not-a-command
+echo exit=%ERRORLEVEL%
+dev.cmd help
+echo exit=%ERRORLEVEL%
+```
+
+```powershell
+# 5b. cmd.exe's own exit code (what CI and scripts see), from PowerShell: expect exit=1, then exit=0
+cmd /c dev.cmd not-a-command; "exit=$LASTEXITCODE"
+cmd /c dev.cmd help; "exit=$LASTEXITCODE"
 ```
 
 ```powershell
@@ -252,7 +269,7 @@ Get-Process | Where-Object { $_.ProcessName -match 'celery|python' } | Select-Ob
 #    runner works but the threshold criterion is not met, which is a finding, not a pass.
 Get-Command k6 -ErrorAction SilentlyContinue
 .\dev.ps1 perf; "exit=$LASTEXITCODE"
-cmd /c "dev.cmd perf & echo exit=%ERRORLEVEL%"
+cmd /c dev.cmd perf; "exit=$LASTEXITCODE"
 
 # 8. Clean (TASK-001): expect caches removed and exit=0
 .\dev.ps1 clean; "exit=$LASTEXITCODE"
@@ -538,6 +555,13 @@ uv run celery -A pbip_api.worker.celery_app beat --loglevel=INFO
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
 Or run the batch entrypoint: `dev.cmd <command>` or `python scripts/dev.py <command>`.
+
+### Q: Passing flags or capturing output with `dev.ps1`
+`.\dev.ps1` forwards every argument unchanged, including flags such as `-p`, `-v`, `-d` or `-k`
+(`.\dev.ps1 test --no-cov -k ledger -v`). PowerShell itself consumes a bare `--`; quote it (`'--'`) to pass it on.
+Capturing output works and keeps the real exit code: `.\dev.ps1 check 2>&1 | Tee-Object check.log` or
+`.\dev.ps1 check *> check.log`. Windows PowerShell 5.1 shows redirected stderr lines as red `NativeCommandError`
+text; that is display only, and the command keeps running.
 
 ### Q: `tests skip with: run make infra-up`
 **Fix:** Integration tests require live Postgres and Redis instances. Start them with:
