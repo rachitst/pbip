@@ -49,6 +49,7 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+        stages: [pre-commit]
       - id: web-prettier-eslint
         name: web - prettier + eslint
         entry: python scripts/dev.py web-lint
