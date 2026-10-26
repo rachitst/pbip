@@ -1,16 +1,22 @@
 """Create .env from .env.example with freshly generated local secrets (cross-platform).
 
 uv run python scripts/init_env.py [--force]
+
+Standard library only: `setup` runs this before dependencies are installed (fresh clone).
 """
 
+import base64
 import re
 import secrets
 import sys
 from pathlib import Path
 
-from cryptography.fernet import Fernet
-
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def fernet_key() -> str:
+    """A Fernet key, in the same format as cryptography's Fernet.generate_key()."""
+    return base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
 
 
 def main() -> int:
@@ -21,7 +27,7 @@ def main() -> int:
     text = example.read_text(encoding="utf-8")
     replacements = {
         "JWT_SECRET": secrets.token_urlsafe(48),
-        "FIELD_ENCRYPTION_KEY": Fernet.generate_key().decode(),
+        "FIELD_ENCRYPTION_KEY": fernet_key(),
         "POSTGRES_PASSWORD": secrets.token_urlsafe(18),
         "GRAFANA_ADMIN_PASSWORD": secrets.token_urlsafe(18),
     }
