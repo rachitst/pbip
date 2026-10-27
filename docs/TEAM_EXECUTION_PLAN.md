@@ -922,7 +922,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #51 | **Sprint:** 2 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Sun 25 Oct | **Target deadline:** Sun 25 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (9.4 days of slack)
+- **Start:** Sun 25 Oct | **Target deadline:** Sun 25 Oct | **Actual completion:** Wed 28 Oct (merged in #140; acceptance criteria verified) | **Status:** Done | **Risk:** Low
 - **Depends on:** none
 - **Mode:** Parallel: can start immediately
 - **Goal:** Formal threat model evaluating STRIDE categories and OWASP Top 10 mitigations for PBIP.
@@ -934,9 +934,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Maps security controls to compliance principles for regulated retail banks
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #51`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Evaluates BOLA/IDOR mitigations, Argon2id parameters, and token rotation security
-  - [ ] Documents fraud evasion threats, synthetic identity risks, and prompt injection vectors
-  - [ ] Maps security controls to compliance principles for regulated retail banks
+  - [x] Evaluates BOLA/IDOR mitigations, Argon2id parameters, and token rotation security
+  - [x] Documents fraud evasion threats, synthetic identity risks, and prompt injection vectors
+  - [x] Maps security controls to compliance principles for regulated retail banks
 - **Definition of done (evidence):** Committed to docs/security/threat-model.md, referenced in PR template.
 - **Required checks:**
   - Automated: security tests for every authorization and negative path; prove no secrets/PII reach logs (redaction test); document builds/renders, links valid, content matches the code and backlog
