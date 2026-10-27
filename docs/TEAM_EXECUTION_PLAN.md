@@ -244,14 +244,14 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #12 | **Sprint:** 1 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Rachit (`rachitst`)
-- **Target deadline:** met | **Actual completion:** merged Sun 11 Oct (#10/#25/#26); not Done until verified on real Windows | **Status:** In Review | **Risk:** Low
+- **Target deadline:** met | **Actual completion:** Tue 27 Oct (merged Sun 11 Oct in #10/#25/#26; Windows criteria verified by the native run, evidence on #12) | **Status:** Done | **Risk:** Low
 - **Depends on:** none
-- **Mode:** In Review (awaiting real Windows verification)
+- **Mode:** Done
 - **Goal:** A single, cross-platform CLI runner that works identically on Ubuntu/Linux, macOS, and native Windows PowerShell/CMD.
 - **Expected end result / acceptance criteria:**
   - [x] scripts/dev.py implements setup, doctor, infra-up, infra-down, up, dev-api, dev-web, dev-worker, test, lint, check, clean
-  - [ ] dev.ps1 and dev.cmd allow Windows developers to execute commands identically to make on Linux *(implemented; Linux and simulated-Windows tests pass; real Windows run pending, see `docs/SETUP_GUIDE.md` section 4.7)*
-  - [ ] Celery dev-worker adds --pool=solo on Windows to avoid unsupported prefork crashes *(implemented; Linux and simulated-Windows tests pass; real Windows run pending, see `docs/SETUP_GUIDE.md` section 4.7)*
+  - [x] dev.ps1 and dev.cmd allow Windows developers to execute commands identically to make on Linux
+  - [x] Celery dev-worker adds --pool=solo on Windows to avoid unsupported prefork crashes
   - [x] Clean command purges cache directories cross-platform without bash or rm -rf
 - **Definition of done (evidence):** Strictly typed, ruff clean, tested on Linux and Windows PowerShell, documented in SETUP_GUIDE.md.
 - **Required checks:**
@@ -476,14 +476,14 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #23 | **Sprint:** 1 | **Priority:** must | **Size:** S (0.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Rachit (`rachitst`)
-- **Target deadline:** met | **Actual completion:** merged Sun 25 Oct (#36); not Done until verified on real Windows | **Status:** In Review | **Risk:** Low
+- **Target deadline:** met | **Actual completion:** Tue 27 Oct (merged Sun 25 Oct in #36; Windows run verified, evidence on #23) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-001 (#12, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** In Review (awaiting real Windows verification, `docs/SETUP_GUIDE.md` section 4.7 step 7)
+- **Mode:** Done
 - **Goal:** Initial k6 script benchmarking baseline latency on health and unauthenticated endpoints.
 - **Expected end result / acceptance criteria:**
   - [x] Script tests /api/health/live and /api/health/ready at 50 virtual users (VUs)
   - [x] Validates p95 latency < 50ms and error rate < 0.1%
-  - [ ] Cross-platform execution script works on Windows and Linux *(implemented; Linux and simulated-Windows tests pass; real Windows run pending, see `docs/SETUP_GUIDE.md` section 4.7)*
+  - [x] Cross-platform execution script works on Windows and Linux
 - **Definition of done (evidence):** k6 script committed to infra/k6/baseline.js, README instructions verified.
 - **Required checks:**
   - Automated: CI job or `scripts/dev.py` command exercised in tests; works from a fresh clone; the suite itself runs in CI or via a documented command and asserts its thresholds
@@ -496,9 +496,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #24 | **Sprint:** 1 | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Kalpak (`Patil-Kalpak`)
-- **Target deadline:** met | **Actual completion:** merged Sun 11 Oct (#25/#26); not Done until verified on real Windows | **Status:** In Review | **Risk:** Low
+- **Target deadline:** met | **Actual completion:** Tue 27 Oct (merged Sun 11 Oct in #25/#26; fresh-clone Windows run verified, evidence on #24) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-001 (#12, Rachit), TASK-002 (#13, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** In Review (awaiting a fresh-clone run on real Windows)
+- **Mode:** Done
 - **Goal:** Clear, beginner-friendly setup guide covering native Ubuntu, macOS, and native Windows PowerShell.
 - **Expected end result / acceptance criteria:**
   - [x] Separate step-by-step instructions for native Ubuntu and native Windows PowerShell
