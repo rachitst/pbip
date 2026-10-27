@@ -36,6 +36,11 @@ _SENSITIVE_KEY_PARTS = (
     "pan_number",
     "private_key",
     "encryption_key",
+    # Customer PII (threat model A09 / UK GDPR Art. 25): nothing logs these today; this is the
+    # backstop so a future log call cannot leak them by key (#145).
+    "full_name",
+    "date_of_birth",
+    "phone",
 )
 
 _JWT_RE = re.compile(r"eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}")
