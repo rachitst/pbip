@@ -26,7 +26,7 @@ Closes #
 
 ## Impact
 - **Security** (authn/authz, object ownership/BOLA, validation, logging, rate limits; AGENTS.md section 5; new attack
-  surface or a changed control => update [`docs/security/threat-model.md`](../docs/security/threat-model.md)):
+  surface or a changed control => update `docs/security/threat-model.md`):
 - **Database migration** (Alembic up and down; `alembic check`):
 - **Configuration / environment variables:**
 - **API contract** (`make openapi`; `docs/api/openapi.json` and `apps/web/src/api/schema.d.ts` committed):
