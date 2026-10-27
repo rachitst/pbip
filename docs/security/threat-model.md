@@ -238,9 +238,9 @@ escalated to REVIEW), REVIEW 60–84, BLOCK ≥ 85.
 | F1 APP scam: new payee + large transfer | Social engineering convinces victim to add a mule payee and send a large amount | `NEW_PAYEE_LARGE_AMOUNT` (+45 → STEP_UP), plus `LARGE_AMOUNT` at ≥ ₹1,00,000 (+65 → REVIEW) | Payee name check (CoP-like) and step-up already in the flow |
 | F2 Velocity burst | Rapid-fire transfers from one account (bot or compromised session) | `VELOCITY_BURST` | Fixed window; ML velocity features in Redis (TASK-034) |
 | F3 Account takeover chain | Failed logins → new device → payee added → transfer | Only the new-payee rules fire; device and login-failure signals are **not** scored | `security_events` and device data exist for the ML feature layer |
-| F4 Impossible travel / new geography | Locations physically impossible in the elapsed time | **Not scored**; `TransactionContext` has optional `ip_country`/`geo_lat`/`geo_lon` fields, but transfers do not populate them yet | No backlog task yet (open item §10) |
+| F4 Impossible travel / new geography | Locations physically impossible in the elapsed time | **Not scored**; `TransactionContext` has optional `ip_country`/`geo_lat`/`geo_lon` fields, but transfers do not populate them yet, and no geo source exists | #143 (ADR for the location source first) |
 | F5 Amount anomaly vs customer baseline | Single transfer is an outlier against 90-day history | `AMOUNT_SPIKE` (needs ≥ 3 prior transfers) | Isolation Forest (TASK-030, Sprint 3) |
-| F6 Mule pass-through (credit in, immediately out) | Large inbound credit passed straight on | **Not scored**; ledger data is available | No backlog task yet (open item §10) |
+| F6 Mule pass-through (credit in, immediately out) | Large inbound credit passed straight on | **Not scored**; ledger data is available (`transactions.credit_account_id`, `posted_at`) | #144 |
 
 Fail-safe requirement (AGENTS.md §8): when an ML scorer is introduced it must fall back to these rules if the model
 is unavailable, never to ALLOW-all. Today there is no model to fail, so the rules always run.
@@ -371,9 +371,9 @@ are the origin of the UK rule. "Analogous" means PBIP mirrors the control object
 | AI assistant: build to the §8 specification, with the adversarial test suite in CI (closes T12, T27) | MUST | TASK-057–061, TASK-067, TASK-076 (Sprint 5) |
 | ML fraud scorer with rules-only fallback (§7.1, AGENTS.md §8) | MUST | TASK-029–031, TASK-033 (Sprint 3) |
 | Structuring (F7) and dormant-account (F8) detection | SHOULD | TASK-071 (Sprint 5) |
-| F4 impossible-travel rule (transfers must first populate `ip_country`/geo in `TransactionContext`) | SHOULD | No backlog task yet |
-| F6 mule pass-through rule (ledger data available) | SHOULD | No backlog task yet |
-| Decide whether to encrypt or minimise email, full name and date of birth at rest (A02, GDPR Art. 25) | SHOULD | No backlog task yet |
+| F4 impossible-travel rule (needs a location source: ADR, then populate `ip_country`/geo in `TransactionContext`) | MUST (Blueprint §8) | #143 |
+| F6 mule pass-through rule (ledger data available) | MUST (Blueprint §8) | #144 |
+| Customer PII encryption policy for email, full name and date of birth: ADR plus baseline evidence (TLS, disk/backup encryption, access control, logging); `phone_enc` currently has no write path | SHOULD | #145 |
 | Device-binding of refresh tokens | COULD | Backlog |
 | Access-token denylist (the 15-minute TTL is the current revocation bound) | COULD | Backlog |
 | Asymmetric JWT signing (EdDSA) with `kid` key rotation | COULD | Backlog |
