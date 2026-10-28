@@ -350,6 +350,21 @@
         "title": "AuditLogOut",
         "type": "object"
       },
+      "BulkMarkReadResponse": {
+        "properties": {
+          "updated_count": {
+            "description": "Number of notifications marked as read",
+            "minimum": 0.0,
+            "title": "Updated Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "updated_count"
+        ],
+        "title": "BulkMarkReadResponse",
+        "type": "object"
+      },
       "ChainStatusOut": {
         "properties": {
           "checked": {
@@ -851,6 +866,51 @@
           "created_at"
         ],
         "title": "NotificationOut",
+        "type": "object"
+      },
+      "NotificationsPage": {
+        "properties": {
+          "items": {
+            "description": "Paginated list of notifications",
+            "items": {
+              "$ref": "#/components/schemas/NotificationOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "description": "Maximum items per page",
+            "exclusiveMinimum": 0.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "description": "Offset of the current page",
+            "minimum": 0.0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "description": "Total number of notifications matching filter",
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          },
+          "unread_count": {
+            "description": "Total unread notifications for the user",
+            "minimum": 0.0,
+            "title": "Unread Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "unread_count",
+          "limit",
+          "offset"
+        ],
+        "title": "NotificationsPage",
         "type": "object"
       },
       "OpenAccountRequest": {
@@ -2767,6 +2827,17 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -2774,11 +2845,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/NotificationOut"
-                  },
-                  "title": "Response List My Notifications Api V1 Notifications Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/NotificationsPage"
                 }
               }
             },
@@ -2801,6 +2868,32 @@
           }
         ],
         "summary": "My notifications",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/mark-all-read": {
+      "post": {
+        "operationId": "mark_all_notifications_read_api_v1_notifications_mark_all_read_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkMarkReadResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Mark all notifications as read",
         "tags": [
           "notifications"
         ]

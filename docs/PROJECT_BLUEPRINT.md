@@ -192,7 +192,7 @@ erDiagram
 | payments | `POST /transfers` (Idempotency-Key), `GET /transfers/{id}`, `POST /transfers/{id}/step-up` |
 | fraud | `GET /fraud/alerts`, `/fraud/alerts/{id}`, `POST /fraud/alerts/{id}/decision` |
 | compliance | `GET /compliance/audit-logs`, `/compliance/audit-logs/verify` |
-| notifications | `GET /notifications`, `POST /notifications/{id}/read` |
+| notifications | `GET /notifications` (paginated envelope with `unread_count`), `POST /notifications/{id}/read`, `POST /notifications/mark-all-read` |
 
 Planned: `statements`, `bill-payments`, `scheduled-transfers`, `loans/*`, `wealth/*`, `analytics/{spending,trends,
 forecast,health-score}`, `recommendations`, `assistant/chat`, `insights/*` (RM), `events` (clickstream),

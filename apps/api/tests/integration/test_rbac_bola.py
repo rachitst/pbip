@@ -7,7 +7,9 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from pbip_api.modules.auth.models import RoleName
+from pbip_api.modules.notifications.models import Notification
 from pbip_test_support import PASSWORD, Actor
+from sqlalchemy.orm import Session
 
 pytestmark = [pytest.mark.integration, pytest.mark.security]
 
@@ -22,6 +24,8 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("get", "/api/v1/fraud/alerts"),
         ("get", "/api/v1/compliance/audit-logs"),
         ("get", "/api/v1/notifications"),
+        ("post", "/api/v1/notifications/mark-all-read"),
+        ("post", f"/api/v1/notifications/{uuid.uuid4()}/read"),
         ("post", "/api/v1/auth/password-change"),
         ("get", f"/api/v1/admin/users/{uuid.uuid4()}/lockout"),
         ("post", f"/api/v1/admin/users/{uuid.uuid4()}/unlock"),
@@ -147,6 +151,7 @@ def _victim_resources(
 
 def test_bola_customer_b_cannot_touch_customer_a_objects(
     client: TestClient,
+    db: Session,
     make_customer: Callable[..., Actor],
     make_verified_payee: Callable[..., dict[str, Any]],
 ) -> None:
@@ -154,6 +159,9 @@ def test_bola_customer_b_cannot_touch_customer_a_objects(
     bob = make_customer()
     mallory = make_customer()
     ids = _victim_resources(client, alice, bob, make_verified_payee)
+    notification = Notification(user_id=alice.user_id, type="TEST", title="Private", body="x")
+    db.add(notification)
+    db.commit()
     h = mallory.headers
     key = lambda: {**h, "Idempotency-Key": uuid.uuid4().hex}
 
@@ -198,12 +206,17 @@ def test_bola_customer_b_cannot_touch_customer_a_objects(
         ),
         "random uuid account": client.get(f"/api/v1/accounts/{uuid.uuid4()}", headers=h),
         "get victim device": client.get(f"/api/v1/customers/devices/{ids['device']}", headers=h),
+        "mark victim notification read": client.post(
+            f"/api/v1/notifications/{notification.id}/read", headers=h
+        ),
     }
     for name, response in attempts.items():
         assert response.status_code == 404, f"{name}: expected 404 got {response.status_code}"
     # And nothing of Alice's was disturbed.
     own = client.get(f"/api/v1/accounts/{ids['account']}", headers=alice.headers)
     assert own.status_code == 200 and own.json()["ledger_balance_minor"] == 99_000
+    inbox = client.get("/api/v1/notifications", headers=alice.headers).json()
+    assert inbox["unread_count"] == 1 and inbox["items"][0]["read"] is False
 
 
 def test_listings_only_contain_the_callers_own_objects(
