@@ -83,6 +83,8 @@ describe("accounts page", () => {
   it("restores the session, shows balances and the amount on hold", async () => {
     renderApp();
     expect(await screen.findByLabelText("available balance")).toHaveTextContent("INR 9,750.00");
+    expect(screen.getByLabelText("ledger balance")).toHaveTextContent("Ledger: INR 10,000.00");
+    expect(screen.getByLabelText("held funds")).toHaveTextContent("INR 250.00 on hold");
     expect(screen.getByText("INR 250.00 on hold")).toBeInTheDocument();
   });
 

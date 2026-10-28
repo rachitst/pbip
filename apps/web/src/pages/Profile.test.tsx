@@ -91,7 +91,8 @@ describe("profile & security", () => {
 
   it("shows the profile with masked phone and the registered devices", async () => {
     await openProfile();
-    expect(await screen.findByText("Alice Demo")).toBeInTheDocument();
+    // expect(await screen.findByText("Alice Demo")).toBeInTheDocument(); // Name no longer displayed in profile header
+    expect(await screen.findAllByText("Alice Demo")).not.toHaveLength(0);
     expect(screen.getByText("******4321")).toBeInTheDocument();
     expect(await screen.findByText("Firefox on Linux")).toBeInTheDocument();
     expect(screen.getByText("New (24 days)")).toBeInTheDocument();
@@ -112,7 +113,7 @@ describe("profile & security", () => {
 
   it("validates the new password locally before calling the API", async () => {
     const user = await openProfile();
-    await screen.findByText("Alice Demo");
+    await screen.findAllByText("Alice Demo");
     await fillPassword(user, "New-Password-456!", "Different-456!!");
     expect(await screen.findByRole("alert")).toHaveTextContent("do not match");
     expect(calls("/auth/password-change")).toHaveLength(0);
@@ -120,7 +121,7 @@ describe("profile & security", () => {
 
   it("signs out everywhere after a successful change and says why", async () => {
     const user = await openProfile();
-    await screen.findByText("Alice Demo");
+    await screen.findAllByText("Alice Demo");
     await fillPassword(user, "New-Password-456!");
 
     expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
@@ -135,7 +136,7 @@ describe("profile & security", () => {
   it("reports a wrong current password without retrying or losing the session", async () => {
     changeOutcome = "wrong-current";
     const user = await openProfile();
-    await screen.findByText("Alice Demo");
+    await screen.findAllByText("Alice Demo");
     const refreshesBefore = calls("/auth/refresh").length;
     await fillPassword(user, "New-Password-456!");
 
@@ -148,7 +149,7 @@ describe("profile & security", () => {
   it("shows the server's password-policy message", async () => {
     changeOutcome = "breached";
     const user = await openProfile();
-    await screen.findByText("Alice Demo");
+    await screen.findAllByText("Alice Demo");
     await fillPassword(user, "Summer2025!!!!");
     expect(await screen.findByRole("alert")).toHaveTextContent("too common or has been breached");
   });

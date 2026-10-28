@@ -43,6 +43,17 @@ export const account = {
   available_minor: 1_000_000,
 };
 
+export const profile = {
+  id: "cust-1",
+  user_id: "user-1",
+  email: "alice@demo.pbip",
+  full_name: "Alice Demo",
+  date_of_birth: null,
+  phone_masked: "******4321",
+  kyc_status: "VERIFIED",
+  created_at: "2026-01-15T00:00:00Z",
+};
+
 export function entry(seq: number, amount: number, direction: "CREDIT" | "DEBIT" = "CREDIT") {
   return {
     entry_seq: seq,
