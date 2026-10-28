@@ -636,9 +636,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #41 | **Sprint:** 2 | **Priority:** must | **Size:** S (0.5 person-days estimate) | **Epic:** Identity & Core Banking
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Sun 25 Oct | **Target deadline:** Sun 25 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (9.2 days of slack)
+- **Start:** Sun 25 Oct | **Target deadline:** Sun 25 Oct | **Actual completion:** Wed 29 Oct (merged in #149; acceptance criteria verified in review) | **Status:** Done | **Risk:** Low
 - **Depends on:** none
-- **Mode:** Parallel: can start immediately
+- **Mode:** Done
 - **Goal:** Customer notification inbox with unread count and batch mark-as-read endpoints.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -649,10 +649,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: BOLA policy guarantees customer cannot inspect or mark another user's notifications
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #41`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] GET /api/v1/notifications returns unread and recent notifications with pagination
-  - [ ] POST /api/v1/notifications/{id}/read marks individual notification as read
-  - [ ] POST /api/v1/notifications/mark-all-read bulk updates unread notifications
-  - [ ] BOLA policy guarantees customer cannot inspect or mark another user's notifications
+  - [x] GET /api/v1/notifications returns unread and recent notifications with pagination
+  - [x] POST /api/v1/notifications/{id}/read marks individual notification as read
+  - [x] POST /api/v1/notifications/mark-all-read bulk updates unread notifications
+  - [x] BOLA policy guarantees customer cannot inspect or mark another user's notifications
 - **Definition of done (evidence):** Tested in integration test suite, OpenAPI contract exported and verified.
 - **Required checks:**
   - Automated: pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths
@@ -666,9 +666,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #42 | **Sprint:** 2 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Kalpak (`Patil-Kalpak`)
-- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (6.7 days of slack)
+- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Wed 29 Oct (merged in #150; acceptance criteria verified in review) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-005 (#16, Sujal), TASK-008 (#19, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** Parallel: can start immediately
+- **Mode:** Done
 - **Goal:** React dashboard shell with responsive navigation, account balances, and quick actions.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -679,10 +679,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Strict TypeScript, zero any types, handles loading, error, and empty states cleanly
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #42`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Responsive navigation shell with dark/light themes and authenticated customer session bar
-  - [ ] Accounts summary card displaying ledger balance, held funds, and available balance
-  - [ ] Recent transactions list with keyset infinite scroll or pagination
-  - [ ] Strict TypeScript, zero any types, handles loading, error, and empty states cleanly
+  - [x] Responsive navigation shell with dark/light themes and authenticated customer session bar
+  - [x] Accounts summary card displaying ledger balance, held funds, and available balance
+  - [x] Recent transactions list with keyset infinite scroll or pagination
+  - [x] Strict TypeScript, zero any types, handles loading, error, and empty states cleanly
 - **Definition of done (evidence):** Vitest component tests passing, ESLint strict clean, responsive across mobile and desktop.
 - **Required checks:**
   - Automated: Vitest + Testing Library covering loading, empty, error and success states; Playwright journey for critical flows; types only from `schema.d.ts`
