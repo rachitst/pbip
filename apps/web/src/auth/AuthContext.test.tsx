@@ -46,7 +46,7 @@ describe("signing out", () => {
     const user = userEvent.setup();
     renderApp();
     await user.click(await screen.findByRole("button", { name: "Profile & security" }));
-    expect(await screen.findByText("Alice")).toBeInTheDocument();
+    expect(await screen.findAllByText("Alice")).not.toHaveLength(0);
 
     await user.click(screen.getByRole("button", { name: "Sign out" }));
     signedIn = "Bob";

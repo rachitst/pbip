@@ -56,18 +56,23 @@ function AccountRow({ account, expanded, onToggle }: AccountRowProps) {
   const panelId = `transactions-${account.id}`;
   return (
     <li className="account">
-      <div className="row">
+      <div className="row account-header">
         <div>
           <strong>{ACCOUNT_LABELS[account.account_type] ?? account.account_type}</strong>
           <div className="muted">{account.account_number_masked}</div>
         </div>
-        <div className="right">
-          <div aria-label="available balance">
+        <div className="right account-balances">
+          <div aria-label="available balance" className="balance-available">
             {formatMinor(account.available_minor, account.currency)}
           </div>
-          {account.held_minor > 0 && (
-            <div className="muted">{formatMinor(account.held_minor)} on hold</div>
-          )}
+          <div className="balance-sub">
+            <div aria-label="ledger balance" className="muted">
+              Ledger: {formatMinor(account.ledger_balance_minor, account.currency)}
+            </div>
+            <div aria-label="held funds" className="muted">
+              {formatMinor(account.held_minor, account.currency)} on hold
+            </div>
+          </div>
           <button
             type="button"
             className="link"
