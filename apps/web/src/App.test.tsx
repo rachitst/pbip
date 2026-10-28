@@ -68,6 +68,29 @@ describe("App shell, session bar, and theme toggle (TASK-019)", () => {
     expect(window.localStorage.getItem("pbip-theme")).toBe(toggledAgain);
   });
 
+  it("applies a saved theme on the sign-in page before authentication", async () => {
+    window.localStorage.setItem("pbip-theme", "dark");
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(json(401, { code: "unauthorized", title: "no session" })),
+    );
+    renderApp();
+
+    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+  });
+
+  it("follows the OS preference without saving it until the user toggles", async () => {
+    renderApp();
+
+    const themeBtn = await screen.findByRole("button", { name: /switch to (dark|light) theme/i });
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light"); // jsdom default
+    expect(window.localStorage.getItem("pbip-theme")).toBeNull();
+
+    await userEvent.setup().click(themeBtn);
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    expect(window.localStorage.getItem("pbip-theme")).toBe("dark");
+  });
+
   it("switches pages between Accounts and Profile cleanly", async () => {
     const user = userEvent.setup();
     renderApp();

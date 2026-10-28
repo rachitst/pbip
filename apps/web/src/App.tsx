@@ -1,5 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { api } from "./api/client";
 import { useAuth } from "./auth/AuthContext";
 import { Accounts } from "./pages/Accounts";
@@ -7,36 +15,62 @@ import { Login } from "./pages/Login";
 import { Profile } from "./pages/Profile";
 
 export type Theme = "light" | "dark";
+const THEME_STORAGE_KEY = "pbip-theme";
 
-export function useTheme(): { theme: Theme; toggleTheme: () => void } {
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window === "undefined") return "light";
-    try {
-      const saved = localStorage.getItem("pbip-theme");
-      if (saved === "light" || saved === "dark") return saved;
-      if (typeof window.matchMedia === "function") {
-        return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-      }
-    } catch {
-      // Storage or matchMedia might be unavailable/restricted in some environments
+function savedTheme(): Theme | null {
+  try {
+    const saved = localStorage.getItem(THEME_STORAGE_KEY);
+    return saved === "light" || saved === "dark" ? saved : null;
+  } catch {
+    return null; // storage can be unavailable or restricted (private browsing)
+  }
+}
+
+function systemTheme(): Theme {
+  try {
+    if (typeof window.matchMedia === "function") {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
     }
-    return "light";
-  });
+  } catch {
+    // matchMedia can be missing in some environments (jsdom)
+  }
+  return "light";
+}
+
+interface ThemeContextValue {
+  theme: Theme;
+  toggleTheme: () => void;
+}
+
+const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+/** Owns the theme for the whole app, including the sign-in page, so it cannot flip after login.
+ *  The OS preference is followed until the user toggles; only an explicit choice is saved. */
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const [theme, setTheme] = useState<Theme>(() => savedTheme() ?? systemTheme());
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
-    try {
-      localStorage.setItem("pbip-theme", theme);
-    } catch {
-      // Storage might be unavailable in private browsing
-    }
   }, [theme]);
 
   const toggleTheme = useCallback(() => {
-    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
-  }, []);
+    const next: Theme = theme === "dark" ? "light" : "dark";
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, next);
+    } catch {
+      // Storage might be unavailable in private browsing; the choice still applies this session
+    }
+    setTheme(next);
+  }, [theme]);
 
-  return { theme, toggleTheme };
+  const value = useMemo(() => ({ theme, toggleTheme }), [theme, toggleTheme]);
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+}
+
+export function useTheme(): ThemeContextValue {
+  const context = useContext(ThemeContext);
+  if (!context) throw new Error("useTheme must be used inside ThemeProvider");
+  return context;
 }
 
 export function ThemeToggle() {
@@ -105,6 +139,14 @@ const PAGES: { id: Page; label: string }[] = [
 ];
 
 export function App() {
+  return (
+    <ThemeProvider>
+      <AuthenticatedOrLogin />
+    </ThemeProvider>
+  );
+}
+
+function AuthenticatedOrLogin() {
   const { status } = useAuth();
   if (status === "loading") return <p className="center">Loading...</p>;
   return status === "authenticated" ? <Shell /> : <Login />;

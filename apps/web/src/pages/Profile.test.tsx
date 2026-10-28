@@ -91,7 +91,6 @@ describe("profile & security", () => {
 
   it("shows the profile with masked phone and the registered devices", async () => {
     await openProfile();
-    // expect(await screen.findByText("Alice Demo")).toBeInTheDocument(); // Name no longer displayed in profile header
     expect(await screen.findAllByText("Alice Demo")).not.toHaveLength(0);
     expect(screen.getByText("******4321")).toBeInTheDocument();
     expect(await screen.findByText("Firefox on Linux")).toBeInTheDocument();
