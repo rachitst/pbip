@@ -78,7 +78,7 @@ def test_outbox_relay_creates_notifications_exactly_once_and_only_for_the_owner(
     age_payee(migrated_engine, payee["id"], 48)
     assert _transfer(client, alice, payee).status_code == 201
     assert (
-        client.get("/api/v1/notifications", headers=alice.headers).json() == []
+        client.get("/api/v1/notifications", headers=alice.headers).json()["items"] == []
     )  # not relayed yet
 
     assert relay_outbox(db) == 1
@@ -86,19 +86,24 @@ def test_outbox_relay_creates_notifications_exactly_once_and_only_for_the_owner(
     assert relay_outbox(db) == 0  # already processed
     mine = client.get("/api/v1/notifications", headers=alice.headers).json()
     assert (
-        len(mine) == 1
-        and mine[0]["title"] == "Transfer completed"
-        and "INR 5.00" in mine[0]["body"]
+        len(mine["items"]) == 1
+        and mine["items"][0]["title"] == "Transfer completed"
+        and "INR 5.00" in mine["items"][0]["body"]
     )
-    assert client.get("/api/v1/notifications", headers=bob.headers).json() == []
+    assert client.get("/api/v1/notifications", headers=bob.headers).json()["items"] == []
     assert (
-        client.post(f"/api/v1/notifications/{mine[0]['id']}/read", headers=bob.headers).status_code
+        client.post(
+            f"/api/v1/notifications/{mine['items'][0]['id']}/read", headers=bob.headers
+        ).status_code
         == 404
     )
     assert (
         client.post(
-            f"/api/v1/notifications/{mine[0]['id']}/read", headers=alice.headers
+            f"/api/v1/notifications/{mine['items'][0]['id']}/read", headers=alice.headers
         ).status_code
         == 204
     )
-    assert client.get("/api/v1/notifications?unread_only=true", headers=alice.headers).json() == []
+    assert (
+        client.get("/api/v1/notifications?unread_only=true", headers=alice.headers).json()["items"]
+        == []
+    )
