@@ -60,7 +60,8 @@ Repository configuration (labels, sprint milestones, ruleset) can be initialized
 Push a tag from `main` (`git tag v0.1.0 && git push --tags`): CI/CD builds images to GHCR and, when repository
 variable `DEPLOY_ENABLED=true`, deploys over SSH and runs `scripts/smoke_test.sh`. Required secrets:
 `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`; variable `STAGING_URL`. Server `.env`:
-`infra/deploy/.env.prod.example`.
+`infra/deploy/.env.prod.example`. Rollback, secret rotation, backup/restore and incident playbooks:
+`docs/operations/runbook.md`.
 
 ## Troubleshooting
 * `make: command not found` on Windows -> use native PowerShell wrapper `.\dev.ps1 <command>` or `dev.cmd <command>` (see `docs/SETUP_GUIDE.md`).

@@ -29,3 +29,13 @@ class FieldCipher:
             return self._fernet.decrypt(token.encode()).decode()
         except InvalidToken as exc:
             raise CryptoError("ciphertext failed authentication") from exc
+
+    def rotate(self, token: str) -> str:
+        """Re-encrypt ``token`` under the first (primary) key; any listed key may have produced it.
+
+        Used by scripts/rotate_field_key.py so an old key can be retired without unreadable rows.
+        """
+        try:
+            return self._fernet.rotate(token.encode()).decode()
+        except InvalidToken as exc:
+            raise CryptoError("ciphertext failed authentication") from exc
