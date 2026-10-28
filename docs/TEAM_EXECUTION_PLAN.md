@@ -2266,9 +2266,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #98 | **Sprint:** 5 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Sun 25 Oct | **Target deadline:** Sun 25 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (9.6 days of slack)
+- **Start:** Sun 25 Oct | **Target deadline:** Sun 25 Oct | **Actual completion:** Wed 29 Oct (merged in #152; acceptance criteria verified) | **Status:** Done | **Risk:** Low
 - **Depends on:** none
-- **Mode:** Parallel: can start immediately
+- **Mode:** Done
 - **Goal:** Production operations runbook covering container management, secret rotation, and incident triage.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -2278,9 +2278,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Incident response playbooks for fraud spike and compromised staff session
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #98`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Step-by-step procedures for rotating JWT secrets and field encryption keys
-  - [ ] Database backup and point-in-time recovery runbook
-  - [ ] Incident response playbooks for fraud spike and compromised staff session
+  - [x] Step-by-step procedures for rotating JWT secrets and field encryption keys
+  - [x] Database backup and point-in-time recovery runbook
+  - [x] Incident response playbooks for fraud spike and compromised staff session
 - **Definition of done (evidence):** Peer-reviewed, committed to docs/operations/runbook.md.
 - **Required checks:**
   - Automated: document builds/renders, links valid, content matches the code and backlog
