@@ -7,6 +7,7 @@ from collections.abc import Callable
 
 import pytest
 from fastapi.testclient import TestClient
+from pbip_api.core.db import utcnow
 from pbip_api.modules.notifications.models import Notification
 from pbip_test_support import Actor
 from sqlalchemy.orm import Session
@@ -27,11 +28,7 @@ def _seed_notification(
         type=notification_type,
         title=title,
         body=body,
-        read_at=db.bind.execute(  # type: ignore[union-attr]
-            pytest.importorskip("sqlalchemy").text("now()")
-        ).scalar()
-        if is_read
-        else None,
+        read_at=utcnow() if is_read else None,
     )
     db.add(notif)
     db.commit()
