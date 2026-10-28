@@ -107,6 +107,7 @@ def mark_all_read(session: Session, user_id: UUID) -> int:
         .where(Notification.user_id == user_id, Notification.read_at.is_(None))
         .values(read_at=now)
     )
+    # rowcount is missing from SQLAlchemy's CursorResult stubs; for an UPDATE it is the row count.
     count = int(result.rowcount)  # type: ignore[attr-defined]
     session.commit()
     return count
