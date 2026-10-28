@@ -15,7 +15,7 @@
 | ML / fraud methodology | `docs/ml/fraud-methodology.md` | Intelligence Layer | S3-5 | Todo |
 | Model evaluation report | `docs/ml/evaluation-report.md` | Intelligence Layer | S6 | Todo |
 | Deployment guide | `docs/deployment.md` | DevOps / Platform | S5 | Todo |
-| Support / operations guide | `docs/operations.md` | Operations / Platform | S5 | Todo |
+| Support / operations guide | `docs/operations/runbook.md` | Operations / Platform | S5 | **v1 (TASK-075)** |
 | User manual | `docs/user-manual.md` | Team / Shared | S7 | Todo |
 | Test strategy + report | blueprint section 12 -> `docs/test-report.md` | Quality / Testing | S6 | Strategy done |
 | Architecture decision records | `docs/adr/` | Team / Shared | as decided | 10 accepted |
