@@ -22,6 +22,8 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("get", "/api/v1/fraud/alerts"),
         ("get", "/api/v1/compliance/audit-logs"),
         ("get", "/api/v1/notifications"),
+        ("post", "/api/v1/notifications/mark-all-read"),
+        ("post", f"/api/v1/notifications/{uuid.uuid4()}/read"),
         ("post", "/api/v1/auth/password-change"),
         ("get", f"/api/v1/admin/users/{uuid.uuid4()}/lockout"),
         ("post", f"/api/v1/admin/users/{uuid.uuid4()}/unlock"),

@@ -3,13 +3,13 @@
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from pbip_api.core.db import utcnow
-from pbip_api.core.errors import NotFoundError
 from pbip_api.core.money import format_minor
 from pbip_api.modules.notifications.models import Notification, OutboxEvent
+from pbip_api.modules.notifications.policy import get_owned_notification
 
 TRANSFER_POSTED = "TRANSFER_POSTED"
 TRANSFER_DECLINED = "TRANSFER_DECLINED"
@@ -66,25 +66,47 @@ def relay_outbox(session: Session, batch_size: int = 100) -> int:
 
 
 def list_notifications(
-    session: Session, user_id: UUID, unread_only: bool, limit: int
-) -> list[Notification]:
-    stmt = (
-        select(Notification)
-        .where(Notification.user_id == user_id)
-        .order_by(Notification.created_at.desc())
+    session: Session, user_id: UUID, unread_only: bool, limit: int, offset: int = 0
+) -> tuple[list[Notification], int, int]:
+    """Fetch notifications for a user with pagination and total/unread counts."""
+    base_stmt = select(Notification).where(Notification.user_id == user_id)
+    filtered_stmt = base_stmt.where(Notification.read_at.is_(None)) if unread_only else base_stmt
+
+    total = session.execute(select(func.count()).select_from(filtered_stmt.subquery())).scalar_one()
+
+    unread_count = session.execute(
+        select(func.count())
+        .select_from(Notification)
+        .where(Notification.user_id == user_id, Notification.read_at.is_(None))
+    ).scalar_one()
+
+    items_stmt = (
+        filtered_stmt.order_by(Notification.created_at.desc(), Notification.id.desc())
+        .offset(offset)
         .limit(limit)
     )
-    if unread_only:
-        stmt = stmt.where(Notification.read_at.is_(None))
-    return list(session.execute(stmt).scalars().all())
+    items = list(session.execute(items_stmt).scalars().all())
+
+    return items, total, unread_count
 
 
-def mark_read(session: Session, user_id: UUID, notification_id: UUID) -> None:
+def mark_read(session: Session, user_id: UUID, notification_id: UUID) -> Notification:
+    """Mark a single notification as read if owned by user_id, returning the notification."""
+    notification = get_owned_notification(session, user_id, notification_id)
+    if notification.read_at is None:
+        notification.read_at = utcnow()
+        session.commit()
+    return notification
+
+
+def mark_all_read(session: Session, user_id: UUID) -> int:
+    """Bulk mark all unread notifications belonging to user_id as read."""
+    now = utcnow()
     result = session.execute(
         update(Notification)
-        .where(Notification.id == notification_id, Notification.user_id == user_id)
-        .values(read_at=utcnow())
+        .where(Notification.user_id == user_id, Notification.read_at.is_(None))
+        .values(read_at=now)
     )
-    if result.rowcount == 0:  # type: ignore[attr-defined]
-        raise NotFoundError("notification not found")
+    count = int(result.rowcount)  # type: ignore[attr-defined]
     session.commit()
+    return count

@@ -448,6 +448,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/notifications/mark-all-read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark all notifications as read */
+        post: operations["mark_all_notifications_read_api_v1_notifications_mark_all_read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/notifications/{notification_id}/read": {
         parameters: {
             query?: never;
@@ -722,6 +739,14 @@ export interface components {
             /** Seq */
             seq: number;
         };
+        /** BulkMarkReadResponse */
+        BulkMarkReadResponse: {
+            /**
+             * Updated Count
+             * @description Number of notifications marked as read
+             */
+            updated_count: number;
+        };
         /** ChainStatusOut */
         ChainStatusOut: {
             /** Checked */
@@ -934,6 +959,34 @@ export interface components {
             title: string;
             /** Type */
             type: string;
+        };
+        /** NotificationsPage */
+        NotificationsPage: {
+            /**
+             * Items
+             * @description Paginated list of notifications
+             */
+            items: components["schemas"]["NotificationOut"][];
+            /**
+             * Limit
+             * @description Maximum items per page
+             */
+            limit: number;
+            /**
+             * Offset
+             * @description Offset of the current page
+             */
+            offset: number;
+            /**
+             * Total
+             * @description Total number of notifications matching filter
+             */
+            total: number;
+            /**
+             * Unread Count
+             * @description Total unread notifications for the user
+             */
+            unread_count: number;
         };
         /** OpenAccountRequest */
         OpenAccountRequest: {
@@ -1981,6 +2034,7 @@ export interface operations {
             query?: {
                 unread_only?: boolean;
                 limit?: number;
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -1994,7 +2048,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NotificationOut"][];
+                    "application/json": components["schemas"]["NotificationsPage"];
                 };
             };
             /** @description Validation Error */
@@ -2004,6 +2058,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_all_notifications_read_api_v1_notifications_mark_all_read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkMarkReadResponse"];
                 };
             };
         };
