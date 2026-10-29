@@ -13,11 +13,18 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 from typing import Any
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
+from pbip_api.core.db import utcnow
+from pbip_api.modules.accounts.models import Account
+from pbip_api.modules.analytics import repository
 from pbip_api.modules.analytics.models import MonthlyCategorySpending
+from pbip_api.modules.analytics.service import materialize_monthly_spending
+from pbip_api.modules.ledger import service as ledger
 from pbip_test_support import Actor, age_payee
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
 pytestmark = [pytest.mark.integration, pytest.mark.security]
@@ -47,7 +54,7 @@ def test_spending_breakdown_with_categorized_debits(
     client: TestClient,
     make_customer: Callable[..., Actor],
     make_verified_payee: Callable[..., dict[str, Any]],
-    migrated_engine: Any,
+    migrated_engine: Engine,
 ) -> None:
     """Accurately calculates spend amounts, transaction counts, and percentages by category."""
     alice = make_customer(funds=500_000)
@@ -283,40 +290,6 @@ def test_analytics_bola_isolation(
     )
     assert resp_non_existent.status_code == 404
 
-    # Bob attempts to inspect Alice's health score
-    resp_health = client.get(
-        f"/api/v1/analytics/health-score?account_id={alice.account_id}",
-        headers=bob.headers,
-    )
-    assert resp_health.status_code == 404
-
-
-def test_financial_health_score_endpoint(
-    client: TestClient,
-    make_customer: Callable[..., Actor],
-) -> None:
-    """GET /api/v1/analytics/health-score calculates health components dynamically."""
-    alice = make_customer(funds=200_000)
-
-    resp = client.get(
-        f"/api/v1/analytics/health-score?account_id={alice.account_id}",
-        headers=alice.headers,
-    )
-    assert resp.status_code == 200, resp.text
-    data = resp.json()
-
-    assert data["account_id"] == str(alice.account_id)
-    assert data["currency"] == "INR"
-    assert 0 <= data["overall_score"] <= 100
-    assert data["rating"] in ("EXCELLENT", "GOOD", "FAIR", "NEEDS_ATTENTION")
-
-    comps = data["components"]
-    assert comps["savings_rate"]["weight_percentage"] == 30.0
-    assert comps["expense_volatility"]["weight_percentage"] == 25.0
-    assert comps["emi_to_income"]["weight_percentage"] == 25.0
-    assert comps["buffer_months"]["weight_percentage"] == 20.0
-    assert len(data["recommendations"]) >= 1
-
 
 def test_analytics_validation(
     client: TestClient,
@@ -342,3 +315,200 @@ def test_analytics_validation(
     # Unauthenticated
     resp_unauth = client.get(f"/api/v1/analytics/spending?account_id={alice.account_id}")
     assert resp_unauth.status_code == 401
+
+
+def _transfer(client: TestClient, actor: Actor, payee_id: str, amount: int, reference: str) -> UUID:
+    resp = client.post(
+        "/api/v1/transfers",
+        headers={**actor.headers, "Idempotency-Key": uuid.uuid4().hex},
+        json={
+            "from_account_id": str(actor.account_id),
+            "amount_minor": amount,
+            "payee_id": payee_id,
+            "reference": reference,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    return UUID(resp.json()["id"])
+
+
+def _stored_rows(db: Session, account_id: UUID | None) -> set[tuple[str, int, int]]:
+    db.expire_all()
+    rows = db.execute(
+        select(MonthlyCategorySpending).where(MonthlyCategorySpending.account_id == account_id)
+    ).scalars()
+    return {(r.category, r.total_amount_minor, r.transaction_count) for r in rows}
+
+
+def test_reversed_transfers_and_refund_outflows_are_not_spending(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_verified_payee: Callable[..., dict[str, Any]],
+    migrated_engine: Engine,
+    db: Session,
+) -> None:
+    """A reversed transfer was refunded, and the counterparty's REVERSAL debit returns money."""
+    alice = make_customer(funds=500_000)
+    bob = make_customer()
+    payee = make_verified_payee(alice, bob)
+    age_payee(migrated_engine, payee["id"], 48)
+    _transfer(client, alice, payee["id"], 20_000, "BigBasket weekly groceries")
+    dinner = _transfer(client, alice, payee["id"], 10_000, "Swiggy dinner order")
+    ledger.reverse_transaction(db, dinner, None, "customer dispute")
+    db.commit()
+
+    alice_view = client.get(
+        f"/api/v1/analytics/spending?account_id={alice.account_id}", headers=alice.headers
+    ).json()
+    assert alice_view["total_spend_minor"] == 20_000 and alice_view["transaction_count"] == 1
+    assert [c["category"] for c in alice_view["categories"]] == ["groceries"]
+
+    bob_view = client.get(
+        f"/api/v1/analytics/spending?account_id={bob.account_id}", headers=bob.headers
+    ).json()
+    assert bob_view["total_spend_minor"] == 0 and bob_view["categories"] == []
+
+
+def test_materialization_matches_the_live_computation_and_is_idempotent(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_verified_payee: Callable[..., dict[str, Any]],
+    migrated_engine: Engine,
+    db: Session,
+) -> None:
+    """The nightly task stores exactly what the live computation returns and can be re-run."""
+    alice = make_customer(funds=500_000)
+    bob = make_customer()
+    payee = make_verified_payee(alice, bob)
+    age_payee(migrated_engine, payee["id"], 48)
+    _transfer(client, alice, payee["id"], 20_000, "BigBasket weekly groceries")
+    _transfer(client, alice, payee["id"], 10_000, "Zepto instant provisions")
+    dinner = _transfer(client, alice, payee["id"], 10_000, "Swiggy dinner order")
+    now = utcnow()
+
+    # Only Alice's account has customer debits (the funding deposit debits the SYSTEM clearing
+    # account, Bob only receives credits).
+    debited = repository.accounts_with_debits(db, now.year, now.month)
+    details = db.execute(
+        select(Account.id, Account.account_number, Account.account_type).where(
+            Account.id.in_(debited)
+        )
+    ).all()
+    assert debited == [alice.account_id], details
+    assert materialize_monthly_spending(db, periods=[(now.year, now.month)]) == 1
+    assert _stored_rows(db, alice.account_id) == {("groceries", 30_000, 2), ("dining", 10_000, 1)}
+    assert _stored_rows(db, bob.account_id) == set()
+
+    # Re-running after a reversal updates groceries in place and deletes the vanished category.
+    # The compensating REVERSAL debits Bob's account, so Bob is now visited too, and correctly
+    # stores nothing (a refund outflow is not spend).
+    ledger.reverse_transaction(db, dinner, None, "customer dispute")
+    db.commit()
+    assert materialize_monthly_spending(db, periods=[(now.year, now.month)]) == 2
+    assert _stored_rows(db, alice.account_id) == {("groceries", 30_000, 2)}
+    assert _stored_rows(db, bob.account_id) == set()
+    assert materialize_monthly_spending(db, periods=[(now.year, now.month)]) == 2  # no-op rerun
+    assert _stored_rows(db, alice.account_id) == {("groceries", 30_000, 2)}
+
+
+def test_stored_rows_serve_closed_months_only_and_percentages_need_a_baseline(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    db: Session,
+) -> None:
+    """Rows for the running month are ignored by reads; a month without a predecessor has no %."""
+    alice = make_customer(funds=100_000)
+    now = utcnow()
+    db.add(
+        MonthlyCategorySpending(
+            account_id=alice.account_id,
+            year=now.year,
+            month=now.month,
+            category="groceries",
+            total_amount_minor=99_000,
+            transaction_count=9,
+        )
+    )
+    db.add(
+        MonthlyCategorySpending(
+            account_id=alice.account_id,
+            year=2025,
+            month=6,
+            category="groceries",
+            total_amount_minor=60_000,
+            transaction_count=3,
+        )
+    )
+    db.commit()
+
+    running = client.get(
+        f"/api/v1/analytics/spending?account_id={alice.account_id}", headers=alice.headers
+    ).json()
+    assert running["total_spend_minor"] == 0  # live computation, not the stale stored row
+
+    trends = client.get(
+        f"/api/v1/analytics/trends?account_id={alice.account_id}&year=2025&month=6",
+        headers=alice.headers,
+    ).json()
+    assert trends["current_month"]["total_spend_minor"] == 60_000
+    assert trends["current_month"]["daily_burn_rate_minor"] == 60_000 // 30
+    assert trends["previous_month"] is None
+    assert trends["mom_spend_change_percentage"] is None
+    assert trends["burn_rate_change_percentage"] is None
+    assert trends["top_categories_increasing"][0]["change_percentage"] is None
+    assert trends["top_categories_decreasing"] == []
+
+
+def test_year_beyond_the_calendar_is_rejected_not_a_server_error(
+    client: TestClient, make_customer: Callable[..., Actor]
+) -> None:
+    alice = make_customer()
+    resp = client.get(
+        f"/api/v1/analytics/trends?account_id={alice.account_id}&year=99999&month=1",
+        headers=alice.headers,
+    )
+    assert resp.status_code == 422, resp.text
+
+
+def test_financial_health_score_moves_with_ledger_activity(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_verified_payee: Callable[..., dict[str, Any]],
+    migrated_engine: Engine,
+) -> None:
+    """AC3: nothing static. A fresh account scores on what is known, then every transfer moves it."""
+    alice = make_customer(funds=300_000)
+    bob = make_customer()
+    payee = make_verified_payee(alice, bob)
+    age_payee(migrated_engine, payee["id"], 48)
+    url = f"/api/v1/analytics/health-score?account_id={alice.account_id}"
+
+    fresh = client.get(url, headers=alice.headers)
+    assert fresh.status_code == 200, fresh.text
+    assert fresh.json()["overall_score"] == 55 and fresh.json()["insufficient_data"] is True
+
+    _transfer(client, alice, payee["id"], 60_000, "October rent")
+    _transfer(client, alice, payee["id"], 40_000, "Home loan EMI")
+    _transfer(client, alice, payee["id"], 30_000, "Apollo chemist pharmacy")  # not debt
+
+    data = client.get(url, headers=alice.headers).json()
+    comps = data["components"]
+    # income 300,000 (deposit), spend 130,000: savings rate 56.7% -> 30 points
+    assert (
+        comps["savings_rate"]["score"] == 30 and comps["savings_rate"]["formatted_value"] == "56.7%"
+    )
+    # repayments 40,000 / 300,000 = 13.3% -> full points; "chemist" is not an EMI
+    assert comps["emi_to_income"]["metric_value"] == 0.1333
+    assert (
+        comps["emi_to_income"]["score"] == 25 and comps["emi_to_income"]["assessment"] == "OPTIMAL"
+    )
+    # one month of spend: volatility unknown; buffer 170,000 / 130,000 = 1.3 months -> LOW
+    assert comps["expense_volatility"]["assessment"] == "INSUFFICIENT_DATA"
+    assert comps["buffer_months"]["assessment"] == "LOW" and comps["buffer_months"]["score"] == 9
+    assert data["overall_score"] == 64 and data["rating"] == "GOOD"
+    assert data["months_observed"] == 1 and data["window_months"] == 12
+    assert any("cash buffer covers 1.3 months" in tip for tip in data["recommendations"])
+    assert data["account_id"] == str(alice.account_id) and data["currency"] == "INR"
+
+    # Bob cannot read Alice's score (BOLA).
+    assert client.get(url, headers=bob.headers).status_code == 404

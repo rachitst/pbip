@@ -21,7 +21,8 @@ router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
 def list_my_notifications(
     unread_only: bool = False,
     limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    # Bounded: fuzzing found that an unbounded offset reached PostgreSQL as an out-of-range bigint.
+    offset: int = Query(default=0, ge=0, le=1_000_000),
     principal: Principal = Depends(get_current_principal),
     session: Session = Depends(get_session),
 ) -> NotificationsPage:

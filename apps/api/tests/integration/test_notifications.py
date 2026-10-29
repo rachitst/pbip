@@ -175,3 +175,16 @@ def test_unauthenticated_requests_are_rejected(client: TestClient) -> None:
     assert client.get("/api/v1/notifications").status_code == 401
     assert client.post(f"/api/v1/notifications/{uuid.uuid4()}/read").status_code == 401
     assert client.post("/api/v1/notifications/mark-all-read").status_code == 401
+
+
+def test_oversized_offset_is_a_validation_error_not_a_server_error(
+    client: TestClient, make_customer: Callable[..., Actor]
+) -> None:
+    """Regression (fuzzing finding): an offset beyond bigint reached PostgreSQL and produced a 500."""
+    alice = make_customer()
+    for offset in (1_000_001, 2_389_327_229_750_625_173_504):
+        resp = client.get(f"/api/v1/notifications?offset={offset}", headers=alice.headers)
+        assert resp.status_code == 422, resp.text
+    assert (
+        client.get("/api/v1/notifications?offset=1000000", headers=alice.headers).status_code == 200
+    )

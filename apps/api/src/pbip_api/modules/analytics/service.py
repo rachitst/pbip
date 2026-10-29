@@ -1,6 +1,14 @@
-"""Service layer for analytics: spending categorization, aggregations, and trend analysis."""
+"""Service layer for analytics: spending breakdown, month-over-month trends, materialisation.
+
+Read path (never writes): a closed month is served from ``monthly_category_spending`` when the
+nightly task has stored it; otherwise, and always for the running month, the breakdown is computed
+from the ledger entries (ADR-0011). Write path: ``materialize_monthly_spending`` is the Celery
+task body that stores closed months and refreshes the most recent one because a transfer can be
+reversed weeks after it was posted.
+"""
 
 import calendar
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -19,21 +27,61 @@ from pbip_api.modules.analytics.schemas import (
     SpendingTrendsResponse,
 )
 
+MATERIALIZED_MONTHS_BACK = 2
 
-def _get_or_compute_monthly_aggregates(
+
+def percentage_change(current: int, previous: int) -> float | None:
+    """Relative change in percent; None when there is no previous value to compare against."""
+    if previous <= 0:
+        return None
+    return round((current - previous) / previous * 100, 2)
+
+
+def is_closed_month(year: int, month: int, now: datetime) -> bool:
+    return (year, month) < (now.year, now.month)
+
+
+def previous_closed_months(now: datetime, count: int) -> list[tuple[int, int]]:
+    """The ``count`` calendar months before the running one, most recent first."""
+    months: list[tuple[int, int]] = []
+    year, month = now.year, now.month
+    for _ in range(count):
+        year, month = (year - 1, 12) if month == 1 else (year, month - 1)
+        months.append((year, month))
+    return months
+
+
+def _monthly_aggregates(
     session: Session, account_id: UUID, year: int, month: int
 ) -> list[MonthlyCategorySpending]:
-    """Retrieve pre-aggregated spending or compute live from entries if not yet materialized."""
-    records = repository.get_preaggregated_monthly_spending(session, account_id, year, month)
-    if not records:
-        records = repository.compute_monthly_spending_from_entries(session, account_id, year, month)
-        # If it is a past month, persist it to avoid recomputing next time
-        now = utcnow()
-        is_past_month = (year < now.year) or (year == now.year and month < now.month)
-        if is_past_month and records:
-            repository.persist_monthly_aggregates(session, account_id, year, month, records)
-            session.commit()
-    return records
+    if is_closed_month(year, month, utcnow()):
+        stored = repository.get_preaggregated_monthly_spending(session, account_id, year, month)
+        if stored:
+            return stored
+    return repository.compute_monthly_spending_from_entries(session, account_id, year, month)
+
+
+def materialize_monthly_spending(
+    session: Session, periods: list[tuple[int, int]] | None = None
+) -> int:
+    """Store the per-category spend of every customer account for the given months.
+
+    Defaults to the two most recent closed months. Idempotent (rows are upserted under their
+    unique key, vanished categories are deleted) and committed once at the end. Returns the number
+    of account-months written. A running month may be passed; the read path ignores stored rows
+    for it, so this is only useful to tests.
+    """
+    periods = periods or previous_closed_months(utcnow(), MATERIALIZED_MONTHS_BACK)
+    written = 0
+    for year, month in periods:
+        for account_id in repository.accounts_with_debits(session, year, month):
+            records = repository.compute_monthly_spending_from_entries(
+                session, account_id, year, month
+            )
+            repository.upsert_monthly_aggregates(session, account_id, year, month, records)
+            written += 1
+    session.commit()
+    return written
 
 
 def get_spending_breakdown(
@@ -43,42 +91,48 @@ def get_spending_breakdown(
     year: int | None = None,
     month: int | None = None,
 ) -> SpendingBreakdownResponse:
-    """Get categorized spending breakdown for an account in a given month (BOLA protected)."""
+    """Categorised spend of one owned account in a calendar month (default: the running month)."""
     account = verify_account_ownership(session, customer_id, account_id)
-
     now = utcnow()
-    target_year = year or now.year
-    target_month = month or now.month
+    target_year, target_month = year or now.year, month or now.month
 
-    records = _get_or_compute_monthly_aggregates(session, account.id, target_year, target_month)
-
+    records = _monthly_aggregates(session, account.id, target_year, target_month)
     total_spend = sum(r.total_amount_minor for r in records)
-    total_tx_count = sum(r.transaction_count for r in records)
-
-    category_items: list[CategorySpendingItem] = []
-    for r in records:
-        percentage = (
-            round((r.total_amount_minor / total_spend) * 100, 2) if total_spend > 0 else 0.0
+    categories = [
+        CategorySpendingItem(
+            category=r.category,
+            amount_minor=r.total_amount_minor,
+            percentage=round(r.total_amount_minor / total_spend * 100, 2) if total_spend else 0.0,
+            transaction_count=r.transaction_count,
         )
-        category_items.append(
-            CategorySpendingItem(
-                category=r.category,
-                amount_minor=r.total_amount_minor,
-                percentage=percentage,
-                transaction_count=r.transaction_count,
-            )
-        )
-
-    period_str = f"{target_year:04d}-{target_month:02d}"
+        for r in records
+    ]
     return SpendingBreakdownResponse(
         account_id=account.id,
         currency=account.currency,
-        period=period_str,
+        period=f"{target_year:04d}-{target_month:02d}",
         year=target_year,
         month=target_month,
         total_spend_minor=total_spend,
-        transaction_count=total_tx_count,
-        categories=category_items,
+        transaction_count=sum(r.transaction_count for r in records),
+        categories=categories,
+    )
+
+
+def _summary(
+    records: list[MonthlyCategorySpending], year: int, month: int, now: datetime
+) -> MonthlySpendingSummary:
+    """Totals of a month; the burn rate divides by the days elapsed so far for the running month."""
+    total = sum(r.total_amount_minor for r in records)
+    running = (year, month) == (now.year, now.month)
+    days = max(now.day, 1) if running else calendar.monthrange(year, month)[1]
+    return MonthlySpendingSummary(
+        period=f"{year:04d}-{month:02d}",
+        year=year,
+        month=month,
+        total_spend_minor=total,
+        transaction_count=sum(r.transaction_count for r in records),
+        daily_burn_rate_minor=total // days,
     )
 
 
@@ -89,129 +143,61 @@ def get_spending_trends(
     year: int | None = None,
     month: int | None = None,
 ) -> SpendingTrendsResponse:
-    """Compute month-over-month spending trends, daily burn rate, and category shifts."""
+    """Month-over-month comparison of one owned account: totals, burn rate and category shifts."""
     account = verify_account_ownership(session, customer_id, account_id)
-
     now = utcnow()
-    curr_year = year or now.year
-    curr_month = month or now.month
+    curr_year, curr_month = year or now.year, month or now.month
+    prev_year, prev_month = previous_closed_months(
+        datetime(curr_year, curr_month, 1, tzinfo=now.tzinfo), 1
+    )[0]
 
-    curr_records = _get_or_compute_monthly_aggregates(session, account.id, curr_year, curr_month)
-    curr_total = sum(r.total_amount_minor for r in curr_records)
-    curr_count = sum(r.transaction_count for r in curr_records)
+    curr_records = _monthly_aggregates(session, account.id, curr_year, curr_month)
+    prev_records = _monthly_aggregates(session, account.id, prev_year, prev_month)
+    current = _summary(curr_records, curr_year, curr_month, now)
+    previous = _summary(prev_records, prev_year, prev_month, now) if prev_records else None
 
-    # Days elapsed in current month for burn rate
-    days_in_curr_month = calendar.monthrange(curr_year, curr_month)[1]
-    is_current_running_month = curr_year == now.year and curr_month == now.month
-    days_elapsed = max(now.day, 1) if is_current_running_month else days_in_curr_month
-    daily_burn_rate = curr_total // days_elapsed if days_elapsed > 0 else 0
-
-    curr_summary = MonthlySpendingSummary(
-        period=f"{curr_year:04d}-{curr_month:02d}",
-        year=curr_year,
-        month=curr_month,
-        total_spend_minor=curr_total,
-        transaction_count=curr_count,
-        daily_burn_rate_minor=daily_burn_rate,
+    curr_by_cat = {r.category: r.total_amount_minor for r in curr_records}
+    prev_by_cat = {r.category: r.total_amount_minor for r in prev_records}
+    shifts = [
+        CategoryShiftItem(
+            category=category,
+            current_amount_minor=curr_by_cat.get(category, 0),
+            previous_amount_minor=prev_by_cat.get(category, 0),
+            change_minor=curr_by_cat.get(category, 0) - prev_by_cat.get(category, 0),
+            change_percentage=percentage_change(
+                curr_by_cat.get(category, 0), prev_by_cat.get(category, 0)
+            ),
+        )
+        for category in sorted(curr_by_cat.keys() | prev_by_cat.keys())
+    ]
+    increasing = sorted(
+        (s for s in shifts if s.change_minor > 0), key=lambda s: s.change_minor, reverse=True
     )
-
-    # Previous calendar month
-    prev_month = curr_month - 1 if curr_month > 1 else 12
-    prev_year = curr_year if curr_month > 1 else curr_year - 1
-
-    prev_records = _get_or_compute_monthly_aggregates(session, account.id, prev_year, prev_month)
-    has_prev_data = bool(prev_records)
-    prev_total = sum(r.total_amount_minor for r in prev_records)
-    prev_count = sum(r.transaction_count for r in prev_records)
-    days_in_prev_month = calendar.monthrange(prev_year, prev_month)[1]
-    prev_burn_rate = prev_total // days_in_prev_month if days_in_prev_month > 0 else 0
-
-    prev_summary: MonthlySpendingSummary | None = None
-    if has_prev_data or prev_total > 0:
-        prev_summary = MonthlySpendingSummary(
-            period=f"{prev_year:04d}-{prev_month:02d}",
-            year=prev_year,
-            month=prev_month,
-            total_spend_minor=prev_total,
-            transaction_count=prev_count,
-            daily_burn_rate_minor=prev_burn_rate,
-        )
-
-    # Month-over-month total change percentage
-    mom_change_pct: float | None = None
-    if prev_total > 0:
-        mom_change_pct = round(((curr_total - prev_total) / prev_total) * 100, 2)
-    elif prev_total == 0 and curr_total > 0:
-        mom_change_pct = 100.0
-
-    # Burn rate change percentage
-    burn_rate_change_pct: float | None = None
-    if prev_burn_rate > 0:
-        burn_rate_change_pct = round(((daily_burn_rate - prev_burn_rate) / prev_burn_rate) * 100, 2)
-
-    # Category shifts analysis
-    curr_cat_map = {r.category: r.total_amount_minor for r in curr_records}
-    prev_cat_map = {r.category: r.total_amount_minor for r in prev_records}
-    all_categories = sorted(set(curr_cat_map.keys()) | set(prev_cat_map.keys()))
-
-    increasing: list[CategoryShiftItem] = []
-    decreasing: list[CategoryShiftItem] = []
-
-    for cat in all_categories:
-        c_amt = curr_cat_map.get(cat, 0)
-        p_amt = prev_cat_map.get(cat, 0)
-        diff = c_amt - p_amt
-        shift_pct = round((diff / p_amt) * 100, 2) if p_amt > 0 else (100.0 if c_amt > 0 else 0.0)
-
-        shift_item = CategoryShiftItem(
-            category=cat,
-            current_amount_minor=c_amt,
-            previous_amount_minor=p_amt,
-            change_minor=diff,
-            change_percentage=shift_pct,
-        )
-
-        if diff > 0:
-            increasing.append(shift_item)
-        elif diff < 0:
-            decreasing.append(shift_item)
-
-    increasing.sort(key=lambda x: x.change_minor, reverse=True)
-    decreasing.sort(key=lambda x: x.change_minor)
+    decreasing = sorted((s for s in shifts if s.change_minor < 0), key=lambda s: s.change_minor)
 
     return SpendingTrendsResponse(
         account_id=account.id,
         currency=account.currency,
-        current_month=curr_summary,
-        previous_month=prev_summary,
-        mom_spend_change_percentage=mom_change_pct,
-        daily_burn_rate_minor=daily_burn_rate,
-        burn_rate_change_percentage=burn_rate_change_pct,
+        current_month=current,
+        previous_month=previous,
+        mom_spend_change_percentage=percentage_change(
+            current.total_spend_minor, previous.total_spend_minor if previous else 0
+        ),
+        daily_burn_rate_minor=current.daily_burn_rate_minor,
+        burn_rate_change_percentage=percentage_change(
+            current.daily_burn_rate_minor, previous.daily_burn_rate_minor if previous else 0
+        ),
         top_categories_increasing=increasing[:5],
         top_categories_decreasing=decreasing[:5],
     )
 
 
 def get_financial_health_score(
-    session: Session,
-    customer_id: UUID,
-    account_id: UUID,
+    session: Session, customer_id: UUID, account_id: UUID
 ) -> FinancialHealthScoreResponse:
-    """Calculate dynamic customer financial health score from ledger history (BOLA protected)."""
+    """Explainable health score of one owned account from its trailing ledger history."""
     account = verify_account_ownership(session, customer_id, account_id)
-    (
-        total_credits,
-        total_debits,
-        monthly_debits,
-        total_emi,
-    ) = repository.get_financial_health_metrics(session, account.id)
-
+    metrics = repository.get_financial_health_metrics(session, account.id, utcnow())
     return compute_financial_health_score(
-        account_id=account.id,
-        currency=account.currency,
-        available_balance=account.available_balance,
-        total_credits=total_credits,
-        total_debits=total_debits,
-        monthly_debit_totals=monthly_debits,
-        total_emi_debits=total_emi,
+        account.id, account.currency, account.available_balance, metrics
     )

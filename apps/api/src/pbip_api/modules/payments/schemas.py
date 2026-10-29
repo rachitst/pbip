@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
+from pbip_api.core.validation import Text
+
 
 class TransferRequest(BaseModel):
     from_account_id: UUID
@@ -11,7 +13,7 @@ class TransferRequest(BaseModel):
     currency: str = Field(default="INR", min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
     payee_id: UUID | None = None
     to_account_id: UUID | None = Field(default=None, description="One of MY OWN other accounts")
-    reference: str | None = Field(default=None, max_length=140)
+    reference: Text | None = Field(default=None, max_length=140)
 
     @model_validator(mode="after")
     def _exactly_one_destination(self) -> Self:

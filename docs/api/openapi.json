@@ -387,7 +387,7 @@
                 "type": "null"
               }
             ],
-            "description": "Percentage change (+/-), None if previous was 0",
+            "description": "Percentage change (+/-); None when the previous month had no spend here",
             "title": "Change Percentage"
           },
           "current_amount_minor": {
@@ -759,23 +759,23 @@
         "type": "object"
       },
       "FinancialHealthComponents": {
-        "description": "Component-wise breakdown of the customer financial health score.",
+        "description": "Component-wise breakdown of the financial health score.",
         "properties": {
           "buffer_months": {
             "$ref": "#/components/schemas/HealthScoreComponent",
-            "description": "Emergency buffer in months (20% weight)"
+            "description": "Cash buffer in months (20 points)"
           },
           "emi_to_income": {
             "$ref": "#/components/schemas/HealthScoreComponent",
-            "description": "Debt / EMI to income ratio (25% weight)"
+            "description": "Loan/EMI repayments to income (25 points)"
           },
           "expense_volatility": {
             "$ref": "#/components/schemas/HealthScoreComponent",
-            "description": "Expense volatility component (25% weight)"
+            "description": "Expense volatility (25 points)"
           },
           "savings_rate": {
             "$ref": "#/components/schemas/HealthScoreComponent",
-            "description": "Savings rate component (30% weight)"
+            "description": "Savings rate (30 points)"
           }
         },
         "required": [
@@ -788,7 +788,7 @@
         "type": "object"
       },
       "FinancialHealthScoreResponse": {
-        "description": "Customer financial health score (0-100) with explainable components and advice.",
+        "description": "Financial health score (0-100) with explainable components and actionable tips.",
         "properties": {
           "account_id": {
             "description": "Target account identifier",
@@ -807,25 +807,48 @@
             "title": "Currency",
             "type": "string"
           },
+          "insufficient_data": {
+            "description": "True when at least one component could not be computed from the history",
+            "title": "Insufficient Data",
+            "type": "boolean"
+          },
+          "months_observed": {
+            "description": "Calendar months of history in the window",
+            "minimum": 0.0,
+            "title": "Months Observed",
+            "type": "integer"
+          },
           "overall_score": {
-            "description": "Composite financial health score (0-100)",
+            "description": "Sum of the component points",
             "maximum": 100.0,
             "minimum": 0.0,
             "title": "Overall Score",
             "type": "integer"
           },
           "rating": {
-            "description": "Rating band: EXCELLENT, GOOD, FAIR, or NEEDS_ATTENTION",
+            "description": "EXCELLENT >= 80, GOOD >= 60, FAIR >= 40, else NEEDS_ATTENTION",
+            "enum": [
+              "EXCELLENT",
+              "GOOD",
+              "FAIR",
+              "NEEDS_ATTENTION"
+            ],
             "title": "Rating",
             "type": "string"
           },
           "recommendations": {
-            "description": "Actionable financial tips",
+            "description": "Actionable tips",
             "items": {
               "type": "string"
             },
             "title": "Recommendations",
             "type": "array"
+          },
+          "window_months": {
+            "description": "Length of the trailing window used",
+            "exclusiveMinimum": 0.0,
+            "title": "Window Months",
+            "type": "integer"
           }
         },
         "required": [
@@ -833,6 +856,9 @@
           "currency",
           "overall_score",
           "rating",
+          "insufficient_data",
+          "months_observed",
+          "window_months",
           "components"
         ],
         "title": "FinancialHealthScoreResponse",
@@ -852,37 +878,50 @@
         "type": "object"
       },
       "HealthScoreComponent": {
-        "description": "Detailed score and calculation for a single health component.",
+        "description": "One scored component of the financial health score, with the metric behind it.",
         "properties": {
           "assessment": {
-            "description": "Assessment summary (e.g. 'OPTIMAL', 'MODERATE', 'VULNERABLE')",
+            "description": "Band of the metric; INSUFFICIENT_DATA when it cannot be computed yet",
+            "enum": [
+              "OPTIMAL",
+              "MODERATE",
+              "DEFICIT",
+              "VOLATILE",
+              "NO_DEBT",
+              "BURDENED",
+              "CRITICAL",
+              "ADEQUATE",
+              "LOW",
+              "VULNERABLE",
+              "INSUFFICIENT_DATA"
+            ],
             "title": "Assessment",
             "type": "string"
           },
           "formatted_value": {
-            "description": "Human-readable formatted metric (e.g. '24.5%', '4.2 months')",
+            "description": "Human-readable metric, e.g. '24.5%', '4.2 months'",
             "title": "Formatted Value",
             "type": "string"
           },
           "max_score": {
-            "description": "Maximum possible points for component",
+            "description": "Points available (the component weight)",
             "exclusiveMinimum": 0.0,
             "title": "Max Score",
             "type": "integer"
           },
           "metric_value": {
-            "description": "Observed underlying metric value",
+            "description": "The underlying metric (rate, CV, ratio, months)",
             "title": "Metric Value",
             "type": "number"
           },
           "score": {
-            "description": "Earned points for component",
+            "description": "Points earned",
             "minimum": 0.0,
             "title": "Score",
             "type": "integer"
           },
           "weight_percentage": {
-            "description": "Weight percentage",
+            "description": "Weight in percent",
             "maximum": 100.0,
             "minimum": 0.0,
             "title": "Weight Percentage",
@@ -1045,7 +1084,7 @@
         "description": "Summary of spending in a calendar month.",
         "properties": {
           "daily_burn_rate_minor": {
-            "description": "Average daily spend in minor units",
+            "description": "Total spend divided by the days of the month (elapsed days when running)",
             "minimum": 0.0,
             "title": "Daily Burn Rate Minor",
             "type": "integer"
@@ -1516,7 +1555,7 @@
                 "type": "null"
               }
             ],
-            "description": "Burn rate percentage change vs previous month",
+            "description": "Daily burn rate change vs the previous month (+/-); None when it had no spend",
             "title": "Burn Rate Change Percentage"
           },
           "currency": {
@@ -1545,7 +1584,7 @@
                 "type": "null"
               }
             ],
-            "description": "Month-over-month total spend percentage change (+/-)",
+            "description": "Month-over-month total spend change (+/-); None if last month had none",
             "title": "Mom Spend Change Percentage"
           },
           "previous_month": {
@@ -2426,7 +2465,7 @@
     },
     "/api/v1/analytics/health-score": {
       "get": {
-        "description": "Calculate explainable financial health score (0-100) based on savings, debt, and buffer.",
+        "description": "Savings rate, expense volatility, loan repayments to income, cash buffer (owned account).",
         "operationId": "get_customer_health_score_api_v1_analytics_health_score_get",
         "parameters": [
           {
@@ -2469,7 +2508,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Customer financial health score and actionable recommendations",
+        "summary": "Financial health score (0-100) with explainable components and tips",
         "tags": [
           "analytics"
         ]
@@ -2500,6 +2539,7 @@
             "schema": {
               "anyOf": [
                 {
+                  "maximum": 2200,
                   "minimum": 2000,
                   "type": "integer"
                 },
@@ -2590,6 +2630,7 @@
             "schema": {
               "anyOf": [
                 {
+                  "maximum": 2200,
                   "minimum": 2000,
                   "type": "integer"
                 },
@@ -3029,6 +3070,7 @@
             "schema": {
               "anyOf": [
                 {
+                  "maximum": 9223372036854775807,
                   "minimum": 1,
                   "type": "integer"
                 },
@@ -3483,6 +3525,7 @@
             "required": false,
             "schema": {
               "default": 0,
+              "maximum": 1000000,
               "minimum": 0,
               "title": "Offset",
               "type": "integer"

@@ -26,7 +26,7 @@ router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
 )
 def get_customer_spending(
     account_id: UUID = Query(..., description="Target account identifier"),
-    year: int | None = Query(None, ge=2000, description="Calendar year (e.g. 2026)"),
+    year: int | None = Query(None, ge=2000, le=2200, description="Calendar year (e.g. 2026)"),
     month: int | None = Query(None, ge=1, le=12, description="Calendar month (1-12)"),
     customer: Customer = Depends(get_current_customer),
     session: Session = Depends(get_session),
@@ -49,7 +49,7 @@ def get_customer_spending(
 )
 def get_customer_trends(
     account_id: UUID = Query(..., description="Target account identifier"),
-    year: int | None = Query(None, ge=2000, description="Calendar year (e.g. 2026)"),
+    year: int | None = Query(None, ge=2000, le=2200, description="Calendar year (e.g. 2026)"),
     month: int | None = Query(None, ge=1, le=12, description="Calendar month (1-12)"),
     customer: Customer = Depends(get_current_customer),
     session: Session = Depends(get_session),
@@ -68,16 +68,14 @@ def get_customer_trends(
     "/health-score",
     response_model=FinancialHealthScoreResponse,
     status_code=status.HTTP_200_OK,
-    summary="Customer financial health score and actionable recommendations",
+    summary="Financial health score (0-100) with explainable components and tips",
 )
 def get_customer_health_score(
     account_id: UUID = Query(..., description="Target account identifier"),
     customer: Customer = Depends(get_current_customer),
     session: Session = Depends(get_session),
 ) -> FinancialHealthScoreResponse:
-    """Calculate explainable financial health score (0-100) based on savings, debt, and buffer."""
+    """Savings rate, expense volatility, loan repayments to income, cash buffer (owned account)."""
     return service.get_financial_health_score(
-        session=session,
-        customer_id=customer.id,
-        account_id=account_id,
+        session=session, customer_id=customer.id, account_id=account_id
     )
