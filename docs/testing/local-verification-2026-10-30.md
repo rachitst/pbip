@@ -64,3 +64,62 @@ clock (includes HTTP and JSON overhead).
 through nginx, for the running-month breakdown. **Limits:** tiny dataset (an account with years of
 entries was not tested), no concurrency, one laptop. This supports the 50 ms target for small
 accounts at low load; it is not evidence for production scale (TASK-078 and TASK-102 own that).
+
+---
+
+# Run 2 (same day, after TASK-052, GeoIP and the segmentation feature fix)
+
+`main` at `fc51805`; stack rebuilt with `docker compose up -d --build --wait` (API image built
+2026-10-30 04:10 IST). Same laptop (Intel Celeron N4500, 2 cores, 7 GiB RAM, Linux 7.0, Python 3.12.15).
+
+## Full suite against PostgreSQL and Redis
+
+`python scripts/dev.py test`: **590 passed, 9 skipped** (8 Windows-only runner tests, 1 real-GeoIP
+test that needs `PBIP_GEOIP_TEST_DB`), coverage **95.89%**. The real-GeoIP test was run separately
+with the DB-IP 2026-10 file and passed.
+
+## Celery beat and worker
+
+```text
+$ docker compose exec beat python -c "...print(celery_app.conf.beat_schedule)"
+relay-outbox pbip.outbox.relay 10.0
+materialize-monthly-spending pbip.analytics.materialize_monthly_spending <crontab: 0 2 * * *>
+segment-customers-weekly pbip.analytics.segment_customers <crontab: 0 3 * * 0>
+
+$ docker compose exec worker celery -A pbip_api.worker.celery_app call pbip.analytics.materialize_monthly_spending
+spending_materialized account_months=1 accounts=1 duration_ms=68.2
+Task ...materialize_monthly_spending[...] succeeded in 0.075s: 1
+
+$ docker compose exec worker celery -A pbip_api.worker.celery_app call pbip.analytics.segment_customers
+Task ...segment_customers[...] succeeded in 2.51s: 9
+```
+
+One spending job only (TASK-052 resolution); the weekly segmentation task ran in the worker and
+re-assigned all 9 customers with activity. The scheduled times themselves were not observed.
+
+## Analytics latency (repeatable method)
+
+```text
+uv run python scripts/measure_analytics_latency.py --base-url http://localhost:8000 \
+    --email <verification customer> --account-id <their account> --requests 300
+```
+
+300 sequential requests per endpoint after 20 warm-up; client wall clock.
+
+| Endpoint | Direct (8000) median / p95 / p99 ms | Through nginx (8080) median / p95 / p99 ms |
+|---|---|---|
+| spending, running month | 10.4 / 18.9 / 33.2 | 10.6 / 15.9 / 21.0 |
+| spending, previous month | 10.9 / 15.7 / 20.3 | 11.4 / 15.8 / 19.9 |
+| trends | 12.7 / 18.4 / 20.8 | 13.6 / 18.7 / 25.3 |
+| health-score | 11.0 / 16.8 / 20.8 | 11.3 / 15.3 / 16.9 |
+| segment | 7.5 / 12.0 / 16.3 | 8.0 / 12.0 / 18.7 |
+
+All p95 and p99 values are under 50 ms in this run (maxima reached 58-80 ms on single requests).
+Faster than run 1 mainly because of the `(account_id, created_at)` index (#174) and warm caches.
+Same limits as before: small dataset, no concurrency, one laptop.
+
+## Not verified locally
+
+* GeoIP inside the running stack: the development compose does not mount a database file, so the
+  NEW_COUNTRY rule was exercised by the integration test and the real-file unit test only.
+* The beat schedule firing at 02:00 / Sunday 03:00 UTC.

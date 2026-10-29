@@ -1274,9 +1274,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #63 | **Sprint:** 4 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Sun 25 Oct | **Target deadline:** Sun 25 Oct | **Actual completion:** - (merged in #156 on Wed 29 Oct; audit fixes merged in #171 and #174; not complete until a teammate reviews the maintainer-written changes) | **Status:** In Review | **Risk:** Low
+- **Start:** Sun 25 Oct | **Target deadline:** Sun 25 Oct | **Actual completion:** Wed 29 Oct (merged in #156; audit fixes #171, #174 merged and verified; analytics p95 under 50 ms measured locally, see docs/testing/local-verification-2026-10-30.md) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-008 (#19, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** In Review
+- **Mode:** Done
 - **Goal:** Analytics endpoints aggregating customer spending by category and month-over-month trends.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -1304,9 +1304,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #64 | **Sprint:** 4 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Sun 25 Oct | **Target deadline:** Sun 25 Oct | **Actual completion:** - (merged in #158 on Wed 29 Oct; audit fixes merged in #170 and #174; not complete until a teammate reviews the maintainer-written changes) | **Status:** In Review | **Risk:** Low
+- **Start:** Sun 25 Oct | **Target deadline:** Sun 25 Oct | **Actual completion:** Wed 29 Oct (merged in #158; audit fixes #170, #174 merged and verified) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-040 (#63, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** In Review
+- **Mode:** Done
 - **Goal:** Explainable financial health score (0-100) based on savings rate, buffer months, and EMI ratio.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -1390,9 +1390,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #67 | **Sprint:** 4 | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (merged in #161 on Wed 29 Oct; audit fixes merged in #167 and #173; not complete until a teammate reviews the maintainer-written changes) | **Status:** In Review | **Risk:** Low
+- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Wed 29 Oct (merged in #161; audit fixes #167, #173, #192 merged and verified; job run end to end by a real Celery worker locally) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-040 (#63, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** In Review
+- **Mode:** Done
 - **Goal:** Clustering pipeline grouping customers into explainable segments (e.g. High Net Worth, Budget Conscious).
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -1621,9 +1621,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #75 | **Sprint:** 4 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Wed 28 Oct | **Target deadline:** Thu 29 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (5.7 days of slack)
+- **Start:** Wed 28 Oct | **Target deadline:** Thu 29 Oct | **Actual completion:** Fri 30 Oct (merged in #193; criteria clarified onto the TASK-040 job, no duplicate job; run by a real Celery worker locally) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-040 (#63, Krishna), TASK-041 (#64, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** Sequential: waits for TASK-040, TASK-041
+- **Mode:** Done
 - **Goal:** Scheduled Celery Beat jobs pre-computing monthly spending summaries and customer health scores.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -1635,11 +1635,11 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   7. Implement and make the tests pass for: Customer segmentation re-runs weekly through Celery beat with idempotent upserts (ADR-0012)
   8. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #75`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Celery task runs nightly at 02:00 UTC materialising the closed-month spending aggregates the analytics endpoints read (ADR-0011) *(accepted clarification 2026-10-30, resolves the overlap with TASK-040's nightly job; original: "Celery task runs nightly at 02:00 UTC computing previous day aggregates")*
-  - [ ] Writes materialized results to the monthly_category_spending table (no separate customer_analytics_monthly table) *(accepted clarification 2026-10-30, resolves the overlap with TASK-040's nightly job; original: "Writes materialized results to customer_analytics_monthly table")*
-  - [ ] Idempotent execution: safe to rerun multiple times without double-counting
-  - [ ] Logs metrics on execution duration and processed account count *(accepted clarification 2026-10-30, resolves the overlap with TASK-040's nightly job; original: "Logs metrics on execution duration and processed customer count")*
-  - [ ] Customer segmentation re-runs weekly through Celery beat with idempotent upserts (ADR-0012) *(added 2026-10-30 with the clarification above)*
+  - [x] Celery task runs nightly at 02:00 UTC materialising the closed-month spending aggregates the analytics endpoints read (ADR-0011) *(accepted clarification 2026-10-30, resolves the overlap with TASK-040's nightly job; original: "Celery task runs nightly at 02:00 UTC computing previous day aggregates")*
+  - [x] Writes materialized results to the monthly_category_spending table (no separate customer_analytics_monthly table) *(accepted clarification 2026-10-30, resolves the overlap with TASK-040's nightly job; original: "Writes materialized results to customer_analytics_monthly table")*
+  - [x] Idempotent execution: safe to rerun multiple times without double-counting
+  - [x] Logs metrics on execution duration and processed account count *(accepted clarification 2026-10-30, resolves the overlap with TASK-040's nightly job; original: "Logs metrics on execution duration and processed customer count")*
+  - [x] Customer segmentation re-runs weekly through Celery beat with idempotent upserts (ADR-0012) *(added 2026-10-30 with the clarification above)*
 - **Definition of done (evidence):** Integration tests verify batch execution against test database with 100 accounts.
 - **Required checks:**
   - Automated: CI job or `scripts/dev.py` command exercised in tests; works from a fresh clone; correctness tests on aggregates with fixed fixtures (edge cases: empty history, single month)
@@ -2135,9 +2135,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #93 | **Sprint:** 5 | **Priority:** could | **Size:** M (1.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (merged in #154 on Wed 29 Oct; follow-ups #159, #160, #162, #168, #169; fuzz run 40948518916 on main: 940 cases, 0 5xx; not complete until a teammate reviews the maintainer-written changes) | **Status:** In Review | **Risk:** Low
+- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Wed 29 Oct (merged in #154; follow-ups #159, #160, #162, #168, #169 merged; fuzz run 40948518916 on main: 940 cases, 0 5xx, 0 schema violations) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-001 (#12, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** In Review
+- **Mode:** Done
 - **Goal:** Property-based API fuzzing job running Schemathesis against the OpenAPI specification.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -2216,9 +2216,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #96 | **Sprint:** 5 | **Priority:** could | **Size:** S (0.5 person-days estimate) | **Epic:** Identity & Core Banking
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (merged in #172 on Fri 30 Oct as ADR 0013; not complete until a teammate reviews the maintainer's corrections) | **Status:** In Review | **Risk:** Low
+- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Fri 30 Oct (merged in #172; ADR committed as `docs/adr/0013-passkeys-evaluation.md` because 0008 is the ledger keyset-cursor ADR) | **Status:** Done | **Risk:** Low
 - **Depends on:** none
-- **Mode:** In Review
+- **Mode:** Done
 - **Goal:** Architecture evaluation and proof-of-concept for FIDO2/WebAuthn passkey authentication.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -2802,8 +2802,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ## 6a. Requirement-gap tasks (added 2026-10-30, unassigned and unscheduled)
 
 Added after tracing the use case document v0.2 against the backlog (`docs/requirements/traceability.md`): each covers a
-requirement that no existing task did. They are **not** in the sprint schedule above and have no owner: assigning
-people and dates against the Nov 3 deadline is a team decision (section 1's slip order applies). The `sprint = 7` value
+requirement that no existing task did. The product owner confirmed on 2026-10-30 that there is capacity for them; they stay
+unassigned with no dates and remain Todo on the board until someone starts one (no deferral). The `sprint = 7` value
 in the backlog only satisfies the validator's 1-7 range. TASK-107 (2026-10-30) implements the demographics
 decision in ADR-0015.
 
@@ -2840,9 +2840,9 @@ decision in ADR-0015.
 
 - **Issue:** #178 | **Sprint:** unscheduled | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Core Banking & Ledger
 - **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** In Progress | **Risk:** Unscheduled
 - **Depends on:** none.
-- **Mode:** Unscheduled
+- **Mode:** In Progress (geographic criterion merged in #196; login-failure and new-device criteria open)
 - **Goal:** The transfer risk score uses the UC-09 triggers 'multiple login failures' and 'new location' (as new device or network).
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
