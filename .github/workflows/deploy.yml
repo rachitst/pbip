@@ -180,6 +180,7 @@ jobs:
         # The runner's values are meant to reach the host: quote them with %q into one remote command.
         run: |
           remote="$(printf 'cd ~/pbip && bash deploy.sh deploy %q %q' "$IMAGE_PREFIX" "$IMAGE_TAG")"
+          # shellcheck disable=SC2029 # client-side expansion is intended; both values are %q-escaped above
           ssh staging "$remote"
       - uses: actions/setup-python@v7
         if: env.DRY_RUN != 'true'
