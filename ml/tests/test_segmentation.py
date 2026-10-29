@@ -198,7 +198,7 @@ def test_clustering_edge_case_identical_samples() -> None:
         )
         for _ in range(10)
     ]
-    assignments, report = cluster_customers(identical, n_clusters=3, random_state=42)
+    assignments, report = cluster_customers(identical, n_clusters=5, random_state=42)
 
     assert len(assignments) == 10
     assert report.n_samples == 10
@@ -224,8 +224,47 @@ def test_each_persona_blob_is_named_after_its_dominant_feature() -> None:
     assert report.silhouette_score is not None and report.silhouette_score > 0.4
 
 
-def test_more_clusters_than_personas_is_rejected() -> None:
+def test_only_five_clusters_can_carry_the_five_persona_names() -> None:
+    """Audit H2: with k < 5 the ranking-based naming labelled grocery spenders HIGH_NET_WORTH."""
     from scripts.run_segmentation import synthetic_customers
 
-    with pytest.raises(ValueError, match="between 1 and 5"):
-        cluster_customers(synthetic_customers(20), n_clusters=6)
+    for k in (1, 2, 4, 6):
+        with pytest.raises(ValueError, match="n_clusters must be 5"):
+            cluster_customers(synthetic_customers(20), n_clusters=k)
+    with pytest.raises(ValueError, match="At least 5 customers"):
+        cluster_customers(synthetic_customers(4), n_clusters=5)
+
+
+def test_an_extreme_outlier_still_gets_a_finite_confidence() -> None:
+    """Audit M8: exp(-distance) underflowed to 0 for every centroid and the confidence became NaN."""
+    from scripts.run_segmentation import synthetic_customers
+
+    customers = synthetic_customers(25)
+    outlier = customers[0].model_copy(
+        update={"customer_id": UUID(int=999), "savings_ratio": -1e8, "monetary_minor": 10**13}
+    )
+    assignments, _report = cluster_customers([*customers, outlier], n_clusters=5)
+    for assignment in assignments:
+        assert 0.0 <= assignment.confidence_score <= 1.0
+        assert assignment.confidence_score == assignment.confidence_score  # not NaN
+
+
+def test_quality_metrics_are_undefined_when_every_customer_is_its_own_cluster() -> None:
+    from scripts.run_segmentation import synthetic_customers
+
+    _assignments, report = cluster_customers(synthetic_customers(5), n_clusters=5)
+    assert report.n_clusters == 5 and report.n_samples == 5
+    assert report.silhouette_score is None and report.davies_bouldin_index is None
+
+
+def test_explanations_state_measured_facts_relative_to_the_population() -> None:
+    """Audit M7: templates claimed 'high frequency' or 'channels' regardless of the customer's data."""
+    from scripts.run_segmentation import synthetic_customers
+
+    assignments, _report = cluster_customers(synthetic_customers(125), n_clusters=5)
+    by_segment = {a.segment: a.explanation for a in assignments}
+    assert "the population median" in by_segment[CustomerSegmentName.HIGH_NET_WORTH]
+    assert "debits per month" in by_segment[CustomerSegmentName.FREQUENT_TRANSACTOR]
+    assert "days since the last entry" in by_segment[CustomerSegmentName.INACTIVE_SAVER]
+    for text in by_segment.values():
+        assert "channels" not in text and "High " not in text

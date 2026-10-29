@@ -77,7 +77,7 @@ def test_job_skips_cleanly_when_too_few_customers_have_activity(
     make_customer()  # registered, no ledger activity
     result = run_offline_segmentation_job(db, utcnow())
     assert result.n_clusters == 0 and result.total_customers_assigned == 0
-    assert result.skipped_reason is not None and "at least 2" in result.skipped_reason
+    assert result.skipped_reason is not None and "at least 5" in result.skipped_reason
     assert db.execute(select(func.count()).select_from(CustomerSegment)).scalar_one() == 0
 
 
@@ -88,7 +88,7 @@ def test_job_persists_explainable_segments_idempotently_and_the_endpoint_serves_
     migrated_engine: Engine,
     db: Session,
 ) -> None:
-    spenders = [make_customer(funds=500_000) for _ in range(3)]
+    spenders = [make_customer(funds=500_000) for _ in range(4)]
     saver = make_customer(funds=500_000)
     sink = make_customer()
     payees = {actor.customer_id: make_verified_payee(actor, sink) for actor in (*spenders, saver)}
@@ -103,11 +103,11 @@ def test_job_persists_explainable_segments_idempotently_and_the_endpoint_serves_
             )
     idle = make_customer()  # no activity: must not get a segment
 
-    first = run_offline_segmentation_job(db, utcnow(), n_clusters=2)
-    assert first.skipped_reason is None and first.n_clusters == 2
-    assert first.n_samples == 5  # four customers with debits plus the sink with credits
-    assert first.total_customers_assigned == 5
-    assert sum(first.cluster_distribution.values()) == 5
+    first = run_offline_segmentation_job(db, utcnow())
+    assert first.skipped_reason is None and first.n_clusters == 5
+    assert first.n_samples == 6  # five customers with debits plus the sink with credits
+    assert first.total_customers_assigned == 6
+    assert sum(first.cluster_distribution.values()) == 6
     assert first.silhouette_score is not None and first.davies_bouldin_index is not None
     rows = db.execute(select(CustomerSegment)).scalars().all()
     assert {r.customer_id for r in rows} == {a.customer_id for a in (*spenders, saver, sink)}
@@ -125,6 +125,6 @@ def test_job_persists_explainable_segments_idempotently_and_the_endpoint_serves_
     assert client.get(SEGMENT_URL, headers=idle.headers).status_code == 404
 
     # Re-running updates in place: same customers, no duplicate rows.
-    second = run_offline_segmentation_job(db, utcnow(), n_clusters=2)
-    assert second.total_customers_assigned == 5
-    assert db.execute(select(func.count()).select_from(CustomerSegment)).scalar_one() == 5
+    second = run_offline_segmentation_job(db, utcnow())
+    assert second.total_customers_assigned == 6
+    assert db.execute(select(func.count()).select_from(CustomerSegment)).scalar_one() == 6
