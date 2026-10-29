@@ -11,6 +11,7 @@ import calendar
 from datetime import datetime, timedelta
 from uuid import UUID
 
+import structlog
 from sqlalchemy.orm import Session
 
 from pbip_api.core.db import utcnow
@@ -29,6 +30,7 @@ from pbip_api.modules.analytics.schemas import (
     SpendingTrendsResponse,
 )
 
+_logger = structlog.get_logger(__name__)
 MATERIALIZED_MONTHS_BACK = 2
 REVERSAL_LOOKBACK = timedelta(
     days=2
@@ -82,6 +84,10 @@ def materialize_monthly_spending(
     it, so this is only useful to tests.
     """
     now = now or utcnow()
+    if not repository.try_lock_materialization(session):
+        _logger.info("spending_materialization_skipped", reason="another run holds the lock")
+        session.rollback()
+        return 0
     if periods is None:
         periods = previous_closed_months(now, MATERIALIZED_MONTHS_BACK)
     targets: list[tuple[UUID, int, int]] = [
@@ -99,6 +105,7 @@ def materialize_monthly_spending(
         records = repository.compute_monthly_spending_from_entries(session, account_id, year, month)
         repository.upsert_monthly_aggregates(session, account_id, year, month, records)
     session.commit()
+    _logger.info("spending_materialized", account_months=len(targets))
     return len(targets)
 
 

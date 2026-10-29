@@ -95,6 +95,10 @@ def get_financial_health_metrics(
     )
 
 
+# Arbitrary, project-unique key for pg advisory locks taken by the spending materialisation.
+MATERIALIZATION_LOCK_KEY = 4_040_001
+
+
 def month_window(year: int, month: int) -> tuple[datetime, datetime]:
     """[start, end) of a calendar month in UTC; ledger timestamps are UTC."""
     start = datetime(year, month, 1, tzinfo=UTC)
@@ -162,6 +166,16 @@ def compute_monthly_spending_from_entries(
     ]
     records.sort(key=lambda r: r.total_amount_minor, reverse=True)
     return records
+
+
+def try_lock_materialization(session: Session) -> bool:
+    """Transaction-scoped advisory lock so two materialisation runs never interleave (released at
+    commit/rollback). Returns False when another run holds it."""
+    return bool(
+        session.execute(
+            select(func.pg_try_advisory_xact_lock(MATERIALIZATION_LOCK_KEY))
+        ).scalar_one()
+    )
 
 
 def account_months_reversed_since(session: Session, since: datetime) -> list[tuple[UUID, int, int]]:
@@ -240,7 +254,7 @@ def upsert_monthly_aggregates(
                 "total_amount_minor": record.total_amount_minor,
                 "transaction_count": record.transaction_count,
             }
-            for record in records
+            for record in sorted(records, key=lambda r: r.category)  # stable lock order
         ]
     )
     session.execute(

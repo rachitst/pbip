@@ -548,3 +548,19 @@ def test_a_reversal_refreshes_the_stored_month_even_outside_the_default_periods(
         materialize_monthly_spending(db, periods=[far], reversed_since=now + timedelta(days=1)) == 0
     )
     assert _stored_rows(db, alice.account_id) == set()
+
+
+def test_a_second_materialization_run_skips_while_one_holds_the_lock(
+    make_customer: Callable[..., Actor], migrated_engine: Engine, db: Session
+) -> None:
+    """Audit M2: overlapping runs must not interleave their deletes and upserts."""
+    from pbip_api.modules.analytics.repository import MATERIALIZATION_LOCK_KEY
+
+    make_customer(funds=10_000)
+    with migrated_engine.connect() as other, other.begin():
+        assert other.execute(
+            text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": MATERIALIZATION_LOCK_KEY}
+        ).scalar_one()
+        assert materialize_monthly_spending(db, periods=[(2001, 1)]) == 0  # skipped
+        # Lock released at the end of that transaction: the next run proceeds.
+    assert materialize_monthly_spending(db, periods=[(2001, 1)]) == 0  # nothing to write, but ran
