@@ -2133,9 +2133,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #93 | **Sprint:** 5 | **Priority:** could | **Size:** M (1.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (9.0 days of slack)
+- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Wed 29 Oct (merged in #154; definition of done shown by fuzz run 40914561750 on main: 984 cases, 0 5xx, 0 schema violations) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-001 (#12, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** Parallel: can start immediately
+- **Mode:** Done
 - **Goal:** Property-based API fuzzing job running Schemathesis against the OpenAPI specification.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -2145,9 +2145,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Configured to run as scheduled GitHub Action workflow
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #93`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Generates randomized payloads testing boundary cases across all endpoints
-  - [ ] Verifies 100% schema conformance and zero unhandled 500 Internal Server Errors
-  - [ ] Configured to run as scheduled GitHub Action workflow
+  - [x] Generates randomized payloads testing boundary cases across all endpoints
+  - [x] Verifies 100% schema conformance and zero unhandled 500 Internal Server Errors
+  - [x] Configured to run as scheduled GitHub Action workflow
 - **Definition of done (evidence):** Fuzz test completes 500 test cases with zero unhandled 500 errors.
 - **Required checks:**
   - Automated: CI job or `scripts/dev.py` command exercised in tests; works from a fresh clone; the suite itself runs in CI or via a documented command and asserts its thresholds
