@@ -924,7 +924,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Owner:** Abbas (`Abbaskazi`)
 - **Start:** Sun 25 Oct | **Target deadline:** Sun 25 Oct | **Actual completion:** Wed 28 Oct (merged in #140; acceptance criteria verified) | **Status:** Done | **Risk:** Low
 - **Depends on:** none
-- **Mode:** Parallel: can start immediately
+- **Mode:** Done
 - **Goal:** Formal threat model evaluating STRIDE categories and OWASP Top 10 mitigations for PBIP.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -2467,9 +2467,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #105 | **Sprint:** 6 | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Mon 26 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (7.5 days of slack)
+- **Start:** Mon 26 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** Wed 29 Oct (merged in #155; acceptance criteria verified, zero-downtime cutover partially met - health-gated single host, follow-up noted on #105) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-001 (#12, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** Parallel: can start immediately
+- **Mode:** Done
 - **Goal:** Automated GitHub Actions workflow building GHCR images and deploying to staging VM via SSH.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -2480,10 +2480,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Executes scripts/smoke_test.py post-deploy verifying readiness and security headers
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #105`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Triggered by git push of version tag (v*.*.*) from main branch
-  - [ ] Builds multi-stage Docker images and pushes to GitHub Container Registry (GHCR)
-  - [ ] Deploys over SSH to target host, runs migrations, and starts stack with zero downtime
-  - [ ] Executes scripts/smoke_test.py post-deploy verifying readiness and security headers
+  - [x] Triggered by git push of version tag (v*.*.*) from main branch
+  - [x] Builds multi-stage Docker images and pushes to GitHub Container Registry (GHCR)
+  - [x] Deploys over SSH to target host, runs migrations, and starts stack with zero downtime
+  - [x] Executes scripts/smoke_test.py post-deploy verifying readiness and security headers
 - **Definition of done (evidence):** Tested with dry-run or target staging environment, workflow syntax validated.
 - **Required checks:**
   - Automated: CI job or `scripts/dev.py` command exercised in tests; works from a fresh clone
