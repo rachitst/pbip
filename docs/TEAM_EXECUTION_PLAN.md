@@ -1628,16 +1628,18 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
   2. Write failing tests from the acceptance criteria below.
-  3. Implement and make the tests pass for: Celery task runs nightly at 02:00 UTC computing previous day aggregates
-  4. Implement and make the tests pass for: Writes materialized results to customer_analytics_monthly table
+  3. Implement and make the tests pass for: Celery task runs nightly at 02:00 UTC materialising the closed-month spending aggregates the analytics endpoints read (ADR-0011)
+  4. Implement and make the tests pass for: Writes materialized results to the monthly_category_spending table (no separate customer_analytics_monthly table)
   5. Implement and make the tests pass for: Idempotent execution: safe to rerun multiple times without double-counting
-  6. Implement and make the tests pass for: Logs metrics on execution duration and processed customer count
-  7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #75`) and request review.
+  6. Implement and make the tests pass for: Logs metrics on execution duration and processed account count
+  7. Implement and make the tests pass for: Customer segmentation re-runs weekly through Celery beat with idempotent upserts (ADR-0012)
+  8. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #75`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Celery task runs nightly at 02:00 UTC computing previous day aggregates
-  - [ ] Writes materialized results to customer_analytics_monthly table
+  - [ ] Celery task runs nightly at 02:00 UTC materialising the closed-month spending aggregates the analytics endpoints read (ADR-0011) *(accepted clarification 2026-10-30, resolves the overlap with TASK-040's nightly job; original: "Celery task runs nightly at 02:00 UTC computing previous day aggregates")*
+  - [ ] Writes materialized results to the monthly_category_spending table (no separate customer_analytics_monthly table) *(accepted clarification 2026-10-30, resolves the overlap with TASK-040's nightly job; original: "Writes materialized results to customer_analytics_monthly table")*
   - [ ] Idempotent execution: safe to rerun multiple times without double-counting
-  - [ ] Logs metrics on execution duration and processed customer count
+  - [ ] Logs metrics on execution duration and processed account count *(accepted clarification 2026-10-30, resolves the overlap with TASK-040's nightly job; original: "Logs metrics on execution duration and processed customer count")*
+  - [ ] Customer segmentation re-runs weekly through Celery beat with idempotent upserts (ADR-0012) *(added 2026-10-30 with the clarification above)*
 - **Definition of done (evidence):** Integration tests verify batch execution against test database with 100 accounts.
 - **Required checks:**
   - Automated: CI job or `scripts/dev.py` command exercised in tests; works from a fresh clone; correctness tests on aggregates with fixed fixtures (edge cases: empty history, single month)

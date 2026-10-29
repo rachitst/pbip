@@ -94,9 +94,10 @@ Last reviewed against `main` on 2026-10-30 (local verification run recorded in
    selects DB-IP Lite (CC BY 4.0, country level) and records accuracy, privacy and spoofing limits.
 2. **"Demographics" (UC-12)**: the customer model stores no demographic attributes beyond identity
    data; collecting more is a privacy and data-minimisation decision for the product owner.
-3. **TASK-052 vs. TASK-040**: TASK-052 specifies a 02:00 job writing `customer_analytics_monthly`; the
-   merged TASK-040 work already runs a 02:30 job writing `monthly_category_spending` (ADR-0011). The
-   team should decide whether TASK-052 is narrowed to the remaining jobs or re-specified.
+3. **TASK-052 vs. TASK-040 (resolved 2026-10-30)**: TASK-052's criteria were clarified onto the
+   existing job instead of adding a second one: one nightly job at 02:00 UTC writing
+   `monthly_category_spending`, with duration and account counts logged and a 100-account test, plus a
+   weekly segmentation run (ADR-0011 addendum, ADR-0012).
 4. **Delivery capacity**: section 1 of the plan already shows the Nov 3 deadline needs a 3.4x speed-up;
    the 13 new tasks are unscheduled until the team applies the slip order.
 
