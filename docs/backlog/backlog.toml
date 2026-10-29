@@ -1913,3 +1913,21 @@ acceptance_criteria = [
 ]
 dependencies = []
 definition_of_done = "Diagram committed under docs/architecture/ with the generation command documented."
+
+[[tasks]]
+id = "TASK-107"
+title = "Consented Date of Birth and Age Band for Recommendations"
+epic = "Identity & Core Banking"
+sprint = 7
+priority = "should"
+size = "M"
+labels = ["api", "security", "compliance"]
+outcome = "The minimum demographic input for recommendations (ADR-0015): optional date of birth, explicit consent, derived age band."
+acceptance_criteria = [
+    "Customer can set or delete their own date of birth (age 18 to 120) and grant or withdraw a separate recommendations consent; both changes are audited with policy version",
+    "Recommendation service receives only the derived age band (18-25, 26-35, 36-50, 51-59, 60+ or unknown) and only when consent is granted",
+    "No date of birth is inferred or backfilled for existing customers; without consent or a date the band is unknown",
+    "Date of birth never appears in logs, staff responses, or assistant tool output (redaction and response-shape tests)",
+]
+dependencies = []
+definition_of_done = "Integration tests for consent grant and withdrawal, ownership (404 on other customers), validation, redaction; migration with downgrade if schema changes."
