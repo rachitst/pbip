@@ -1,8 +1,24 @@
 """Pydantic schemas for analytics: spending breakdown and trends."""
 
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+Rating = Literal["EXCELLENT", "GOOD", "FAIR", "NEEDS_ATTENTION"]
+Assessment = Literal[
+    "OPTIMAL",
+    "MODERATE",
+    "DEFICIT",
+    "VOLATILE",
+    "NO_DEBT",
+    "BURDENED",
+    "CRITICAL",
+    "ADEQUATE",
+    "LOW",
+    "VULNERABLE",
+    "INSUFFICIENT_DATA",
+]
 
 
 class CategorySpendingItem(BaseModel):
@@ -94,3 +110,57 @@ class SpendingTrendsResponse(BaseModel):
     top_categories_decreasing: list[CategoryShiftItem] = Field(
         default_factory=list, description="Categories with highest spending decreases"
     )
+
+
+class HealthScoreComponent(BaseModel):
+    """One scored component of the financial health score, with the metric behind it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    score: int = Field(..., ge=0, description="Points earned")
+    max_score: int = Field(..., gt=0, description="Points available (the component weight)")
+    weight_percentage: float = Field(..., ge=0.0, le=100.0, description="Weight in percent")
+    metric_value: float = Field(..., description="The underlying metric (rate, CV, ratio, months)")
+    formatted_value: str = Field(
+        ..., description="Human-readable metric, e.g. '24.5%', '4.2 months'"
+    )
+    assessment: Assessment = Field(
+        ..., description="Band of the metric; INSUFFICIENT_DATA when it cannot be computed yet"
+    )
+
+
+class FinancialHealthComponents(BaseModel):
+    """Component-wise breakdown of the financial health score."""
+
+    model_config = ConfigDict(frozen=True)
+
+    savings_rate: HealthScoreComponent = Field(..., description="Savings rate (30 points)")
+    expense_volatility: HealthScoreComponent = Field(
+        ..., description="Expense volatility (25 points)"
+    )
+    emi_to_income: HealthScoreComponent = Field(
+        ..., description="Loan/EMI repayments to income (25 points)"
+    )
+    buffer_months: HealthScoreComponent = Field(
+        ..., description="Cash buffer in months (20 points)"
+    )
+
+
+class FinancialHealthScoreResponse(BaseModel):
+    """Financial health score (0-100) with explainable components and actionable tips."""
+
+    model_config = ConfigDict(frozen=True)
+
+    account_id: UUID = Field(..., description="Target account identifier")
+    currency: str = Field(..., min_length=3, max_length=3, description="ISO currency code")
+    overall_score: int = Field(..., ge=0, le=100, description="Sum of the component points")
+    rating: Rating = Field(
+        ..., description="EXCELLENT >= 80, GOOD >= 60, FAIR >= 40, else NEEDS_ATTENTION"
+    )
+    insufficient_data: bool = Field(
+        ..., description="True when at least one component could not be computed from the history"
+    )
+    months_observed: int = Field(..., ge=0, description="Calendar months of history in the window")
+    window_months: int = Field(..., gt=0, description="Length of the trailing window used")
+    components: FinancialHealthComponents = Field(..., description="Component breakdown")
+    recommendations: list[str] = Field(default_factory=list, description="Actionable tips")

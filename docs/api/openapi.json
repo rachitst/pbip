@@ -758,6 +758,112 @@
         "title": "EntryOut",
         "type": "object"
       },
+      "FinancialHealthComponents": {
+        "description": "Component-wise breakdown of the financial health score.",
+        "properties": {
+          "buffer_months": {
+            "$ref": "#/components/schemas/HealthScoreComponent",
+            "description": "Cash buffer in months (20 points)"
+          },
+          "emi_to_income": {
+            "$ref": "#/components/schemas/HealthScoreComponent",
+            "description": "Loan/EMI repayments to income (25 points)"
+          },
+          "expense_volatility": {
+            "$ref": "#/components/schemas/HealthScoreComponent",
+            "description": "Expense volatility (25 points)"
+          },
+          "savings_rate": {
+            "$ref": "#/components/schemas/HealthScoreComponent",
+            "description": "Savings rate (30 points)"
+          }
+        },
+        "required": [
+          "savings_rate",
+          "expense_volatility",
+          "emi_to_income",
+          "buffer_months"
+        ],
+        "title": "FinancialHealthComponents",
+        "type": "object"
+      },
+      "FinancialHealthScoreResponse": {
+        "description": "Financial health score (0-100) with explainable components and actionable tips.",
+        "properties": {
+          "account_id": {
+            "description": "Target account identifier",
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "components": {
+            "$ref": "#/components/schemas/FinancialHealthComponents",
+            "description": "Component breakdown"
+          },
+          "currency": {
+            "description": "ISO currency code",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency",
+            "type": "string"
+          },
+          "insufficient_data": {
+            "description": "True when at least one component could not be computed from the history",
+            "title": "Insufficient Data",
+            "type": "boolean"
+          },
+          "months_observed": {
+            "description": "Calendar months of history in the window",
+            "minimum": 0.0,
+            "title": "Months Observed",
+            "type": "integer"
+          },
+          "overall_score": {
+            "description": "Sum of the component points",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Overall Score",
+            "type": "integer"
+          },
+          "rating": {
+            "description": "EXCELLENT >= 80, GOOD >= 60, FAIR >= 40, else NEEDS_ATTENTION",
+            "enum": [
+              "EXCELLENT",
+              "GOOD",
+              "FAIR",
+              "NEEDS_ATTENTION"
+            ],
+            "title": "Rating",
+            "type": "string"
+          },
+          "recommendations": {
+            "description": "Actionable tips",
+            "items": {
+              "type": "string"
+            },
+            "title": "Recommendations",
+            "type": "array"
+          },
+          "window_months": {
+            "description": "Length of the trailing window used",
+            "exclusiveMinimum": 0.0,
+            "title": "Window Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "account_id",
+          "currency",
+          "overall_score",
+          "rating",
+          "insufficient_data",
+          "months_observed",
+          "window_months",
+          "components"
+        ],
+        "title": "FinancialHealthScoreResponse",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -769,6 +875,68 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthScoreComponent": {
+        "description": "One scored component of the financial health score, with the metric behind it.",
+        "properties": {
+          "assessment": {
+            "description": "Band of the metric; INSUFFICIENT_DATA when it cannot be computed yet",
+            "enum": [
+              "OPTIMAL",
+              "MODERATE",
+              "DEFICIT",
+              "VOLATILE",
+              "NO_DEBT",
+              "BURDENED",
+              "CRITICAL",
+              "ADEQUATE",
+              "LOW",
+              "VULNERABLE",
+              "INSUFFICIENT_DATA"
+            ],
+            "title": "Assessment",
+            "type": "string"
+          },
+          "formatted_value": {
+            "description": "Human-readable metric, e.g. '24.5%', '4.2 months'",
+            "title": "Formatted Value",
+            "type": "string"
+          },
+          "max_score": {
+            "description": "Points available (the component weight)",
+            "exclusiveMinimum": 0.0,
+            "title": "Max Score",
+            "type": "integer"
+          },
+          "metric_value": {
+            "description": "The underlying metric (rate, CV, ratio, months)",
+            "title": "Metric Value",
+            "type": "number"
+          },
+          "score": {
+            "description": "Points earned",
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "integer"
+          },
+          "weight_percentage": {
+            "description": "Weight in percent",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Weight Percentage",
+            "type": "number"
+          }
+        },
+        "required": [
+          "score",
+          "max_score",
+          "weight_percentage",
+          "metric_value",
+          "formatted_value",
+          "assessment"
+        ],
+        "title": "HealthScoreComponent",
         "type": "object"
       },
       "LiveResponse": {
@@ -2292,6 +2460,57 @@
         "summary": "Clear a user's lockout and login rate-limit counters (ADMIN with MFA)",
         "tags": [
           "admin"
+        ]
+      }
+    },
+    "/api/v1/analytics/health-score": {
+      "get": {
+        "description": "Savings rate, expense volatility, loan repayments to income, cash buffer (owned account).",
+        "operationId": "get_customer_health_score_api_v1_analytics_health_score_get",
+        "parameters": [
+          {
+            "description": "Target account identifier",
+            "in": "query",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "description": "Target account identifier",
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinancialHealthScoreResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Financial health score (0-100) with explainable components and tips",
+        "tags": [
+          "analytics"
         ]
       }
     },

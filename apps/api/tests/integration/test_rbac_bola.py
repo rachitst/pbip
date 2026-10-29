@@ -29,6 +29,7 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("post", "/api/v1/auth/password-change"),
         ("get", f"/api/v1/analytics/spending?account_id={uuid.uuid4()}"),
         ("get", f"/api/v1/analytics/trends?account_id={uuid.uuid4()}"),
+        ("get", f"/api/v1/analytics/health-score?account_id={uuid.uuid4()}"),
         ("get", f"/api/v1/admin/users/{uuid.uuid4()}/lockout"),
         ("post", f"/api/v1/admin/users/{uuid.uuid4()}/unlock"),
     ]:
@@ -72,6 +73,12 @@ def test_staff_have_no_customer_profile(
     assert (
         client.get(
             f"/api/v1/analytics/trends?account_id={uuid.uuid4()}", headers=analyst.headers
+        ).status_code
+        == 403
+    )
+    assert (
+        client.get(
+            f"/api/v1/analytics/health-score?account_id={uuid.uuid4()}", headers=analyst.headers
         ).status_code
         == 403
     )
@@ -195,6 +202,12 @@ def test_bola_customer_b_cannot_touch_customer_a_objects(
         ),
         "analytics trends non-existent account": client.get(
             f"/api/v1/analytics/trends?account_id={uuid.uuid4()}", headers=h
+        ),
+        "analytics health-score for victim account": client.get(
+            f"/api/v1/analytics/health-score?account_id={ids['account']}", headers=h
+        ),
+        "analytics health-score non-existent account": client.get(
+            f"/api/v1/analytics/health-score?account_id={uuid.uuid4()}", headers=h
         ),
         "get payee": client.get(f"/api/v1/payees/{ids['payee']}", headers=h),
         "verify payee": client.post(f"/api/v1/payees/{ids['payee']}/verify", headers=h),

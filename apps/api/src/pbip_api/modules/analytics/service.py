@@ -15,11 +15,13 @@ from sqlalchemy.orm import Session
 
 from pbip_api.core.db import utcnow
 from pbip_api.modules.analytics import repository
+from pbip_api.modules.analytics.health import compute_financial_health_score
 from pbip_api.modules.analytics.models import MonthlyCategorySpending
 from pbip_api.modules.analytics.policy import verify_account_ownership
 from pbip_api.modules.analytics.schemas import (
     CategoryShiftItem,
     CategorySpendingItem,
+    FinancialHealthScoreResponse,
     MonthlySpendingSummary,
     SpendingBreakdownResponse,
     SpendingTrendsResponse,
@@ -187,4 +189,15 @@ def get_spending_trends(
         ),
         top_categories_increasing=increasing[:5],
         top_categories_decreasing=decreasing[:5],
+    )
+
+
+def get_financial_health_score(
+    session: Session, customer_id: UUID, account_id: UUID
+) -> FinancialHealthScoreResponse:
+    """Explainable health score of one owned account from its trailing ledger history."""
+    account = verify_account_ownership(session, customer_id, account_id)
+    metrics = repository.get_financial_health_metrics(session, account.id, utcnow())
+    return compute_financial_health_score(
+        account.id, account.currency, account.available_balance, metrics
     )

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from pbip_api.core.db import get_session
 from pbip_api.modules.analytics import service
 from pbip_api.modules.analytics.schemas import (
+    FinancialHealthScoreResponse,
     SpendingBreakdownResponse,
     SpendingTrendsResponse,
 )
@@ -60,4 +61,21 @@ def get_customer_trends(
         account_id=account_id,
         year=year,
         month=month,
+    )
+
+
+@router.get(
+    "/health-score",
+    response_model=FinancialHealthScoreResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Financial health score (0-100) with explainable components and tips",
+)
+def get_customer_health_score(
+    account_id: UUID = Query(..., description="Target account identifier"),
+    customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+) -> FinancialHealthScoreResponse:
+    """Savings rate, expense volatility, loan repayments to income, cash buffer (owned account)."""
+    return service.get_financial_health_score(
+        session=session, customer_id=customer.id, account_id=account_id
     )

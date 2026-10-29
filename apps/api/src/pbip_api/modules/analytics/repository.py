@@ -4,6 +4,7 @@ The ledger is read through its models only (no ledger internals are called) and 
 the only table this module writes is ``monthly_category_spending``.
 """
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -12,7 +13,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from pbip_api.modules.accounts.models import Account, AccountType
-from pbip_api.modules.analytics.categorization import categorize_transaction
+from pbip_api.modules.analytics.categorization import categorize_transaction, is_debt_repayment
 from pbip_api.modules.analytics.models import MonthlyCategorySpending
 from pbip_api.modules.ledger.models import (
     EntryDirection,
@@ -21,6 +22,75 @@ from pbip_api.modules.ledger.models import (
     TransactionStatus,
     TransactionType,
 )
+
+HEALTH_WINDOW_MONTHS = 12
+INCOME_TYPES = (TransactionType.DEPOSIT, TransactionType.TRANSFER)
+
+
+@dataclass(frozen=True)
+class HealthMetrics:
+    """Ledger facts behind the financial health score, over the trailing window (minor units)."""
+
+    income_minor: int  # CREDIT entries of POSTED deposits and transfers (refunds excluded)
+    spend_minor: int  # DEBIT entries of POSTED non-REVERSAL transactions (as in the breakdown)
+    monthly_spend_minor: list[int]  # spend per calendar month that had any, oldest first
+    debt_repayments_minor: int  # the part of spend whose reference marks a loan or EMI instalment
+    months_observed: int  # calendar months from the first entry in the window to now; 0 if none
+
+
+def window_start(now: datetime, months: int) -> datetime:
+    """First instant of the calendar month ``months - 1`` months before ``now`` (UTC)."""
+    index = now.year * 12 + (now.month - 1) - (months - 1)
+    return datetime(index // 12, index % 12 + 1, 1, tzinfo=UTC)
+
+
+def get_financial_health_metrics(
+    session: Session, account_id: UUID, now: datetime
+) -> HealthMetrics:
+    """One pass over the account's entries in the window (which bounds the work per request)."""
+    start = window_start(now, HEALTH_WINDOW_MONTHS)
+    stmt = (
+        select(
+            TransactionEntry.amount,
+            TransactionEntry.direction,
+            TransactionEntry.created_at,
+            Transaction.type,
+            Transaction.reference,
+        )
+        .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
+        .where(
+            TransactionEntry.account_id == account_id,
+            TransactionEntry.created_at >= start,
+            Transaction.status == TransactionStatus.POSTED,
+            Transaction.type != TransactionType.REVERSAL,
+        )
+        .order_by(TransactionEntry.created_at)
+    )
+    income = spend = debt = 0
+    monthly: dict[tuple[int, int], int] = {}
+    first: datetime | None = None
+    for amount, direction, created_at, tx_type, reference in session.execute(stmt).all():
+        first = first or created_at
+        if direction == EntryDirection.CREDIT:
+            if tx_type in INCOME_TYPES:
+                income += int(amount)
+            continue
+        spend += int(amount)
+        stamp = created_at.astimezone(UTC)
+        monthly[(stamp.year, stamp.month)] = monthly.get((stamp.year, stamp.month), 0) + int(amount)
+        if is_debt_repayment(reference):
+            debt += int(amount)
+    months_observed = 0
+    if first is not None:
+        begin = first.astimezone(UTC)
+        months_observed = (now.year - begin.year) * 12 + (now.month - begin.month) + 1
+    return HealthMetrics(
+        income_minor=income,
+        spend_minor=spend,
+        monthly_spend_minor=[monthly[key] for key in sorted(monthly)],
+        debt_repayments_minor=debt,
+        months_observed=months_observed,
+    )
 
 
 def month_window(year: int, month: int) -> tuple[datetime, datetime]:

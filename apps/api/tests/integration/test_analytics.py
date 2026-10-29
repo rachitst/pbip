@@ -468,3 +468,47 @@ def test_year_beyond_the_calendar_is_rejected_not_a_server_error(
         headers=alice.headers,
     )
     assert resp.status_code == 422, resp.text
+
+
+def test_financial_health_score_moves_with_ledger_activity(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_verified_payee: Callable[..., dict[str, Any]],
+    migrated_engine: Engine,
+) -> None:
+    """AC3: nothing static. A fresh account scores on what is known, then every transfer moves it."""
+    alice = make_customer(funds=300_000)
+    bob = make_customer()
+    payee = make_verified_payee(alice, bob)
+    age_payee(migrated_engine, payee["id"], 48)
+    url = f"/api/v1/analytics/health-score?account_id={alice.account_id}"
+
+    fresh = client.get(url, headers=alice.headers)
+    assert fresh.status_code == 200, fresh.text
+    assert fresh.json()["overall_score"] == 55 and fresh.json()["insufficient_data"] is True
+
+    _transfer(client, alice, payee["id"], 60_000, "October rent")
+    _transfer(client, alice, payee["id"], 40_000, "Home loan EMI")
+    _transfer(client, alice, payee["id"], 30_000, "Apollo chemist pharmacy")  # not debt
+
+    data = client.get(url, headers=alice.headers).json()
+    comps = data["components"]
+    # income 300,000 (deposit), spend 130,000: savings rate 56.7% -> 30 points
+    assert (
+        comps["savings_rate"]["score"] == 30 and comps["savings_rate"]["formatted_value"] == "56.7%"
+    )
+    # repayments 40,000 / 300,000 = 13.3% -> full points; "chemist" is not an EMI
+    assert comps["emi_to_income"]["metric_value"] == 0.1333
+    assert (
+        comps["emi_to_income"]["score"] == 25 and comps["emi_to_income"]["assessment"] == "OPTIMAL"
+    )
+    # one month of spend: volatility unknown; buffer 170,000 / 130,000 = 1.3 months -> LOW
+    assert comps["expense_volatility"]["assessment"] == "INSUFFICIENT_DATA"
+    assert comps["buffer_months"]["assessment"] == "LOW" and comps["buffer_months"]["score"] == 9
+    assert data["overall_score"] == 64 and data["rating"] == "GOOD"
+    assert data["months_observed"] == 1 and data["window_months"] == 12
+    assert any("cash buffer covers 1.3 months" in tip for tip in data["recommendations"])
+    assert data["account_id"] == str(alice.account_id) and data["currency"] == "INR"
+
+    # Bob cannot read Alice's score (BOLA).
+    assert client.get(url, headers=bob.headers).status_code == 404

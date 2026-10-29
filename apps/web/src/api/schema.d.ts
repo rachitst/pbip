@@ -141,6 +141,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/analytics/health-score": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Financial health score (0-100) with explainable components and tips
+         * @description Savings rate, expense volatility, loan repayments to income, cash buffer (owned account).
+         */
+        get: operations["get_customer_health_score_api_v1_analytics_health_score_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/analytics/spending": {
         parameters: {
             query?: never;
@@ -978,10 +998,111 @@ export interface components {
             /** Transaction Type */
             transaction_type: string;
         };
+        /**
+         * FinancialHealthComponents
+         * @description Component-wise breakdown of the financial health score.
+         */
+        FinancialHealthComponents: {
+            /** @description Cash buffer in months (20 points) */
+            buffer_months: components["schemas"]["HealthScoreComponent"];
+            /** @description Loan/EMI repayments to income (25 points) */
+            emi_to_income: components["schemas"]["HealthScoreComponent"];
+            /** @description Expense volatility (25 points) */
+            expense_volatility: components["schemas"]["HealthScoreComponent"];
+            /** @description Savings rate (30 points) */
+            savings_rate: components["schemas"]["HealthScoreComponent"];
+        };
+        /**
+         * FinancialHealthScoreResponse
+         * @description Financial health score (0-100) with explainable components and actionable tips.
+         */
+        FinancialHealthScoreResponse: {
+            /**
+             * Account Id
+             * Format: uuid
+             * @description Target account identifier
+             */
+            account_id: string;
+            /** @description Component breakdown */
+            components: components["schemas"]["FinancialHealthComponents"];
+            /**
+             * Currency
+             * @description ISO currency code
+             */
+            currency: string;
+            /**
+             * Insufficient Data
+             * @description True when at least one component could not be computed from the history
+             */
+            insufficient_data: boolean;
+            /**
+             * Months Observed
+             * @description Calendar months of history in the window
+             */
+            months_observed: number;
+            /**
+             * Overall Score
+             * @description Sum of the component points
+             */
+            overall_score: number;
+            /**
+             * Rating
+             * @description EXCELLENT >= 80, GOOD >= 60, FAIR >= 40, else NEEDS_ATTENTION
+             * @enum {string}
+             */
+            rating: "EXCELLENT" | "GOOD" | "FAIR" | "NEEDS_ATTENTION";
+            /**
+             * Recommendations
+             * @description Actionable tips
+             */
+            recommendations?: string[];
+            /**
+             * Window Months
+             * @description Length of the trailing window used
+             */
+            window_months: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HealthScoreComponent
+         * @description One scored component of the financial health score, with the metric behind it.
+         */
+        HealthScoreComponent: {
+            /**
+             * Assessment
+             * @description Band of the metric; INSUFFICIENT_DATA when it cannot be computed yet
+             * @enum {string}
+             */
+            assessment: "OPTIMAL" | "MODERATE" | "DEFICIT" | "VOLATILE" | "NO_DEBT" | "BURDENED" | "CRITICAL" | "ADEQUATE" | "LOW" | "VULNERABLE" | "INSUFFICIENT_DATA";
+            /**
+             * Formatted Value
+             * @description Human-readable metric, e.g. '24.5%', '4.2 months'
+             */
+            formatted_value: string;
+            /**
+             * Max Score
+             * @description Points available (the component weight)
+             */
+            max_score: number;
+            /**
+             * Metric Value
+             * @description The underlying metric (rate, CV, ratio, months)
+             */
+            metric_value: number;
+            /**
+             * Score
+             * @description Points earned
+             */
+            score: number;
+            /**
+             * Weight Percentage
+             * @description Weight in percent
+             */
+            weight_percentage: number;
         };
         /** LiveResponse */
         LiveResponse: {
@@ -1724,6 +1845,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UnlockResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_customer_health_score_api_v1_analytics_health_score_get: {
+        parameters: {
+            query: {
+                /** @description Target account identifier */
+                account_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinancialHealthScoreResponse"];
                 };
             };
             /** @description Validation Error */

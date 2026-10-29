@@ -76,6 +76,15 @@ CATEGORY_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
 )
 
 
+DEBT_REPAYMENT = re.compile(r"\b(emi|loan|mortgage|instal?lment|repayment)\b", re.IGNORECASE)
+
+
+def is_debt_repayment(reference: str | None) -> bool:
+    """Whether a debit's reference marks a loan or EMI instalment (word boundaries, so that
+    "chemist", "premium" or "remit" do not count as debt)."""
+    return reference is not None and DEBT_REPAYMENT.search(reference) is not None
+
+
 def categorize_transaction(reference: str | None, tx_type: str | None = None) -> str:
     """Determine spending category for a transaction based on reference, merchant and type."""
     if reference:
