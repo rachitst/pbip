@@ -3,18 +3,18 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from pbip_api.core.validation import Text
+from pbip_api.core.validation import EncodableText, Text
 
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=1, max_length=256)
+    password: EncodableText = Field(min_length=1, max_length=256)
     full_name: Text = Field(min_length=2, max_length=200)
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=1, max_length=256)
+    password: EncodableText = Field(min_length=1, max_length=256)
 
 
 class MfaVerifyRequest(BaseModel):
@@ -56,14 +56,14 @@ class RecoveryCodesOut(BaseModel):
 
 class AdminCreateUserRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=1, max_length=256)
+    password: EncodableText = Field(min_length=1, max_length=256)
     full_name: Text = Field(min_length=2, max_length=200)
     roles: list[str] = Field(min_length=1)
 
 
 class PasswordChangeRequest(BaseModel):
-    current_password: str = Field(min_length=1, max_length=256)
-    new_password: str = Field(min_length=1, max_length=256)
+    current_password: EncodableText = Field(min_length=1, max_length=256)
+    new_password: EncodableText = Field(min_length=1, max_length=256)
 
 
 class LockoutStatusOut(BaseModel):
