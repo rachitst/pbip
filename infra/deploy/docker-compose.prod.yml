@@ -1,6 +1,6 @@
 # Production-like stack pulled from GHCR (no build, no published DB/Redis ports).
 # Copy this file + a real .env (see .env.prod.example) to the server, then:
-#   IMAGE_TAG=v0.1.0 docker compose -f docker-compose.prod.yml pull && ... up -d
+#   bash deploy.sh deploy ghcr.io/<owner>/pbip v0.1.0   (health-gated; see deploy.sh and the runbook)
 name: pbip-prod
 
 x-api-env: &api-env
@@ -59,7 +59,9 @@ services:
     restart: unless-stopped
   web:
     image: ${IMAGE_PREFIX}/web:${IMAGE_TAG}
-    depends_on: [api]
+    # nginx resolves `api` at start-up, so it is (re)started only once a healthy API exists.
+    depends_on:
+      api: { condition: service_healthy }
     ports: ["${PUBLIC_PORT:-80}:8080"]
     restart: unless-stopped
 

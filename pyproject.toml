@@ -31,6 +31,7 @@ dev = [
     "nbformat>=5.11.1",
     "ipykernel>=7.4.0",
     "matplotlib>=3.11.2",
+    "pyyaml>=6.0",
     "schemathesis>=4.32.7",
 ]
 
