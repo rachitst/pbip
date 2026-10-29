@@ -22,3 +22,7 @@
 | Team execution plan (owners, dates, handoffs) | `docs/TEAM_EXECUTION_PLAN.md` | Team / Shared | Oct 25 - Nov 3 2026 | v2 (Oct 25, hard Nov 3 deadline) |
 
 Rule: a PR that changes behaviour updates the relevant doc in the same PR. Docs are never a week-14 activity.
+
+## Requirements traceability
+
+[`requirements/traceability.md`](requirements/traceability.md) maps every use case and non-functional requirement of the use case document (v0.2) to the code and the CI tests that prove it, with the gaps that remain.

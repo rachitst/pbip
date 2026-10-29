@@ -2214,9 +2214,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #96 | **Sprint:** 5 | **Priority:** could | **Size:** S (0.5 person-days estimate) | **Epic:** Identity & Core Banking
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (8.8 days of slack)
+- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Fri 30 Oct (merged in #172; ADR committed as `docs/adr/0013-passkeys-evaluation.md` because 0008 is the ledger keyset-cursor ADR) | **Status:** Done | **Risk:** Low
 - **Depends on:** none
-- **Mode:** Parallel: can start immediately
+- **Mode:** Done
 - **Goal:** Architecture evaluation and proof-of-concept for FIDO2/WebAuthn passkey authentication.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -2225,8 +2225,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   4. Implement and make the tests pass for: Documents trade-offs and implementation roadmap in architectural ADR
   5. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #96`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Evaluates PyWebAuthn library integration and browser WebAuthn API compatibility
-  - [ ] Documents trade-offs and implementation roadmap in architectural ADR
+  - [x] Evaluates PyWebAuthn library integration and browser WebAuthn API compatibility
+  - [x] Documents trade-offs and implementation roadmap in architectural ADR
 - **Definition of done (evidence):** ADR committed to docs/adr/0008-passkeys-evaluation.md.
 - **Required checks:**
   - Automated: security tests for every authorization and negative path; prove no secrets/PII reach logs (redaction test); document builds/renders, links valid, content matches the code and backlog
