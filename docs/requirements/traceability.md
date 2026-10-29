@@ -12,11 +12,9 @@ Status values:
 * **Unverified**: implemented or configured, but never exercised by a test or a real environment.
 * **Missing**: not implemented.
 
-Task status comes from `docs/TEAM_EXECUTION_PLAN.md` and the project board. **In Review** marks work
-that is merged and CI-verified but includes maintainer-written changes no second person has reviewed
-(TASK-040, 041, 044, 070, 073; AGENTS.md section 14 requires a peer-reviewed PR for Done).
-TASK-094 to TASK-106 were created on 2026-10-30 for requirements no task covered; they are
-unassigned and unscheduled.
+Task status comes from `docs/TEAM_EXECUTION_PLAN.md` and the project board.
+TASK-094 to TASK-107 were created on 2026-10-30 for requirements no task covered; they are
+unassigned, without dates, and Todo until someone starts one (capacity confirmed by the product owner).
 
 Last reviewed against `main` on 2026-10-30 (local verification run recorded in
 `docs/testing/local-verification-2026-10-30.md`).
@@ -35,7 +33,7 @@ Last reviewed against `main` on 2026-10-30 (local verification run recorded in
 | UC-08 AI assistant | Missing | `modules/assistant/` empty | 057 #80, 058 #81, 059 #82, 060 #83, 061 #84, 067 #90, 076 #99 (Todo), **105 #188 (new)** | FAQ/support, product discovery and investment suggestions had no tool (TASK-105) |
 | UC-09 Fraud detection triggers | Partial | `fraud/baseline.py` (`baseline-rules-0.2`): LARGE_AMOUNT, VELOCITY_BURST, AMOUNT_SPIKE, NEW_PAYEE, NEW_PAYEE_LARGE_AMOUNT, **NEW_COUNTRY** (DB-IP Lite country, ADR-0014; approximate, signal only); score and reasons persisted; `test_transfers.py`, `test_geoip.py` | 023 #46, 025 #48, 029-034 #52-57 (Todo), 095 #178 (In Progress) | No rule for login failures or new device/network (TASK-095); location accuracy unevaluated (no labelled data) |
 | UC-10 Fraud alert management: alert, customer notified, analyst review | Partial | Alerts API with MFA-gated decision; customer `TRANSFER_UNDER_REVIEW` / declined / posted notifications via outbox; `test_transfers.py`, `test_notifications.py` | 036 #59, 022 #45 (Todo) | No analyst UI (TASK-036); no notification tray (TASK-022) |
-| UC-11 Behaviour analytics: page visits, clickstream, session, product interests, spend and income | Partial | Spend patterns (`/analytics/spending`, `/trends`), RFM segmentation job (run end to end on seeded data locally); nightly materialisation run by a real Celery worker locally; `test_analytics.py`, `test_segmentation.py` | 040 #63, 044 #67 (In Review); 055 #78, 056 #79 (Todo) | No clickstream/session capture (TASK-055); no product-interest data |
+| UC-11 Behaviour analytics: page visits, clickstream, session, product interests, spend and income | Partial | Spend patterns (`/analytics/spending`, `/trends`), RFM segmentation job (weekly Celery beat run, TASK-052); nightly 02:00 materialisation; both run by a real Celery worker locally; `test_analytics.py`, `test_segmentation.py` | 040 #63, 044 #67, 052 #75 (Done); 055 #78, 056 #79 (Todo) | No clickstream/session capture (TASK-055); no product-interest data |
 | UC-12 Product recommendation engine (demographics, behaviour, spend, existing products) | Missing | Segmentation exists as an input | 054 #77, 062 #85 (Todo), **107 #194 (new)** | Whole use case; demographics limited to a consented age band (ADR-0015, TASK-107) |
 | UC-13 Security monitoring dashboard | Partial | Audit log API with hash-chain verification; Grafana/Prometheus config | 035 #58 (Todo), **099 #182 (new)** | No security view of high-risk customers, login anomalies, open investigations (TASK-099) |
 
@@ -43,7 +41,7 @@ Last reviewed against `main` on 2026-10-30 (local verification run recorded in
 
 | Item | Status | Owning tasks | Gap |
 |---|---|---|---|
-| Financial health indicators | Partial (API verified) | 041 #64 (In Review), 049 #72 (Todo) | No UI |
+| Financial health indicators | Partial (API verified) | 041 #64 (Done), 049 #72 (Todo) | No UI |
 | Account details, transaction search, statements, settings | Partial | 005, 008 (Done); 017 #40, 016 #39, 074 #97 (Todo) | Search/filter (TASK-017) and statements missing; profile, devices, password change verified (`Profile.tsx`, `test_customers.py`, E2E) |
 | Bill payments, scheduled transfers | Missing | 014 #37, 015 #38, 020 #43, 021 #44 (Todo) | |
 | Loans: catalogue, eligibility, EMI calculator, applications, tracking | Missing | 045, 046, 047, 051 (Todo) | |
@@ -51,7 +49,7 @@ Last reviewed against `main` on 2026-10-30 (local verification run recorded in
 | Wealth: insurance products | Missing | **096 #179 (new)** | No task covered insurance |
 | Wealth: product comparison | Missing | **098 #181 (new)** | No task covered comparison |
 | Fraud monitoring dashboard | Missing (UI) | 035 #58, 036 #59 (Todo) | |
-| Behavioural analytics dashboard: segmentation, spend patterns, product affinity, engagement | Partial (segmentation API) | 044 (In Review), 056 #79, 066 #89 (Todo), **101 #184 (new)** | Product affinity and engagement metrics had no task |
+| Behavioural analytics dashboard: segmentation, spend patterns, product affinity, engagement | Partial (segmentation API) | 044 (Done), 056 #79, 066 #89 (Todo), **101 #184 (new)** | Product affinity and engagement metrics had no task |
 | Compliance and risk dashboard: audit history, system alerts, exceptions, regulatory monitoring | Partial (audit API) | 048 #71 (Todo), **100 #183 (new)** | Alerts, exception management and monitoring had no task |
 
 ## Non-functional requirements (section 8)
@@ -62,8 +60,8 @@ Last reviewed against `main` on 2026-10-30 (local verification run recorded in
 | Encrypt sensitive data | Verified | `core/crypto.py`, `test_crypto.py`, `test_rotate_field_key.py` | 075 (Done) | TLS not configured in the repo (runbook section 1.4) |
 | Role-based access control | Verified | `require_roles`, `test_rbac_bola.py` | | |
 | Audit logs | Verified | hash-chained `audit_logs`, `test_audit_and_outbox.py` | 048 #71 (UI) | |
-| OWASP Top 10 | Partial | threat model mapping, Bandit, CodeQL, nightly fuzzing (run 40948518916: 940 cases, 0 5xx) | 028 (Done), 070 (In Review), 090 #113 | No DAST against a deployed environment |
-| Page load < 2 s, API < 500 ms, login < 3 s | Partial | Analytics endpoints measured locally at p95 21-34 ms ([local verification](../testing/local-verification-2026-10-30.md)); `infra/k6/baseline.js` (TASK-012) | 078 #101, **102 #185 (new)** | Page load and login never measured; other routes and load not measured |
+| OWASP Top 10 | Partial | threat model mapping, Bandit, CodeQL, nightly fuzzing (run 40948518916: 940 cases, 0 5xx) | 028 (Done), 070 (Done), 090 #113 | No DAST against a deployed environment |
+| Page load < 2 s, API < 500 ms, login < 3 s | Partial | Analytics endpoints measured locally with `scripts/measure_analytics_latency.py`: p95 12-19 ms, 300 requests each ([local verification](../testing/local-verification-2026-10-30.md)); `infra/k6/baseline.js` (TASK-012) | 078 #101, **102 #185 (new)** | Page load and login never measured; other routes and load not measured |
 | 99% availability in test environment | Unverified | | **103 #186 (new)** | No environment deployed; no task existed |
 | Horizontal scaling, stateless APIs, containers | Partial | Docker images, compose files, JWT access tokens | 082 (Done), 079 #102 | Multi-replica deployment never exercised |
 | Centralised logging, error tracking, health, metrics | Unverified | `infra/{loki,alloy,prometheus,grafana}`, `/api/health/*` | 069 #92, 085 #108, **103 #186 (new)** | Error tracking had no task; nothing deployed |
