@@ -1,5 +1,6 @@
 """Unit tests for analytics categorization and service logic."""
 
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -8,6 +9,11 @@ from pbip_api.modules.analytics.schemas import (
     CategorySpendingItem,
     SpendingBreakdownResponse,
     SpendingTrendsResponse,
+)
+from pbip_api.modules.analytics.service import (
+    is_closed_month,
+    percentage_change,
+    previous_closed_months,
 )
 
 pytestmark = pytest.mark.unit
@@ -95,3 +101,18 @@ def test_spending_trends_schema_validation() -> None:
     )
     assert resp.mom_spend_change_percentage == 50.0
     assert resp.current_month.daily_burn_rate_minor == 500
+
+
+def test_percentage_change_is_undefined_without_a_baseline() -> None:
+    assert percentage_change(100_000, 80_000) == 25.0
+    assert percentage_change(60_000, 80_000) == -25.0
+    assert percentage_change(0, 80_000) == -100.0
+    assert percentage_change(50_000, 0) is None  # not "+100%": there is nothing to compare with
+    assert percentage_change(0, 0) is None
+
+
+def test_previous_closed_months_cross_the_year_boundary() -> None:
+    now = datetime(2026, 1, 15, tzinfo=UTC)
+    assert previous_closed_months(now, 2) == [(2025, 12), (2025, 11)]
+    assert is_closed_month(2025, 12, now) and not is_closed_month(2026, 1, now)
+    assert not is_closed_month(2026, 2, now)

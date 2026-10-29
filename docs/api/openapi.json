@@ -387,7 +387,7 @@
                 "type": "null"
               }
             ],
-            "description": "Percentage change (+/-), None if previous was 0",
+            "description": "Percentage change (+/-); None when the previous month had no spend here",
             "title": "Change Percentage"
           },
           "current_amount_minor": {
@@ -916,7 +916,7 @@
         "description": "Summary of spending in a calendar month.",
         "properties": {
           "daily_burn_rate_minor": {
-            "description": "Average daily spend in minor units",
+            "description": "Total spend divided by the days of the month (elapsed days when running)",
             "minimum": 0.0,
             "title": "Daily Burn Rate Minor",
             "type": "integer"
@@ -1387,7 +1387,7 @@
                 "type": "null"
               }
             ],
-            "description": "Burn rate percentage change vs previous month",
+            "description": "Daily burn rate change vs the previous month (+/-); None when it had no spend",
             "title": "Burn Rate Change Percentage"
           },
           "currency": {
@@ -1416,7 +1416,7 @@
                 "type": "null"
               }
             ],
-            "description": "Month-over-month total spend percentage change (+/-)",
+            "description": "Month-over-month total spend change (+/-); None if last month had none",
             "title": "Mom Spend Change Percentage"
           },
           "previous_month": {
@@ -2320,6 +2320,7 @@
             "schema": {
               "anyOf": [
                 {
+                  "maximum": 2200,
                   "minimum": 2000,
                   "type": "integer"
                 },
@@ -2410,6 +2411,7 @@
             "schema": {
               "anyOf": [
                 {
+                  "maximum": 2200,
                   "minimum": 2000,
                   "type": "integer"
                 },

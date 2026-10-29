@@ -25,7 +25,7 @@ router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
 )
 def get_customer_spending(
     account_id: UUID = Query(..., description="Target account identifier"),
-    year: int | None = Query(None, ge=2000, description="Calendar year (e.g. 2026)"),
+    year: int | None = Query(None, ge=2000, le=2200, description="Calendar year (e.g. 2026)"),
     month: int | None = Query(None, ge=1, le=12, description="Calendar month (1-12)"),
     customer: Customer = Depends(get_current_customer),
     session: Session = Depends(get_session),
@@ -48,7 +48,7 @@ def get_customer_spending(
 )
 def get_customer_trends(
     account_id: UUID = Query(..., description="Target account identifier"),
-    year: int | None = Query(None, ge=2000, description="Calendar year (e.g. 2026)"),
+    year: int | None = Query(None, ge=2000, le=2200, description="Calendar year (e.g. 2026)"),
     month: int | None = Query(None, ge=1, le=12, description="Calendar month (1-12)"),
     customer: Customer = Depends(get_current_customer),
     session: Session = Depends(get_session),

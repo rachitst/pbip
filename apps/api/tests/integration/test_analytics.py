@@ -13,11 +13,16 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 from typing import Any
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
+from pbip_api.core.db import utcnow
 from pbip_api.modules.analytics.models import MonthlyCategorySpending
+from pbip_api.modules.analytics.service import materialize_monthly_spending
+from pbip_api.modules.ledger import service as ledger
 from pbip_test_support import Actor, age_payee
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
 pytestmark = [pytest.mark.integration, pytest.mark.security]
@@ -47,7 +52,7 @@ def test_spending_breakdown_with_categorized_debits(
     client: TestClient,
     make_customer: Callable[..., Actor],
     make_verified_payee: Callable[..., dict[str, Any]],
-    migrated_engine: Any,
+    migrated_engine: Engine,
 ) -> None:
     """Accurately calculates spend amounts, transaction counts, and percentages by category."""
     alice = make_customer(funds=500_000)
@@ -308,3 +313,145 @@ def test_analytics_validation(
     # Unauthenticated
     resp_unauth = client.get(f"/api/v1/analytics/spending?account_id={alice.account_id}")
     assert resp_unauth.status_code == 401
+
+
+def _transfer(client: TestClient, actor: Actor, payee_id: str, amount: int, reference: str) -> UUID:
+    resp = client.post(
+        "/api/v1/transfers",
+        headers={**actor.headers, "Idempotency-Key": uuid.uuid4().hex},
+        json={
+            "from_account_id": str(actor.account_id),
+            "amount_minor": amount,
+            "payee_id": payee_id,
+            "reference": reference,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    return UUID(resp.json()["id"])
+
+
+def _stored_rows(db: Session, account_id: UUID | None) -> set[tuple[str, int, int]]:
+    db.expire_all()
+    rows = db.execute(
+        select(MonthlyCategorySpending).where(MonthlyCategorySpending.account_id == account_id)
+    ).scalars()
+    return {(r.category, r.total_amount_minor, r.transaction_count) for r in rows}
+
+
+def test_reversed_transfers_and_refund_outflows_are_not_spending(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_verified_payee: Callable[..., dict[str, Any]],
+    migrated_engine: Engine,
+    db: Session,
+) -> None:
+    """A reversed transfer was refunded, and the counterparty's REVERSAL debit returns money."""
+    alice = make_customer(funds=500_000)
+    bob = make_customer()
+    payee = make_verified_payee(alice, bob)
+    age_payee(migrated_engine, payee["id"], 48)
+    _transfer(client, alice, payee["id"], 20_000, "BigBasket weekly groceries")
+    dinner = _transfer(client, alice, payee["id"], 10_000, "Swiggy dinner order")
+    ledger.reverse_transaction(db, dinner, None, "customer dispute")
+    db.commit()
+
+    alice_view = client.get(
+        f"/api/v1/analytics/spending?account_id={alice.account_id}", headers=alice.headers
+    ).json()
+    assert alice_view["total_spend_minor"] == 20_000 and alice_view["transaction_count"] == 1
+    assert [c["category"] for c in alice_view["categories"]] == ["groceries"]
+
+    bob_view = client.get(
+        f"/api/v1/analytics/spending?account_id={bob.account_id}", headers=bob.headers
+    ).json()
+    assert bob_view["total_spend_minor"] == 0 and bob_view["categories"] == []
+
+
+def test_materialization_matches_the_live_computation_and_is_idempotent(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_verified_payee: Callable[..., dict[str, Any]],
+    migrated_engine: Engine,
+    db: Session,
+) -> None:
+    """The nightly task stores exactly what the live computation returns and can be re-run."""
+    alice = make_customer(funds=500_000)
+    bob = make_customer()
+    payee = make_verified_payee(alice, bob)
+    age_payee(migrated_engine, payee["id"], 48)
+    _transfer(client, alice, payee["id"], 20_000, "BigBasket weekly groceries")
+    _transfer(client, alice, payee["id"], 10_000, "Zepto instant provisions")
+    dinner = _transfer(client, alice, payee["id"], 10_000, "Swiggy dinner order")
+    now = utcnow()
+
+    # Only Alice's account has debits (the funding deposit debits a SYSTEM account).
+    assert materialize_monthly_spending(db, periods=[(now.year, now.month)]) == 1
+    assert _stored_rows(db, alice.account_id) == {("groceries", 30_000, 2), ("dining", 10_000, 1)}
+    assert _stored_rows(db, bob.account_id) == set()
+
+    # Re-running after a reversal updates groceries in place and deletes the vanished category.
+    ledger.reverse_transaction(db, dinner, None, "customer dispute")
+    db.commit()
+    assert materialize_monthly_spending(db, periods=[(now.year, now.month)]) == 1
+    assert _stored_rows(db, alice.account_id) == {("groceries", 30_000, 2)}
+    assert materialize_monthly_spending(db, periods=[(now.year, now.month)]) == 1  # no-op rerun
+    assert _stored_rows(db, alice.account_id) == {("groceries", 30_000, 2)}
+
+
+def test_stored_rows_serve_closed_months_only_and_percentages_need_a_baseline(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    db: Session,
+) -> None:
+    """Rows for the running month are ignored by reads; a month without a predecessor has no %."""
+    alice = make_customer(funds=100_000)
+    now = utcnow()
+    db.add(
+        MonthlyCategorySpending(
+            account_id=alice.account_id,
+            year=now.year,
+            month=now.month,
+            category="groceries",
+            total_amount_minor=99_000,
+            transaction_count=9,
+        )
+    )
+    db.add(
+        MonthlyCategorySpending(
+            account_id=alice.account_id,
+            year=2025,
+            month=6,
+            category="groceries",
+            total_amount_minor=60_000,
+            transaction_count=3,
+        )
+    )
+    db.commit()
+
+    running = client.get(
+        f"/api/v1/analytics/spending?account_id={alice.account_id}", headers=alice.headers
+    ).json()
+    assert running["total_spend_minor"] == 0  # live computation, not the stale stored row
+
+    trends = client.get(
+        f"/api/v1/analytics/trends?account_id={alice.account_id}&year=2025&month=6",
+        headers=alice.headers,
+    ).json()
+    assert trends["current_month"]["total_spend_minor"] == 60_000
+    assert trends["current_month"]["daily_burn_rate_minor"] == 60_000 // 30
+    assert trends["previous_month"] is None
+    assert trends["mom_spend_change_percentage"] is None
+    assert trends["burn_rate_change_percentage"] is None
+    assert trends["top_categories_increasing"][0]["change_percentage"] is None
+    assert trends["top_categories_decreasing"] == []
+
+
+def test_year_beyond_the_calendar_is_rejected_not_a_server_error(
+    client: TestClient, make_customer: Callable[..., Actor]
+) -> None:
+    alice = make_customer()
+    resp = client.get(
+        f"/api/v1/analytics/trends?account_id={alice.account_id}&year=99999&month=1",
+        headers=alice.headers,
+    )
+    assert resp.status_code == 422, resp.text

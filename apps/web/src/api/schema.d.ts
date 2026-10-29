@@ -804,7 +804,7 @@ export interface components {
             change_minor: number;
             /**
              * Change Percentage
-             * @description Percentage change (+/-), None if previous was 0
+             * @description Percentage change (+/-); None when the previous month had no spend here
              */
             change_percentage?: number | null;
             /**
@@ -1043,7 +1043,7 @@ export interface components {
         MonthlySpendingSummary: {
             /**
              * Daily Burn Rate Minor
-             * @description Average daily spend in minor units
+             * @description Total spend divided by the days of the month (elapsed days when running)
              */
             daily_burn_rate_minor: number;
             /**
@@ -1281,7 +1281,7 @@ export interface components {
             account_id: string;
             /**
              * Burn Rate Change Percentage
-             * @description Burn rate percentage change vs previous month
+             * @description Daily burn rate change vs the previous month (+/-); None when it had no spend
              */
             burn_rate_change_percentage?: number | null;
             /**
@@ -1298,7 +1298,7 @@ export interface components {
             daily_burn_rate_minor: number;
             /**
              * Mom Spend Change Percentage
-             * @description Month-over-month total spend percentage change (+/-)
+             * @description Month-over-month total spend change (+/-); None if last month had none
              */
             mom_spend_change_percentage?: number | null;
             /** @description Previous month summary (if available) */

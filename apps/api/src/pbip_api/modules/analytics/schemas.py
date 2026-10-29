@@ -43,7 +43,11 @@ class MonthlySpendingSummary(BaseModel):
     month: int = Field(..., ge=1, le=12, description="Month (1-12)")
     total_spend_minor: int = Field(..., ge=0, description="Total spend in minor units")
     transaction_count: int = Field(..., ge=0, description="Transaction count")
-    daily_burn_rate_minor: int = Field(..., ge=0, description="Average daily spend in minor units")
+    daily_burn_rate_minor: int = Field(
+        ...,
+        ge=0,
+        description="Total spend divided by the days of the month (elapsed days when running)",
+    )
 
 
 class CategoryShiftItem(BaseModel):
@@ -58,7 +62,7 @@ class CategoryShiftItem(BaseModel):
         ..., description="Difference in spend (current - previous) in minor units"
     )
     change_percentage: float | None = Field(
-        None, description="Percentage change (+/-), None if previous was 0"
+        None, description="Percentage change (+/-); None when the previous month had no spend here"
     )
 
 
@@ -74,13 +78,15 @@ class SpendingTrendsResponse(BaseModel):
         None, description="Previous month summary (if available)"
     )
     mom_spend_change_percentage: float | None = Field(
-        None, description="Month-over-month total spend percentage change (+/-)"
+        None,
+        description="Month-over-month total spend change (+/-); None if last month had none",
     )
     daily_burn_rate_minor: int = Field(
         ..., ge=0, description="Current daily burn rate in minor units"
     )
     burn_rate_change_percentage: float | None = Field(
-        None, description="Burn rate percentage change vs previous month"
+        None,
+        description="Daily burn rate change vs the previous month (+/-); None when it had no spend",
     )
     top_categories_increasing: list[CategoryShiftItem] = Field(
         default_factory=list, description="Categories with highest spending increases"
