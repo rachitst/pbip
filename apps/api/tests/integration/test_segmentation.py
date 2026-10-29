@@ -96,10 +96,10 @@ def test_job_persists_explainable_segments_idempotently_and_the_endpoint_serves_
         age_payee(migrated_engine, payee["id"], 48)
     for actor in (*spenders, saver):
         _transfer(client, actor, payees[actor.customer_id]["id"], 5_000, "Groceries at BigBasket")
-    for actor in spenders:
-        for _ in range(3):
+    for actor in spenders:  # kept small and few: large or rapid transfers go to fraud review
+        for _ in range(2):
             _transfer(
-                client, actor, payees[actor.customer_id]["id"], 40_000, "Zomato dinner, Amazon"
+                client, actor, payees[actor.customer_id]["id"], 15_000, "Zomato dinner, Amazon"
             )
     idle = make_customer()  # no activity: must not get a segment
 
