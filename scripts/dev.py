@@ -699,6 +699,11 @@ def cmd_test_e2e(args: list[str]) -> int:
     return _run(["npm", "run", "test:e2e"], cwd=ROOT / "apps" / "web")
 
 
+def cmd_fuzz(args: list[str]) -> int:
+    """Run Schemathesis property-based API fuzzing against OpenAPI contract."""
+    return _run(["uv", "run", "python", str(ROOT / "scripts" / "fuzz.py"), *args])
+
+
 def cmd_smoke(args: list[str]) -> int:
     """Run post-deploy smoke test."""
     url = args[0] if args else "http://localhost:8080"
@@ -781,6 +786,7 @@ COMMANDS = {
     "test-e2e": "Run Playwright end-to-end tests",
     "perf": "k6 baseline: health endpoints at 50 VUs, p95 < 50 ms (needs a running API)",
     "smoke": "Run smoke test against localhost:8080 or custom URL",
+    "fuzz": "Run property-based API fuzzing with Schemathesis",
     "check": "Run full CI verification suite locally",
     "clean": "Remove cache files and build outputs",
 }

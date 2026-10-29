@@ -5,7 +5,7 @@ Silhouette Score and Davies-Bouldin Index validation, and edge case handling.
 """
 
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from pbip_ml.segmentation.contract import (
@@ -203,4 +203,29 @@ def test_clustering_edge_case_identical_samples() -> None:
     assert len(assignments) == 10
     assert report.n_samples == 10
     assert all(a.confidence_score == 1.0 for a in assignments)
-    assert report.silhouette_score == 0.0
+    assert report.silhouette_score is None
+
+
+def test_each_persona_blob_is_named_after_its_dominant_feature() -> None:
+    """The five synthetic personas from the job script land in the five segments, one each."""
+    from scripts.run_segmentation import synthetic_customers
+
+    assignments, report = cluster_customers(synthetic_customers(125), n_clusters=5)
+    assert report.cluster_distribution == {name.value: 25 for name in CustomerSegmentName}
+    richest = max(assignments, key=lambda a: a.customer_id.int)  # ids are stable per persona slot
+    assert richest.segment in CustomerSegmentName
+    by_id = {a.customer_id: a.segment for a in assignments}
+    # customer_id=UUID(int=1) is the first high-net-worth profile, int=4 the first inactive saver
+    assert by_id[UUID(int=1)] == CustomerSegmentName.HIGH_NET_WORTH
+    assert by_id[UUID(int=2)] == CustomerSegmentName.FREQUENT_TRANSACTOR
+    assert by_id[UUID(int=3)] == CustomerSegmentName.DISCRETIONARY_SPENDER
+    assert by_id[UUID(int=4)] == CustomerSegmentName.INACTIVE_SAVER
+    assert by_id[UUID(int=5)] == CustomerSegmentName.BUDGET_CONSCIOUS
+    assert report.silhouette_score is not None and report.silhouette_score > 0.4
+
+
+def test_more_clusters_than_personas_is_rejected() -> None:
+    from scripts.run_segmentation import synthetic_customers
+
+    with pytest.raises(ValueError, match="between 1 and 5"):
+        cluster_customers(synthetic_customers(20), n_clusters=6)

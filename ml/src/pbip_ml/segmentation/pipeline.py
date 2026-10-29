@@ -1,13 +1,14 @@
-"""K-Means behavioral clustering pipeline for PBIP customer segmentation.
+"""K-Means behavioural clustering of customers on RFM and lifestyle features (TASK-044).
 
-Computes RFM + lifestyle features, fits K-Means with deterministic seeds,
-evaluates quality using Silhouette Score and Davies-Bouldin index, and
-maps clusters to explainable human-readable personas.
+Training code: imported only by the offline job, never by the API request path. Fits K-Means with
+a fixed seed on standardised features, reports Silhouette and Davies-Bouldin, and names each
+cluster with one of the five personas from its centroid (``_label_cluster_centroids``), so
+``n_clusters`` is capped at the number of personas.
 """
 
 from collections import Counter
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any  # numpy array dtype/shape parameters have no narrower static type
 
 import numpy as np
 from sklearn.cluster import KMeans
@@ -28,12 +29,20 @@ FEATURE_NAMES = (
     "savings_ratio",
     "discretionary_ratio",
 )
+MIN_CUSTOMERS = 2
+MAX_CLUSTERS = len(CustomerSegmentName)
 
 
 def _label_cluster_centroids(
     centroids: np.ndarray[Any, Any], feature_names: tuple[str, ...]
 ) -> dict[int, CustomerSegmentName]:
-    """Map each cluster centroid index to an explainable segment name based on centroid metrics."""
+    """Name clusters from their centroids, in a fixed priority order.
+
+    Highest monetary -> HIGH_NET_WORTH; then highest recency -> INACTIVE_SAVER; then highest
+    frequency -> FREQUENT_TRANSACTOR; then highest discretionary ratio -> DISCRETIONARY_SPENDER;
+    the rest -> BUDGET_CONSCIOUS. Deterministic and explainable; with k < 5 the later personas
+    are simply not used. Requires k <= len(CustomerSegmentName).
+    """
     k = centroids.shape[0]
     assigned: dict[int, CustomerSegmentName] = {}
     available_segments = list(CustomerSegmentName)
@@ -97,7 +106,7 @@ def _generate_explanation(
         case CustomerSegmentName.HIGH_NET_WORTH:
             return (
                 f"High monetary expenditure ({rfm.monetary_minor // 100:,} major units/mo) "
-                f"with a solid savings ratio of {rfm.savings_ratio * 100:.1f}%."
+                f"with a savings ratio of {rfm.savings_ratio * 100:.1f}%."
             )
         case CustomerSegmentName.BUDGET_CONSCIOUS:
             return (
@@ -141,13 +150,15 @@ def cluster_customers(
     timestamp = now or datetime.now(UTC)
     n_samples = len(customers)
 
-    if n_samples < 2:
-        raise ValueError("At least 2 customer feature records are required for clustering.")
+    if n_samples < MIN_CUSTOMERS:
+        msg = f"At least {MIN_CUSTOMERS} customer feature records are required for clustering."
+        raise ValueError(msg)
+    if not 1 <= n_clusters <= MAX_CLUSTERS:
+        msg = f"n_clusters must be between 1 and {MAX_CLUSTERS} (one persona per cluster)."
+        raise ValueError(msg)
 
-    # Bound n_clusters to available samples
+    # Bound n_clusters to the available samples; a single cluster is allowed but uninformative.
     k = min(n_clusters, n_samples)
-    if k < 2:
-        k = 2
 
     feat_matrix = np.array(
         [
@@ -182,8 +193,8 @@ def cluster_customers(
         report = ClusteringValidationReport(
             n_clusters=1,
             n_samples=n_samples,
-            silhouette_score=0.0,
-            davies_bouldin_index=0.0,
+            silhouette_score=None,
+            davies_bouldin_index=None,
             inertia=0.0,
             cluster_distribution={CustomerSegmentName.BUDGET_CONSCIOUS.value: n_samples},
             cluster_centroids={
@@ -199,12 +210,11 @@ def cluster_customers(
 
     # Ensure more than 1 distinct cluster was formed before calculating metrics
     unique_labels = np.unique(labels)
+    sil_score: float | None = None
+    db_index: float | None = None
     if len(unique_labels) > 1:
-        sil_score = float(silhouette_score(scaled_matrix, labels))
-        db_index = float(davies_bouldin_score(scaled_matrix, labels))
-    else:
-        sil_score = 0.0
-        db_index = 0.0
+        sil_score = round(float(silhouette_score(scaled_matrix, labels)), 4)
+        db_index = round(float(davies_bouldin_score(scaled_matrix, labels)), 4)
 
     cluster_to_segment = _label_cluster_centroids(kmeans.cluster_centers_, FEATURE_NAMES)
 
@@ -247,8 +257,8 @@ def cluster_customers(
     report = ClusteringValidationReport(
         n_clusters=k,
         n_samples=n_samples,
-        silhouette_score=round(sil_score, 4),
-        davies_bouldin_index=round(db_index, 4),
+        silhouette_score=sil_score,
+        davies_bouldin_index=db_index,
         inertia=round(float(kmeans.inertia_), 2),
         cluster_distribution=dict(distribution_counts),
         cluster_centroids=centroids_dict,

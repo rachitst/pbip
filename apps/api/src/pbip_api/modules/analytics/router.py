@@ -27,7 +27,7 @@ router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
 )
 def get_customer_spending(
     account_id: UUID = Query(..., description="Target account identifier"),
-    year: int | None = Query(None, ge=2000, description="Calendar year (e.g. 2026)"),
+    year: int | None = Query(None, ge=2000, le=2200, description="Calendar year (e.g. 2026)"),
     month: int | None = Query(None, ge=1, le=12, description="Calendar month (1-12)"),
     customer: Customer = Depends(get_current_customer),
     session: Session = Depends(get_session),
@@ -50,7 +50,7 @@ def get_customer_spending(
 )
 def get_customer_trends(
     account_id: UUID = Query(..., description="Target account identifier"),
-    year: int | None = Query(None, ge=2000, description="Calendar year (e.g. 2026)"),
+    year: int | None = Query(None, ge=2000, le=2200, description="Calendar year (e.g. 2026)"),
     month: int | None = Query(None, ge=1, le=12, description="Calendar month (1-12)"),
     customer: Customer = Depends(get_current_customer),
     session: Session = Depends(get_session),
@@ -69,18 +69,16 @@ def get_customer_trends(
     "/health-score",
     response_model=FinancialHealthScoreResponse,
     status_code=status.HTTP_200_OK,
-    summary="Customer financial health score and actionable recommendations",
+    summary="Financial health score (0-100) with explainable components and tips",
 )
 def get_customer_health_score(
     account_id: UUID = Query(..., description="Target account identifier"),
     customer: Customer = Depends(get_current_customer),
     session: Session = Depends(get_session),
 ) -> FinancialHealthScoreResponse:
-    """Calculate explainable financial health score (0-100) based on savings, debt, and buffer."""
+    """Savings rate, expense volatility, loan repayments to income, cash buffer (owned account)."""
     return service.get_financial_health_score(
-        session=session,
-        customer_id=customer.id,
-        account_id=account_id,
+        session=session, customer_id=customer.id, account_id=account_id
     )
 
 
@@ -88,14 +86,11 @@ def get_customer_health_score(
     "/segment",
     response_model=CustomerSegmentResponse,
     status_code=status.HTTP_200_OK,
-    summary="Customer behavioral segmentation persona and RFM profile",
+    summary="Behavioural segment assigned to the customer by the offline job (404 until it ran)",
 )
 def get_customer_segment(
     customer: Customer = Depends(get_current_customer),
     session: Session = Depends(get_session),
 ) -> CustomerSegmentResponse:
-    """Retrieve explainable behavioral segment and RFM lifestyle profile for current customer."""
-    return service.get_customer_segment(
-        session=session,
-        customer_id=customer.id,
-    )
+    """Segment, confidence and the RFM features it was derived from; the principal's own only."""
+    return service.get_customer_segment(session=session, customer_id=customer.id)

@@ -1,29 +1,85 @@
 name: Deploy
 
-# Package -> Deploy -> Smoke test. Runs when you push a version tag (git tag v0.1.0 && git push --tags)
-# or manually. Tags are cut from `main`, which is protected, so CI has already passed on that commit.
+# Verify tag -> Package -> Deploy -> Smoke test -> automatic rollback on failure (TASK-082).
+# Triggers: a release tag vX.Y.Z pushed from `main` (the verify job rejects tags that are not on main),
+# or workflow_dispatch to redeploy / roll back to an existing tag, optionally as a dry run.
+# The deploy job runs only when the repository variable DEPLOY_ENABLED is "true" and the `staging`
+# environment provides the secrets listed in README.md (names are checked; values are never printed).
+# Host-side steps live in infra/deploy/deploy.sh; procedures in docs/operations/runbook.md section 2.
 on:
   push:
-    tags: ["v*"]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to deploy, redeploy or roll back to (vX.Y.Z)"
+        required: true
+        type: string
+      dry_run:
+        description: "Validate the tag, secrets and plan without connecting to the host"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
-  packages: write
+
+# One deployment at a time; a queued one waits instead of interleaving with a running one.
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.12"
 
 jobs:
-  package:
-    name: Build and push images to GHCR
+  verify:
+    name: Verify the release tag
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
-      image_prefix: ${{ steps.meta.outputs.prefix }}
       tag: ${{ steps.meta.outputs.tag }}
+      sha: ${{ steps.meta.outputs.sha }}
+      image_prefix: ${{ steps.meta.outputs.prefix }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
       - id: meta
+        name: Tag is vX.Y.Z and its commit is on main
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-          echo "tag=${GITHUB_REF_NAME//\//-}" >> "$GITHUB_OUTPUT"
+          tag="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::'$tag' is not a release tag of the form vX.Y.Z"
+            exit 1
+          fi
+          sha="$(git rev-list -n 1 "refs/tags/$tag")"
+          if ! git merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::tag $tag points at $sha, which is not on main; releases are cut from main only"
+            exit 1
+          fi
+          echo "Release $tag at $sha is on main."
+          {
+            echo "tag=$tag"
+            echo "sha=$sha"
+            echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}"
+          } >> "$GITHUB_OUTPUT"
+
+  package:
+    name: Build and push images to GHCR
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
@@ -36,46 +92,103 @@ jobs:
           file: apps/api/Dockerfile
           push: true
           tags: |
-            ${{ steps.meta.outputs.prefix }}/api:${{ steps.meta.outputs.tag }}
-            ${{ steps.meta.outputs.prefix }}/api:latest
+            ${{ needs.verify.outputs.image_prefix }}/api:${{ needs.verify.outputs.tag }}
+            ${{ needs.verify.outputs.image_prefix }}/api:latest
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7
         with:
           context: .
           file: apps/web/Dockerfile
           push: true
           tags: |
-            ${{ steps.meta.outputs.prefix }}/web:${{ steps.meta.outputs.tag }}
-            ${{ steps.meta.outputs.prefix }}/web:latest
+            ${{ needs.verify.outputs.image_prefix }}/web:${{ needs.verify.outputs.tag }}
+            ${{ needs.verify.outputs.image_prefix }}/web:latest
 
   deploy:
     name: Deploy to staging and smoke test
-    needs: package
-    # Enable by setting repository VARIABLE DEPLOY_ENABLED=true plus the secrets listed in README.
+    needs: [verify, package]
+    # Enable by setting the repository VARIABLE DEPLOY_ENABLED=true plus the secrets listed in README.md.
     if: ${{ vars.DEPLOY_ENABLED == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: staging
+    permissions:
+      contents: read
+    env:
+      IMAGE_PREFIX: ${{ needs.verify.outputs.image_prefix }}
+      IMAGE_TAG: ${{ needs.verify.outputs.tag }}
+      DRY_RUN: ${{ inputs.dry_run == true }}
     steps:
       - uses: actions/checkout@v7
-      - name: Configure SSH
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
+      - name: Required secrets and variables are set (names only; values are never printed)
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          STAGING_URL: ${{ vars.STAGING_URL }}
+        run: |
+          missing=()
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS STAGING_URL; do
+            [ -n "${!name}" ] || missing+=("$name")
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::deployment is enabled but these are empty: ${missing[*]}"
+            exit 1
+          fi
+          case "$STAGING_URL" in
+            https://*) echo "STAGING_URL uses https." ;;
+            *) echo "::warning::STAGING_URL is not https; the smoke test will not prove TLS (runbook section 1.4)." ;;
+          esac
+          echo "All required deployment secrets and variables are set."
+      - name: Deployment plan
+        run: |
+          echo "Release:  $IMAGE_TAG"
+          echo "Images:   $IMAGE_PREFIX/api:$IMAGE_TAG and $IMAGE_PREFIX/web:$IMAGE_TAG"
+          echo "Host:     staging (~/pbip, infra/deploy/deploy.sh: pull, migrate, health-gated start)"
+          echo "Dry run:  $DRY_RUN"
+      - name: Configure SSH (host key verification required)
+        if: env.DRY_RUN != 'true'
         env:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
-          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-      - name: Copy compose file
-        env: { HOST: "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" }
-        run: scp -i ~/.ssh/id_deploy infra/deploy/docker-compose.prod.yml "$HOST":~/pbip/docker-compose.prod.yml
-      - name: Pull and restart
-        env:
-          HOST: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
-          IMAGE_PREFIX: ${{ needs.package.outputs.image_prefix }}
-          IMAGE_TAG: ${{ needs.package.outputs.tag }}
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts && chmod 600 ~/.ssh/known_hosts
+          {
+            echo "Host staging"
+            echo "  HostName $DEPLOY_HOST"
+            echo "  User $DEPLOY_USER"
+            echo "  IdentityFile ~/.ssh/id_deploy"
+            echo "  IdentitiesOnly yes"
+            echo "  StrictHostKeyChecking yes"
+            echo "  UserKnownHostsFile ~/.ssh/known_hosts"
+            echo "  BatchMode yes"
+          } > ~/.ssh/config
+          chmod 600 ~/.ssh/config
+      - name: Copy the compose file and deploy script
+        if: env.DRY_RUN != 'true'
         run: |
-          ssh -i ~/.ssh/id_deploy "$HOST" \
-            "cd ~/pbip && IMAGE_PREFIX='$IMAGE_PREFIX' IMAGE_TAG='$IMAGE_TAG' docker compose -f docker-compose.prod.yml pull \
-             && IMAGE_PREFIX='$IMAGE_PREFIX' IMAGE_TAG='$IMAGE_TAG' docker compose -f docker-compose.prod.yml up -d --remove-orphans"
-      - name: Smoke test
+          ssh staging 'mkdir -p ~/pbip'
+          scp infra/deploy/docker-compose.prod.yml infra/deploy/deploy.sh staging:~/pbip/
+      - name: Deploy (pull, migrate, health-gated start)
+        if: env.DRY_RUN != 'true'
+        # The runner's values are meant to reach the host: quote them with %q into one remote command.
+        run: |
+          remote="$(printf 'cd ~/pbip && bash deploy.sh deploy %q %q' "$IMAGE_PREFIX" "$IMAGE_TAG")"
+          # shellcheck disable=SC2029 # client-side expansion is intended; both values are %q-escaped above
+          ssh staging "$remote"
+      - uses: actions/setup-python@v7
+        if: env.DRY_RUN != 'true'
+        with: { python-version: "${{ env.PYTHON_VERSION }}" }
+      - name: Smoke test (readiness and security headers)
+        if: env.DRY_RUN != 'true'
         env: { URL: "${{ vars.STAGING_URL }}" }
         run: bash scripts/smoke_test.sh "$URL"
+      - name: Roll back to the previous healthy release
+        if: failure() && env.DRY_RUN != 'true'
+        run: ssh staging "cd ~/pbip && bash deploy.sh rollback"

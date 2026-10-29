@@ -1,4 +1,4 @@
-"""Analytics models: pre-aggregated monthly spending and customer behavioral segments."""
+"""Analytics models: pre-aggregated monthly spending and category totals."""
 
 from datetime import datetime
 from uuid import UUID
@@ -21,10 +21,11 @@ from pbip_api.core.db import Base, created_at_col, utcnow, uuid_pk
 
 
 class MonthlyCategorySpending(Base):
-    """Pre-aggregated monthly customer spending per category.
+    """Per-category spend of one customer account in one calendar month.
 
-    Materialized table updated periodically or on demand to maintain
-    sub-50ms query response times for spending breakdown and trends.
+    Written only by the nightly Celery task (``pbip.analytics.materialize_monthly_spending``,
+    ADR-0011) for closed months; the request path reads it so a closed month costs one indexed
+    lookup instead of a scan of the ledger entries.
     """
 
     __tablename__ = "monthly_category_spending"
@@ -59,7 +60,11 @@ class MonthlyCategorySpending(Base):
 
 
 class CustomerSegment(Base):
-    """Customer behavioral segment assignment persisted from the ML clustering pipeline."""
+    """A customer's behavioural segment, written only by the offline K-Means job (ADR-0012).
+
+    The request path reads this table; it never assigns a segment itself. The RFM features the
+    label was derived from are stored next to it so the assignment is explainable.
+    """
 
     __tablename__ = "customer_segments"
     __table_args__ = (
@@ -68,7 +73,7 @@ class CustomerSegment(Base):
         CheckConstraint(
             "segment IN ('HIGH_NET_WORTH', 'BUDGET_CONSCIOUS', 'FREQUENT_TRANSACTOR', "
             "'DISCRETIONARY_SPENDER', 'INACTIVE_SAVER')",
-            name="customer_segment_valid",
+            name="segment_valid",
         ),
         CheckConstraint(
             "confidence_score >= 0.0 AND confidence_score <= 1.0", name="confidence_score_range"

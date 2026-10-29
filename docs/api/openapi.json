@@ -387,7 +387,7 @@
                 "type": "null"
               }
             ],
-            "description": "Percentage change (+/-), None if previous was 0",
+            "description": "Percentage change (+/-); None when the previous month had no spend here",
             "title": "Change Percentage"
           },
           "current_amount_minor": {
@@ -551,64 +551,71 @@
         "type": "object"
       },
       "CustomerSegmentResponse": {
-        "description": "Customer behavioral segmentation profile with RFM metrics and justification.",
+        "description": "The customer's behavioural segment and the RFM features it was derived from.",
         "properties": {
           "assigned_at": {
-            "description": "UTC timestamp of the assignment",
+            "description": "When the offline job assigned the segment",
             "format": "date-time",
             "title": "Assigned At",
             "type": "string"
           },
           "confidence_score": {
-            "description": "Clustering proximity confidence score",
+            "description": "Softmax of the distances to the cluster centroids",
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Confidence Score",
             "type": "number"
           },
           "customer_id": {
-            "description": "Target customer identifier",
+            "description": "Customer identifier (the principal's own)",
             "format": "uuid",
             "title": "Customer Id",
             "type": "string"
           },
           "discretionary_ratio": {
-            "description": "Discretionary non-essential spending ratio",
+            "description": "Share of spend in dining, shopping, entertainment, travel",
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Discretionary Ratio",
             "type": "number"
           },
           "explanation": {
-            "description": "Human-readable justification for the segment",
+            "description": "Human-readable justification of the segment",
             "title": "Explanation",
             "type": "string"
           },
           "frequency": {
-            "description": "Average monthly transaction frequency",
+            "description": "Debits per 30-day month",
             "minimum": 0.0,
             "title": "Frequency",
             "type": "number"
           },
           "monetary_minor": {
-            "description": "Average monthly spend in integer minor units",
+            "description": "Spend per 30-day month, minor units",
             "minimum": 0.0,
             "title": "Monetary Minor",
             "type": "integer"
           },
           "recency_days": {
-            "description": "Days elapsed since last transaction",
+            "description": "Days since the last ledger entry",
             "minimum": 0.0,
             "title": "Recency Days",
             "type": "integer"
           },
           "savings_ratio": {
-            "description": "Inflow vs outflow savings ratio",
+            "description": "(credits - debits) / credits; negative = deficit",
             "title": "Savings Ratio",
             "type": "number"
           },
           "segment": {
-            "description": "Assigned behavioral segment name",
+            "description": "Assigned behavioural segment",
+            "enum": [
+              "HIGH_NET_WORTH",
+              "BUDGET_CONSCIOUS",
+              "FREQUENT_TRANSACTOR",
+              "DISCRETIONARY_SPENDER",
+              "INACTIVE_SAVER"
+            ],
             "title": "Segment",
             "type": "string"
           }
@@ -837,23 +844,23 @@
         "type": "object"
       },
       "FinancialHealthComponents": {
-        "description": "Component-wise breakdown of the customer financial health score.",
+        "description": "Component-wise breakdown of the financial health score.",
         "properties": {
           "buffer_months": {
             "$ref": "#/components/schemas/HealthScoreComponent",
-            "description": "Emergency buffer in months (20% weight)"
+            "description": "Cash buffer in months (20 points)"
           },
           "emi_to_income": {
             "$ref": "#/components/schemas/HealthScoreComponent",
-            "description": "Debt / EMI to income ratio (25% weight)"
+            "description": "Loan/EMI repayments to income (25 points)"
           },
           "expense_volatility": {
             "$ref": "#/components/schemas/HealthScoreComponent",
-            "description": "Expense volatility component (25% weight)"
+            "description": "Expense volatility (25 points)"
           },
           "savings_rate": {
             "$ref": "#/components/schemas/HealthScoreComponent",
-            "description": "Savings rate component (30% weight)"
+            "description": "Savings rate (30 points)"
           }
         },
         "required": [
@@ -866,7 +873,7 @@
         "type": "object"
       },
       "FinancialHealthScoreResponse": {
-        "description": "Customer financial health score (0-100) with explainable components and advice.",
+        "description": "Financial health score (0-100) with explainable components and actionable tips.",
         "properties": {
           "account_id": {
             "description": "Target account identifier",
@@ -885,25 +892,48 @@
             "title": "Currency",
             "type": "string"
           },
+          "insufficient_data": {
+            "description": "True when at least one component could not be computed from the history",
+            "title": "Insufficient Data",
+            "type": "boolean"
+          },
+          "months_observed": {
+            "description": "Calendar months of history in the window",
+            "minimum": 0.0,
+            "title": "Months Observed",
+            "type": "integer"
+          },
           "overall_score": {
-            "description": "Composite financial health score (0-100)",
+            "description": "Sum of the component points",
             "maximum": 100.0,
             "minimum": 0.0,
             "title": "Overall Score",
             "type": "integer"
           },
           "rating": {
-            "description": "Rating band: EXCELLENT, GOOD, FAIR, or NEEDS_ATTENTION",
+            "description": "EXCELLENT >= 80, GOOD >= 60, FAIR >= 40, else NEEDS_ATTENTION",
+            "enum": [
+              "EXCELLENT",
+              "GOOD",
+              "FAIR",
+              "NEEDS_ATTENTION"
+            ],
             "title": "Rating",
             "type": "string"
           },
           "recommendations": {
-            "description": "Actionable financial tips",
+            "description": "Actionable tips",
             "items": {
               "type": "string"
             },
             "title": "Recommendations",
             "type": "array"
+          },
+          "window_months": {
+            "description": "Length of the trailing window used",
+            "exclusiveMinimum": 0.0,
+            "title": "Window Months",
+            "type": "integer"
           }
         },
         "required": [
@@ -911,6 +941,9 @@
           "currency",
           "overall_score",
           "rating",
+          "insufficient_data",
+          "months_observed",
+          "window_months",
           "components"
         ],
         "title": "FinancialHealthScoreResponse",
@@ -930,37 +963,50 @@
         "type": "object"
       },
       "HealthScoreComponent": {
-        "description": "Detailed score and calculation for a single health component.",
+        "description": "One scored component of the financial health score, with the metric behind it.",
         "properties": {
           "assessment": {
-            "description": "Assessment summary (e.g. 'OPTIMAL', 'MODERATE', 'VULNERABLE')",
+            "description": "Band of the metric; INSUFFICIENT_DATA when it cannot be computed yet",
+            "enum": [
+              "OPTIMAL",
+              "MODERATE",
+              "DEFICIT",
+              "VOLATILE",
+              "NO_DEBT",
+              "BURDENED",
+              "CRITICAL",
+              "ADEQUATE",
+              "LOW",
+              "VULNERABLE",
+              "INSUFFICIENT_DATA"
+            ],
             "title": "Assessment",
             "type": "string"
           },
           "formatted_value": {
-            "description": "Human-readable formatted metric (e.g. '24.5%', '4.2 months')",
+            "description": "Human-readable metric, e.g. '24.5%', '4.2 months'",
             "title": "Formatted Value",
             "type": "string"
           },
           "max_score": {
-            "description": "Maximum possible points for component",
+            "description": "Points available (the component weight)",
             "exclusiveMinimum": 0.0,
             "title": "Max Score",
             "type": "integer"
           },
           "metric_value": {
-            "description": "Observed underlying metric value",
+            "description": "The underlying metric (rate, CV, ratio, months)",
             "title": "Metric Value",
             "type": "number"
           },
           "score": {
-            "description": "Earned points for component",
+            "description": "Points earned",
             "minimum": 0.0,
             "title": "Score",
             "type": "integer"
           },
           "weight_percentage": {
-            "description": "Weight percentage",
+            "description": "Weight in percent",
             "maximum": 100.0,
             "minimum": 0.0,
             "title": "Weight Percentage",
@@ -1123,7 +1169,7 @@
         "description": "Summary of spending in a calendar month.",
         "properties": {
           "daily_burn_rate_minor": {
-            "description": "Average daily spend in minor units",
+            "description": "Total spend divided by the days of the month (elapsed days when running)",
             "minimum": 0.0,
             "title": "Daily Burn Rate Minor",
             "type": "integer"
@@ -1594,7 +1640,7 @@
                 "type": "null"
               }
             ],
-            "description": "Burn rate percentage change vs previous month",
+            "description": "Daily burn rate change vs the previous month (+/-); None when it had no spend",
             "title": "Burn Rate Change Percentage"
           },
           "currency": {
@@ -1623,7 +1669,7 @@
                 "type": "null"
               }
             ],
-            "description": "Month-over-month total spend percentage change (+/-)",
+            "description": "Month-over-month total spend change (+/-); None if last month had none",
             "title": "Mom Spend Change Percentage"
           },
           "previous_month": {
@@ -2504,7 +2550,7 @@
     },
     "/api/v1/analytics/health-score": {
       "get": {
-        "description": "Calculate explainable financial health score (0-100) based on savings, debt, and buffer.",
+        "description": "Savings rate, expense volatility, loan repayments to income, cash buffer (owned account).",
         "operationId": "get_customer_health_score_api_v1_analytics_health_score_get",
         "parameters": [
           {
@@ -2547,7 +2593,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Customer financial health score and actionable recommendations",
+        "summary": "Financial health score (0-100) with explainable components and tips",
         "tags": [
           "analytics"
         ]
@@ -2555,7 +2601,7 @@
     },
     "/api/v1/analytics/segment": {
       "get": {
-        "description": "Retrieve explainable behavioral segment and RFM lifestyle profile for current customer.",
+        "description": "Segment, confidence and the RFM features it was derived from; the principal's own only.",
         "operationId": "get_customer_segment_api_v1_analytics_segment_get",
         "responses": {
           "200": {
@@ -2574,7 +2620,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Customer behavioral segmentation persona and RFM profile",
+        "summary": "Behavioural segment assigned to the customer by the offline job (404 until it ran)",
         "tags": [
           "analytics"
         ]
@@ -2605,6 +2651,7 @@
             "schema": {
               "anyOf": [
                 {
+                  "maximum": 2200,
                   "minimum": 2000,
                   "type": "integer"
                 },
@@ -2695,6 +2742,7 @@
             "schema": {
               "anyOf": [
                 {
+                  "maximum": 2200,
                   "minimum": 2000,
                   "type": "integer"
                 },
@@ -3134,6 +3182,7 @@
             "schema": {
               "anyOf": [
                 {
+                  "maximum": 9223372036854775807,
                   "minimum": 1,
                   "type": "integer"
                 },
@@ -3588,6 +3637,7 @@
             "required": false,
             "schema": {
               "default": 0,
+              "maximum": 1000000,
               "minimum": 0,
               "title": "Offset",
               "type": "integer"

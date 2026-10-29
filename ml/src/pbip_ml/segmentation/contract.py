@@ -63,13 +63,15 @@ class ClusteringValidationReport(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    n_clusters: int = Field(ge=1, description="Number of clusters evaluated")
+    n_clusters: int = Field(ge=1, description="Number of clusters formed")
     n_samples: int = Field(gt=0, description="Number of customer data points clustered")
-    silhouette_score: float = Field(
-        ge=-1.0, le=1.0, description="Silhouette score measuring cluster cohesion and separation"
+    silhouette_score: float | None = Field(
+        ge=-1.0,
+        le=1.0,
+        description="Cohesion and separation, -1..1; None when fewer than two clusters formed",
     )
-    davies_bouldin_index: float = Field(
-        ge=0.0, description="Davies-Bouldin index (lower indicates better clustering)"
+    davies_bouldin_index: float | None = Field(
+        ge=0.0, description="Lower is better; None when fewer than two clusters formed"
     )
     inertia: float = Field(
         ge=0.0, description="Sum of squared distances of samples to nearest cluster center"

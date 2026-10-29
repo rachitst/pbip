@@ -1,28 +1,112 @@
-"""Repository for analytics: queries pre-aggregated monthly tables and ledger entries."""
+"""Repository for analytics: the materialised monthly table and the ledger entries it is built from.
 
-from collections.abc import Sequence
+The ledger is read through its models only (no ledger internals are called) and never written;
+the only table this module writes is ``monthly_category_spending``.
+"""
+
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
 from uuid import UUID
 
-from pbip_ml.segmentation.contract import (
-    CustomerRFMFeatures,
-    SegmentAssignment,
-)
-from sqlalchemy import delete, extract, func, select
+from pbip_ml.segmentation.contract import CustomerRFMFeatures, SegmentAssignment
+from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from pbip_api.modules.accounts.models import AccountHolder
-from pbip_api.modules.analytics.categorization import categorize_transaction
+from pbip_api.modules.accounts.models import Account, AccountHolder, AccountType
+from pbip_api.modules.analytics.categorization import categorize_transaction, is_debt_repayment
 from pbip_api.modules.analytics.models import CustomerSegment, MonthlyCategorySpending
 from pbip_api.modules.customers.models import Customer
-from pbip_api.modules.ledger.models import EntryDirection, Transaction, TransactionEntry
+from pbip_api.modules.ledger.models import (
+    EntryDirection,
+    Transaction,
+    TransactionEntry,
+    TransactionStatus,
+    TransactionType,
+)
+
+HEALTH_WINDOW_MONTHS = 12
+INCOME_TYPES = (TransactionType.DEPOSIT, TransactionType.TRANSFER)
+
+
+@dataclass(frozen=True)
+class HealthMetrics:
+    """Ledger facts behind the financial health score, over the trailing window (minor units)."""
+
+    income_minor: int  # CREDIT entries of POSTED deposits and transfers (refunds excluded)
+    spend_minor: int  # DEBIT entries of POSTED non-REVERSAL transactions (as in the breakdown)
+    monthly_spend_minor: list[int]  # spend per calendar month that had any, oldest first
+    debt_repayments_minor: int  # the part of spend whose reference marks a loan or EMI instalment
+    months_observed: int  # calendar months from the first entry in the window to now; 0 if none
+
+
+def window_start(now: datetime, months: int) -> datetime:
+    """First instant of the calendar month ``months - 1`` months before ``now`` (UTC)."""
+    index = now.year * 12 + (now.month - 1) - (months - 1)
+    return datetime(index // 12, index % 12 + 1, 1, tzinfo=UTC)
+
+
+def get_financial_health_metrics(
+    session: Session, account_id: UUID, now: datetime
+) -> HealthMetrics:
+    """One pass over the account's entries in the window (which bounds the work per request)."""
+    start = window_start(now, HEALTH_WINDOW_MONTHS)
+    stmt = (
+        select(
+            TransactionEntry.amount,
+            TransactionEntry.direction,
+            TransactionEntry.created_at,
+            Transaction.type,
+            Transaction.reference,
+        )
+        .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
+        .where(
+            TransactionEntry.account_id == account_id,
+            TransactionEntry.created_at >= start,
+            Transaction.status == TransactionStatus.POSTED,
+            Transaction.type != TransactionType.REVERSAL,
+        )
+        .order_by(TransactionEntry.created_at)
+    )
+    income = spend = debt = 0
+    monthly: dict[tuple[int, int], int] = {}
+    first: datetime | None = None
+    for amount, direction, created_at, tx_type, reference in session.execute(stmt).all():
+        first = first or created_at
+        if direction == EntryDirection.CREDIT:
+            if tx_type in INCOME_TYPES:
+                income += int(amount)
+            continue
+        spend += int(amount)
+        stamp = created_at.astimezone(UTC)
+        monthly[(stamp.year, stamp.month)] = monthly.get((stamp.year, stamp.month), 0) + int(amount)
+        if is_debt_repayment(reference):
+            debt += int(amount)
+    months_observed = 0
+    if first is not None:
+        begin = first.astimezone(UTC)
+        months_observed = (now.year - begin.year) * 12 + (now.month - begin.month) + 1
+    return HealthMetrics(
+        income_minor=income,
+        spend_minor=spend,
+        monthly_spend_minor=[monthly[key] for key in sorted(monthly)],
+        debt_repayments_minor=debt,
+        months_observed=months_observed,
+    )
+
+
+def month_window(year: int, month: int) -> tuple[datetime, datetime]:
+    """[start, end) of a calendar month in UTC; ledger timestamps are UTC."""
+    start = datetime(year, month, 1, tzinfo=UTC)
+    next_year, next_month = (year + 1, 1) if month == 12 else (year, month + 1)
+    end = datetime(next_year, next_month, 1, tzinfo=UTC)
+    return start, end
 
 
 def get_preaggregated_monthly_spending(
     session: Session, account_id: UUID, year: int, month: int
 ) -> list[MonthlyCategorySpending]:
-    """Retrieve pre-aggregated spending by category for an account and month."""
+    """Stored per-category spend for an account-month, largest category first."""
     stmt = (
         select(MonthlyCategorySpending)
         .where(
@@ -38,225 +122,135 @@ def get_preaggregated_monthly_spending(
 def compute_monthly_spending_from_entries(
     session: Session, account_id: UUID, year: int, month: int
 ) -> list[MonthlyCategorySpending]:
-    """Compute category aggregations on the fly from immutable ledger entries and transactions."""
-    start_dt = datetime(year, month, 1, 0, 0, 0, tzinfo=UTC)
-    if month == 12:
-        end_dt = datetime(year + 1, 1, 1, 0, 0, 0, tzinfo=UTC)
-    else:
-        end_dt = datetime(year, month + 1, 1, 0, 0, 0, tzinfo=UTC)
+    """Per-category spend of an account-month computed from the immutable ledger entries.
 
-    # Fetch all posted debits for this account in the requested calendar window
+    Spend is every DEBIT entry of a POSTED transaction that is not itself a REVERSAL:
+    a reversed transfer was refunded (its status is REVERSED), so it is no longer spend, and the
+    compensating REVERSAL that debits the counterparty is money being returned, not consumption.
+    Deposits and incoming transfers are CREDIT entries and never count.
+    """
+    start, end = month_window(year, month)
     stmt = (
-        select(
-            TransactionEntry.amount,
-            Transaction.reference,
-            Transaction.type,
-        )
+        select(TransactionEntry.amount, Transaction.reference, Transaction.type)
         .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
         .where(
             TransactionEntry.account_id == account_id,
             TransactionEntry.direction == EntryDirection.DEBIT,
-            TransactionEntry.created_at >= start_dt,
-            TransactionEntry.created_at < end_dt,
+            TransactionEntry.created_at >= start,
+            TransactionEntry.created_at < end,
+            Transaction.status == TransactionStatus.POSTED,
+            Transaction.type != TransactionType.REVERSAL,
         )
     )
+    totals: dict[str, int] = {}
+    counts: dict[str, int] = {}
+    for amount, reference, tx_type in session.execute(stmt).all():
+        category = categorize_transaction(reference, str(tx_type) if tx_type else None)
+        totals[category] = totals.get(category, 0) + int(amount)
+        counts[category] = counts.get(category, 0) + 1
 
-    rows = session.execute(stmt).all()
-
-    category_totals: dict[str, int] = {}
-    category_counts: dict[str, int] = {}
-
-    for amount, reference, tx_type in rows:
-        cat = categorize_transaction(reference, str(tx_type) if tx_type else None)
-        category_totals[cat] = category_totals.get(cat, 0) + int(amount)
-        category_counts[cat] = category_counts.get(cat, 0) + 1
-
-    records: list[MonthlyCategorySpending] = []
-    for cat, total in category_totals.items():
-        records.append(
-            MonthlyCategorySpending(
-                account_id=account_id,
-                year=year,
-                month=month,
-                category=cat,
-                total_amount_minor=total,
-                transaction_count=category_counts.get(cat, 0),
-            )
+    records = [
+        MonthlyCategorySpending(
+            account_id=account_id,
+            year=year,
+            month=month,
+            category=category,
+            total_amount_minor=total,
+            transaction_count=counts[category],
         )
-
+        for category, total in totals.items()
+    ]
     records.sort(key=lambda r: r.total_amount_minor, reverse=True)
     return records
 
 
-def persist_monthly_aggregates(
+def accounts_with_debits(session: Session, year: int, month: int) -> list[UUID]:
+    """Customer accounts with any debit entry in the month (SYSTEM accounts are not customers)."""
+    start, end = month_window(year, month)
+    stmt = (
+        select(TransactionEntry.account_id)
+        .join(Account, Account.id == TransactionEntry.account_id)
+        .where(
+            Account.account_type != AccountType.SYSTEM,
+            TransactionEntry.direction == EntryDirection.DEBIT,
+            TransactionEntry.created_at >= start,
+            TransactionEntry.created_at < end,
+        )
+        .distinct()
+        .order_by(TransactionEntry.account_id)
+    )
+    return list(session.execute(stmt).scalars().all())
+
+
+def upsert_monthly_aggregates(
     session: Session,
     account_id: UUID,
     year: int,
     month: int,
     records: list[MonthlyCategorySpending],
 ) -> None:
-    """Store or refresh pre-aggregated monthly category spending."""
+    """Make the stored rows of one account-month equal to ``records``.
+
+    Categories that disappeared (e.g. every transfer in them was reversed) are deleted; the rest
+    are inserted or updated in place under the unique key, so concurrent or repeated runs cannot
+    collide on it. The caller owns the transaction.
+    """
+    keep = [record.category for record in records]
+    stale = delete(MonthlyCategorySpending).where(
+        MonthlyCategorySpending.account_id == account_id,
+        MonthlyCategorySpending.year == year,
+        MonthlyCategorySpending.month == month,
+    )
+    if keep:
+        stale = stale.where(MonthlyCategorySpending.category.not_in(keep))
+    session.execute(stale)
+    if not records:
+        return
+    stmt = insert(MonthlyCategorySpending).values(
+        [
+            {
+                "account_id": account_id,
+                "year": year,
+                "month": month,
+                "category": record.category,
+                "total_amount_minor": record.total_amount_minor,
+                "transaction_count": record.transaction_count,
+            }
+            for record in records
+        ]
+    )
     session.execute(
-        delete(MonthlyCategorySpending).where(
-            MonthlyCategorySpending.account_id == account_id,
-            MonthlyCategorySpending.year == year,
-            MonthlyCategorySpending.month == month,
+        stmt.on_conflict_do_update(
+            constraint="uq_monthly_category_spending_account_period_cat",
+            set_={
+                "total_amount_minor": stmt.excluded.total_amount_minor,
+                "transaction_count": stmt.excluded.transaction_count,
+                "updated_at": func.now(),
+            },
         )
     )
-    for record in records:
-        session.add(record)
-    session.flush()
-
-
-def get_financial_health_metrics(
-    session: Session, account_id: UUID
-) -> tuple[int, int, list[int], int]:
-    """Retrieve historical total credits, debits, monthly debit breakdown, and EMI debits."""
-    credit_stmt = select(func.coalesce(func.sum(TransactionEntry.amount), 0)).where(
-        TransactionEntry.account_id == account_id,
-        TransactionEntry.direction == EntryDirection.CREDIT,
-    )
-    total_credits = int(session.execute(credit_stmt).scalar_one())
-
-    debit_stmt = select(func.coalesce(func.sum(TransactionEntry.amount), 0)).where(
-        TransactionEntry.account_id == account_id,
-        TransactionEntry.direction == EntryDirection.DEBIT,
-    )
-    total_debits = int(session.execute(debit_stmt).scalar_one())
-
-    year_col = extract("year", TransactionEntry.created_at)
-    month_col = extract("month", TransactionEntry.created_at)
-    monthly_stmt = (
-        select(func.coalesce(func.sum(TransactionEntry.amount), 0))
-        .where(
-            TransactionEntry.account_id == account_id,
-            TransactionEntry.direction == EntryDirection.DEBIT,
-        )
-        .group_by(year_col, month_col)
-        .order_by(year_col, month_col)
-    )
-    monthly_debits = [int(x) for x in session.execute(monthly_stmt).scalars().all()]
-
-    emi_stmt = (
-        select(TransactionEntry.amount, Transaction.reference)
-        .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
-        .where(
-            TransactionEntry.account_id == account_id,
-            TransactionEntry.direction == EntryDirection.DEBIT,
-        )
-    )
-    emi_rows = session.execute(emi_stmt).all()
-    total_emi = 0
-    for amt, ref in emi_rows:
-        if ref and any(term in ref.lower() for term in ("emi", "loan", "mortgage", "installment")):
-            total_emi += int(amt)
-
-    return total_credits, total_debits, monthly_debits, total_emi
-
-
-def get_customer_segment(session: Session, customer_id: UUID) -> CustomerSegment | None:
-    """Retrieve persisted customer behavioral segment profile."""
-    stmt = select(CustomerSegment).where(CustomerSegment.customer_id == customer_id)
-    return session.execute(stmt).scalars().first()
-
-
-def upsert_customer_segment(
-    session: Session, assignment: SegmentAssignment, rfm: CustomerRFMFeatures
-) -> CustomerSegment:
-    """Persist or update customer behavioral segment in the database."""
-    existing = get_customer_segment(session, assignment.customer_id)
-    if existing:
-        existing.segment = assignment.segment.value
-        existing.confidence_score = assignment.confidence_score
-        existing.recency_days = rfm.recency_days
-        existing.frequency = rfm.frequency
-        existing.monetary_minor = rfm.monetary_minor
-        existing.savings_ratio = rfm.savings_ratio
-        existing.discretionary_ratio = rfm.discretionary_ratio
-        existing.explanation = assignment.explanation
-        existing.updated_at = assignment.assigned_at
-        session.flush()
-        return existing
-
-    record = CustomerSegment(
-        customer_id=assignment.customer_id,
-        segment=assignment.segment.value,
-        confidence_score=assignment.confidence_score,
-        recency_days=rfm.recency_days,
-        frequency=rfm.frequency,
-        monetary_minor=rfm.monetary_minor,
-        savings_ratio=rfm.savings_ratio,
-        discretionary_ratio=rfm.discretionary_ratio,
-        explanation=assignment.explanation,
-        created_at=assignment.assigned_at,
-        updated_at=assignment.assigned_at,
-    )
-    session.add(record)
-    session.flush()
-    return record
 
 
 DISCRETIONARY_CATEGORIES = frozenset({"dining", "shopping", "entertainment", "travel"})
-
-
-def _aggregate_rfm_entries(
-    entries: Sequence[Any],
-) -> tuple[int, int, int, int, datetime | None, datetime | None]:
-    """Aggregate total credits, debits, counts, and active period bounds."""
-    total_credits = 0
-    total_debits = 0
-    debit_count = 0
-    discretionary_debits = 0
-    earliest_dt: datetime | None = None
-    most_recent_dt: datetime | None = None
-
-    for amt, direction, created_at_val, ref, tx_type in entries:
-        if direction == EntryDirection.CREDIT:
-            total_credits += int(amt)
-        elif direction == EntryDirection.DEBIT:
-            total_debits += int(amt)
-            debit_count += 1
-            if categorize_transaction(ref, tx_type) in DISCRETIONARY_CATEGORIES:
-                discretionary_debits += int(amt)
-
-        if created_at_val:
-            if earliest_dt is None or created_at_val < earliest_dt:
-                earliest_dt = created_at_val
-            if most_recent_dt is None or created_at_val > most_recent_dt:
-                most_recent_dt = created_at_val
-
-    return (
-        total_credits,
-        total_debits,
-        debit_count,
-        discretionary_debits,
-        earliest_dt,
-        most_recent_dt,
-    )
+DAYS_PER_MONTH = 30.0
 
 
 def extract_customer_rfm_features(
-    session: Session, customer_id: UUID, as_of: datetime | None = None
-) -> CustomerRFMFeatures:
-    """Extract recency, frequency, monetary and lifestyle spending features for a customer."""
-    ref_time = as_of or datetime.now(UTC)
+    session: Session, customer_id: UUID, as_of: datetime
+) -> CustomerRFMFeatures | None:
+    """RFM and lifestyle features of a customer from POSTED, non-REVERSAL entries on their accounts.
 
-    # 1. Get customer accounts
-    acc_stmt = select(AccountHolder.account_id).where(AccountHolder.customer_id == customer_id)
-    account_ids = list(session.execute(acc_stmt).scalars().all())
-
+    Returns None when the customer has no entries: there is nothing to cluster, and a made-up
+    "dormant" profile would not be a measurement.
+    """
+    account_ids = list(
+        session.execute(
+            select(AccountHolder.account_id).where(AccountHolder.customer_id == customer_id)
+        ).scalars()
+    )
     if not account_ids:
-        return CustomerRFMFeatures(
-            customer_id=customer_id,
-            recency_days=90,
-            frequency=0.0,
-            monetary_minor=0,
-            savings_ratio=0.0,
-            discretionary_ratio=0.0,
-        )
-
-    # 2. Query transactions
-    tx_stmt = (
+        return None
+    stmt = (
         select(
             TransactionEntry.amount,
             TransactionEntry.direction,
@@ -265,62 +259,72 @@ def extract_customer_rfm_features(
             Transaction.type,
         )
         .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
-        .where(TransactionEntry.account_id.in_(account_ids))
-        .order_by(TransactionEntry.created_at.asc())
-    )
-    entries = list(session.execute(tx_stmt).all())
-
-    if not entries:
-        return CustomerRFMFeatures(
-            customer_id=customer_id,
-            recency_days=90,
-            frequency=0.0,
-            monetary_minor=0,
-            savings_ratio=0.0,
-            discretionary_ratio=0.0,
+        .where(
+            TransactionEntry.account_id.in_(account_ids),
+            Transaction.status == TransactionStatus.POSTED,
+            Transaction.type != TransactionType.REVERSAL,
         )
-
-    (
-        total_credits,
-        total_debits,
-        debit_count,
-        discretionary_debits,
-        earliest_dt,
-        most_recent_dt,
-    ) = _aggregate_rfm_entries(entries)
-
-    recency_days = max((ref_time - most_recent_dt).days, 0) if most_recent_dt else 90
-
-    # Activity span in 30-day months (minimum 1 month)
-    if earliest_dt and most_recent_dt:
-        span_days = max((ref_time - earliest_dt).days, 1)
-        months = max(span_days / 30.0, 1.0)
-    else:
-        months = 1.0
-
-    frequency = round(debit_count / months, 2)
-    monetary_minor = round(total_debits / months)
-    savings_ratio = (
-        round((total_credits - total_debits) / total_credits, 4) if total_credits > 0 else 0.0
+        .order_by(TransactionEntry.created_at)
     )
-    discretionary_ratio = round(discretionary_debits / total_debits, 4) if total_debits > 0 else 0.0
-
+    rows = session.execute(stmt).all()
+    if not rows:
+        return None
+    credits = debits = debit_count = discretionary = 0
+    for amount, direction, _created_at, reference, tx_type in rows:
+        if direction == EntryDirection.CREDIT:
+            credits += int(amount)
+            continue
+        debits += int(amount)
+        debit_count += 1
+        if categorize_transaction(reference, str(tx_type)) in DISCRETIONARY_CATEGORIES:
+            discretionary += int(amount)
+    first, last = rows[0][2], rows[-1][2]
+    months = max((as_of - first).days / DAYS_PER_MONTH, 1.0)
     return CustomerRFMFeatures(
         customer_id=customer_id,
-        recency_days=recency_days,
-        frequency=frequency,
-        monetary_minor=monetary_minor,
-        savings_ratio=savings_ratio,
-        discretionary_ratio=discretionary_ratio,
+        recency_days=max((as_of - last).days, 0),
+        frequency=round(debit_count / months, 2),
+        monetary_minor=round(debits / months),
+        savings_ratio=round((credits - debits) / credits, 4) if credits > 0 else 0.0,
+        discretionary_ratio=round(discretionary / debits, 4) if debits > 0 else 0.0,
     )
 
 
 def extract_all_customers_rfm_features(
-    session: Session, as_of: datetime | None = None
+    session: Session, as_of: datetime
 ) -> list[CustomerRFMFeatures]:
-    """Extract RFM features across all registered customers in the bank."""
-    cust_stmt = select(Customer.id).order_by(Customer.id)
-    customer_ids = list(session.execute(cust_stmt).scalars().all())
-    return [
-        extract_customer_rfm_features(session, cust_id, as_of=as_of) for cust_id in customer_ids
-    ]
+    """Features of every customer that has ledger activity, in a stable order."""
+    customer_ids = session.execute(select(Customer.id).order_by(Customer.id)).scalars()
+    features = (extract_customer_rfm_features(session, cid, as_of) for cid in customer_ids)
+    return [f for f in features if f is not None]
+
+
+def get_customer_segment(session: Session, customer_id: UUID) -> CustomerSegment | None:
+    return session.execute(
+        select(CustomerSegment).where(CustomerSegment.customer_id == customer_id)
+    ).scalar_one_or_none()
+
+
+def upsert_customer_segment(
+    session: Session, assignment: SegmentAssignment, rfm: CustomerRFMFeatures
+) -> None:
+    """Insert or replace the customer's segment row under its unique key (safe to re-run)."""
+    values = {
+        "customer_id": assignment.customer_id,
+        "segment": assignment.segment.value,
+        "confidence_score": assignment.confidence_score,
+        "recency_days": rfm.recency_days,
+        "frequency": rfm.frequency,
+        "monetary_minor": rfm.monetary_minor,
+        "savings_ratio": rfm.savings_ratio,
+        "discretionary_ratio": rfm.discretionary_ratio,
+        "explanation": assignment.explanation,
+        "updated_at": assignment.assigned_at,
+    }
+    stmt = insert(CustomerSegment).values(values)
+    session.execute(
+        stmt.on_conflict_do_update(
+            constraint="uq_customer_segments_customer_id",
+            set_={key: getattr(stmt.excluded, key) for key in values if key != "customer_id"},
+        )
+    )

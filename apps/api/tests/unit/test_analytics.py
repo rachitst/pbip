@@ -1,17 +1,25 @@
 """Unit tests for analytics categorization and service logic."""
 
+from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 import pytest
-from pbip_api.modules.analytics.categorization import categorize_transaction
+from pbip_api.modules.analytics.categorization import categorize_transaction, is_debt_repayment
 from pbip_api.modules.analytics.health import (
     calculate_volatility_component,
     compute_financial_health_score,
 )
+from pbip_api.modules.analytics.repository import HealthMetrics, window_start
 from pbip_api.modules.analytics.schemas import (
     CategorySpendingItem,
     SpendingBreakdownResponse,
     SpendingTrendsResponse,
+)
+from pbip_api.modules.analytics.service import (
+    is_closed_month,
+    percentage_change,
+    previous_closed_months,
 )
 
 pytestmark = pytest.mark.unit
@@ -101,67 +109,127 @@ def test_spending_trends_schema_validation() -> None:
     assert resp.current_month.daily_burn_rate_minor == 500
 
 
-def test_health_score_ideal_saver() -> None:
-    """Ideal saver: 40% savings rate, stable expenses, no EMI, 8 months cash buffer."""
-    resp = compute_financial_health_score(
-        account_id=uuid4(),
-        currency="INR",
-        available_balance=800_000,  # 8000 INR
-        total_credits=200_000,  # 2000 INR
-        total_debits=100_000,  # 1000 INR (50% savings rate)
-        monthly_debit_totals=[100_000, 102_000, 98_000],  # very stable (CV < 0.05)
-        total_emi_debits=0,
-    )
-    assert resp.overall_score >= 90
-    assert resp.rating == "EXCELLENT"
-    assert resp.components.savings_rate.score == 30
-    assert resp.components.expense_volatility.score == 25
-    assert resp.components.emi_to_income.score == 25
-    assert resp.components.buffer_months.score == 20
-    assert len(resp.recommendations) >= 1
+def test_percentage_change_is_undefined_without_a_baseline() -> None:
+    assert percentage_change(100_000, 80_000) == 25.0
+    assert percentage_change(60_000, 80_000) == -25.0
+    assert percentage_change(0, 80_000) == -100.0
+    assert percentage_change(50_000, 0) is None  # not "+100%": there is nothing to compare with
+    assert percentage_change(0, 0) is None
 
 
-def test_health_score_zero_income_deficit() -> None:
-    """Zero income and burning cash: savings deficit, zero buffer."""
-    resp = compute_financial_health_score(
-        account_id=uuid4(),
-        currency="INR",
-        available_balance=0,  # no buffer
-        total_credits=0,  # no income
-        total_debits=50_000,  # burning cash
-        monthly_debit_totals=[50_000],
-        total_emi_debits=0,
+def test_previous_closed_months_cross_the_year_boundary() -> None:
+    now = datetime(2026, 1, 15, tzinfo=UTC)
+    assert previous_closed_months(now, 2) == [(2025, 12), (2025, 11)]
+    assert is_closed_month(2025, 12, now) and not is_closed_month(2026, 1, now)
+    assert not is_closed_month(2026, 2, now)
+
+
+def _score(
+    available: int,
+    income: int,
+    spend: int,
+    monthly: list[int],
+    debt: int = 0,
+    months_observed: int = 1,
+) -> Any:
+    return compute_financial_health_score(
+        uuid4(),
+        "INR",
+        available,
+        HealthMetrics(
+            income_minor=income,
+            spend_minor=spend,
+            monthly_spend_minor=monthly,
+            debt_repayments_minor=debt,
+            months_observed=months_observed,
+        ),
     )
-    assert resp.overall_score <= 45
-    assert resp.rating in ("FAIR", "NEEDS_ATTENTION")
-    assert resp.components.savings_rate.score == 0
-    assert resp.components.buffer_months.score == 0
+
+
+def test_health_score_ideal_saver_scores_full_points() -> None:
+    """50% savings rate, stable spend, no debt, eight months of buffer."""
+    resp = _score(800_000, 200_000, 100_000, [100_000, 102_000, 98_000], months_observed=3)
+    assert resp.overall_score == 100 and resp.rating == "EXCELLENT"
+    assert not resp.insufficient_data and resp.window_months == 12
+    assert (
+        resp.components.savings_rate.score,
+        resp.components.expense_volatility.score,
+        resp.components.emi_to_income.score,
+        resp.components.buffer_months.score,
+    ) == (30, 25, 25, 20)
+    assert resp.components.emi_to_income.assessment == "NO_DEBT"
+    assert resp.recommendations == [
+        "Your financial habits are in great shape. Keep up the steady savings rate."
+    ]
+
+
+def test_health_score_zero_income_burning_cash_is_zero_and_flagged() -> None:
+    """DoD boundary: no income, one month of spend, nothing left: 0, not 'FAIR' by default."""
+    resp = _score(0, 0, 50_000, [50_000])
+    assert resp.overall_score == 0 and resp.rating == "NEEDS_ATTENTION"
+    assert resp.insufficient_data is True
+    assert resp.components.savings_rate.assessment == "INSUFFICIENT_DATA"
+    assert resp.components.expense_volatility.assessment == "INSUFFICIENT_DATA"
+    assert resp.components.emi_to_income.assessment == "INSUFFICIENT_DATA"
+    assert resp.components.buffer_months.assessment == "VULNERABLE"
     assert any("No active credit inflows" in tip for tip in resp.recommendations)
 
 
 def test_health_score_high_overdraft_and_debt_burden() -> None:
-    """Overdrawn account with severe EMI commitments (>60% of income)."""
-    resp = compute_financial_health_score(
-        account_id=uuid4(),
-        currency="INR",
-        available_balance=-50_000,  # overdraft
-        total_credits=100_000,
-        total_debits=110_000,
-        monthly_debit_totals=[110_000, 115_000],
-        total_emi_debits=70_000,  # 70% EMI-to-income
-    )
-    assert resp.components.buffer_months.score == 0
+    """DoD boundary: overdrawn, spend above income, repayments at 70% of income."""
+    resp = _score(-50_000, 100_000, 110_000, [110_000, 115_000], debt=70_000, months_observed=2)
+    assert resp.components.savings_rate.assessment == "DEFICIT"
     assert resp.components.emi_to_income.score == 0
-    assert resp.overall_score < 40
-    assert resp.rating == "NEEDS_ATTENTION"
+    assert resp.components.emi_to_income.assessment == "CRITICAL"
+    assert resp.components.buffer_months.score == 0
+    assert resp.overall_score == 25 and resp.rating == "NEEDS_ATTENTION"
     assert any("debt servicing" in tip.lower() for tip in resp.recommendations)
 
 
-def test_health_score_volatility_component_scaling() -> None:
-    """High spending volatility drops the volatility component score."""
-    stable_comp, _ = calculate_volatility_component([100_000, 102_000, 99_000])
-    volatile_comp, _ = calculate_volatility_component([10_000, 250_000, 30_000])
+def test_health_score_fresh_account_is_not_rewarded_for_missing_history() -> None:
+    """One deposit, no spend: savings and no-debt are real, volatility and buffer are unknown."""
+    resp = _score(200_000, 200_000, 0, [])
+    assert resp.overall_score == 55 and resp.rating == "FAIR"
+    assert resp.insufficient_data is True
+    assert resp.components.savings_rate.score == 30
+    assert resp.components.expense_volatility.score == 0
+    assert resp.components.emi_to_income.score == 25
+    assert resp.components.buffer_months.score == 0
+    assert resp.components.buffer_months.assessment == "INSUFFICIENT_DATA"
 
-    assert stable_comp.score == 25
-    assert volatile_comp.score < 15
-    assert volatile_comp.assessment == "VOLATILE"
+
+def test_health_score_tips_are_never_replaced_by_a_generic_message() -> None:
+    """30 + 25 + 25 + 0 = 80 is EXCELLENT, and the empty-buffer warning must still be shown."""
+    resp = _score(0, 200_000, 100_000, [100_000, 101_000], months_observed=2)
+    assert resp.overall_score == 80 and resp.rating == "EXCELLENT"
+    assert any("No liquid cash buffer" in tip for tip in resp.recommendations)
+
+
+def test_health_score_volatility_component_scaling() -> None:
+    stable, _ = calculate_volatility_component([100_000, 102_000, 99_000])
+    volatile, tips = calculate_volatility_component([10_000, 250_000, 30_000])
+    assert stable.score == 25 and stable.assessment == "OPTIMAL"
+    assert volatile.score == 0 and volatile.assessment == "VOLATILE" and tips
+
+
+@pytest.mark.parametrize(
+    ("reference", "expected"),
+    [
+        ("Home loan EMI", True),
+        ("Mortgage instalment March", True),
+        ("Car loan installment", True),
+        ("Apollo chemist pharmacy", False),  # "chemist" contains "emi"
+        ("Insurance premium", False),  # "premium" contains "emi"
+        ("Remittance to family", False),
+        (None, False),
+    ],
+)
+def test_debt_repayment_detection_uses_word_boundaries(
+    reference: str | None, expected: bool
+) -> None:
+    assert is_debt_repayment(reference) is expected
+
+
+def test_window_start_covers_twelve_calendar_months() -> None:
+    assert window_start(datetime(2026, 10, 29, tzinfo=UTC), 12) == datetime(2025, 11, 1, tzinfo=UTC)
+    assert window_start(datetime(2026, 1, 5, tzinfo=UTC), 12) == datetime(2025, 2, 1, tzinfo=UTC)

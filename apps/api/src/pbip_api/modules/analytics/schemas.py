@@ -1,9 +1,25 @@
 """Pydantic schemas for analytics: spending breakdown and trends."""
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+Rating = Literal["EXCELLENT", "GOOD", "FAIR", "NEEDS_ATTENTION"]
+Assessment = Literal[
+    "OPTIMAL",
+    "MODERATE",
+    "DEFICIT",
+    "VOLATILE",
+    "NO_DEBT",
+    "BURDENED",
+    "CRITICAL",
+    "ADEQUATE",
+    "LOW",
+    "VULNERABLE",
+    "INSUFFICIENT_DATA",
+]
 
 
 class CategorySpendingItem(BaseModel):
@@ -44,7 +60,11 @@ class MonthlySpendingSummary(BaseModel):
     month: int = Field(..., ge=1, le=12, description="Month (1-12)")
     total_spend_minor: int = Field(..., ge=0, description="Total spend in minor units")
     transaction_count: int = Field(..., ge=0, description="Transaction count")
-    daily_burn_rate_minor: int = Field(..., ge=0, description="Average daily spend in minor units")
+    daily_burn_rate_minor: int = Field(
+        ...,
+        ge=0,
+        description="Total spend divided by the days of the month (elapsed days when running)",
+    )
 
 
 class CategoryShiftItem(BaseModel):
@@ -59,7 +79,7 @@ class CategoryShiftItem(BaseModel):
         ..., description="Difference in spend (current - previous) in minor units"
     )
     change_percentage: float | None = Field(
-        None, description="Percentage change (+/-), None if previous was 0"
+        None, description="Percentage change (+/-); None when the previous month had no spend here"
     )
 
 
@@ -75,13 +95,15 @@ class SpendingTrendsResponse(BaseModel):
         None, description="Previous month summary (if available)"
     )
     mom_spend_change_percentage: float | None = Field(
-        None, description="Month-over-month total spend percentage change (+/-)"
+        None,
+        description="Month-over-month total spend change (+/-); None if last month had none",
     )
     daily_burn_rate_minor: int = Field(
         ..., ge=0, description="Current daily burn rate in minor units"
     )
     burn_rate_change_percentage: float | None = Field(
-        None, description="Burn rate percentage change vs previous month"
+        None,
+        description="Daily burn rate change vs the previous month (+/-); None when it had no spend",
     )
     top_categories_increasing: list[CategoryShiftItem] = Field(
         default_factory=list, description="Categories with highest spending increases"
@@ -92,101 +114,108 @@ class SpendingTrendsResponse(BaseModel):
 
 
 class HealthScoreComponent(BaseModel):
-    """Detailed score and calculation for a single health component."""
+    """One scored component of the financial health score, with the metric behind it."""
 
     model_config = ConfigDict(frozen=True)
 
-    score: int = Field(..., ge=0, description="Earned points for component")
-    max_score: int = Field(..., gt=0, description="Maximum possible points for component")
-    weight_percentage: float = Field(..., ge=0.0, le=100.0, description="Weight percentage")
-    metric_value: float = Field(..., description="Observed underlying metric value")
+    score: int = Field(..., ge=0, description="Points earned")
+    max_score: int = Field(..., gt=0, description="Points available (the component weight)")
+    weight_percentage: float = Field(..., ge=0.0, le=100.0, description="Weight in percent")
+    metric_value: float = Field(..., description="The underlying metric (rate, CV, ratio, months)")
     formatted_value: str = Field(
-        ..., description="Human-readable formatted metric (e.g. '24.5%', '4.2 months')"
+        ..., description="Human-readable metric, e.g. '24.5%', '4.2 months'"
     )
-    assessment: str = Field(
-        ..., description="Assessment summary (e.g. 'OPTIMAL', 'MODERATE', 'VULNERABLE')"
+    assessment: Assessment = Field(
+        ..., description="Band of the metric; INSUFFICIENT_DATA when it cannot be computed yet"
     )
 
 
 class FinancialHealthComponents(BaseModel):
-    """Component-wise breakdown of the customer financial health score."""
+    """Component-wise breakdown of the financial health score."""
 
     model_config = ConfigDict(frozen=True)
 
-    savings_rate: HealthScoreComponent = Field(
-        ..., description="Savings rate component (30% weight)"
-    )
+    savings_rate: HealthScoreComponent = Field(..., description="Savings rate (30 points)")
     expense_volatility: HealthScoreComponent = Field(
-        ..., description="Expense volatility component (25% weight)"
+        ..., description="Expense volatility (25 points)"
     )
     emi_to_income: HealthScoreComponent = Field(
-        ..., description="Debt / EMI to income ratio (25% weight)"
+        ..., description="Loan/EMI repayments to income (25 points)"
     )
     buffer_months: HealthScoreComponent = Field(
-        ..., description="Emergency buffer in months (20% weight)"
+        ..., description="Cash buffer in months (20 points)"
     )
 
 
 class FinancialHealthScoreResponse(BaseModel):
-    """Customer financial health score (0-100) with explainable components and advice."""
+    """Financial health score (0-100) with explainable components and actionable tips."""
 
     model_config = ConfigDict(frozen=True)
 
     account_id: UUID = Field(..., description="Target account identifier")
     currency: str = Field(..., min_length=3, max_length=3, description="ISO currency code")
-    overall_score: int = Field(
-        ..., ge=0, le=100, description="Composite financial health score (0-100)"
+    overall_score: int = Field(..., ge=0, le=100, description="Sum of the component points")
+    rating: Rating = Field(
+        ..., description="EXCELLENT >= 80, GOOD >= 60, FAIR >= 40, else NEEDS_ATTENTION"
     )
-    rating: str = Field(..., description="Rating band: EXCELLENT, GOOD, FAIR, or NEEDS_ATTENTION")
+    insufficient_data: bool = Field(
+        ..., description="True when at least one component could not be computed from the history"
+    )
+    months_observed: int = Field(..., ge=0, description="Calendar months of history in the window")
+    window_months: int = Field(..., gt=0, description="Length of the trailing window used")
     components: FinancialHealthComponents = Field(..., description="Component breakdown")
-    recommendations: list[str] = Field(
-        default_factory=list, description="Actionable financial tips"
-    )
+    recommendations: list[str] = Field(default_factory=list, description="Actionable tips")
+
+
+SegmentName = Literal[
+    "HIGH_NET_WORTH",
+    "BUDGET_CONSCIOUS",
+    "FREQUENT_TRANSACTOR",
+    "DISCRETIONARY_SPENDER",
+    "INACTIVE_SAVER",
+]
 
 
 class CustomerSegmentResponse(BaseModel):
-    """Customer behavioral segmentation profile with RFM metrics and justification."""
+    """The customer's behavioural segment and the RFM features it was derived from."""
 
     model_config = ConfigDict(frozen=True)
 
-    customer_id: UUID = Field(..., description="Target customer identifier")
-    segment: str = Field(..., description="Assigned behavioral segment name")
+    customer_id: UUID = Field(..., description="Customer identifier (the principal's own)")
+    segment: SegmentName = Field(..., description="Assigned behavioural segment")
     confidence_score: float = Field(
-        ..., ge=0.0, le=1.0, description="Clustering proximity confidence score"
+        ..., ge=0.0, le=1.0, description="Softmax of the distances to the cluster centroids"
     )
-    recency_days: int = Field(..., ge=0, description="Days elapsed since last transaction")
-    frequency: float = Field(..., ge=0.0, description="Average monthly transaction frequency")
-    monetary_minor: int = Field(
-        ..., ge=0, description="Average monthly spend in integer minor units"
+    recency_days: int = Field(..., ge=0, description="Days since the last ledger entry")
+    frequency: float = Field(..., ge=0.0, description="Debits per 30-day month")
+    monetary_minor: int = Field(..., ge=0, description="Spend per 30-day month, minor units")
+    savings_ratio: float = Field(
+        ..., description="(credits - debits) / credits; negative = deficit"
     )
-    savings_ratio: float = Field(..., description="Inflow vs outflow savings ratio")
     discretionary_ratio: float = Field(
-        ..., ge=0.0, le=1.0, description="Discretionary non-essential spending ratio"
+        ..., ge=0.0, le=1.0, description="Share of spend in dining, shopping, entertainment, travel"
     )
-    explanation: str = Field(..., description="Human-readable justification for the segment")
-    assigned_at: datetime = Field(..., description="UTC timestamp of the assignment")
+    explanation: str = Field(..., description="Human-readable justification of the segment")
+    assigned_at: datetime = Field(..., description="When the offline job assigned the segment")
 
 
 class SegmentationJobResponse(BaseModel):
-    """Execution summary of the offline customer behavioral segmentation clustering job."""
+    """Summary of one offline segmentation run (the cluster distribution report)."""
 
     model_config = ConfigDict(frozen=True)
 
-    n_clusters: int = Field(..., gt=0, description="Number of clusters evaluated")
-    n_samples: int = Field(..., ge=0, description="Number of customer profiles processed")
-    silhouette_score: float = Field(
-        ..., description="Silhouette score measuring cluster cohesion and separation"
+    n_clusters: int = Field(..., ge=0, description="Clusters formed; 0 when the run was skipped")
+    n_samples: int = Field(..., ge=0, description="Customers with ledger activity")
+    silhouette_score: float | None = Field(
+        None, description="Silhouette score; None when fewer than two clusters formed"
     )
-    davies_bouldin_index: float = Field(
-        ..., ge=0.0, description="Davies-Bouldin index for clustering validation"
+    davies_bouldin_index: float | None = Field(
+        None, ge=0.0, description="Davies-Bouldin index; None when fewer than two clusters formed"
     )
-    inertia: float = Field(..., ge=0.0, description="Within-cluster sum of squared distances")
-    cluster_distribution: dict[str, int] = Field(
-        description="Number of customers classified into each segment"
-    )
+    inertia: float | None = Field(None, ge=0.0, description="Within-cluster sum of squares")
+    cluster_distribution: dict[str, int] = Field(description="Customers per segment")
     cluster_centroids: dict[str, dict[str, float]] = Field(
-        description="Feature centroid values for each segment"
+        description="Centroids per segment in original feature units"
     )
-    total_customers_assigned: int = Field(
-        ..., ge=0, description="Total customers with updated segment in the database"
-    )
+    total_customers_assigned: int = Field(..., ge=0, description="Rows written")
+    skipped_reason: str | None = Field(None, description="Why nothing was clustered, if so")

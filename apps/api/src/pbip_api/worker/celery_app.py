@@ -1,6 +1,7 @@
 """Celery application. Tasks must be idempotent: with acks_late a task may run twice."""
 
 from celery import Celery
+from celery.schedules import crontab
 
 from pbip_api.core.config import get_settings
 
@@ -26,5 +27,9 @@ celery_app.conf.update(
     result_expires=3600,
     beat_schedule={
         "relay-outbox": {"task": "pbip.outbox.relay", "schedule": 10.0},
+        "materialize-monthly-spending": {
+            "task": "pbip.analytics.materialize_monthly_spending",
+            "schedule": crontab(hour=2, minute=30),
+        },
     },
 )

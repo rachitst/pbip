@@ -1,164 +1,114 @@
-"""Offline customer behavioral segmentation job runner (TASK-044).
+"""Offline customer behavioural segmentation job (TASK-044, ADR-0012).
 
-Runs K-Means clustering pipeline across bank customer RFM & lifestyle profiles,
-validates cluster cohesion (Silhouette score, Davies-Bouldin index), persists
-segment assignments, and produces a cluster distribution report.
+Clusters every customer with ledger activity on RFM and lifestyle features (K-Means), reports the
+Silhouette score and Davies-Bouldin index, stores one segment row per customer in
+``customer_segments`` and writes the cluster distribution report. Failures are failures: the job
+exits non-zero and never silently switches to synthetic data.
 
 Usage:
-    uv run python scripts/run_segmentation.py
-    uv run python scripts/run_segmentation.py --synthetic
+    uv run python scripts/run_segmentation.py [--clusters 5] [--report-file report.json]
+    uv run python scripts/run_segmentation.py --synthetic   # pipeline check without a database
 """
 
 import argparse
+import json
 import sys
-from uuid import uuid4
+from datetime import UTC, datetime
+from pathlib import Path
+from uuid import UUID
 
-from pbip_ml.segmentation.contract import CustomerRFMFeatures
+from pbip_ml.segmentation.contract import ClusteringValidationReport, CustomerRFMFeatures
 from pbip_ml.segmentation.pipeline import cluster_customers
 
+SYNTHETIC_PERSONAS = (
+    # (recency_days, frequency, monetary_minor, savings_ratio, discretionary_ratio)
+    (2, 15.0, 450_000_00, 0.35, 0.28),  # high net worth
+    (1, 55.0, 30_000_00, 0.15, 0.22),  # frequent transactor
+    (3, 24.0, 65_000_00, 0.08, 0.72),  # discretionary spender
+    (90, 0.8, 6_000_00, 0.12, 0.08),  # inactive saver
+    (5, 11.0, 22_000_00, 0.42, 0.09),  # budget conscious
+)
 
-def _generate_synthetic_sample(n: int = 100) -> list[CustomerRFMFeatures]:
-    """Generate representative customer profiles across distinct spending personas."""
+
+def synthetic_customers(n: int = 125) -> list[CustomerRFMFeatures]:
+    """Deterministic profiles around the five personas (fixed ids, so runs are reproducible)."""
     samples: list[CustomerRFMFeatures] = []
-    per_cluster = n // 5
-
-    # 1. High Net Worth
-    for i in range(per_cluster):
+    for index in range(n):
+        recency, frequency, monetary, savings, discretionary = SYNTHETIC_PERSONAS[index % 5]
+        jitter = index // 5
         samples.append(
             CustomerRFMFeatures(
-                customer_id=uuid4(),
-                recency_days=1 + (i % 5),
-                frequency=15.0 + (i % 6) * 0.5,
-                monetary_minor=450_000_00 + i * 2_500_00,
-                savings_ratio=0.35 + (i % 4) * 0.01,
-                discretionary_ratio=0.28 + (i % 3) * 0.01,
+                customer_id=UUID(int=index + 1),
+                recency_days=recency + jitter % 4,
+                frequency=round(frequency + (jitter % 6) * 0.5, 2),
+                monetary_minor=monetary + jitter * 250_00,
+                savings_ratio=round(savings + (jitter % 4) * 0.01, 4),
+                discretionary_ratio=round(discretionary + (jitter % 3) * 0.01, 4),
             )
         )
-
-    # 2. Frequent Transactor
-    for i in range(per_cluster):
-        samples.append(
-            CustomerRFMFeatures(
-                customer_id=uuid4(),
-                recency_days=1 + (i % 3),
-                frequency=55.0 + (i % 12) * 1.0,
-                monetary_minor=30_000_00 + i * 400_00,
-                savings_ratio=0.15 + (i % 5) * 0.01,
-                discretionary_ratio=0.22 + (i % 4) * 0.01,
-            )
-        )
-
-    # 3. Discretionary Spender
-    for i in range(per_cluster):
-        samples.append(
-            CustomerRFMFeatures(
-                customer_id=uuid4(),
-                recency_days=2 + (i % 4),
-                frequency=24.0 + (i % 6) * 1.0,
-                monetary_minor=65_000_00 + i * 700_00,
-                savings_ratio=0.08 + (i % 3) * 0.01,
-                discretionary_ratio=0.72 + (i % 6) * 0.02,
-            )
-        )
-
-    # 4. Inactive / Dormant
-    for i in range(per_cluster):
-        samples.append(
-            CustomerRFMFeatures(
-                customer_id=uuid4(),
-                recency_days=85 + (i % 20),
-                frequency=0.8 + (i % 3) * 0.2,
-                monetary_minor=6_000_00 + i * 250_00,
-                savings_ratio=0.12 + (i % 4) * 0.01,
-                discretionary_ratio=0.08 + (i % 2) * 0.01,
-            )
-        )
-
-    # 5. Budget Conscious
-    for i in range(n - len(samples)):
-        samples.append(
-            CustomerRFMFeatures(
-                customer_id=uuid4(),
-                recency_days=5 + (i % 5),
-                frequency=11.0 + (i % 5) * 0.5,
-                monetary_minor=22_000_00 + i * 350_00,
-                savings_ratio=0.42 + (i % 5) * 0.01,
-                discretionary_ratio=0.09 + (i % 3) * 0.01,
-            )
-        )
-
     return samples
 
 
+def print_report(report: ClusteringValidationReport, written: int | None) -> None:
+    out = sys.stdout
+    out.write(f"Customers clustered:   {report.n_samples} into {report.n_clusters} segments\n")
+    out.write(f"Silhouette score:      {report.silhouette_score}\n")
+    out.write(f"Davies-Bouldin index:  {report.davies_bouldin_index}\n")
+    out.write(f"Inertia:               {report.inertia}\n")
+    if written is not None:
+        out.write(f"Segment rows written:  {written}\n")
+    out.write("\nCluster distribution:\n")
+    for segment, count in sorted(report.cluster_distribution.items()):
+        out.write(f"  {segment:22s} {count:5d}  ({count / report.n_samples * 100:5.1f}%)\n")
+    out.write("\nCentroids (original units):\n")
+    for segment, centroid in sorted(report.cluster_centroids.items()):
+        values = ", ".join(f"{name}={value}" for name, value in centroid.items())
+        out.write(f"  {segment}: {values}\n")
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="PBIP Customer Behavioral Segmentation Job")
+    parser = argparse.ArgumentParser(description="PBIP customer behavioural segmentation job")
+    parser.add_argument("--clusters", type=int, default=5, help="Number of segments, 1..5")
     parser.add_argument(
-        "--synthetic",
-        action="store_true",
-        help="Run against synthetic customer dataset instead of live database",
+        "--synthetic", action="store_true", help="Cluster a synthetic population, no database"
     )
-    parser.add_argument(
-        "--clusters",
-        type=int,
-        default=5,
-        help="Number of behavioral clusters (default: 5)",
-    )
+    parser.add_argument("--report-file", type=Path, default=None, help="Write the JSON report")
     args = parser.parse_args()
+    now = datetime.now(UTC)
 
-    print("==========================================================")
-    print("PBIP Customer Behavioral Segmentation Pipeline (TASK-044)")
-    print("==========================================================")
+    if args.synthetic:
+        _assignments, report = cluster_customers(synthetic_customers(), args.clusters, now=now)
+        print_report(report, written=None)
+        payload = report.model_dump()
+    else:
+        from pbip_api.core.db import session_scope
+        from pbip_api.modules.analytics.segmentation_job import run_offline_segmentation_job
 
-    if not args.synthetic:
-        try:
-            from pbip_api.core.db import get_engine
-            from pbip_api.modules.analytics.service import run_offline_segmentation_job
-            from sqlalchemy.orm import sessionmaker
+        with session_scope() as session:
+            result = run_offline_segmentation_job(session, now, n_clusters=args.clusters)
+        if result.skipped_reason is not None:
+            sys.stdout.write(f"Skipped: {result.skipped_reason}\n")
+        else:
+            print_report(
+                ClusteringValidationReport(
+                    n_clusters=result.n_clusters,
+                    n_samples=result.n_samples,
+                    silhouette_score=result.silhouette_score,
+                    davies_bouldin_index=result.davies_bouldin_index,
+                    inertia=result.inertia or 0.0,
+                    cluster_distribution=result.cluster_distribution,
+                    cluster_centroids=result.cluster_centroids,
+                ),
+                written=result.total_customers_assigned,
+            )
+        payload = result.model_dump()
 
-            engine = get_engine()
-            session_factory = sessionmaker(bind=engine)
-            with session_factory() as session:
-                print("Running segmentation against active database...")
-                res = run_offline_segmentation_job(session, n_clusters=args.clusters)
-                print(f"Processed {res.n_samples} customers across {res.n_clusters} clusters.")
-                print(f"Persisted {res.total_customers_assigned} customer segment assignments.")
-                print(f"Silhouette Score: {res.silhouette_score:.4f} (Cohesion & Separation)")
-                print(f"Davies-Bouldin Index: {res.davies_bouldin_index:.4f} (Cluster Quality)")
-                print(f"Inertia: {res.inertia:.2f}")
-                print("\nCluster Distribution:")
-                for seg, count in sorted(res.cluster_distribution.items()):
-                    print(f"  - {seg:25s}: {count:4d} customers")
-                print("==========================================================")
-                return 0
-        except Exception as e:
-            print(f"Database connection unavailable ({e}). Falling back to synthetic run...\n")
-
-    print(f"Running clustering on synthetic population (k={args.clusters})...")
-    samples = _generate_synthetic_sample(125)
-    _assignments, report = cluster_customers(samples, n_clusters=args.clusters, random_state=42)
-
-    print(
-        f"Successfully evaluated {report.n_samples} customer profiles into "
-        f"{report.n_clusters} clusters."
-    )
-    print(f"Silhouette Score:     {report.silhouette_score:.4f}")
-    print(f"Davies-Bouldin Index: {report.davies_bouldin_index:.4f}")
-    print(f"Inertia:              {report.inertia:.2f}")
-    print("\nCluster Distribution Report:")
-    for seg, count in sorted(report.cluster_distribution.items()):
-        pct = (count / report.n_samples) * 100
-        print(f"  - {seg:25s}: {count:4d} customers ({pct:5.1f}%)")
-
-    print("\nCentroid Profiles:")
-    for seg, centroids in sorted(report.cluster_centroids.items()):
-        print(f"  [{seg}]")
-        for metric, val in centroids.items():
-            print(f"     {metric:22s}: {val:10.2f}")
-
-    print("==========================================================")
-    print("Offline segmentation job execution completed cleanly.")
+    if args.report_file:
+        args.report_file.parent.mkdir(parents=True, exist_ok=True)
+        args.report_file.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+        sys.stdout.write(f"Wrote report to {args.report_file}\n")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

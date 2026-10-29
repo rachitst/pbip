@@ -82,24 +82,36 @@ the threat model lists TLS as a deployment requirement, not an implemented contr
 
 ### 2.1 Deploy a release
 
-1. From `main` with CI green: `git tag vX.Y.Z && git push --tags`. The `package` job builds and pushes
-   `api:vX.Y.Z`/`web:vX.Y.Z` (and `latest`).
-2. With `DEPLOY_ENABLED=true`, the `deploy` job copies the compose file, runs `pull` then `up -d --remove-orphans` with
-   the new `IMAGE_TAG`, and runs the smoke test against `STAGING_URL`. `migrate` runs `alembic upgrade head` before
-   `api` starts (compose dependency), so a failed migration stops the rollout with the previous `api` still running.
-3. Confirm: `docker compose -f docker-compose.prod.yml ps` shows `migrate` exited 0 and the others healthy/up;
-   `python scripts/smoke_test.py https://<host>` passes.
+1. From `main` with CI green: `git tag vX.Y.Z && git push origin vX.Y.Z`. The workflow accepts only
+   `vX.Y.Z` tags and its `verify` job refuses a tag whose commit is not on `main`.
+2. The `package` job builds and pushes `api:vX.Y.Z`/`web:vX.Y.Z` (and `latest`) to GHCR.
+3. With `DEPLOY_ENABLED=true`, the `deploy` job (GitHub environment `staging`, one deployment at a time) checks
+   that every required secret and variable is set (names only), copies `docker-compose.prod.yml` and
+   `infra/deploy/deploy.sh` to `~/pbip`, and runs `bash deploy.sh deploy <prefix> vX.Y.Z` on the host:
+   `pull`, then `up -d --remove-orphans --wait`, which runs `migrate` (`alembic upgrade head`) before `api` starts,
+   starts `web` only once `api` is healthy, and fails if any container is not healthy within 180 s. The tag is
+   recorded in `~/pbip/.deployed_tag` only after the stack is healthy; the previous release stays in
+   `~/pbip/.previous_tag`.
+4. The runner then runs `scripts/smoke_test.sh` against `STAGING_URL`. If the deploy or the smoke test fails, the
+   workflow runs `bash deploy.sh rollback` on the host, which redeploys the previous healthy release (§2.2), and the
+   run is marked failed.
+5. Confirm: the workflow is green; `docker compose -f docker-compose.prod.yml ps` on the host shows `migrate`
+   exited 0 and the others healthy; `cat ~/pbip/.deployed_tag` shows the new tag.
+
+**Cutover window.** Containers are recreated in place on one host, so the API is unavailable for the seconds
+between the old `api` stopping and the new one passing its health check (nginx is restarted after that). This is
+a health-gated, minimal-downtime deployment, not a zero-downtime one; true zero downtime needs two `api` replicas
+behind a dynamically resolved nginx upstream (follow-up noted on #105).
+
+**Dry run.** `Actions -> Deploy -> Run workflow` with a tag and `dry_run = true` runs the tag verification, the image
+build and the secret/variable check, prints the plan, and skips every step that touches the host.
 
 ### 2.2 Roll back
 
-Images are immutable per tag, so a rollback is a redeploy of the previous tag:
-
-```bash
-cd ~/pbip
-IMAGE_PREFIX=ghcr.io/<owner>/pbip IMAGE_TAG=v<previous> docker compose -f docker-compose.prod.yml pull
-IMAGE_PREFIX=ghcr.io/<owner>/pbip IMAGE_TAG=v<previous> docker compose -f docker-compose.prod.yml up -d --remove-orphans
-python3 scripts/smoke_test.py https://<host>
-```
+- **From GitHub:** `Actions -> Deploy -> Run workflow` with `tag = v<previous>` redeploys that release through the
+  same health-gated path (images are immutable per tag).
+- **On the host:** `cd ~/pbip && bash deploy.sh rollback` restarts the release recorded in `.previous_tag`.
+- **Automatic:** the workflow does this itself when a deploy or smoke test fails.
 
 Migrations are **not** rolled back automatically. Every migration has a tested `downgrade` (CI runs up → down → up),
 but only downgrade when the previous release cannot run on the new schema, and take a backup first (§4.1):

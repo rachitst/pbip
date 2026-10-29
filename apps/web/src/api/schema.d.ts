@@ -149,8 +149,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Customer financial health score and actionable recommendations
-         * @description Calculate explainable financial health score (0-100) based on savings, debt, and buffer.
+         * Financial health score (0-100) with explainable components and tips
+         * @description Savings rate, expense volatility, loan repayments to income, cash buffer (owned account).
          */
         get: operations["get_customer_health_score_api_v1_analytics_health_score_get"];
         put?: never;
@@ -169,8 +169,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Customer behavioral segmentation persona and RFM profile
-         * @description Retrieve explainable behavioral segment and RFM lifestyle profile for current customer.
+         * Behavioural segment assigned to the customer by the offline job (404 until it ran)
+         * @description Segment, confidence and the RFM features it was derived from; the principal's own only.
          */
         get: operations["get_customer_segment_api_v1_analytics_segment_get"];
         put?: never;
@@ -844,7 +844,7 @@ export interface components {
             change_minor: number;
             /**
              * Change Percentage
-             * @description Percentage change (+/-), None if previous was 0
+             * @description Percentage change (+/-); None when the previous month had no spend here
              */
             change_percentage?: number | null;
             /**
@@ -926,61 +926,62 @@ export interface components {
         };
         /**
          * CustomerSegmentResponse
-         * @description Customer behavioral segmentation profile with RFM metrics and justification.
+         * @description The customer's behavioural segment and the RFM features it was derived from.
          */
         CustomerSegmentResponse: {
             /**
              * Assigned At
              * Format: date-time
-             * @description UTC timestamp of the assignment
+             * @description When the offline job assigned the segment
              */
             assigned_at: string;
             /**
              * Confidence Score
-             * @description Clustering proximity confidence score
+             * @description Softmax of the distances to the cluster centroids
              */
             confidence_score: number;
             /**
              * Customer Id
              * Format: uuid
-             * @description Target customer identifier
+             * @description Customer identifier (the principal's own)
              */
             customer_id: string;
             /**
              * Discretionary Ratio
-             * @description Discretionary non-essential spending ratio
+             * @description Share of spend in dining, shopping, entertainment, travel
              */
             discretionary_ratio: number;
             /**
              * Explanation
-             * @description Human-readable justification for the segment
+             * @description Human-readable justification of the segment
              */
             explanation: string;
             /**
              * Frequency
-             * @description Average monthly transaction frequency
+             * @description Debits per 30-day month
              */
             frequency: number;
             /**
              * Monetary Minor
-             * @description Average monthly spend in integer minor units
+             * @description Spend per 30-day month, minor units
              */
             monetary_minor: number;
             /**
              * Recency Days
-             * @description Days elapsed since last transaction
+             * @description Days since the last ledger entry
              */
             recency_days: number;
             /**
              * Savings Ratio
-             * @description Inflow vs outflow savings ratio
+             * @description (credits - debits) / credits; negative = deficit
              */
             savings_ratio: number;
             /**
              * Segment
-             * @description Assigned behavioral segment name
+             * @description Assigned behavioural segment
+             * @enum {string}
              */
-            segment: string;
+            segment: "HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER";
         };
         /** DecisionRequest */
         DecisionRequest: {
@@ -1078,21 +1079,21 @@ export interface components {
         };
         /**
          * FinancialHealthComponents
-         * @description Component-wise breakdown of the customer financial health score.
+         * @description Component-wise breakdown of the financial health score.
          */
         FinancialHealthComponents: {
-            /** @description Emergency buffer in months (20% weight) */
+            /** @description Cash buffer in months (20 points) */
             buffer_months: components["schemas"]["HealthScoreComponent"];
-            /** @description Debt / EMI to income ratio (25% weight) */
+            /** @description Loan/EMI repayments to income (25 points) */
             emi_to_income: components["schemas"]["HealthScoreComponent"];
-            /** @description Expense volatility component (25% weight) */
+            /** @description Expense volatility (25 points) */
             expense_volatility: components["schemas"]["HealthScoreComponent"];
-            /** @description Savings rate component (30% weight) */
+            /** @description Savings rate (30 points) */
             savings_rate: components["schemas"]["HealthScoreComponent"];
         };
         /**
          * FinancialHealthScoreResponse
-         * @description Customer financial health score (0-100) with explainable components and advice.
+         * @description Financial health score (0-100) with explainable components and actionable tips.
          */
         FinancialHealthScoreResponse: {
             /**
@@ -1109,20 +1110,36 @@ export interface components {
              */
             currency: string;
             /**
+             * Insufficient Data
+             * @description True when at least one component could not be computed from the history
+             */
+            insufficient_data: boolean;
+            /**
+             * Months Observed
+             * @description Calendar months of history in the window
+             */
+            months_observed: number;
+            /**
              * Overall Score
-             * @description Composite financial health score (0-100)
+             * @description Sum of the component points
              */
             overall_score: number;
             /**
              * Rating
-             * @description Rating band: EXCELLENT, GOOD, FAIR, or NEEDS_ATTENTION
+             * @description EXCELLENT >= 80, GOOD >= 60, FAIR >= 40, else NEEDS_ATTENTION
+             * @enum {string}
              */
-            rating: string;
+            rating: "EXCELLENT" | "GOOD" | "FAIR" | "NEEDS_ATTENTION";
             /**
              * Recommendations
-             * @description Actionable financial tips
+             * @description Actionable tips
              */
             recommendations?: string[];
+            /**
+             * Window Months
+             * @description Length of the trailing window used
+             */
+            window_months: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1131,37 +1148,38 @@ export interface components {
         };
         /**
          * HealthScoreComponent
-         * @description Detailed score and calculation for a single health component.
+         * @description One scored component of the financial health score, with the metric behind it.
          */
         HealthScoreComponent: {
             /**
              * Assessment
-             * @description Assessment summary (e.g. 'OPTIMAL', 'MODERATE', 'VULNERABLE')
+             * @description Band of the metric; INSUFFICIENT_DATA when it cannot be computed yet
+             * @enum {string}
              */
-            assessment: string;
+            assessment: "OPTIMAL" | "MODERATE" | "DEFICIT" | "VOLATILE" | "NO_DEBT" | "BURDENED" | "CRITICAL" | "ADEQUATE" | "LOW" | "VULNERABLE" | "INSUFFICIENT_DATA";
             /**
              * Formatted Value
-             * @description Human-readable formatted metric (e.g. '24.5%', '4.2 months')
+             * @description Human-readable metric, e.g. '24.5%', '4.2 months'
              */
             formatted_value: string;
             /**
              * Max Score
-             * @description Maximum possible points for component
+             * @description Points available (the component weight)
              */
             max_score: number;
             /**
              * Metric Value
-             * @description Observed underlying metric value
+             * @description The underlying metric (rate, CV, ratio, months)
              */
             metric_value: number;
             /**
              * Score
-             * @description Earned points for component
+             * @description Points earned
              */
             score: number;
             /**
              * Weight Percentage
-             * @description Weight percentage
+             * @description Weight in percent
              */
             weight_percentage: number;
         };
@@ -1225,7 +1243,7 @@ export interface components {
         MonthlySpendingSummary: {
             /**
              * Daily Burn Rate Minor
-             * @description Average daily spend in minor units
+             * @description Total spend divided by the days of the month (elapsed days when running)
              */
             daily_burn_rate_minor: number;
             /**
@@ -1463,7 +1481,7 @@ export interface components {
             account_id: string;
             /**
              * Burn Rate Change Percentage
-             * @description Burn rate percentage change vs previous month
+             * @description Daily burn rate change vs the previous month (+/-); None when it had no spend
              */
             burn_rate_change_percentage?: number | null;
             /**
@@ -1480,7 +1498,7 @@ export interface components {
             daily_burn_rate_minor: number;
             /**
              * Mom Spend Change Percentage
-             * @description Month-over-month total spend percentage change (+/-)
+             * @description Month-over-month total spend change (+/-); None if last month had none
              */
             mom_spend_change_percentage?: number | null;
             /** @description Previous month summary (if available) */

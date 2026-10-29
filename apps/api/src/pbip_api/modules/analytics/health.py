@@ -1,312 +1,216 @@
-"""Calculation engine for customer Financial Health Score (0-100).
+"""Financial health score (0-100) with explainable components (TASK-041).
 
-Weights:
-- Savings rate: 30%
-- Expense volatility: 25%
-- EMI / Debt-to-income: 25%
-- Buffer months: 20%
+Points per component: savings rate 30, expense volatility 25, debt (EMI) to income 25, cash
+buffer 20. Every component is computed from the account's ledger over the trailing
+``HEALTH_WINDOW_MONTHS`` months (see ``repository.get_financial_health_metrics``). A component
+that cannot be computed because the history is too thin scores 0 and says so
+(``INSUFFICIENT_DATA``) rather than earning default points: a brand-new account is not "healthy",
+it is unknown, and the response carries ``insufficient_data`` so clients can show that.
+Recommendation tips are never replaced by a generic message; a tip is dropped only when its
+component is at its best.
 """
 
-from typing import Any
+from uuid import UUID
 
+from pbip_api.modules.analytics.repository import HEALTH_WINDOW_MONTHS, HealthMetrics
 from pbip_api.modules.analytics.schemas import (
+    Assessment,
     FinancialHealthComponents,
     FinancialHealthScoreResponse,
     HealthScoreComponent,
+    Rating,
+)
+
+SAVINGS_POINTS = 30
+VOLATILITY_POINTS = 25
+DEBT_POINTS = 25
+BUFFER_POINTS = 20
+TARGET_SAVINGS_RATE = 0.20
+NO_INCOME_TIP = (
+    f"No active credit inflows recorded in the last {HEALTH_WINDOW_MONTHS} months. "
+    "Set up direct deposits so income and savings can be measured."
 )
 
 
-def calculate_savings_component(
-    total_credits: int, total_debits: int
-) -> tuple[HealthScoreComponent, list[str]]:
-    """Compute savings rate component score (weight 30%)."""
-    tips: list[str] = []
-    if total_credits <= 0:
-        comp = HealthScoreComponent(
-            score=0,
-            max_score=30,
-            weight_percentage=30.0,
-            metric_value=0.0,
-            formatted_value="0.0%",
-            assessment="VULNERABLE",
-        )
-        tips.append("No active credit inflows recorded. Set up direct deposits to build savings.")
-        return comp, tips
-
-    net_saved = total_credits - total_debits
-    rate = net_saved / total_credits
-
-    if rate >= 0.20:
-        score = 30
-        assessment = "OPTIMAL"
-    elif rate > 0:
-        score = round((rate / 0.20) * 30)
-        assessment = "MODERATE"
-        tips.append(
-            f"Your savings rate is {rate * 100:.1f}%. Increasing your monthly savings to >=20% "
-            "accelerates wealth accumulation."
-        )
-    else:
-        score = 0
-        assessment = "DEFICIT"
-        tips.append(
-            "Your monthly expenses exceed total income inflows. Review discretionary categories "
-            "to prevent debt accumulation."
-        )
-
-    comp = HealthScoreComponent(
+def _component(
+    score: int, max_score: int, metric: float, formatted: str, assessment: Assessment
+) -> HealthScoreComponent:
+    return HealthScoreComponent(
         score=score,
-        max_score=30,
-        weight_percentage=30.0,
-        metric_value=round(rate, 4),
-        formatted_value=f"{rate * 100:.1f}%",
+        max_score=max_score,
+        weight_percentage=float(max_score),
+        metric_value=round(metric, 4),
+        formatted_value=formatted,
         assessment=assessment,
     )
-    return comp, tips
+
+
+def calculate_savings_component(
+    income_minor: int, spend_minor: int
+) -> tuple[HealthScoreComponent, list[str]]:
+    """Share of income kept: (income - spend) / income; 20 percent or more earns full points."""
+    if income_minor <= 0:
+        comp = _component(0, SAVINGS_POINTS, 0.0, "no income observed", "INSUFFICIENT_DATA")
+        return comp, [NO_INCOME_TIP]
+    rate = (income_minor - spend_minor) / income_minor
+    if rate >= TARGET_SAVINGS_RATE:
+        return _component(SAVINGS_POINTS, SAVINGS_POINTS, rate, f"{rate * 100:.1f}%", "OPTIMAL"), []
+    if rate > 0:
+        score = round(rate / TARGET_SAVINGS_RATE * SAVINGS_POINTS)
+        tip = (
+            f"Your savings rate is {rate * 100:.1f}%. Increasing your monthly savings to 20% or "
+            "more accelerates wealth accumulation."
+        )
+        return _component(score, SAVINGS_POINTS, rate, f"{rate * 100:.1f}%", "MODERATE"), [tip]
+    tip = (
+        "Your expenses exceed your income inflows. Review discretionary categories to prevent "
+        "debt accumulation."
+    )
+    return _component(0, SAVINGS_POINTS, rate, f"{rate * 100:.1f}%", "DEFICIT"), [tip]
 
 
 def calculate_volatility_component(
-    monthly_debits: list[int],
+    monthly_spend_minor: list[int],
 ) -> tuple[HealthScoreComponent, list[str]]:
-    """Compute expense stability component score (weight 25%)."""
-    tips: list[str] = []
-    if len(monthly_debits) < 2:
-        comp = HealthScoreComponent(
-            score=20,
-            max_score=25,
-            weight_percentage=25.0,
-            metric_value=0.0,
-            formatted_value="Baseline (initial period)",
-            assessment="STABLE",
+    """Coefficient of variation of monthly spend; needs at least two months with spend."""
+    if len(monthly_spend_minor) < 2:
+        comp = _component(
+            0, VOLATILITY_POINTS, 0.0, "fewer than two months of spending", "INSUFFICIENT_DATA"
         )
-        return comp, tips
-
-    mean = sum(monthly_debits) / len(monthly_debits)
-    if mean == 0:
-        comp = HealthScoreComponent(
-            score=25,
-            max_score=25,
-            weight_percentage=25.0,
-            metric_value=0.0,
-            formatted_value="0.00 CV",
-            assessment="OPTIMAL",
-        )
-        return comp, tips
-
-    variance = sum((x - mean) ** 2 for x in monthly_debits) / len(monthly_debits)
-    std_dev = variance**0.5
-    cv = std_dev / mean
-
+        return comp, ["Expense stability needs at least two months of spending history."]
+    mean = sum(monthly_spend_minor) / len(monthly_spend_minor)
+    variance = sum((x - mean) ** 2 for x in monthly_spend_minor) / len(monthly_spend_minor)
+    cv = variance**0.5 / mean
+    formatted = f"{cv:.2f} CV"
     if cv <= 0.15:
-        score = 25
-        assessment = "OPTIMAL"
-    elif cv <= 0.40:
-        score = round(25 - ((cv - 0.15) / (0.40 - 0.15)) * 15)
-        assessment = "MODERATE"
-    else:
-        score = max(round(10 - ((cv - 0.40) / 0.60) * 10), 0)
-        assessment = "VOLATILE"
-        tips.append(
-            "High variation in monthly spending detected. Creating a monthly budget helps "
-            "smooth unpredictable spikes."
-        )
-
-    comp = HealthScoreComponent(
-        score=score,
-        max_score=25,
-        weight_percentage=25.0,
-        metric_value=round(cv, 4),
-        formatted_value=f"{cv:.2f} CV",
-        assessment=assessment,
+        return _component(VOLATILITY_POINTS, VOLATILITY_POINTS, cv, formatted, "OPTIMAL"), []
+    if cv <= 0.40:
+        score = round(VOLATILITY_POINTS - (cv - 0.15) / 0.25 * 15)
+        return _component(score, VOLATILITY_POINTS, cv, formatted, "MODERATE"), []
+    score = max(round(10 - (cv - 0.40) / 0.60 * 10), 0)
+    tip = (
+        "High variation in monthly spending detected. A monthly budget helps smooth "
+        "unpredictable spikes."
     )
-    return comp, tips
+    return _component(score, VOLATILITY_POINTS, cv, formatted, "VOLATILE"), [tip]
 
 
-def calculate_emi_component(
-    total_credits: int, total_emi_debits: int
+def calculate_debt_component(
+    income_minor: int, debt_repayments_minor: int
 ) -> tuple[HealthScoreComponent, list[str]]:
-    """Compute EMI / Debt-to-income component score (weight 25%)."""
-    tips: list[str] = []
-    if total_credits <= 0:
-        if total_emi_debits > 0:
-            comp = HealthScoreComponent(
-                score=0,
-                max_score=25,
-                weight_percentage=25.0,
-                metric_value=1.0,
-                formatted_value=">100%",
-                assessment="CRITICAL",
-            )
-            tips.append(
-                "EMI obligations exist without recorded income inflows. Urgent repayment risk."
-            )
-            return comp, tips
-        comp = HealthScoreComponent(
-            score=25,
-            max_score=25,
-            weight_percentage=25.0,
-            metric_value=0.0,
-            formatted_value="0.0%",
-            assessment="OPTIMAL",
-        )
-        return comp, tips
-
-    ratio = total_emi_debits / total_credits
+    """Loan and EMI repayments as a share of income; 20 percent or less earns full points."""
+    if income_minor <= 0:
+        if debt_repayments_minor > 0:
+            comp = _component(0, DEBT_POINTS, 1.0, "repayments without income", "CRITICAL")
+            return comp, ["Loan repayments exist without recorded income inflows: repayment risk."]
+        comp = _component(0, DEBT_POINTS, 0.0, "no income observed", "INSUFFICIENT_DATA")
+        return comp, []
+    ratio = debt_repayments_minor / income_minor
+    formatted = f"{ratio * 100:.1f}%"
     if ratio == 0:
-        score = 25
-        assessment = "NO_DEBT"
-    elif ratio <= 0.20:
-        score = 25
-        assessment = "OPTIMAL"
-    elif ratio <= 0.40:
-        score = round(25 - ((ratio - 0.20) / 0.20) * 15)
-        assessment = "MODERATE"
-        tips.append(
-            f"EMI burden is {ratio * 100:.1f}% of income. Keeping debt obligations under 20% "
-            "leaves ample cushion for savings."
+        return _component(DEBT_POINTS, DEBT_POINTS, ratio, formatted, "NO_DEBT"), []
+    if ratio <= 0.20:
+        return _component(DEBT_POINTS, DEBT_POINTS, ratio, formatted, "OPTIMAL"), []
+    if ratio <= 0.40:
+        score = round(DEBT_POINTS - (ratio - 0.20) / 0.20 * 15)
+        tip = (
+            f"Loan repayments take {ratio * 100:.1f}% of your income. Keeping them under 20% "
+            "leaves room for savings."
         )
-    elif ratio <= 0.60:
-        score = round(10 - ((ratio - 0.40) / 0.20) * 10)
-        assessment = "BURDENED"
-        tips.append(
-            f"Debt commitments consume {ratio * 100:.1f}% of income. Prioritize prepayment "
-            "of high-interest loans."
+        return _component(score, DEBT_POINTS, ratio, formatted, "MODERATE"), [tip]
+    if ratio <= 0.60:
+        score = round(10 - (ratio - 0.40) / 0.20 * 10)
+        tip = (
+            f"Loan repayments consume {ratio * 100:.1f}% of your income. Prioritise prepaying "
+            "high-interest loans."
         )
-    else:
-        score = 0
-        assessment = "CRITICAL"
-        tips.append(
-            f"Over {ratio * 100:.1f}% of monthly income goes toward debt servicing. Restructuring "
-            "loans can reduce monthly payments."
-        )
-
-    comp = HealthScoreComponent(
-        score=score,
-        max_score=25,
-        weight_percentage=25.0,
-        metric_value=round(ratio, 4),
-        formatted_value=f"{ratio * 100:.1f}%",
-        assessment=assessment,
+        return _component(score, DEBT_POINTS, ratio, formatted, "BURDENED"), [tip]
+    tip = (
+        f"Over {ratio * 100:.1f}% of your income goes toward debt servicing. Restructuring "
+        "loans can reduce the monthly outflow."
     )
-    return comp, tips
+    return _component(0, DEBT_POINTS, ratio, formatted, "CRITICAL"), [tip]
 
 
 def calculate_buffer_component(
-    available_balance: int, avg_monthly_debits: int
+    available_balance_minor: int, average_monthly_spend_minor: int
 ) -> tuple[HealthScoreComponent, list[str]]:
-    """Compute buffer months component score (weight 20%)."""
-    tips: list[str] = []
-    if available_balance <= 0:
-        comp = HealthScoreComponent(
-            score=0,
-            max_score=20,
-            weight_percentage=20.0,
-            metric_value=0.0,
-            formatted_value="0.0 months",
-            assessment="VULNERABLE",
+    """Months of average spend covered by the available balance; six or more earns full points."""
+    if average_monthly_spend_minor <= 0:
+        comp = _component(0, BUFFER_POINTS, 0.0, "no spending observed", "INSUFFICIENT_DATA")
+        return comp, ["A cash buffer can be assessed once there is spending history."]
+    if available_balance_minor <= 0:
+        comp = _component(0, BUFFER_POINTS, 0.0, "0.0 months", "VULNERABLE")
+        tip = (
+            "No liquid cash buffer. Aim to accumulate at least one month of living expenses as "
+            "a safety net."
         )
-        tips.append(
-            "No liquid cash buffer. Aim to accumulate at least 1 month of living expenses "
-            "as a safety net."
-        )
-        return comp, tips
-
-    if avg_monthly_debits <= 0:
-        comp = HealthScoreComponent(
-            score=20,
-            max_score=20,
-            weight_percentage=20.0,
-            metric_value=12.0,
-            formatted_value=">= 12.0 months",
-            assessment="OPTIMAL",
-        )
-        return comp, tips
-
-    months = available_balance / avg_monthly_debits
+        return comp, [tip]
+    months = available_balance_minor / average_monthly_spend_minor
+    formatted = f"{months:.1f} months"
     if months >= 6.0:
-        score = 20
-        assessment = "OPTIMAL"
-    elif months >= 3.0:
-        score = round(15 + ((months - 3.0) / 3.0) * 5)
-        assessment = "ADEQUATE"
-    elif months >= 1.0:
-        score = round(8 + ((months - 1.0) / 2.0) * 7)
-        assessment = "LOW"
-        tips.append(
+        return _component(BUFFER_POINTS, BUFFER_POINTS, months, formatted, "OPTIMAL"), []
+    if months >= 3.0:
+        score = round(15 + (months - 3.0) / 3.0 * 5)
+        return _component(score, BUFFER_POINTS, months, formatted, "ADEQUATE"), []
+    if months >= 1.0:
+        score = round(8 + (months - 1.0) / 2.0 * 7)
+        tip = (
             f"Your liquid cash buffer covers {months:.1f} months of expenses. Building toward "
-            "3 to 6 months provides essential emergency resilience."
+            "three to six months provides emergency resilience."
         )
-    else:
-        score = max(round(months * 8), 0)
-        assessment = "CRITICAL"
-        tips.append(
-            f"Current reserves cover only {months:.1f} months of expenses. Setting aside small "
-            "regular deposits will build a reliable buffer."
-        )
-
-    comp = HealthScoreComponent(
-        score=score,
-        max_score=20,
-        weight_percentage=20.0,
-        metric_value=round(months, 2),
-        formatted_value=f"{months:.1f} months",
-        assessment=assessment,
+        return _component(score, BUFFER_POINTS, months, formatted, "LOW"), [tip]
+    tip = (
+        f"Current reserves cover only {months:.1f} months of expenses. Small regular deposits "
+        "will build a reliable buffer."
     )
-    return comp, tips
+    return _component(max(round(months * 8), 0), BUFFER_POINTS, months, formatted, "CRITICAL"), [
+        tip
+    ]
+
+
+def _rating(overall: int) -> Rating:
+    if overall >= 80:
+        return "EXCELLENT"
+    if overall >= 60:
+        return "GOOD"
+    if overall >= 40:
+        return "FAIR"
+    return "NEEDS_ATTENTION"
 
 
 def compute_financial_health_score(
-    account_id: Any,
-    currency: str,
-    available_balance: int,
-    total_credits: int,
-    total_debits: int,
-    monthly_debit_totals: list[int],
-    total_emi_debits: int,
+    account_id: UUID, currency: str, available_balance_minor: int, metrics: HealthMetrics
 ) -> FinancialHealthScoreResponse:
-    """Calculate overall financial health score (0-100) and actionable advice."""
-    savings_comp, s_tips = calculate_savings_component(total_credits, total_debits)
-    vol_comp, v_tips = calculate_volatility_component(monthly_debit_totals)
-    emi_comp, e_tips = calculate_emi_component(total_credits, total_emi_debits)
-
-    avg_debits = (
-        round(sum(monthly_debit_totals) / len(monthly_debit_totals))
-        if monthly_debit_totals
-        else total_debits
+    """Overall score (sum of the component points, 0-100), the components and the tips."""
+    savings, savings_tips = calculate_savings_component(metrics.income_minor, metrics.spend_minor)
+    volatility, volatility_tips = calculate_volatility_component(metrics.monthly_spend_minor)
+    debt, debt_tips = calculate_debt_component(metrics.income_minor, metrics.debt_repayments_minor)
+    average_spend = (
+        round(sum(metrics.monthly_spend_minor) / len(metrics.monthly_spend_minor))
+        if metrics.monthly_spend_minor
+        else 0
     )
-    buffer_comp, b_tips = calculate_buffer_component(available_balance, avg_debits)
+    buffer, buffer_tips = calculate_buffer_component(available_balance_minor, average_spend)
 
-    raw_sum = savings_comp.score + vol_comp.score + emi_comp.score + buffer_comp.score
-    overall = min(max(raw_sum, 0), 100)
-
-    if overall >= 80:
-        rating = "EXCELLENT"
-        all_tips = [
-            "Your financial habits are in great shape. Keep maintaining your steady savings rate!"
-        ]
-    elif overall >= 60:
-        rating = "GOOD"
-        all_tips = s_tips + v_tips + e_tips + b_tips
-    elif overall >= 40:
-        rating = "FAIR"
-        all_tips = s_tips + v_tips + e_tips + b_tips
-    else:
-        rating = "NEEDS_ATTENTION"
-        all_tips = s_tips + v_tips + e_tips + b_tips
-
-    if not all_tips:
-        all_tips.append("Continue tracking category spending to maintain your healthy score.")
-
+    components = (savings, volatility, debt, buffer)
+    overall = min(max(sum(c.score for c in components), 0), 100)
+    tips = savings_tips + volatility_tips + debt_tips + buffer_tips
+    if not tips:
+        tips = ["Your financial habits are in great shape. Keep up the steady savings rate."]
     return FinancialHealthScoreResponse(
         account_id=account_id,
         currency=currency,
         overall_score=overall,
-        rating=rating,
+        rating=_rating(overall),
+        insufficient_data=any(c.assessment == "INSUFFICIENT_DATA" for c in components),
+        months_observed=metrics.months_observed,
+        window_months=HEALTH_WINDOW_MONTHS,
         components=FinancialHealthComponents(
-            savings_rate=savings_comp,
-            expense_volatility=vol_comp,
-            emi_to_income=emi_comp,
-            buffer_months=buffer_comp,
+            savings_rate=savings,
+            expense_volatility=volatility,
+            emi_to_income=debt,
+            buffer_months=buffer,
         ),
-        recommendations=all_tips[:4],
+        recommendations=tips,
     )

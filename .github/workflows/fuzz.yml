@@ -1,0 +1,98 @@
+name: Nightly API Fuzzing
+
+# Scheduled property-based API fuzzing with Schemathesis against the PBIP OpenAPI contract.
+# Runs nightly at 02:00 UTC and on manual workflow_dispatch triggers.
+# TASK-070 definition of done: >= 500 cases with zero unhandled 5xx errors and 100% schema conformance.
+# How the runner works (modes, authentication, reproduction): docs/testing/fuzzing.md.
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      cases:
+        description: "Number of fuzzing test cases to execute (minimum 500 for DoD)"
+        required: false
+        default: "500"
+        type: string
+
+concurrency:
+  group: fuzz-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  UV_VERSION: "0.11.7"
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  schemathesis-fuzz:
+    name: Schemathesis Property-Based API Fuzzing
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: pbip
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: pbip_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pbip -d pbip_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://pbip@localhost:5432/pbip_test
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://pbip@localhost:5432/pbip_test
+      DATABASE_URL: postgresql+psycopg://pbip@localhost:5432/pbip_test
+      REDIS_URL: redis://localhost:6379/0
+      APP_ENV: local
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: { python-version: "${{ env.PYTHON_VERSION }}" }
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+      - name: Install uv
+        run: pip install uv==${{ env.UV_VERSION }} cryptography
+      - name: Initialize development environment secrets
+        run: python scripts/init_env.py
+      - name: Install project dependencies
+        run: uv sync --all-packages --frozen
+      - name: Verify OpenAPI specification is current
+        run: uv run python scripts/export_openapi.py --check
+      - name: Apply database migrations
+        run: uv run alembic -c apps/api/alembic.ini upgrade head
+      - name: Seed database fixtures
+        run: uv run python scripts/dev.py seed
+      - name: Start PBIP API server in background
+        run: |
+          uv run uvicorn pbip_api.main:app --host 127.0.0.1 --port 8000 &
+          echo "API_PID=$!" >> "$GITHUB_ENV"
+      - name: Wait for API readiness probe
+        run: |
+          curl --fail --silent --retry 30 --retry-delay 2 --retry-all-errors http://127.0.0.1:8000/api/health/ready
+      # Authenticated by default: the runner registers a disposable customer on the ephemeral database.
+      # The run number is the Hypothesis seed, so a failing night can be replayed with --seed.
+      - name: Execute property-based API fuzzing (>= 500 cases, positive and negative inputs)
+        env:
+          CASES: ${{ inputs.cases || '500' }}
+          SEED: ${{ github.run_number }}
+        run: >-
+          uv run python scripts/dev.py fuzz --url http://127.0.0.1:8000
+          --cases "$CASES" --seed "$SEED" --report-file fuzz-report.json
+      - name: Upload Schemathesis fuzzing report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: schemathesis-fuzz-report
+          path: fuzz-report.json
