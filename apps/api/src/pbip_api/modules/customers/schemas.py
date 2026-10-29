@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from pbip_api.core.validation import Text
+
 
 class CustomerProfileOut(BaseModel):
     """Authenticated customer profile details. Sensitive PII like phone is masked."""
@@ -32,7 +34,7 @@ class DeviceRegisterRequest(BaseModel):
         max_length=512,
         description="Raw client device fingerprint string or hardware identifier",
     )
-    label: str | None = Field(
+    label: Text | None = Field(
         default=None,
         max_length=100,
         description="Optional human-readable label for the device",
