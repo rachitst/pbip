@@ -27,9 +27,15 @@ celery_app.conf.update(
     result_expires=3600,
     beat_schedule={
         "relay-outbox": {"task": "pbip.outbox.relay", "schedule": 10.0},
+        # TASK-052 / ADR-0011: one nightly spending job (no second materialisation job).
         "materialize-monthly-spending": {
             "task": "pbip.analytics.materialize_monthly_spending",
-            "schedule": crontab(hour=2, minute=30),
+            "schedule": crontab(hour=2, minute=0),
+        },
+        # TASK-052 / ADR-0012: segments are recomputed weekly (Sunday), after the nightly job.
+        "segment-customers-weekly": {
+            "task": "pbip.analytics.segment_customers",
+            "schedule": crontab(hour=3, minute=0, day_of_week=0),
         },
     },
 )

@@ -13,10 +13,12 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 from datetime import timedelta
+from itertools import pairwise
 from typing import Any
 from uuid import UUID
 
 import pytest
+from fakeredis import FakeRedis
 from fastapi.testclient import TestClient
 from pbip_api.core.db import utcnow
 from pbip_api.modules.accounts.models import Account
@@ -25,7 +27,7 @@ from pbip_api.modules.analytics.models import MonthlyCategorySpending
 from pbip_api.modules.analytics.service import materialize_monthly_spending
 from pbip_api.modules.ledger import service as ledger
 from pbip_test_support import Actor, FakeClock, age_payee
-from sqlalchemy import Engine, select, text
+from sqlalchemy import Engine, func, select, text
 from sqlalchemy.orm import Session
 
 pytestmark = [pytest.mark.integration, pytest.mark.security]
@@ -641,3 +643,47 @@ def test_health_score_uses_closed_months_only_so_the_calendar_day_does_not_move_
     assert later["components"]["expense_volatility"]["assessment"] == "VOLATILE"
     assert later["components"]["buffer_months"]["metric_value"] == 14.0  # 350,000 / 25,000
     assert later["months_observed"] == 3
+
+
+def test_nightly_job_materializes_a_hundred_accounts_idempotently(
+    client: TestClient, make_customer: Callable[..., Actor], db: Session, fake_redis: FakeRedis
+) -> None:
+    """TASK-052 DoD: batch execution against the test database with 100 accounts."""
+    now = utcnow()
+    debited: set[UUID] = set()
+    for _ in range(20):
+        fake_redis.flushall()  # setup only: 20 registrations exceed the per-IP hourly limit
+        owner = make_customer(funds=50_000)
+        accounts = [owner.account_id]
+        for _ in range(4):
+            opened = client.post(
+                "/api/v1/accounts", headers=owner.headers, json={"account_type": "CURRENT"}
+            )
+            assert opened.status_code == 201, opened.text
+            accounts.append(UUID(opened.json()["id"]))
+        for source, target in pairwise(accounts[:4]):
+            moved = client.post(
+                "/api/v1/transfers",
+                headers={**owner.headers, "Idempotency-Key": uuid.uuid4().hex},
+                json={
+                    "from_account_id": str(source),
+                    "amount_minor": 1_000,
+                    "to_account_id": str(target),
+                },
+            )
+            assert moved.status_code == 201, moved.text
+            debited.add(source)
+    customer_accounts = db.execute(
+        select(func.count()).select_from(Account).where(Account.account_type != "SYSTEM")
+    ).scalar_one()
+    assert customer_accounts == 100
+
+    first = materialize_monthly_spending(db, periods=[(now.year, now.month)], now=now)
+    assert first == len(debited) == 60
+    stored = db.execute(select(func.count()).select_from(MonthlyCategorySpending)).scalar_one()
+    assert stored == 60  # one "transfers" category row per debited account
+    assert materialize_monthly_spending(db, periods=[(now.year, now.month)], now=now) == 60
+    db.expire_all()
+    assert (
+        db.execute(select(func.count()).select_from(MonthlyCategorySpending)).scalar_one() == stored
+    )

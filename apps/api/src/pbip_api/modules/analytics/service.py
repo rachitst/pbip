@@ -8,6 +8,7 @@ reversed weeks after it was posted.
 """
 
 import calendar
+import time
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -84,6 +85,7 @@ def materialize_monthly_spending(
     it, so this is only useful to tests.
     """
     now = now or utcnow()
+    started = time.monotonic()
     if not repository.try_lock_materialization(session):
         _logger.info("spending_materialization_skipped", reason="another run holds the lock")
         session.rollback()
@@ -105,7 +107,12 @@ def materialize_monthly_spending(
         records = repository.compute_monthly_spending_from_entries(session, account_id, year, month)
         repository.upsert_monthly_aggregates(session, account_id, year, month, records)
     session.commit()
-    _logger.info("spending_materialized", account_months=len(targets))
+    _logger.info(
+        "spending_materialized",
+        account_months=len(targets),
+        accounts=len({account_id for account_id, _year, _month in targets}),
+        duration_ms=round((time.monotonic() - started) * 1000, 1),
+    )
     return len(targets)
 
 

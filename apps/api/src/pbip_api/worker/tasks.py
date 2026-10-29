@@ -24,3 +24,18 @@ def materialize_monthly_spending_task() -> int:
     """Store the closed months' per-category spend (nightly via beat; ADR-0011). Idempotent."""
     with session_scope() as session:
         return materialize_monthly_spending(session)
+
+
+@celery_app.task(name="pbip.analytics.segment_customers")
+def segment_customers_task() -> int:
+    """Re-run the offline K-Means segmentation (weekly via beat; ADR-0012). Idempotent upserts.
+
+    The job module is imported here, not at module level: it loads scikit-learn, which must stay out
+    of every process that merely imports the task registry (the API, the beat scheduler).
+    """
+    from pbip_api.core.db import utcnow
+    from pbip_api.modules.analytics.segmentation_job import run_offline_segmentation_job
+
+    with session_scope() as session:
+        result = run_offline_segmentation_job(session, utcnow())
+    return result.total_customers_assigned
