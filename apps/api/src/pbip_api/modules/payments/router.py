@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.db import get_session
+from pbip_api.core.geoip import CountryResolver
 from pbip_api.modules.auth.dependencies import (
     Principal,
     get_auth_service,
@@ -17,7 +18,7 @@ from pbip_api.modules.auth.dependencies import (
 from pbip_api.modules.auth.service import AuthService, RequestMeta
 from pbip_api.modules.customers.dependencies import get_current_customer
 from pbip_api.modules.customers.models import Customer
-from pbip_api.modules.fraud.dependencies import get_fraud_scorer
+from pbip_api.modules.fraud.dependencies import get_country_resolver, get_fraud_scorer
 from pbip_api.modules.payments.schemas import StepUpRequest, TransferOut, TransferRequest
 from pbip_api.modules.payments.service import PaymentsService, TransferCommand, TransferResult
 
@@ -40,8 +41,9 @@ def get_payments_service(
     settings: Settings = Depends(get_settings),
     scorer: FraudScorer = Depends(get_fraud_scorer),
     auth: AuthService = Depends(get_auth_service),
+    countries: CountryResolver = Depends(get_country_resolver),
 ) -> PaymentsService:
-    return PaymentsService(session, settings, scorer, auth)
+    return PaymentsService(session, settings, scorer, auth, countries)
 
 
 def _respond(result: TransferResult) -> JSONResponse:

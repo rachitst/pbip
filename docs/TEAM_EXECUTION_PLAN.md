@@ -2847,13 +2847,13 @@ in the backlog only satisfies the validator's 1-7 range.
   3. Implement and make the tests pass for: Rule RECENT_LOGIN_FAILURES adds risk when the user had failed logins in the last 24 hours (from security events)
   4. Implement and make the tests pass for: Rule NEW_DEVICE_OR_NETWORK adds risk when the transfer comes from a device fingerprint or IP network not seen for this customer
   5. Implement and make the tests pass for: Each rule returns a human-readable reason with source RULE and is persisted with the feature snapshot
-  6. Implement and make the tests pass for: Geographic location from IP is out of scope unless an approved offline GeoIP dataset is added through an ADR
+  6. Implement and make the tests pass for: Rule NEW_COUNTRY adds risk when the transfer's IP country (DB-IP Lite, ADR-0014) differs from every country in the customer's scored transfers of the last 180 days; an unknown country never adds risk
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #178`) and request review.
 - **Expected end result / acceptance criteria:**
   - [ ] Rule RECENT_LOGIN_FAILURES adds risk when the user had failed logins in the last 24 hours (from security events)
   - [ ] Rule NEW_DEVICE_OR_NETWORK adds risk when the transfer comes from a device fingerprint or IP network not seen for this customer
   - [ ] Each rule returns a human-readable reason with source RULE and is persisted with the feature snapshot
-  - [ ] Geographic location from IP is out of scope unless an approved offline GeoIP dataset is added through an ADR
+  - [ ] Rule NEW_COUNTRY adds risk when the transfer's IP country (DB-IP Lite, ADR-0014) differs from every country in the customer's scored transfers of the last 180 days; an unknown country never adds risk
 - **Definition of done (evidence):** Unit and integration tests prove each rule fires and does not fire; behaviour-regression thresholds unchanged.
 - **Required checks:**
   - Automated: unit + integration tests against PostgreSQL in CI; coverage gate met

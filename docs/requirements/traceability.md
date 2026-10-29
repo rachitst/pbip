@@ -33,7 +33,7 @@ Last reviewed against `main` on 2026-10-30 (local verification run recorded in
 | UC-06 Loan recommendation | Missing | `modules/loans/` empty; health score (TASK-041) is a possible input | 045 #68, 046 #69, 047 #70, 051 #74, 054 #77 (Todo) | Whole use case |
 | UC-07 Investment recommendation (risk tolerance, savings, income, funds) | Missing | `modules/wealth/`, `modules/recommendations/` empty | 054 #77, 063 #86, 064 #87, 065 #88 (Todo), **097 #180 (new)** | Risk tolerance had no task (TASK-097) |
 | UC-08 AI assistant | Missing | `modules/assistant/` empty | 057 #80, 058 #81, 059 #82, 060 #83, 061 #84, 067 #90, 076 #99 (Todo), **105 #188 (new)** | FAQ/support, product discovery and investment suggestions had no tool (TASK-105) |
-| UC-09 Fraud detection triggers | Partial | `fraud/baseline.py`: LARGE_AMOUNT, VELOCITY_BURST, AMOUNT_SPIKE, NEW_PAYEE, NEW_PAYEE_LARGE_AMOUNT; score and reasons persisted | 023 #46, 025 #48, 029-034 #52-57 (Todo), **095 #178 (new)** | No rule for login failures or new device/network (TASK-095); geographic location needs a GeoIP data decision (scope conflict, see below) |
+| UC-09 Fraud detection triggers | Partial | `fraud/baseline.py` (`baseline-rules-0.2`): LARGE_AMOUNT, VELOCITY_BURST, AMOUNT_SPIKE, NEW_PAYEE, NEW_PAYEE_LARGE_AMOUNT, **NEW_COUNTRY** (DB-IP Lite country, ADR-0014; approximate, signal only); score and reasons persisted; `test_transfers.py`, `test_geoip.py` | 023 #46, 025 #48, 029-034 #52-57 (Todo), 095 #178 (In Progress) | No rule for login failures or new device/network (TASK-095); location accuracy unevaluated (no labelled data) |
 | UC-10 Fraud alert management: alert, customer notified, analyst review | Partial | Alerts API with MFA-gated decision; customer `TRANSFER_UNDER_REVIEW` / declined / posted notifications via outbox; `test_transfers.py`, `test_notifications.py` | 036 #59, 022 #45 (Todo) | No analyst UI (TASK-036); no notification tray (TASK-022) |
 | UC-11 Behaviour analytics: page visits, clickstream, session, product interests, spend and income | Partial | Spend patterns (`/analytics/spending`, `/trends`), RFM segmentation job (run end to end on seeded data locally); nightly materialisation run by a real Celery worker locally; `test_analytics.py`, `test_segmentation.py` | 040 #63, 044 #67 (In Review); 055 #78, 056 #79 (Todo) | No clickstream/session capture (TASK-055); no product-interest data |
 | UC-12 Product recommendation engine (demographics, behaviour, spend, existing products) | Missing | Segmentation exists as an input | 054 #77, 062 #85 (Todo) | Whole use case; demographics are not captured (scope conflict, see below) |
@@ -90,9 +90,8 @@ Last reviewed against `main` on 2026-10-30 (local verification run recorded in
 
 ## Scope conflicts (decisions needed, not guessed)
 
-1. **"New geographic location" (UC-09)**: needs IP geolocation data. A GeoIP database has licensing and
-   an external-data dependency; TASK-095 uses new device or network as the proxy and requires an ADR
-   before adding GeoIP.
+1. **"New geographic location" (UC-09) (resolved 2026-10-30)**: the product owner approved it; ADR-0014
+   selects DB-IP Lite (CC BY 4.0, country level) and records accuracy, privacy and spoofing limits.
 2. **"Demographics" (UC-12)**: the customer model stores no demographic attributes beyond identity
    data; collecting more is a privacy and data-minimisation decision for the product owner.
 3. **TASK-052 vs. TASK-040**: TASK-052 specifies a 02:00 job writing `customer_analytics_monthly`; the

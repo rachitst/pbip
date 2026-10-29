@@ -123,6 +123,7 @@ Explicit boundary rules:
 | T28 | I: cross-customer analytics read (BOLA) | Customer queries `/api/v1/analytics/spending?account_id=<victim>` | `account_id` is resolved only through `accounts/policy.py: get_owned_account` with the authenticated customer id; non-owned and non-existent are both 404; `year`/`month` bounded so no value reaches the calendar or the database as an overflow | `test_analytics_bola_isolation`, `test_year_beyond_the_calendar_is_rejected_not_a_server_error`, BOLA matrix in `test_rbac_bola.py` |
 | T29 | T/D: analytics cache poisoning or write amplification on a read path | Concurrent first readers of a month race on the aggregate table | The request path never writes; `monthly_category_spending` is written only by the nightly Celery task with idempotent upserts (ADR-0011) | `test_materialization_matches_the_live_computation_and_is_idempotent`, `test_stored_rows_serve_closed_months_only_and_percentages_need_a_baseline` |
 | T30 | I/T: segment and health-score data | Customer reads another customer's segment or score; a request path writes segment labels | `GET /analytics/segment` takes no identifier and returns only the principal's own row (404 until the offline job assigned one); `GET /analytics/health-score` goes through `accounts/policy.py: get_owned_account`; labels are written only by `analytics/segmentation_job.py` (ADR-0012) | `test_segment_endpoint_is_404_until_the_job_assigned_one`, `test_job_persists_explainable_segments_idempotently_and_the_endpoint_serves_them`, BOLA matrix in `test_rbac_bola.py` |
+| T31 | S/T: location spoofing against the NEW_COUNTRY rule | Fraudster uses a VPN or proxy in the victim's country, or forges `X-Forwarded-For` | Country from DB-IP Lite (approximate, ADR-0014) only adds risk, never clears it; unknown country adds nothing; uvicorn trusts forwarded headers only because the API is reachable solely through nginx (do not expose port 8000 publicly) | `test_transfer_from_a_new_country_adds_a_new_country_reason`, `test_geoip.py` |
 
 ---
 
@@ -225,7 +226,7 @@ Re-evaluate the cost on the production hardware before go-live; the rehash-on-lo
 
 ## 7. Fraud Evasion Threats
 
-### 7.1 Implemented baseline rules (`fraud/baseline.py`, `baseline-rules-0.1`)
+### 7.1 Implemented baseline rules (`fraud/baseline.py`, `baseline-rules-0.2`)
 
 The only scorer today is the deterministic rules baseline behind the `FraudScorer` contract. Every transfer is
 scored before it posts; the decision, reasons and model version are stored in `fraud_events`.

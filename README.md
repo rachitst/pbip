@@ -70,3 +70,9 @@ health-gated start, runs `scripts/smoke_test.sh` and rolls back automatically on
 * `NoReferencedTableError` -> a new `models.py` was not added to `pbip_api/modules/__init__.py` and `alembic/env.py`.
 * `alembic check` fails -> model changed without a migration: `alembic revision --autogenerate`.
 * Port in use (5432/6379/8000/8080) -> stop the other service or edit the published ports in `docker-compose.yml`.
+
+## Third-party data
+
+* [IP Geolocation by DB-IP](https://db-ip.com): the optional "IP to Country Lite" database used by the
+  NEW_COUNTRY fraud rule is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). It is
+  downloaded by `scripts/fetch_geoip.py`, not committed (ADR-0014).

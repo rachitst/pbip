@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     refresh_ttl_days: int = 7
     # One or more Fernet keys, comma separated, newest first (enables key rotation).
     field_encryption_key: SecretStr = SecretStr("")
+    # DB-IP country Lite MMDB (ADR-0014); unset means no geographic fraud signal, never a guess.
+    geoip_country_db_path: str | None = None
 
     jwt_issuer: str = "pbip"
     jwt_audience: str = "pbip-api"
