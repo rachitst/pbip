@@ -7,7 +7,7 @@ interface; these rules become its deterministic layer.
 """
 
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from pbip_ml.fraud.contract import (
     FraudDecision,
@@ -21,10 +21,11 @@ from sqlalchemy.orm import Session
 
 from pbip_api.core.db import utcnow
 from pbip_api.core.money import format_minor
+from pbip_api.modules.fraud.models import FraudEvent
 from pbip_api.modules.ledger.models import Transaction, TransactionStatus, TransactionType
 from pbip_api.modules.payees.models import Payee
 
-MODEL_VERSION = "baseline-rules-0.1"
+MODEL_VERSION = "baseline-rules-0.2"  # 0.2: NEW_COUNTRY (ADR-0014)
 
 NEW_PAYEE_WINDOW = timedelta(hours=24)
 NEW_PAYEE_LARGE_MINOR = 2_500_000  # 25,000.00
@@ -33,6 +34,8 @@ SPIKE_MULTIPLIER = 5.0
 SPIKE_MIN_HISTORY = 3
 VELOCITY_WINDOW = timedelta(minutes=10)
 VELOCITY_COUNT = 4
+NEW_COUNTRY_POINTS = 20  # a signal, not a decision on its own (below STEP_UP_AT)
+COUNTRY_HISTORY_WINDOW = timedelta(days=180)
 
 STEP_UP_AT = 30
 REVIEW_AT = 60
@@ -148,6 +151,11 @@ class BaselineRulesScorer:
                 )
             )
 
+        new_country = self._new_country(context, now)
+        if new_country is not None:
+            score += NEW_COUNTRY_POINTS
+            reasons.append(new_country)
+
         score = min(score, 100)
         return FraudScoreResult(
             risk_score=score,
@@ -161,5 +169,40 @@ class BaselineRulesScorer:
                 "avg_outgoing_90d_minor": round(average, 2),
                 "outgoing_count_90d": int(history_count),
                 "transfers_last_10m": int(recent_count),
+                "ip_country": context.ip_country,
             },
+        )
+
+    def _new_country(self, context: TransactionContext, now: datetime) -> FraudReason | None:
+        """The transfer's IP country was not seen in this customer's scored transfers recently.
+
+        Unknown country (no database, private IP, lookup miss) never adds risk, and neither does a
+        customer's first located transfer: there is no baseline to differ from.
+        """
+        if context.ip_country is None:
+            return None
+        country = FraudEvent.features["ip_country"].astext
+        seen = set(
+            self.session.execute(
+                select(country)
+                .where(
+                    FraudEvent.customer_id == context.customer_id,
+                    FraudEvent.created_at >= now - COUNTRY_HISTORY_WINDOW,
+                    country.is_not(None),
+                )
+                .distinct()
+            ).scalars()
+        )
+        if not seen or context.ip_country in seen:
+            return None
+        listed = sorted(seen)
+        shown = ", ".join(listed[:5]) + (f" and {len(listed) - 5} more" if len(listed) > 5 else "")
+        return FraudReason(
+            code="NEW_COUNTRY",
+            message=(
+                f"IP located in {context.ip_country}; recent transfers came from {shown} "
+                "(approximate, ADR-0014)"
+            ),
+            source=ReasonSource.RULE,
+            contribution=NEW_COUNTRY_POINTS,
         )

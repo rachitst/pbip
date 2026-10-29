@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from pbip_api.core.config import Settings
 from pbip_api.core.db import utcnow
 from pbip_api.core.errors import ConflictError, NotFoundError, UnprocessableError
+from pbip_api.core.geoip import CountryResolver, NoCountryResolver
 from pbip_api.core.metrics import (
     FRAUD_DECISIONS_TOTAL,
     FRAUD_INFERENCE_SECONDS,
@@ -81,12 +82,18 @@ _PENDING_OR_DONE = (
 
 class PaymentsService:
     def __init__(
-        self, session: Session, settings: Settings, scorer: FraudScorer, auth: AuthService
+        self,
+        session: Session,
+        settings: Settings,
+        scorer: FraudScorer,
+        auth: AuthService,
+        countries: CountryResolver | None = None,
     ) -> None:
         self.session = session
         self.settings = settings
         self.scorer = scorer
         self.auth = auth
+        self.countries = countries or NoCountryResolver()
         self.audit = AuditService(session)
 
     # ----------------------------------------------------------------- creation
@@ -134,6 +141,7 @@ class PaymentsService:
                 currency=command.currency,
                 occurred_at=utcnow(),
                 payee_id=payee.id if payee else None,
+                ip_country=self.countries.country(meta.ip),
             )
         )
         FRAUD_INFERENCE_SECONDS.observe(result.latency_ms / 1000)

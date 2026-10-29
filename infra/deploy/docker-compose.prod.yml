@@ -12,6 +12,8 @@ x-api-env: &api-env
   FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY}
   CORS_ORIGINS: ${CORS_ORIGINS}
   COOKIE_SECURE: ${COOKIE_SECURE:-true}
+  # Optional DB-IP country database for the NEW_COUNTRY fraud rule (ADR-0014, runbook 2.4).
+  GEOIP_COUNTRY_DB_PATH: ${GEOIP_COUNTRY_DB_PATH:-}
 
 services:
   db:
@@ -41,6 +43,8 @@ services:
   api:
     image: ${IMAGE_PREFIX}/api:${IMAGE_TAG}
     environment: *api-env
+    volumes:
+      - ./geoip:/data/geoip:ro
     depends_on:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }

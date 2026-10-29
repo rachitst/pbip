@@ -52,3 +52,6 @@ Thumbs.db
 # Docker
 docker-compose.override.yml
 *.tsbuildinfo
+
+# GeoIP database (DB-IP Lite, CC BY 4.0) is downloaded by scripts/fetch_geoip.py, not committed
+data/geoip/
