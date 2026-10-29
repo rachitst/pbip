@@ -90,6 +90,8 @@ class TransactionEntry(Base):
         CheckConstraint("amount > 0", name="amount_positive"),
         Index("ix_transaction_entries_account_id_seq", "account_id", "seq"),
         Index("ix_transaction_entries_transaction_id", "transaction_id"),
+        # Analytics and health scores filter one account by a time window (TASK-040/041).
+        Index("ix_transaction_entries_account_id_created_at", "account_id", "created_at"),
     )
 
     id: Mapped[UUID] = uuid_pk()

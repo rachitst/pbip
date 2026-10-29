@@ -365,6 +365,90 @@
         "title": "BulkMarkReadResponse",
         "type": "object"
       },
+      "CategoryShiftItem": {
+        "description": "Month-over-month shift in spending for a category.",
+        "properties": {
+          "category": {
+            "description": "Category name",
+            "title": "Category",
+            "type": "string"
+          },
+          "change_minor": {
+            "description": "Difference in spend (current - previous) in minor units",
+            "title": "Change Minor",
+            "type": "integer"
+          },
+          "change_percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Percentage change (+/-); None when the previous month had no spend here",
+            "title": "Change Percentage"
+          },
+          "current_amount_minor": {
+            "description": "Current month spend in minor units",
+            "minimum": 0.0,
+            "title": "Current Amount Minor",
+            "type": "integer"
+          },
+          "previous_amount_minor": {
+            "description": "Previous month spend in minor units",
+            "minimum": 0.0,
+            "title": "Previous Amount Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category",
+          "current_amount_minor",
+          "previous_amount_minor",
+          "change_minor"
+        ],
+        "title": "CategoryShiftItem",
+        "type": "object"
+      },
+      "CategorySpendingItem": {
+        "description": "Spending total and percentage for a single spending category.",
+        "properties": {
+          "amount_minor": {
+            "description": "Total spend in minor units (pence/cents)",
+            "minimum": 0.0,
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "category": {
+            "description": "Category name (e.g. groceries, utilities)",
+            "title": "Category",
+            "type": "string"
+          },
+          "percentage": {
+            "description": "Percentage of total spend",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Percentage",
+            "type": "number"
+          },
+          "transaction_count": {
+            "description": "Number of debit transactions",
+            "minimum": 0.0,
+            "title": "Transaction Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category",
+          "amount_minor",
+          "percentage",
+          "transaction_count"
+        ],
+        "title": "CategorySpendingItem",
+        "type": "object"
+      },
       "ChainStatusOut": {
         "properties": {
           "checked": {
@@ -464,6 +548,91 @@
           "created_at"
         ],
         "title": "CustomerProfileOut",
+        "type": "object"
+      },
+      "CustomerSegmentResponse": {
+        "description": "The customer's behavioural segment and the RFM features it was derived from.",
+        "properties": {
+          "assigned_at": {
+            "description": "When the offline job assigned the segment",
+            "format": "date-time",
+            "title": "Assigned At",
+            "type": "string"
+          },
+          "confidence_score": {
+            "description": "Softmax of the distances to the cluster centroids",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence Score",
+            "type": "number"
+          },
+          "customer_id": {
+            "description": "Customer identifier (the principal's own)",
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "discretionary_ratio": {
+            "description": "Share of spend in dining, shopping, entertainment, travel",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Discretionary Ratio",
+            "type": "number"
+          },
+          "explanation": {
+            "description": "Human-readable justification of the segment",
+            "title": "Explanation",
+            "type": "string"
+          },
+          "frequency": {
+            "description": "Debits per 30-day month",
+            "minimum": 0.0,
+            "title": "Frequency",
+            "type": "number"
+          },
+          "monetary_minor": {
+            "description": "Spend per 30-day month, minor units",
+            "minimum": 0.0,
+            "title": "Monetary Minor",
+            "type": "integer"
+          },
+          "recency_days": {
+            "description": "Days since the last ledger entry",
+            "minimum": 0.0,
+            "title": "Recency Days",
+            "type": "integer"
+          },
+          "savings_ratio": {
+            "description": "(credits - debits) / credits; negative = deficit",
+            "title": "Savings Ratio",
+            "type": "number"
+          },
+          "segment": {
+            "description": "Assigned behavioural segment",
+            "enum": [
+              "HIGH_NET_WORTH",
+              "BUDGET_CONSCIOUS",
+              "FREQUENT_TRANSACTOR",
+              "DISCRETIONARY_SPENDER",
+              "INACTIVE_SAVER"
+            ],
+            "title": "Segment",
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_id",
+          "segment",
+          "confidence_score",
+          "recency_days",
+          "frequency",
+          "monetary_minor",
+          "savings_ratio",
+          "discretionary_ratio",
+          "explanation",
+          "assigned_at"
+        ],
+        "title": "CustomerSegmentResponse",
         "type": "object"
       },
       "DecisionRequest": {
@@ -674,6 +843,112 @@
         "title": "EntryOut",
         "type": "object"
       },
+      "FinancialHealthComponents": {
+        "description": "Component-wise breakdown of the financial health score.",
+        "properties": {
+          "buffer_months": {
+            "$ref": "#/components/schemas/HealthScoreComponent",
+            "description": "Cash buffer in months (20 points)"
+          },
+          "emi_to_income": {
+            "$ref": "#/components/schemas/HealthScoreComponent",
+            "description": "Loan/EMI repayments to income (25 points)"
+          },
+          "expense_volatility": {
+            "$ref": "#/components/schemas/HealthScoreComponent",
+            "description": "Expense volatility (25 points)"
+          },
+          "savings_rate": {
+            "$ref": "#/components/schemas/HealthScoreComponent",
+            "description": "Savings rate (30 points)"
+          }
+        },
+        "required": [
+          "savings_rate",
+          "expense_volatility",
+          "emi_to_income",
+          "buffer_months"
+        ],
+        "title": "FinancialHealthComponents",
+        "type": "object"
+      },
+      "FinancialHealthScoreResponse": {
+        "description": "Financial health score (0-100) with explainable components and actionable tips.",
+        "properties": {
+          "account_id": {
+            "description": "Target account identifier",
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "components": {
+            "$ref": "#/components/schemas/FinancialHealthComponents",
+            "description": "Component breakdown"
+          },
+          "currency": {
+            "description": "ISO currency code",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency",
+            "type": "string"
+          },
+          "insufficient_data": {
+            "description": "True when at least one component could not be computed from the history",
+            "title": "Insufficient Data",
+            "type": "boolean"
+          },
+          "months_observed": {
+            "description": "Calendar months of history in the window",
+            "minimum": 0.0,
+            "title": "Months Observed",
+            "type": "integer"
+          },
+          "overall_score": {
+            "description": "Sum of the component points",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Overall Score",
+            "type": "integer"
+          },
+          "rating": {
+            "description": "EXCELLENT >= 80, GOOD >= 60, FAIR >= 40, else NEEDS_ATTENTION",
+            "enum": [
+              "EXCELLENT",
+              "GOOD",
+              "FAIR",
+              "NEEDS_ATTENTION"
+            ],
+            "title": "Rating",
+            "type": "string"
+          },
+          "recommendations": {
+            "description": "Actionable tips",
+            "items": {
+              "type": "string"
+            },
+            "title": "Recommendations",
+            "type": "array"
+          },
+          "window_months": {
+            "description": "Length of the trailing window used",
+            "exclusiveMinimum": 0.0,
+            "title": "Window Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "account_id",
+          "currency",
+          "overall_score",
+          "rating",
+          "insufficient_data",
+          "months_observed",
+          "window_months",
+          "components"
+        ],
+        "title": "FinancialHealthScoreResponse",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -685,6 +960,68 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthScoreComponent": {
+        "description": "One scored component of the financial health score, with the metric behind it.",
+        "properties": {
+          "assessment": {
+            "description": "Band of the metric; INSUFFICIENT_DATA when it cannot be computed yet",
+            "enum": [
+              "OPTIMAL",
+              "MODERATE",
+              "DEFICIT",
+              "VOLATILE",
+              "NO_DEBT",
+              "BURDENED",
+              "CRITICAL",
+              "ADEQUATE",
+              "LOW",
+              "VULNERABLE",
+              "INSUFFICIENT_DATA"
+            ],
+            "title": "Assessment",
+            "type": "string"
+          },
+          "formatted_value": {
+            "description": "Human-readable metric, e.g. '24.5%', '4.2 months'",
+            "title": "Formatted Value",
+            "type": "string"
+          },
+          "max_score": {
+            "description": "Points available (the component weight)",
+            "exclusiveMinimum": 0.0,
+            "title": "Max Score",
+            "type": "integer"
+          },
+          "metric_value": {
+            "description": "The underlying metric (rate, CV, ratio, months)",
+            "title": "Metric Value",
+            "type": "number"
+          },
+          "score": {
+            "description": "Points earned",
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "integer"
+          },
+          "weight_percentage": {
+            "description": "Weight in percent",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Weight Percentage",
+            "type": "number"
+          }
+        },
+        "required": [
+          "score",
+          "max_score",
+          "weight_percentage",
+          "metric_value",
+          "formatted_value",
+          "assessment"
+        ],
+        "title": "HealthScoreComponent",
         "type": "object"
       },
       "LiveResponse": {
@@ -826,6 +1163,57 @@
           "code"
         ],
         "title": "MfaVerifyRequest",
+        "type": "object"
+      },
+      "MonthlySpendingSummary": {
+        "description": "Summary of spending in a calendar month.",
+        "properties": {
+          "daily_burn_rate_minor": {
+            "description": "Total spend divided by the days of the month (elapsed days when running)",
+            "minimum": 0.0,
+            "title": "Daily Burn Rate Minor",
+            "type": "integer"
+          },
+          "month": {
+            "description": "Month (1-12)",
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Month",
+            "type": "integer"
+          },
+          "period": {
+            "description": "Period formatted as YYYY-MM",
+            "title": "Period",
+            "type": "string"
+          },
+          "total_spend_minor": {
+            "description": "Total spend in minor units",
+            "minimum": 0.0,
+            "title": "Total Spend Minor",
+            "type": "integer"
+          },
+          "transaction_count": {
+            "description": "Transaction count",
+            "minimum": 0.0,
+            "title": "Transaction Count",
+            "type": "integer"
+          },
+          "year": {
+            "description": "Year",
+            "minimum": 2000.0,
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "period",
+          "year",
+          "month",
+          "total_spend_minor",
+          "transaction_count",
+          "daily_burn_rate_minor"
+        ],
+        "title": "MonthlySpendingSummary",
         "type": "object"
       },
       "NotificationOut": {
@@ -1165,6 +1553,160 @@
           "full_name"
         ],
         "title": "RegisterRequest",
+        "type": "object"
+      },
+      "SpendingBreakdownResponse": {
+        "description": "Response containing categorized spending breakdown for an account.",
+        "properties": {
+          "account_id": {
+            "description": "Target account identifier",
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "categories": {
+            "description": "Category-wise spending items",
+            "items": {
+              "$ref": "#/components/schemas/CategorySpendingItem"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "currency": {
+            "description": "ISO currency code",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency",
+            "type": "string"
+          },
+          "month": {
+            "description": "Aggregation month (1-12)",
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Month",
+            "type": "integer"
+          },
+          "period": {
+            "description": "Aggregation period formatted as YYYY-MM",
+            "title": "Period",
+            "type": "string"
+          },
+          "total_spend_minor": {
+            "description": "Total spending in minor units",
+            "minimum": 0.0,
+            "title": "Total Spend Minor",
+            "type": "integer"
+          },
+          "transaction_count": {
+            "description": "Total debit transactions count",
+            "minimum": 0.0,
+            "title": "Transaction Count",
+            "type": "integer"
+          },
+          "year": {
+            "description": "Aggregation year",
+            "minimum": 2000.0,
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "account_id",
+          "currency",
+          "period",
+          "year",
+          "month",
+          "total_spend_minor",
+          "transaction_count"
+        ],
+        "title": "SpendingBreakdownResponse",
+        "type": "object"
+      },
+      "SpendingTrendsResponse": {
+        "description": "Month-over-month spending trends and burn rate comparison.",
+        "properties": {
+          "account_id": {
+            "description": "Target account identifier",
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "burn_rate_change_percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Daily burn rate change vs the previous month (+/-); None when it had no spend",
+            "title": "Burn Rate Change Percentage"
+          },
+          "currency": {
+            "description": "ISO currency code",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency",
+            "type": "string"
+          },
+          "current_month": {
+            "$ref": "#/components/schemas/MonthlySpendingSummary",
+            "description": "Current month summary"
+          },
+          "daily_burn_rate_minor": {
+            "description": "Current daily burn rate in minor units",
+            "minimum": 0.0,
+            "title": "Daily Burn Rate Minor",
+            "type": "integer"
+          },
+          "mom_spend_change_percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Month-over-month total spend change (+/-); None if last month had none",
+            "title": "Mom Spend Change Percentage"
+          },
+          "previous_month": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MonthlySpendingSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Previous month summary (if available)"
+          },
+          "top_categories_decreasing": {
+            "description": "Categories with highest spending decreases",
+            "items": {
+              "$ref": "#/components/schemas/CategoryShiftItem"
+            },
+            "title": "Top Categories Decreasing",
+            "type": "array"
+          },
+          "top_categories_increasing": {
+            "description": "Categories with highest spending increases",
+            "items": {
+              "$ref": "#/components/schemas/CategoryShiftItem"
+            },
+            "title": "Top Categories Increasing",
+            "type": "array"
+          }
+        },
+        "required": [
+          "account_id",
+          "currency",
+          "current_month",
+          "daily_burn_rate_minor"
+        ],
+        "title": "SpendingTrendsResponse",
         "type": "object"
       },
       "StepUpRequest": {
@@ -2003,6 +2545,266 @@
         "summary": "Clear a user's lockout and login rate-limit counters (ADMIN with MFA)",
         "tags": [
           "admin"
+        ]
+      }
+    },
+    "/api/v1/analytics/health-score": {
+      "get": {
+        "description": "Savings rate, expense volatility, loan repayments to income, cash buffer (owned account).",
+        "operationId": "get_customer_health_score_api_v1_analytics_health_score_get",
+        "parameters": [
+          {
+            "description": "Target account identifier",
+            "in": "query",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "description": "Target account identifier",
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinancialHealthScoreResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Financial health score (0-100) with explainable components and tips",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/v1/analytics/segment": {
+      "get": {
+        "description": "Segment, confidence and the RFM features it was derived from; the principal's own only.",
+        "operationId": "get_customer_segment_api_v1_analytics_segment_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerSegmentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Behavioural segment assigned to the customer by the offline job (404 until it ran)",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/v1/analytics/spending": {
+      "get": {
+        "description": "Return categorized spending breakdown for an authenticated customer's account.",
+        "operationId": "get_customer_spending_api_v1_analytics_spending_get",
+        "parameters": [
+          {
+            "description": "Target account identifier",
+            "in": "query",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "description": "Target account identifier",
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Calendar year (e.g. 2026)",
+            "in": "query",
+            "name": "year",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2200,
+                  "minimum": 2000,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Calendar year (e.g. 2026)",
+              "title": "Year"
+            }
+          },
+          {
+            "description": "Calendar month (1-12)",
+            "in": "query",
+            "name": "month",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 12,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Calendar month (1-12)",
+              "title": "Month"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpendingBreakdownResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Customer spending breakdown across categories",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/v1/analytics/trends": {
+      "get": {
+        "description": "Return month-over-month spending trends and burn rate comparison.",
+        "operationId": "get_customer_trends_api_v1_analytics_trends_get",
+        "parameters": [
+          {
+            "description": "Target account identifier",
+            "in": "query",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "description": "Target account identifier",
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Calendar year (e.g. 2026)",
+            "in": "query",
+            "name": "year",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2200,
+                  "minimum": 2000,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Calendar year (e.g. 2026)",
+              "title": "Year"
+            }
+          },
+          {
+            "description": "Calendar month (1-12)",
+            "in": "query",
+            "name": "month",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 12,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Calendar month (1-12)",
+              "title": "Month"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpendingTrendsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Month-over-month spending trends and daily burn rate",
+        "tags": [
+          "analytics"
         ]
       }
     },

@@ -141,6 +141,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/analytics/health-score": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Financial health score (0-100) with explainable components and tips
+         * @description Savings rate, expense volatility, loan repayments to income, cash buffer (owned account).
+         */
+        get: operations["get_customer_health_score_api_v1_analytics_health_score_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analytics/segment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Behavioural segment assigned to the customer by the offline job (404 until it ran)
+         * @description Segment, confidence and the RFM features it was derived from; the principal's own only.
+         */
+        get: operations["get_customer_segment_api_v1_analytics_segment_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analytics/spending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Customer spending breakdown across categories
+         * @description Return categorized spending breakdown for an authenticated customer's account.
+         */
+        get: operations["get_customer_spending_api_v1_analytics_spending_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analytics/trends": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Month-over-month spending trends and daily burn rate
+         * @description Return month-over-month spending trends and burn rate comparison.
+         */
+        get: operations["get_customer_trends_api_v1_analytics_trends_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -747,6 +827,63 @@ export interface components {
              */
             updated_count: number;
         };
+        /**
+         * CategoryShiftItem
+         * @description Month-over-month shift in spending for a category.
+         */
+        CategoryShiftItem: {
+            /**
+             * Category
+             * @description Category name
+             */
+            category: string;
+            /**
+             * Change Minor
+             * @description Difference in spend (current - previous) in minor units
+             */
+            change_minor: number;
+            /**
+             * Change Percentage
+             * @description Percentage change (+/-); None when the previous month had no spend here
+             */
+            change_percentage?: number | null;
+            /**
+             * Current Amount Minor
+             * @description Current month spend in minor units
+             */
+            current_amount_minor: number;
+            /**
+             * Previous Amount Minor
+             * @description Previous month spend in minor units
+             */
+            previous_amount_minor: number;
+        };
+        /**
+         * CategorySpendingItem
+         * @description Spending total and percentage for a single spending category.
+         */
+        CategorySpendingItem: {
+            /**
+             * Amount Minor
+             * @description Total spend in minor units (pence/cents)
+             */
+            amount_minor: number;
+            /**
+             * Category
+             * @description Category name (e.g. groceries, utilities)
+             */
+            category: string;
+            /**
+             * Percentage
+             * @description Percentage of total spend
+             */
+            percentage: number;
+            /**
+             * Transaction Count
+             * @description Number of debit transactions
+             */
+            transaction_count: number;
+        };
         /** ChainStatusOut */
         ChainStatusOut: {
             /** Checked */
@@ -786,6 +923,65 @@ export interface components {
              * Format: uuid
              */
             user_id: string;
+        };
+        /**
+         * CustomerSegmentResponse
+         * @description The customer's behavioural segment and the RFM features it was derived from.
+         */
+        CustomerSegmentResponse: {
+            /**
+             * Assigned At
+             * Format: date-time
+             * @description When the offline job assigned the segment
+             */
+            assigned_at: string;
+            /**
+             * Confidence Score
+             * @description Softmax of the distances to the cluster centroids
+             */
+            confidence_score: number;
+            /**
+             * Customer Id
+             * Format: uuid
+             * @description Customer identifier (the principal's own)
+             */
+            customer_id: string;
+            /**
+             * Discretionary Ratio
+             * @description Share of spend in dining, shopping, entertainment, travel
+             */
+            discretionary_ratio: number;
+            /**
+             * Explanation
+             * @description Human-readable justification of the segment
+             */
+            explanation: string;
+            /**
+             * Frequency
+             * @description Debits per 30-day month
+             */
+            frequency: number;
+            /**
+             * Monetary Minor
+             * @description Spend per 30-day month, minor units
+             */
+            monetary_minor: number;
+            /**
+             * Recency Days
+             * @description Days since the last ledger entry
+             */
+            recency_days: number;
+            /**
+             * Savings Ratio
+             * @description (credits - debits) / credits; negative = deficit
+             */
+            savings_ratio: number;
+            /**
+             * Segment
+             * @description Assigned behavioural segment
+             * @enum {string}
+             */
+            segment: "HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER";
         };
         /** DecisionRequest */
         DecisionRequest: {
@@ -881,10 +1077,111 @@ export interface components {
             /** Transaction Type */
             transaction_type: string;
         };
+        /**
+         * FinancialHealthComponents
+         * @description Component-wise breakdown of the financial health score.
+         */
+        FinancialHealthComponents: {
+            /** @description Cash buffer in months (20 points) */
+            buffer_months: components["schemas"]["HealthScoreComponent"];
+            /** @description Loan/EMI repayments to income (25 points) */
+            emi_to_income: components["schemas"]["HealthScoreComponent"];
+            /** @description Expense volatility (25 points) */
+            expense_volatility: components["schemas"]["HealthScoreComponent"];
+            /** @description Savings rate (30 points) */
+            savings_rate: components["schemas"]["HealthScoreComponent"];
+        };
+        /**
+         * FinancialHealthScoreResponse
+         * @description Financial health score (0-100) with explainable components and actionable tips.
+         */
+        FinancialHealthScoreResponse: {
+            /**
+             * Account Id
+             * Format: uuid
+             * @description Target account identifier
+             */
+            account_id: string;
+            /** @description Component breakdown */
+            components: components["schemas"]["FinancialHealthComponents"];
+            /**
+             * Currency
+             * @description ISO currency code
+             */
+            currency: string;
+            /**
+             * Insufficient Data
+             * @description True when at least one component could not be computed from the history
+             */
+            insufficient_data: boolean;
+            /**
+             * Months Observed
+             * @description Calendar months of history in the window
+             */
+            months_observed: number;
+            /**
+             * Overall Score
+             * @description Sum of the component points
+             */
+            overall_score: number;
+            /**
+             * Rating
+             * @description EXCELLENT >= 80, GOOD >= 60, FAIR >= 40, else NEEDS_ATTENTION
+             * @enum {string}
+             */
+            rating: "EXCELLENT" | "GOOD" | "FAIR" | "NEEDS_ATTENTION";
+            /**
+             * Recommendations
+             * @description Actionable tips
+             */
+            recommendations?: string[];
+            /**
+             * Window Months
+             * @description Length of the trailing window used
+             */
+            window_months: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HealthScoreComponent
+         * @description One scored component of the financial health score, with the metric behind it.
+         */
+        HealthScoreComponent: {
+            /**
+             * Assessment
+             * @description Band of the metric; INSUFFICIENT_DATA when it cannot be computed yet
+             * @enum {string}
+             */
+            assessment: "OPTIMAL" | "MODERATE" | "DEFICIT" | "VOLATILE" | "NO_DEBT" | "BURDENED" | "CRITICAL" | "ADEQUATE" | "LOW" | "VULNERABLE" | "INSUFFICIENT_DATA";
+            /**
+             * Formatted Value
+             * @description Human-readable metric, e.g. '24.5%', '4.2 months'
+             */
+            formatted_value: string;
+            /**
+             * Max Score
+             * @description Points available (the component weight)
+             */
+            max_score: number;
+            /**
+             * Metric Value
+             * @description The underlying metric (rate, CV, ratio, months)
+             */
+            metric_value: number;
+            /**
+             * Score
+             * @description Points earned
+             */
+            score: number;
+            /**
+             * Weight Percentage
+             * @description Weight in percent
+             */
+            weight_percentage: number;
         };
         /** LiveResponse */
         LiveResponse: {
@@ -938,6 +1235,42 @@ export interface components {
             code: string;
             /** Mfa Token */
             mfa_token: string;
+        };
+        /**
+         * MonthlySpendingSummary
+         * @description Summary of spending in a calendar month.
+         */
+        MonthlySpendingSummary: {
+            /**
+             * Daily Burn Rate Minor
+             * @description Total spend divided by the days of the month (elapsed days when running)
+             */
+            daily_burn_rate_minor: number;
+            /**
+             * Month
+             * @description Month (1-12)
+             */
+            month: number;
+            /**
+             * Period
+             * @description Period formatted as YYYY-MM
+             */
+            period: string;
+            /**
+             * Total Spend Minor
+             * @description Total spend in minor units
+             */
+            total_spend_minor: number;
+            /**
+             * Transaction Count
+             * @description Transaction count
+             */
+            transaction_count: number;
+            /**
+             * Year
+             * @description Year
+             */
+            year: number;
         };
         /** NotificationOut */
         NotificationOut: {
@@ -1087,6 +1420,99 @@ export interface components {
             full_name: string;
             /** Password */
             password: string;
+        };
+        /**
+         * SpendingBreakdownResponse
+         * @description Response containing categorized spending breakdown for an account.
+         */
+        SpendingBreakdownResponse: {
+            /**
+             * Account Id
+             * Format: uuid
+             * @description Target account identifier
+             */
+            account_id: string;
+            /**
+             * Categories
+             * @description Category-wise spending items
+             */
+            categories?: components["schemas"]["CategorySpendingItem"][];
+            /**
+             * Currency
+             * @description ISO currency code
+             */
+            currency: string;
+            /**
+             * Month
+             * @description Aggregation month (1-12)
+             */
+            month: number;
+            /**
+             * Period
+             * @description Aggregation period formatted as YYYY-MM
+             */
+            period: string;
+            /**
+             * Total Spend Minor
+             * @description Total spending in minor units
+             */
+            total_spend_minor: number;
+            /**
+             * Transaction Count
+             * @description Total debit transactions count
+             */
+            transaction_count: number;
+            /**
+             * Year
+             * @description Aggregation year
+             */
+            year: number;
+        };
+        /**
+         * SpendingTrendsResponse
+         * @description Month-over-month spending trends and burn rate comparison.
+         */
+        SpendingTrendsResponse: {
+            /**
+             * Account Id
+             * Format: uuid
+             * @description Target account identifier
+             */
+            account_id: string;
+            /**
+             * Burn Rate Change Percentage
+             * @description Daily burn rate change vs the previous month (+/-); None when it had no spend
+             */
+            burn_rate_change_percentage?: number | null;
+            /**
+             * Currency
+             * @description ISO currency code
+             */
+            currency: string;
+            /** @description Current month summary */
+            current_month: components["schemas"]["MonthlySpendingSummary"];
+            /**
+             * Daily Burn Rate Minor
+             * @description Current daily burn rate in minor units
+             */
+            daily_burn_rate_minor: number;
+            /**
+             * Mom Spend Change Percentage
+             * @description Month-over-month total spend change (+/-); None if last month had none
+             */
+            mom_spend_change_percentage?: number | null;
+            /** @description Previous month summary (if available) */
+            previous_month?: components["schemas"]["MonthlySpendingSummary"] | null;
+            /**
+             * Top Categories Decreasing
+             * @description Categories with highest spending decreases
+             */
+            top_categories_decreasing?: components["schemas"]["CategoryShiftItem"][];
+            /**
+             * Top Categories Increasing
+             * @description Categories with highest spending increases
+             */
+            top_categories_increasing?: components["schemas"]["CategoryShiftItem"][];
         };
         /** StepUpRequest */
         StepUpRequest: {
@@ -1498,6 +1924,130 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UnlockResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_customer_health_score_api_v1_analytics_health_score_get: {
+        parameters: {
+            query: {
+                /** @description Target account identifier */
+                account_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinancialHealthScoreResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_customer_segment_api_v1_analytics_segment_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerSegmentResponse"];
+                };
+            };
+        };
+    };
+    get_customer_spending_api_v1_analytics_spending_get: {
+        parameters: {
+            query: {
+                /** @description Target account identifier */
+                account_id: string;
+                /** @description Calendar year (e.g. 2026) */
+                year?: number | null;
+                /** @description Calendar month (1-12) */
+                month?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpendingBreakdownResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_customer_trends_api_v1_analytics_trends_get: {
+        parameters: {
+            query: {
+                /** @description Target account identifier */
+                account_id: string;
+                /** @description Calendar year (e.g. 2026) */
+                year?: number | null;
+                /** @description Calendar month (1-12) */
+                month?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpendingTrendsResponse"];
                 };
             };
             /** @description Validation Error */

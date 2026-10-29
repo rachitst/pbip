@@ -1,8 +1,9 @@
 """Free-text request fields reject what PostgreSQL cannot store (fuzzing finding, 500 -> 422)."""
 
 import pytest
-from pbip_api.core.validation import storable_text
-from pbip_api.modules.auth.schemas import RegisterRequest
+from pbip_api.core.validation import encodable_text, storable_text
+from pbip_api.modules.auth.schemas import LoginRequest, PasswordChangeRequest, RegisterRequest
+from pbip_api.modules.customers.schemas import DeviceRegisterRequest
 from pbip_api.modules.payees.schemas import PayeeCreate
 from pbip_api.modules.payments.schemas import TransferRequest
 from pbip_test_support import PASSWORD
@@ -45,3 +46,30 @@ def test_registration_name_and_transfer_reference_are_validated() -> None:
                 "reference": "x\ud800",
             }
         )
+
+
+def test_encodable_text_rejects_only_unencodable_text() -> None:
+    """Passwords may contain tabs or control characters; only lone surrogates are refused."""
+    assert (
+        encodable_text("tab\tand\x00nul are fine in a secret")
+        == "tab\tand\x00nul are fine in a secret"
+    )
+    with pytest.raises(ValueError, match="cannot be encoded"):
+        encodable_text("lone\ud800surrogate")
+
+
+def test_password_fields_and_device_fingerprint_reject_lone_surrogates() -> None:
+    """Regression (audit H8): a lone surrogate reached Argon2 / .encode() and produced a 500."""
+    bad = PASSWORD + "\ud800"  # a valid password made unencodable by a lone surrogate
+    with pytest.raises(ValidationError):
+        LoginRequest(email="a@example.com", password=bad)
+    with pytest.raises(ValidationError):
+        RegisterRequest(email="a@example.com", password=bad, full_name="A B")
+    with pytest.raises(ValidationError):
+        PasswordChangeRequest(current_password=PASSWORD, new_password=bad)
+    with pytest.raises(ValidationError):
+        PasswordChangeRequest(current_password=bad, new_password=PASSWORD)
+    with pytest.raises(ValidationError):
+        DeviceRegisterRequest(fingerprint="\ud800")
+    with_controls = PASSWORD + "\x00\t"  # control characters are allowed in a secret
+    assert LoginRequest(email="a@example.com", password=with_controls).password == with_controls

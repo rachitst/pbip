@@ -27,6 +27,10 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("post", "/api/v1/notifications/mark-all-read"),
         ("post", f"/api/v1/notifications/{uuid.uuid4()}/read"),
         ("post", "/api/v1/auth/password-change"),
+        ("get", f"/api/v1/analytics/spending?account_id={uuid.uuid4()}"),
+        ("get", f"/api/v1/analytics/trends?account_id={uuid.uuid4()}"),
+        ("get", f"/api/v1/analytics/health-score?account_id={uuid.uuid4()}"),
+        ("get", "/api/v1/analytics/segment"),
         ("get", f"/api/v1/admin/users/{uuid.uuid4()}/lockout"),
         ("post", f"/api/v1/admin/users/{uuid.uuid4()}/unlock"),
     ]:
@@ -61,6 +65,25 @@ def test_staff_have_no_customer_profile(
     assert client.get("/api/v1/customers/me", headers=analyst.headers).status_code == 403
     assert client.get("/api/v1/customers/devices", headers=analyst.headers).status_code == 403
     assert client.get("/api/v1/accounts", headers=analyst.headers).status_code == 403
+    assert (
+        client.get(
+            f"/api/v1/analytics/spending?account_id={uuid.uuid4()}", headers=analyst.headers
+        ).status_code
+        == 403
+    )
+    assert (
+        client.get(
+            f"/api/v1/analytics/trends?account_id={uuid.uuid4()}", headers=analyst.headers
+        ).status_code
+        == 403
+    )
+    assert (
+        client.get(
+            f"/api/v1/analytics/health-score?account_id={uuid.uuid4()}", headers=analyst.headers
+        ).status_code
+        == 403
+    )
+    assert client.get("/api/v1/analytics/segment", headers=analyst.headers).status_code == 403
     assert (
         client.post(
             "/api/v1/accounts",
@@ -169,6 +192,24 @@ def test_bola_customer_b_cannot_touch_customer_a_objects(
         "get account": client.get(f"/api/v1/accounts/{ids['account']}", headers=h),
         "list account entries": client.get(
             f"/api/v1/accounts/{ids['account']}/transactions", headers=h
+        ),
+        "analytics spending for victim account": client.get(
+            f"/api/v1/analytics/spending?account_id={ids['account']}", headers=h
+        ),
+        "analytics trends for victim account": client.get(
+            f"/api/v1/analytics/trends?account_id={ids['account']}", headers=h
+        ),
+        "analytics spending non-existent account": client.get(
+            f"/api/v1/analytics/spending?account_id={uuid.uuid4()}", headers=h
+        ),
+        "analytics trends non-existent account": client.get(
+            f"/api/v1/analytics/trends?account_id={uuid.uuid4()}", headers=h
+        ),
+        "analytics health-score for victim account": client.get(
+            f"/api/v1/analytics/health-score?account_id={ids['account']}", headers=h
+        ),
+        "analytics health-score non-existent account": client.get(
+            f"/api/v1/analytics/health-score?account_id={uuid.uuid4()}", headers=h
         ),
         "get payee": client.get(f"/api/v1/payees/{ids['payee']}", headers=h),
         "verify payee": client.post(f"/api/v1/payees/{ids['payee']}/verify", headers=h),

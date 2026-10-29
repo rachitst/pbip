@@ -1,6 +1,7 @@
 """Celery tasks. Tasks must be idempotent: with acks_late a task may run twice."""
 
 from pbip_api.core.db import session_scope
+from pbip_api.modules.analytics.service import materialize_monthly_spending
 from pbip_api.modules.notifications.service import relay_outbox
 from pbip_api.worker.celery_app import celery_app
 
@@ -16,3 +17,10 @@ def relay_outbox_task() -> int:
     """Turn committed outbox events into notifications (runs every 10 seconds via beat)."""
     with session_scope() as session:
         return relay_outbox(session)
+
+
+@celery_app.task(name="pbip.analytics.materialize_monthly_spending")
+def materialize_monthly_spending_task() -> int:
+    """Store the closed months' per-category spend (nightly via beat; ADR-0011). Idempotent."""
+    with session_scope() as session:
+        return materialize_monthly_spending(session)

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from pbip_api.core.db import get_session
+from pbip_api.core.validation import Text
 from pbip_api.modules.accounts.service import mask_account_number
 from pbip_api.modules.auth.dependencies import Principal, get_request_meta, require_roles
 from pbip_api.modules.auth.models import RoleName
@@ -47,7 +48,7 @@ class AlertDetail(AlertSummary):
 
 class DecisionRequest(BaseModel):
     action: Literal["RELEASE", "REJECT"]
-    note: str | None = Field(default=None, max_length=1000)
+    note: Text | None = Field(default=None, max_length=1000)
 
 
 def _summary(alert: FraudAlert, event: FraudEvent, txn: Transaction) -> AlertSummary:

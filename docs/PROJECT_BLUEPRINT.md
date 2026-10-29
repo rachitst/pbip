@@ -193,9 +193,10 @@ erDiagram
 | fraud | `GET /fraud/alerts`, `/fraud/alerts/{id}`, `POST /fraud/alerts/{id}/decision` |
 | compliance | `GET /compliance/audit-logs`, `/compliance/audit-logs/verify` |
 | notifications | `GET /notifications` (paginated envelope with `unread_count`), `POST /notifications/{id}/read`, `POST /notifications/mark-all-read` |
+| analytics | `GET /analytics/spending`, `GET /analytics/trends` (per owned account, `account_id` query; closed months served from `monthly_category_spending`, materialised nightly by Celery; ADR-0011); `GET /analytics/health-score` (TASK-041); `GET /analytics/segment` (own segment from the offline K-Means job, 404 until assigned; ADR-0012) |
 
-Planned: `statements`, `bill-payments`, `scheduled-transfers`, `loans/*`, `wealth/*`, `analytics/{spending,trends,
-forecast,health-score}`, `recommendations`, `assistant/chat`, `insights/*` (RM), `events` (clickstream),
+Planned: `statements`, `bill-payments`, `scheduled-transfers`, `loans/*`, `wealth/*`, `analytics/{forecast,
+health-score}`, `recommendations`, `assistant/chat`, `insights/*` (RM), `events` (clickstream),
 `fraud/stats`, `fraud/simulator/*` (demo only, disabled in production).
 
 Cross-domain contracts (change only via ADR): `pbip_ml.fraud.contract`, `forecasting.contract`,
