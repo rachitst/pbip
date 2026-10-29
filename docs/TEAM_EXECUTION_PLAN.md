@@ -2214,7 +2214,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #96 | **Sprint:** 5 | **Priority:** could | **Size:** S (0.5 person-days estimate) | **Epic:** Identity & Core Banking
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (8.8 days of slack)
+- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** In Progress | **Risk:** Low (8.8 days of slack)
 - **Depends on:** none
 - **Mode:** Parallel: can start immediately
 - **Goal:** Architecture evaluation and proof-of-concept for FIDO2/WebAuthn passkey authentication.
