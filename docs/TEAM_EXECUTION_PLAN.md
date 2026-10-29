@@ -1304,9 +1304,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #64 | **Sprint:** 4 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Sun 25 Oct | **Target deadline:** Sun 25 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (3.7 days of slack)
+- **Start:** Sun 25 Oct | **Target deadline:** Sun 25 Oct | **Actual completion:** Wed 29 Oct (merged in #158; acceptance criteria verified) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-040 (#63, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** Sequential: waits for TASK-040
+- **Mode:** Done
 - **Goal:** Explainable financial health score (0-100) based on savings rate, buffer months, and EMI ratio.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -1316,9 +1316,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Never returns static mock values: calculates dynamically from ledger history
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #64`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Computes score components: savings rate (30%), expense volatility (25%), EMI-to-income (25%), buffer months (20%)
-  - [ ] Returns overall score, component breakdown, and actionable recommendation tips
-  - [ ] Never returns static mock values: calculates dynamically from ledger history
+  - [x] Computes score components: savings rate (30%), expense volatility (25%), EMI-to-income (25%), buffer months (20%)
+  - [x] Returns overall score, component breakdown, and actionable recommendation tips
+  - [x] Never returns static mock values: calculates dynamically from ledger history
 - **Definition of done (evidence):** Unit tests test boundary conditions (zero income, high overdraft, ideal saver).
 - **Required checks:**
   - Automated: pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths; correctness tests on aggregates with fixed fixtures (edge cases: empty history, single month)
