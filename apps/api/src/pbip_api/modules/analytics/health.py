@@ -6,8 +6,10 @@ buffer 20. Every component is computed from the account's ledger over the traili
 that cannot be computed because the history is too thin scores 0 and says so
 (``INSUFFICIENT_DATA``) rather than earning default points: a brand-new account is not "healthy",
 it is unknown, and the response carries ``insufficient_data`` so clients can show that.
-Recommendation tips are never replaced by a generic message; a tip is dropped only when its
-component is at its best.
+Volatility and the cash buffer are computed over closed calendar months only (zero-filled, so a
+month without spending counts as a swing, and the running month cannot drag the score around as
+the days pass). Every component below its best carries a tip; none is ever replaced by a generic
+message.
 """
 
 from uuid import UUID
@@ -63,8 +65,8 @@ def calculate_savings_component(
         )
         return _component(score, SAVINGS_POINTS, rate, f"{rate * 100:.1f}%", "MODERATE"), [tip]
     tip = (
-        "Your expenses exceed your income inflows. Review discretionary categories to prevent "
-        "debt accumulation."
+        "Your expenses match or exceed your income inflows. Review discretionary categories to "
+        "prevent debt accumulation."
     )
     return _component(0, SAVINGS_POINTS, rate, f"{rate * 100:.1f}%", "DEFICIT"), [tip]
 
@@ -72,12 +74,16 @@ def calculate_savings_component(
 def calculate_volatility_component(
     monthly_spend_minor: list[int],
 ) -> tuple[HealthScoreComponent, list[str]]:
-    """Coefficient of variation of monthly spend; needs at least two months with spend."""
-    if len(monthly_spend_minor) < 2:
+    """Coefficient of variation of spend over closed months; needs at least two closed months."""
+    if len(monthly_spend_minor) < 2 or sum(monthly_spend_minor) == 0:
         comp = _component(
-            0, VOLATILITY_POINTS, 0.0, "fewer than two months of spending", "INSUFFICIENT_DATA"
+            0,
+            VOLATILITY_POINTS,
+            0.0,
+            "fewer than two closed months of spending",
+            "INSUFFICIENT_DATA",
         )
-        return comp, ["Expense stability needs at least two months of spending history."]
+        return comp, ["Expense stability needs at least two closed months of spending history."]
     mean = sum(monthly_spend_minor) / len(monthly_spend_minor)
     variance = sum((x - mean) ** 2 for x in monthly_spend_minor) / len(monthly_spend_minor)
     cv = variance**0.5 / mean
@@ -86,7 +92,11 @@ def calculate_volatility_component(
         return _component(VOLATILITY_POINTS, VOLATILITY_POINTS, cv, formatted, "OPTIMAL"), []
     if cv <= 0.40:
         score = round(VOLATILITY_POINTS - (cv - 0.15) / 0.25 * 15)
-        return _component(score, VOLATILITY_POINTS, cv, formatted, "MODERATE"), []
+        tip = (
+            f"Your monthly spending varies by {cv * 100:.0f}% around its average. Evening out "
+            "large purchases across months earns the full stability points."
+        )
+        return _component(score, VOLATILITY_POINTS, cv, formatted, "MODERATE"), [tip]
     score = max(round(10 - (cv - 0.40) / 0.60 * 10), 0)
     tip = (
         "High variation in monthly spending detected. A monthly budget helps smooth "
@@ -135,11 +145,27 @@ def calculate_debt_component(
 def calculate_buffer_component(
     available_balance_minor: int, average_monthly_spend_minor: int
 ) -> tuple[HealthScoreComponent, list[str]]:
-    """Months of average spend covered by the available balance; six or more earns full points."""
+    """Months of average spend covered by the available balance; six or more earns full points.
+
+    An overdrawn account is VULNERABLE whatever its spending history, and the metric carries the
+    depth as negative months (or -1.0 when there is no spend to measure it against).
+    """
+    if available_balance_minor < 0:
+        months = (
+            available_balance_minor / average_monthly_spend_minor
+            if average_monthly_spend_minor > 0
+            else -1.0
+        )
+        comp = _component(0, BUFFER_POINTS, months, "overdrawn", "VULNERABLE")
+        tip = (
+            "The account is overdrawn: there is no cash buffer. Clearing the overdraft comes "
+            "before building reserves."
+        )
+        return comp, [tip]
     if average_monthly_spend_minor <= 0:
         comp = _component(0, BUFFER_POINTS, 0.0, "no spending observed", "INSUFFICIENT_DATA")
-        return comp, ["A cash buffer can be assessed once there is spending history."]
-    if available_balance_minor <= 0:
+        return comp, ["A cash buffer can be assessed once there is a closed month of spending."]
+    if available_balance_minor == 0:
         comp = _component(0, BUFFER_POINTS, 0.0, "0.0 months", "VULNERABLE")
         tip = (
             "No liquid cash buffer. Aim to accumulate at least one month of living expenses as "
@@ -152,7 +178,11 @@ def calculate_buffer_component(
         return _component(BUFFER_POINTS, BUFFER_POINTS, months, formatted, "OPTIMAL"), []
     if months >= 3.0:
         score = round(15 + (months - 3.0) / 3.0 * 5)
-        return _component(score, BUFFER_POINTS, months, formatted, "ADEQUATE"), []
+        tip = (
+            f"Your cash buffer covers {months:.1f} months of expenses. Six months earns the full "
+            "resilience points."
+        )
+        return _component(score, BUFFER_POINTS, months, formatted, "ADEQUATE"), [tip]
     if months >= 1.0:
         score = round(8 + (months - 1.0) / 2.0 * 7)
         tip = (
@@ -184,17 +214,14 @@ def compute_financial_health_score(
 ) -> FinancialHealthScoreResponse:
     """Overall score (sum of the component points, 0-100), the components and the tips."""
     savings, savings_tips = calculate_savings_component(metrics.income_minor, metrics.spend_minor)
-    volatility, volatility_tips = calculate_volatility_component(metrics.monthly_spend_minor)
+    closed = metrics.closed_monthly_spend_minor
+    volatility, volatility_tips = calculate_volatility_component(closed)
     debt, debt_tips = calculate_debt_component(metrics.income_minor, metrics.debt_repayments_minor)
-    average_spend = (
-        round(sum(metrics.monthly_spend_minor) / len(metrics.monthly_spend_minor))
-        if metrics.monthly_spend_minor
-        else 0
-    )
+    average_spend = round(sum(closed) / len(closed)) if closed else 0
     buffer, buffer_tips = calculate_buffer_component(available_balance_minor, average_spend)
 
     components = (savings, volatility, debt, buffer)
-    overall = min(max(sum(c.score for c in components), 0), 100)
+    overall = sum(c.score for c in components)  # each component is bounded; maxima sum to 100
     tips = savings_tips + volatility_tips + debt_tips + buffer_tips
     if not tips:
         tips = ["Your financial habits are in great shape. Keep up the steady savings rate."]

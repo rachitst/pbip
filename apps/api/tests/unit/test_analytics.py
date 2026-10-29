@@ -1,7 +1,6 @@
 """Unit tests for analytics categorization and service logic."""
 
 from datetime import UTC, datetime
-from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -10,9 +9,10 @@ from pbip_api.modules.analytics.health import (
     calculate_volatility_component,
     compute_financial_health_score,
 )
-from pbip_api.modules.analytics.repository import HealthMetrics, window_start
+from pbip_api.modules.analytics.repository import HealthMetrics, _closed_months, window_start
 from pbip_api.modules.analytics.schemas import (
     CategorySpendingItem,
+    FinancialHealthScoreResponse,
     SpendingBreakdownResponse,
     SpendingTrendsResponse,
 )
@@ -128,10 +128,11 @@ def _score(
     available: int,
     income: int,
     spend: int,
-    monthly: list[int],
+    closed_months: list[int],
     debt: int = 0,
+    running: int = 0,
     months_observed: int = 1,
-) -> Any:
+) -> FinancialHealthScoreResponse:
     return compute_financial_health_score(
         uuid4(),
         "INR",
@@ -139,7 +140,8 @@ def _score(
         HealthMetrics(
             income_minor=income,
             spend_minor=spend,
-            monthly_spend_minor=monthly,
+            closed_monthly_spend_minor=closed_months,
+            running_month_spend_minor=running,
             debt_repayments_minor=debt,
             months_observed=months_observed,
         ),
@@ -188,7 +190,7 @@ def test_health_score_high_overdraft_and_debt_burden() -> None:
 
 def test_health_score_fresh_account_is_not_rewarded_for_missing_history() -> None:
     """One deposit, no spend: savings and no-debt are real, volatility and buffer are unknown."""
-    resp = _score(200_000, 200_000, 0, [])
+    resp = _score(200_000, 200_000, 0, [], running=0)
     assert resp.overall_score == 55 and resp.rating == "FAIR"
     assert resp.insufficient_data is True
     assert resp.components.savings_rate.score == 30
@@ -205,6 +207,60 @@ def test_health_score_tips_are_never_replaced_by_a_generic_message() -> None:
     assert any("No liquid cash buffer" in tip for tip in resp.recommendations)
 
 
+def test_zero_spend_months_count_as_volatility_not_as_missing_data() -> None:
+    """[100k, 0, 100k] is a swing, not a stable pattern (closed months are zero-filled)."""
+    resp = _score(300_000, 500_000, 200_000, [100_000, 0, 100_000], months_observed=4)
+    assert resp.components.expense_volatility.assessment == "VOLATILE"
+    assert resp.components.expense_volatility.metric_value == 0.7071  # CV of the three months
+    assert resp.components.expense_volatility.score == 5
+
+
+def test_running_month_does_not_feed_volatility_or_buffer() -> None:
+    """Nine stable closed months and 3,000 spent so far this month: still OPTIMAL stability."""
+    resp = _score(600_000, 1_200_000, 903_000, [100_000] * 9, running=3_000, months_observed=10)
+    assert resp.components.expense_volatility.score == 25
+    assert resp.components.buffer_months.metric_value == 6.0  # 600,000 / 100,000, not / 90,300
+
+
+def test_mid_band_components_still_explain_their_lost_points() -> None:
+    # closed months 100k/120k/140k/180k: mean 135k, CV 0.219 -> MODERATE, 21 points;
+    # 500,000 available / 135,000 = 3.7 months -> ADEQUATE, 16 points
+    resp = _score(
+        500_000, 1_000_000, 700_000, [100_000, 120_000, 140_000, 180_000], months_observed=5
+    )
+    volatility = resp.components.expense_volatility
+    buffer = resp.components.buffer_months
+    assert (volatility.assessment, volatility.score) == ("MODERATE", 21)
+    assert (buffer.assessment, buffer.score) == ("ADEQUATE", 16)
+    assert any("varies by" in tip for tip in resp.recommendations)
+    assert any("cash buffer covers" in tip for tip in resp.recommendations)
+
+
+def test_overdraft_is_never_reported_as_insufficient_data() -> None:
+    overdrawn_no_spend = _score(-5_000_000, 0, 0, [])
+    assert overdrawn_no_spend.components.buffer_months.assessment == "VULNERABLE"
+    assert overdrawn_no_spend.components.buffer_months.metric_value == -1.0
+    overdrawn = _score(-50_000, 100_000, 110_000, [110_000, 115_000], months_observed=2)
+    assert overdrawn.components.buffer_months.metric_value == round(-50_000 / 112_500, 4)
+    assert any("overdrawn" in tip for tip in overdrawn.recommendations)
+
+
+def test_break_even_is_worded_as_match_not_exceed() -> None:
+    resp = _score(0, 100_000, 100_000, [100_000], months_observed=1)
+    assert resp.components.savings_rate.assessment == "DEFICIT"
+    assert any("match or exceed" in tip for tip in resp.recommendations)
+
+
+def test_closed_months_run_from_the_first_entry_to_the_month_before_now() -> None:
+    now = datetime(2026, 10, 30, tzinfo=UTC)
+    assert _closed_months(datetime(2026, 8, 15, tzinfo=UTC), now) == [(2026, 8), (2026, 9)]
+    assert _closed_months(datetime(2025, 11, 3, tzinfo=UTC), datetime(2026, 1, 1, tzinfo=UTC)) == [
+        (2025, 11),
+        (2025, 12),
+    ]
+    assert _closed_months(now, now) == []
+
+
 def test_health_score_volatility_component_scaling() -> None:
     stable, _ = calculate_volatility_component([100_000, 102_000, 99_000])
     volatile, tips = calculate_volatility_component([10_000, 250_000, 30_000])
@@ -219,6 +275,8 @@ def test_health_score_volatility_component_scaling() -> None:
         ("Mortgage instalment March", True),
         ("Car loan installment", True),
         ("Apollo chemist pharmacy", False),  # "chemist" contains "emi"
+        ("Two EMIs this month", True),
+        ("Car loans repayments", True),
         ("Insurance premium", False),  # "premium" contains "emi"
         ("Remittance to family", False),
         (None, False),

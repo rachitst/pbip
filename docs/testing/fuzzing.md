@@ -35,8 +35,14 @@ Limits of this coverage, stated honestly:
 
 * Staff routes require roles and MFA (`amr: otp`); with a customer token they are exercised only
   on their authorization-denied path (403). Pass `--token <staff access token>` to go further.
-* Rate-limited routes (login, register, password change) start answering 429 during a run. 429 is
-  not documented in the contract, so the schema check skips it; it is still not a failure.
+* `POST /auth/refresh` and `POST /auth/logout` need the CSRF header value `pbip-web`, which the
+  generator never produces, so they are always 403 (and have nothing to corrupt in negative mode).
+* Routes that take a resource id (`/payees/{id}`, `/transfers/{id}`, ...) get random ids: the fuzz
+  customer owns no such resources, so those routes are exercised for validation (422) and the
+  404 path, not for their business logic.
+* Only `not_a_server_error` and `response_schema_conformance` run. An undocumented status code
+  (429 from rate limiting, 400, 403) is therefore not a failure; `status_code_conformance` is not
+  enabled because the contract does not document those codes yet.
 * Money-moving operations run against the fuzz customer's own fresh account on an ephemeral
   database (CI service container or your local test database). Never point `--url` at a shared
   environment with real data.
@@ -85,10 +91,14 @@ python scripts/dev.py fuzz --url http://127.0.0.1:8000 --cases 500 --report-file
 
 The report (console and `--report-file`) contains, per failure, the method, path, status, check
 message and the generated request (path parameters, query, headers without `Authorization`, body).
-It also contains the **seed** and an **input digest** (SHA-256 over every generated request): the
-same seed reproduces the same inputs, and equal digests confirm it. The nightly job uses the
-workflow run number as the seed, so a failing night is replayed with
-`python scripts/dev.py fuzz --url ... --seed <run number>`.
+It also contains the **seed** and an **input digest** (SHA-256 over every generated request,
+with unset values normalised): the same seed, contract and library versions reproduce the same
+inputs, and equal digests confirm it across processes. The nightly job uses the workflow run number
+as the seed, so a failing night is replayed with `python scripts/dev.py fuzz --url ... --seed <run
+number>`; the uploaded artifact also holds `api-server.log` with the server-side traceback.
+
+`--cases` is a floor: every pass covers every operation and mode, so a run usually executes more
+cases than requested (two full passes for 500 with the current contract).
 
 Ordinary unit tests cover the runner itself (`apps/api/tests/unit/test_fuzz_contract.py`, no
 database, stubbed executor), and `apps/api/tests/integration/test_fuzz_contract.py` runs the real

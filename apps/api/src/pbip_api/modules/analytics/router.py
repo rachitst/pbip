@@ -1,5 +1,7 @@
 """HTTP router for customer analytics, spending breakdowns, and trends."""
 
+from collections.abc import Callable
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
@@ -13,6 +15,7 @@ from pbip_api.modules.analytics.schemas import (
     SpendingBreakdownResponse,
     SpendingTrendsResponse,
 )
+from pbip_api.modules.auth.dependencies import get_clock
 from pbip_api.modules.customers.dependencies import get_current_customer
 from pbip_api.modules.customers.models import Customer
 
@@ -75,10 +78,14 @@ def get_customer_health_score(
     account_id: UUID = Query(..., description="Target account identifier"),
     customer: Customer = Depends(get_current_customer),
     session: Session = Depends(get_session),
+    clock: Callable[[], float] = Depends(get_clock),
 ) -> FinancialHealthScoreResponse:
     """Savings rate, expense volatility, loan repayments to income, cash buffer (owned account)."""
     return service.get_financial_health_score(
-        session=session, customer_id=customer.id, account_id=account_id
+        session=session,
+        customer_id=customer.id,
+        account_id=account_id,
+        now=datetime.fromtimestamp(clock(), tz=UTC),
     )
 
 
