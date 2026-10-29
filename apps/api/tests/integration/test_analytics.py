@@ -400,11 +400,14 @@ def test_materialization_matches_the_live_computation_and_is_idempotent(
     assert _stored_rows(db, bob.account_id) == set()
 
     # Re-running after a reversal updates groceries in place and deletes the vanished category.
+    # The compensating REVERSAL debits Bob's account, so Bob is now visited too, and correctly
+    # stores nothing (a refund outflow is not spend).
     ledger.reverse_transaction(db, dinner, None, "customer dispute")
     db.commit()
-    assert materialize_monthly_spending(db, periods=[(now.year, now.month)]) == 1
+    assert materialize_monthly_spending(db, periods=[(now.year, now.month)]) == 2
     assert _stored_rows(db, alice.account_id) == {("groceries", 30_000, 2)}
-    assert materialize_monthly_spending(db, periods=[(now.year, now.month)]) == 1  # no-op rerun
+    assert _stored_rows(db, bob.account_id) == set()
+    assert materialize_monthly_spending(db, periods=[(now.year, now.month)]) == 2  # no-op rerun
     assert _stored_rows(db, alice.account_id) == {("groceries", 30_000, 2)}
 
 
