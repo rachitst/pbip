@@ -2804,7 +2804,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 Added after tracing the use case document v0.2 against the backlog (`docs/requirements/traceability.md`): each covers a
 requirement that no existing task did. They are **not** in the sprint schedule above and have no owner: assigning
 people and dates against the Nov 3 deadline is a team decision (section 1's slip order applies). The `sprint = 7` value
-in the backlog only satisfies the validator's 1-7 range.
+in the backlog only satisfies the validator's 1-7 range. TASK-107 (2026-10-30) implements the demographics
+decision in ADR-0015.
 
 ### TASK-094 - Payee Edit API with Re-Verification
 
@@ -3152,6 +3153,35 @@ in the backlog only satisfies the validator's 1-7 range.
 - **Definition of done (evidence):** Diagram committed under docs/architecture/ with the generation command documented.
 - **Required checks:**
   - Automated: document builds/renders, links valid, content matches the code and backlog
+  - Manual: a teammate exercises the change end to end
+  - Security: no secrets; AGENTS.md section 5 items that apply
+  - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
+- **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
+
+### TASK-107 - Consented Date of Birth and Age Band for Recommendations
+
+- **Issue:** #194 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Identity & Core Banking
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** none.
+- **Mode:** Unscheduled
+- **Goal:** The minimum demographic input for recommendations (ADR-0015): optional date of birth, explicit consent, derived age band.
+- **Implementation steps:**
+  1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
+  2. Write failing tests from the acceptance criteria below.
+  3. Implement and make the tests pass for: Customer can set or delete their own date of birth (age 18 to 120) and grant or withdraw a separate recommendations consent; both changes are audited with policy version
+  4. Implement and make the tests pass for: Recommendation service receives only the derived age band (18-25, 26-35, 36-50, 51-59, 60+ or unknown) and only when consent is granted
+  5. Implement and make the tests pass for: No date of birth is inferred or backfilled for existing customers; without consent or a date the band is unknown
+  6. Implement and make the tests pass for: Date of birth never appears in logs, staff responses, or assistant tool output (redaction and response-shape tests)
+  7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #194`) and request review.
+- **Expected end result / acceptance criteria:**
+  - [ ] Customer can set or delete their own date of birth (age 18 to 120) and grant or withdraw a separate recommendations consent; both changes are audited with policy version
+  - [ ] Recommendation service receives only the derived age band (18-25, 26-35, 36-50, 51-59, 60+ or unknown) and only when consent is granted
+  - [ ] No date of birth is inferred or backfilled for existing customers; without consent or a date the band is unknown
+  - [ ] Date of birth never appears in logs, staff responses, or assistant tool output (redaction and response-shape tests)
+- **Definition of done (evidence):** Integration tests for consent grant and withdrawal, ownership (404 on other customers), validation, redaction; migration with downgrade if schema changes.
+- **Required checks:**
+  - Automated: unit + integration tests against PostgreSQL in CI; coverage gate met
   - Manual: a teammate exercises the change end to end
   - Security: no secrets; AGENTS.md section 5 items that apply
   - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).

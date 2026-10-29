@@ -36,7 +36,7 @@ Last reviewed against `main` on 2026-10-30 (local verification run recorded in
 | UC-09 Fraud detection triggers | Partial | `fraud/baseline.py` (`baseline-rules-0.2`): LARGE_AMOUNT, VELOCITY_BURST, AMOUNT_SPIKE, NEW_PAYEE, NEW_PAYEE_LARGE_AMOUNT, **NEW_COUNTRY** (DB-IP Lite country, ADR-0014; approximate, signal only); score and reasons persisted; `test_transfers.py`, `test_geoip.py` | 023 #46, 025 #48, 029-034 #52-57 (Todo), 095 #178 (In Progress) | No rule for login failures or new device/network (TASK-095); location accuracy unevaluated (no labelled data) |
 | UC-10 Fraud alert management: alert, customer notified, analyst review | Partial | Alerts API with MFA-gated decision; customer `TRANSFER_UNDER_REVIEW` / declined / posted notifications via outbox; `test_transfers.py`, `test_notifications.py` | 036 #59, 022 #45 (Todo) | No analyst UI (TASK-036); no notification tray (TASK-022) |
 | UC-11 Behaviour analytics: page visits, clickstream, session, product interests, spend and income | Partial | Spend patterns (`/analytics/spending`, `/trends`), RFM segmentation job (run end to end on seeded data locally); nightly materialisation run by a real Celery worker locally; `test_analytics.py`, `test_segmentation.py` | 040 #63, 044 #67 (In Review); 055 #78, 056 #79 (Todo) | No clickstream/session capture (TASK-055); no product-interest data |
-| UC-12 Product recommendation engine (demographics, behaviour, spend, existing products) | Missing | Segmentation exists as an input | 054 #77, 062 #85 (Todo) | Whole use case; demographics are not captured (scope conflict, see below) |
+| UC-12 Product recommendation engine (demographics, behaviour, spend, existing products) | Missing | Segmentation exists as an input | 054 #77, 062 #85 (Todo), **107 #194 (new)** | Whole use case; demographics limited to a consented age band (ADR-0015, TASK-107) |
 | UC-13 Security monitoring dashboard | Partial | Audit log API with hash-chain verification; Grafana/Prometheus config | 035 #58 (Todo), **099 #182 (new)** | No security view of high-risk customers, login anomalies, open investigations (TASK-099) |
 
 ## Scope items (section 5)
@@ -92,8 +92,9 @@ Last reviewed against `main` on 2026-10-30 (local verification run recorded in
 
 1. **"New geographic location" (UC-09) (resolved 2026-10-30)**: the product owner approved it; ADR-0014
    selects DB-IP Lite (CC BY 4.0, country level) and records accuracy, privacy and spoofing limits.
-2. **"Demographics" (UC-12)**: the customer model stores no demographic attributes beyond identity
-   data; collecting more is a privacy and data-minimisation decision for the product owner.
+2. **"Demographics" (UC-12) (resolved 2026-10-30)**: the product owner authorised demographics; ADR-0015
+   limits them to an optional, consented date of birth used only as a derived age band for eligibility,
+   with no inference or backfill for existing customers (TASK-107 #194).
 3. **TASK-052 vs. TASK-040 (resolved 2026-10-30)**: TASK-052's criteria were clarified onto the
    existing job instead of adding a second one: one nightly job at 02:00 UTC writing
    `monthly_category_spending`, with duration and account counts logged and a 100-account test, plus a
