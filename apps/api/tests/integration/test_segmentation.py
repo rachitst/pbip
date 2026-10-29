@@ -128,3 +128,32 @@ def test_job_persists_explainable_segments_idempotently_and_the_endpoint_serves_
     second = run_offline_segmentation_job(db, utcnow())
     assert second.total_customers_assigned == 6
     assert db.execute(select(func.count()).select_from(CustomerSegment)).scalar_one() == 6
+
+
+def test_transfers_between_own_accounts_are_not_segmentation_features(
+    client: TestClient, make_customer: Callable[..., Actor], db: Session
+) -> None:
+    """Audit M9: moving money between two of the customer's accounts is neither spend nor income."""
+    import uuid
+
+    alice = make_customer(funds=100_000)
+    opened = client.post(
+        "/api/v1/accounts", headers=alice.headers, json={"account_type": "CURRENT"}
+    )
+    assert opened.status_code == 201, opened.text
+    for _ in range(3):
+        moved = client.post(
+            "/api/v1/transfers",
+            headers={**alice.headers, "Idempotency-Key": uuid.uuid4().hex},
+            json={
+                "from_account_id": str(alice.account_id),
+                "amount_minor": 10_000,
+                "to_account_id": opened.json()["id"],
+            },
+        )
+        assert moved.status_code == 201, moved.text
+
+    rfm = repository.extract_customer_rfm_features(db, alice.customer_id, utcnow())
+    assert rfm is not None  # the funding deposit remains
+    assert rfm.frequency == 0.0 and rfm.monetary_minor == 0  # no spend
+    assert rfm.savings_ratio == 1.0 and rfm.discretionary_ratio == 0.0

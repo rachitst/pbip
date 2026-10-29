@@ -310,8 +310,10 @@ def extract_customer_rfm_features(
 ) -> CustomerRFMFeatures | None:
     """RFM and lifestyle features of a customer from POSTED, non-REVERSAL entries on their accounts.
 
-    Returns None when the customer has no entries: there is nothing to cluster, and a made-up
-    "dormant" profile would not be a measurement.
+    Transfers between two of the customer's own accounts are skipped: moving money between pockets
+    is neither spending nor income (the same rule as the health score). Returns None when the
+    customer has no remaining entries: there is nothing to cluster, and a made-up "dormant" profile
+    would not be a measurement.
     """
     account_ids = list(
         session.execute(
@@ -327,6 +329,8 @@ def extract_customer_rfm_features(
             TransactionEntry.created_at,
             Transaction.reference,
             Transaction.type,
+            Transaction.debit_account_id,
+            Transaction.credit_account_id,
         )
         .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
         .where(
@@ -336,11 +340,16 @@ def extract_customer_rfm_features(
         )
         .order_by(TransactionEntry.created_at)
     )
-    rows = session.execute(stmt).all()
+    owned = set(account_ids)
+    rows = [
+        row
+        for row in session.execute(stmt).all()
+        if not (row.debit_account_id in owned and row.credit_account_id in owned)
+    ]
     if not rows:
         return None
     credits = debits = debit_count = discretionary = 0
-    for amount, direction, _created_at, reference, tx_type in rows:
+    for amount, direction, _created_at, reference, tx_type, _debit, _credit in rows:
         if direction == EntryDirection.CREDIT:
             credits += int(amount)
             continue
