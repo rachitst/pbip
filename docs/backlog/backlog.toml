@@ -1724,7 +1724,8 @@ acceptance_criteria = [
     "Rule RECENT_LOGIN_FAILURES adds risk when the user had failed logins in the last 24 hours (from security events)",
     "Rule NEW_DEVICE_OR_NETWORK adds risk when the transfer comes from a device fingerprint or IP network not seen for this customer",
     "Each rule returns a human-readable reason with source RULE and is persisted with the feature snapshot",
-    "Geographic location from IP is out of scope unless an approved offline GeoIP dataset is added through an ADR",
+    # Changed 2026-10-30: the product owner approved geographic detection; ADR-0014 records the data source.
+    "Rule NEW_COUNTRY adds risk when the transfer's IP country (DB-IP Lite, ADR-0014) differs from every country in the customer's scored transfers of the last 180 days; an unknown country never adds risk",
 ]
 dependencies = []
 definition_of_done = "Unit and integration tests prove each rule fires and does not fire; behaviour-regression thresholds unchanged."

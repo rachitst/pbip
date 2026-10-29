@@ -14,6 +14,8 @@ from pbip_api.modules.accounts.service import open_account
 from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.auth.service import AuthService, RequestMeta
 from pbip_api.modules.fraud.dependencies import get_fraud_scorer
+from pbip_api.modules.fraud.models import FraudEvent
+from pbip_api.modules.ledger import service as ledger
 from pbip_api.modules.ledger.models import Transaction
 from pbip_ml.fraud.contract import FraudDecision
 from pbip_ml.fraud.testing import FixedDecisionScorer
@@ -473,7 +475,7 @@ def test_new_payee_plus_large_amount_is_held_with_human_readable_reasons(
     codes = {r["code"] for r in detail["reasons"]}
     assert "NEW_PAYEE_LARGE_AMOUNT" in codes
     assert (
-        detail["model_version"] == "baseline-rules-0.1"
+        detail["model_version"] == "baseline-rules-0.2"
         and detail["features"]["payee_age_minutes"] is not None
     )
     assert any("minutes ago" in r["message"] for r in detail["reasons"])
@@ -522,7 +524,73 @@ def test_every_scoring_decision_is_persisted_for_audit_and_retraining(
         ).one()
     assert (
         row.decision == "ALLOW"
-        and row.model_version == "baseline-rules-0.1"
+        and row.model_version == "baseline-rules-0.2"
         and row.latency_ms >= 0
     )
     _ = (Transaction, func, select)  # imported for type narrowing in other tests
+
+
+class _CountrySequence:
+    """Test double: answers the next country in the list for every lookup."""
+
+    def __init__(self, countries: list[str | None]) -> None:
+        self.countries = countries
+
+    def country(self, ip: str | None) -> str | None:
+        return self.countries.pop(0)
+
+
+def test_transfer_from_a_new_country_adds_a_new_country_reason(
+    app: FastAPI,
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_verified_payee: Callable[..., dict[str, Any]],
+    migrated_engine: Engine,
+    db: Session,
+) -> None:
+    """ADR-0014: the first located transfer sets a baseline, a repeat country is quiet, a different
+    country adds NEW_COUNTRY (a signal, below the step-up threshold on its own), unknown adds nothing.
+    The customer-facing response never shows the reason."""
+    from pbip_api.modules.fraud.dependencies import get_country_resolver
+
+    alice = make_customer(funds=1_000_000)
+    bob = make_customer()
+    payee = make_verified_payee(alice, bob)
+    age_payee(migrated_engine, payee["id"], 48)
+    countries = _CountrySequence(["IN", "IN", "GB", None])  # one instance across requests
+    app.dependency_overrides[get_country_resolver] = lambda: countries
+
+    # Two source accounts so the per-account velocity rule (4 in 10 minutes) stays out of the way.
+    second = client.post(
+        "/api/v1/accounts", headers=alice.headers, json={"account_type": "CURRENT"}
+    )
+    assert second.status_code == 201, second.text
+    ledger.deposit(db, uuid.UUID(second.json()["id"]), 1_000_000)
+    db.commit()
+    sources = [alice.account_id, alice.account_id, second.json()["id"], second.json()["id"]]
+    ids = []
+    for source in sources:
+        resp = client.post(
+            "/api/v1/transfers",
+            headers={**alice.headers, "Idempotency-Key": uuid.uuid4().hex},
+            json={
+                "from_account_id": str(source),
+                "amount_minor": 1_000,
+                "payee_id": payee["id"],
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        assert "reasons" not in resp.json() and "risk_score" not in resp.json()
+        ids.append(uuid.UUID(resp.json()["id"]))
+
+    events = {
+        e.transaction_id: e
+        for e in db.execute(select(FraudEvent).where(FraudEvent.transaction_id.in_(ids))).scalars()
+    }
+    codes = [[r["code"] for r in events[i].reasons] for i in ids]
+    assert [events[i].features["ip_country"] for i in ids] == ["IN", "IN", "GB", None]
+    assert "NEW_COUNTRY" not in codes[0]  # no baseline yet
+    assert "NEW_COUNTRY" not in codes[1]  # same country
+    assert "NEW_COUNTRY" in codes[2] and events[ids[2]].decision == "ALLOW"
+    assert events[ids[2]].risk_score == 20
+    assert "NEW_COUNTRY" not in codes[3]  # unknown country never adds risk
