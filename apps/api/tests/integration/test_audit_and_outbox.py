@@ -107,3 +107,19 @@ def test_outbox_relay_creates_notifications_exactly_once_and_only_for_the_owner(
         client.get("/api/v1/notifications?unread_only=true", headers=alice.headers).json()["items"]
         == []
     )
+
+
+def test_oversized_before_seq_is_a_validation_error_not_a_server_error(
+    client: TestClient, make_staff: Callable[..., Actor]
+) -> None:
+    """Same class of defect as the notifications offset: bound the keyset cursor to a bigint."""
+    officer = make_staff(RoleName.COMPLIANCE_OFFICER)
+    too_big = 9_223_372_036_854_775_808
+    resp = client.get(
+        f"/api/v1/compliance/audit-logs?before_seq={too_big}", headers=officer.headers
+    )
+    assert resp.status_code == 422, resp.text
+    ok = client.get(
+        f"/api/v1/compliance/audit-logs?before_seq={too_big - 1}", headers=officer.headers
+    )
+    assert ok.status_code == 200

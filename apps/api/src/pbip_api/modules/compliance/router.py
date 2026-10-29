@@ -37,7 +37,7 @@ class ChainStatusOut(BaseModel):
 @router.get("/audit-logs", response_model=list[AuditLogOut], summary="Audit log, newest first")
 def list_audit_logs(
     limit: int = Query(default=50, ge=1, le=200),
-    before_seq: int | None = Query(default=None, ge=1),
+    before_seq: int | None = Query(default=None, ge=1, le=9_223_372_036_854_775_807),  # bigint
     _principal: Principal = Depends(compliance_gate),
     session: Session = Depends(get_session),
 ) -> list[AuditLogOut]:
