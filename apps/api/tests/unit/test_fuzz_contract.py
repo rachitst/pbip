@@ -7,7 +7,9 @@ committed OpenAPI contract.
 """
 
 import json
+import subprocess
 import sys
+from dataclasses import asdict
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -21,6 +23,7 @@ from scripts.fuzz import (
     FuzzResult,
     Target,
     _make_executor,
+    _request_data,
     _Tally,
     main,
     run_fuzz,
@@ -227,9 +230,11 @@ class _FailingCase:
 
     def validate_response(self, _response: Any, **_kwargs: Any) -> None:
         # schemathesis.core.failures.FailureGroup derives from BaseExceptionGroup, not Exception.
-        raise BaseExceptionGroup(
-            "Schemathesis found 1 distinct failure", [AssertionError("Server error")]
-        )
+        # A plain BaseExceptionGroup(...) with Exception members is auto-converted to an
+        # ExceptionGroup (an Exception) and would NOT reproduce the escape: raise the real class.
+        from schemathesis.core.failures import FailureGroup
+
+        raise FailureGroup([AssertionError("Server error")])
 
 
 def test_a_failed_check_is_recorded_not_raised() -> None:
@@ -241,3 +246,67 @@ def test_a_failed_check_is_recorded_not_raised() -> None:
     assert status == 500 and failure is not None
     assert failure.error_type == "UnhandledServerError"
     assert "Server error" in failure.message and failure.path == "/api/v1/notifications"
+
+
+def test_report_serialises_failures_on_bodyless_operations_and_digest_is_stable() -> None:
+    """Regression: a failure on a GET put Schemathesis's NotSet sentinel into the report, which
+    broke json.dumps (no artifact exactly when there was a finding) and made the input digest
+    differ between processes (its str() carries an object address)."""
+
+    def fail_gets(case: Any, _headers: dict[str, str]) -> tuple[int, FuzzFailure | None]:
+        if case.method.upper() == "GET":
+            failure = FuzzFailure(
+                case.method, case.path, 500, "UnhandledServerError", "x", _request_data(case)
+            )
+            return 500, failure
+        return 200, None
+
+    result = run_fuzz(
+        spec_path=SPEC_PATH, app=NOT_AN_APP, auth=False, min_cases=20, seed=5, execute=fail_gets
+    )
+    assert result.server_errors > 0
+    assert '"body": null' in json.dumps(asdict(result), indent=2)  # NotSet normalised, no crash
+
+    root = str(SPEC_PATH.parents[2])
+    probe = (
+        f"import sys, warnings; warnings.filterwarnings('ignore'); sys.path.insert(0, {root!r});"
+        "from scripts.fuzz import run_fuzz, SPEC_DEFAULT;"
+        "print(run_fuzz(spec_path=SPEC_DEFAULT, app=object(), auth=False, min_cases=20, seed=5,"
+        " execute=lambda c, h: (200, None)).input_digest)"
+    )
+    digests = {
+        subprocess.run(  # noqa: S603 - runs the interpreter on a fixed probe string
+            [sys.executable, "-c", probe], capture_output=True, text=True, check=True, timeout=300
+        ).stdout.strip()
+        for _ in range(2)
+    }
+    assert len(digests) == 1, digests
+
+
+class _RateLimitedTarget(_FakeTarget):
+    """Login is rate limited once (the fuzzer's own traffic), then succeeds."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.login_statuses = [429, 200]
+
+    def post_json(self, path: str, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        if path.endswith("/register"):
+            return 201, {}
+        status = self.login_statuses.pop(0)
+        self.logins += 1
+        return status, {"access_token": f"token-{self.logins}"} if status == 200 else {}
+
+
+def test_identity_waits_out_a_rate_limited_login_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("scripts.fuzz.LOGIN_RETRY_SECONDS", 0)
+    identity = FuzzIdentity(_RateLimitedTarget())
+    assert identity.provision() == {"Authorization": "Bearer token-2"}
+
+
+def test_identity_gives_up_when_login_keeps_failing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("scripts.fuzz.LOGIN_RETRY_SECONDS", 0)
+    target = _RateLimitedTarget()
+    target.login_statuses = [429, 429]
+    with pytest.raises(RuntimeError, match="HTTP 429"):
+        FuzzIdentity(target).provision()

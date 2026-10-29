@@ -45,6 +45,7 @@ REGISTER_PATH = "/api/v1/auth/register"
 LOGIN_PATH = "/api/v1/auth/login"
 ME_PATH = "/api/v1/auth/me"
 GENERATION_MODES = ("positive", "negative")
+LOGIN_RETRY_SECONDS = 61  # the login limiter is a 60-second fixed window
 # Upper bound on passes over the operation list when topping up to --cases (Hypothesis runs an
 # operation without any input only once per pass).
 MAX_CYCLES = 25
@@ -161,17 +162,24 @@ class FuzzIdentity:
         return self.login()
 
     def login(self) -> dict[str, str]:
-        status, body = self.target.post_json(
-            LOGIN_PATH, {"email": self.email, "password": self.password}
-        )
-        if status != 200 or "access_token" not in body:
+        """Log in; the fuzzer's own traffic can exhaust the login rate limit, so wait once."""
+        for attempt in range(2):
+            status, body = self.target.post_json(
+                LOGIN_PATH, {"email": self.email, "password": self.password}
+            )
+            if status == 200 and "access_token" in body:
+                self.token = str(body["access_token"])
+                return self.headers
+            if status == 429 and attempt == 0:
+                sys.stdout.write("Login rate limited; waiting for the window to pass\n")
+                time.sleep(LOGIN_RETRY_SECONDS)
+                continue
             msg = f"could not log the fuzz customer in on {self.target.description}: HTTP {status}"
             raise RuntimeError(msg)
-        self.token = str(body["access_token"])
-        return self.headers
+        raise AssertionError("unreachable")  # pragma: no cover
 
     def ensure(self) -> dict[str, str]:
-        """Log in again if a fuzzed operation managed to invalidate the session."""
+        """Log in again if the session stopped working (expired token, a fuzzed logout...)."""
         if self.target.get_status(ME_PATH, self.headers) == 401:
             return self.login()
         return self.headers
@@ -199,13 +207,24 @@ def build_isolated_app(database_url: str | None = None) -> FastAPI:
     return app
 
 
+def _plain(value: object) -> object:
+    """JSON-friendly view of a generated value: Schemathesis's NotSet sentinel becomes None.
+
+    NotSet has no JSON form and its str() carries an object address, which broke the report
+    writer on bodyless failures and made the input digest differ between processes.
+    """
+    from schemathesis.core import NotSet
+
+    return None if isinstance(value, NotSet) else value
+
+
 def _request_data(case: Case) -> Json:
     raw_headers = dict(case.headers or {})
     return {
-        "path_parameters": case.path_parameters,
-        "query": case.query,
+        "path_parameters": _plain(case.path_parameters),
+        "query": _plain(case.query),
         "headers": {k: v for k, v in raw_headers.items() if k.lower() != "authorization"},
-        "body": case.body,
+        "body": _plain(case.body),
     }
 
 
@@ -552,7 +571,9 @@ def main() -> int:
 
     if args.report_file:
         args.report_file.parent.mkdir(parents=True, exist_ok=True)
-        args.report_file.write_text(json.dumps(asdict(result), indent=2), encoding="utf-8")
+        args.report_file.write_text(
+            json.dumps(asdict(result), indent=2, default=str), encoding="utf-8"
+        )
         sys.stdout.write(f"Wrote report to {args.report_file}\n")
 
     return 0 if result.is_success and result.total_cases >= args.cases else 1
