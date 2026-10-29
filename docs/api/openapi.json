@@ -365,6 +365,90 @@
         "title": "BulkMarkReadResponse",
         "type": "object"
       },
+      "CategoryShiftItem": {
+        "description": "Month-over-month shift in spending for a category.",
+        "properties": {
+          "category": {
+            "description": "Category name",
+            "title": "Category",
+            "type": "string"
+          },
+          "change_minor": {
+            "description": "Difference in spend (current - previous) in minor units",
+            "title": "Change Minor",
+            "type": "integer"
+          },
+          "change_percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Percentage change (+/-); None when the previous month had no spend here",
+            "title": "Change Percentage"
+          },
+          "current_amount_minor": {
+            "description": "Current month spend in minor units",
+            "minimum": 0.0,
+            "title": "Current Amount Minor",
+            "type": "integer"
+          },
+          "previous_amount_minor": {
+            "description": "Previous month spend in minor units",
+            "minimum": 0.0,
+            "title": "Previous Amount Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category",
+          "current_amount_minor",
+          "previous_amount_minor",
+          "change_minor"
+        ],
+        "title": "CategoryShiftItem",
+        "type": "object"
+      },
+      "CategorySpendingItem": {
+        "description": "Spending total and percentage for a single spending category.",
+        "properties": {
+          "amount_minor": {
+            "description": "Total spend in minor units (pence/cents)",
+            "minimum": 0.0,
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "category": {
+            "description": "Category name (e.g. groceries, utilities)",
+            "title": "Category",
+            "type": "string"
+          },
+          "percentage": {
+            "description": "Percentage of total spend",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Percentage",
+            "type": "number"
+          },
+          "transaction_count": {
+            "description": "Number of debit transactions",
+            "minimum": 0.0,
+            "title": "Transaction Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category",
+          "amount_minor",
+          "percentage",
+          "transaction_count"
+        ],
+        "title": "CategorySpendingItem",
+        "type": "object"
+      },
       "ChainStatusOut": {
         "properties": {
           "checked": {
@@ -828,6 +912,57 @@
         "title": "MfaVerifyRequest",
         "type": "object"
       },
+      "MonthlySpendingSummary": {
+        "description": "Summary of spending in a calendar month.",
+        "properties": {
+          "daily_burn_rate_minor": {
+            "description": "Total spend divided by the days of the month (elapsed days when running)",
+            "minimum": 0.0,
+            "title": "Daily Burn Rate Minor",
+            "type": "integer"
+          },
+          "month": {
+            "description": "Month (1-12)",
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Month",
+            "type": "integer"
+          },
+          "period": {
+            "description": "Period formatted as YYYY-MM",
+            "title": "Period",
+            "type": "string"
+          },
+          "total_spend_minor": {
+            "description": "Total spend in minor units",
+            "minimum": 0.0,
+            "title": "Total Spend Minor",
+            "type": "integer"
+          },
+          "transaction_count": {
+            "description": "Transaction count",
+            "minimum": 0.0,
+            "title": "Transaction Count",
+            "type": "integer"
+          },
+          "year": {
+            "description": "Year",
+            "minimum": 2000.0,
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "period",
+          "year",
+          "month",
+          "total_spend_minor",
+          "transaction_count",
+          "daily_burn_rate_minor"
+        ],
+        "title": "MonthlySpendingSummary",
+        "type": "object"
+      },
       "NotificationOut": {
         "properties": {
           "body": {
@@ -1165,6 +1300,160 @@
           "full_name"
         ],
         "title": "RegisterRequest",
+        "type": "object"
+      },
+      "SpendingBreakdownResponse": {
+        "description": "Response containing categorized spending breakdown for an account.",
+        "properties": {
+          "account_id": {
+            "description": "Target account identifier",
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "categories": {
+            "description": "Category-wise spending items",
+            "items": {
+              "$ref": "#/components/schemas/CategorySpendingItem"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "currency": {
+            "description": "ISO currency code",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency",
+            "type": "string"
+          },
+          "month": {
+            "description": "Aggregation month (1-12)",
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Month",
+            "type": "integer"
+          },
+          "period": {
+            "description": "Aggregation period formatted as YYYY-MM",
+            "title": "Period",
+            "type": "string"
+          },
+          "total_spend_minor": {
+            "description": "Total spending in minor units",
+            "minimum": 0.0,
+            "title": "Total Spend Minor",
+            "type": "integer"
+          },
+          "transaction_count": {
+            "description": "Total debit transactions count",
+            "minimum": 0.0,
+            "title": "Transaction Count",
+            "type": "integer"
+          },
+          "year": {
+            "description": "Aggregation year",
+            "minimum": 2000.0,
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "account_id",
+          "currency",
+          "period",
+          "year",
+          "month",
+          "total_spend_minor",
+          "transaction_count"
+        ],
+        "title": "SpendingBreakdownResponse",
+        "type": "object"
+      },
+      "SpendingTrendsResponse": {
+        "description": "Month-over-month spending trends and burn rate comparison.",
+        "properties": {
+          "account_id": {
+            "description": "Target account identifier",
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "burn_rate_change_percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Daily burn rate change vs the previous month (+/-); None when it had no spend",
+            "title": "Burn Rate Change Percentage"
+          },
+          "currency": {
+            "description": "ISO currency code",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency",
+            "type": "string"
+          },
+          "current_month": {
+            "$ref": "#/components/schemas/MonthlySpendingSummary",
+            "description": "Current month summary"
+          },
+          "daily_burn_rate_minor": {
+            "description": "Current daily burn rate in minor units",
+            "minimum": 0.0,
+            "title": "Daily Burn Rate Minor",
+            "type": "integer"
+          },
+          "mom_spend_change_percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Month-over-month total spend change (+/-); None if last month had none",
+            "title": "Mom Spend Change Percentage"
+          },
+          "previous_month": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MonthlySpendingSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Previous month summary (if available)"
+          },
+          "top_categories_decreasing": {
+            "description": "Categories with highest spending decreases",
+            "items": {
+              "$ref": "#/components/schemas/CategoryShiftItem"
+            },
+            "title": "Top Categories Decreasing",
+            "type": "array"
+          },
+          "top_categories_increasing": {
+            "description": "Categories with highest spending increases",
+            "items": {
+              "$ref": "#/components/schemas/CategoryShiftItem"
+            },
+            "title": "Top Categories Increasing",
+            "type": "array"
+          }
+        },
+        "required": [
+          "account_id",
+          "currency",
+          "current_month",
+          "daily_burn_rate_minor"
+        ],
+        "title": "SpendingTrendsResponse",
         "type": "object"
       },
       "StepUpRequest": {
@@ -2003,6 +2292,188 @@
         "summary": "Clear a user's lockout and login rate-limit counters (ADMIN with MFA)",
         "tags": [
           "admin"
+        ]
+      }
+    },
+    "/api/v1/analytics/spending": {
+      "get": {
+        "description": "Return categorized spending breakdown for an authenticated customer's account.",
+        "operationId": "get_customer_spending_api_v1_analytics_spending_get",
+        "parameters": [
+          {
+            "description": "Target account identifier",
+            "in": "query",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "description": "Target account identifier",
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Calendar year (e.g. 2026)",
+            "in": "query",
+            "name": "year",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2200,
+                  "minimum": 2000,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Calendar year (e.g. 2026)",
+              "title": "Year"
+            }
+          },
+          {
+            "description": "Calendar month (1-12)",
+            "in": "query",
+            "name": "month",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 12,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Calendar month (1-12)",
+              "title": "Month"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpendingBreakdownResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Customer spending breakdown across categories",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/v1/analytics/trends": {
+      "get": {
+        "description": "Return month-over-month spending trends and burn rate comparison.",
+        "operationId": "get_customer_trends_api_v1_analytics_trends_get",
+        "parameters": [
+          {
+            "description": "Target account identifier",
+            "in": "query",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "description": "Target account identifier",
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Calendar year (e.g. 2026)",
+            "in": "query",
+            "name": "year",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2200,
+                  "minimum": 2000,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Calendar year (e.g. 2026)",
+              "title": "Year"
+            }
+          },
+          {
+            "description": "Calendar month (1-12)",
+            "in": "query",
+            "name": "month",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 12,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Calendar month (1-12)",
+              "title": "Month"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpendingTrendsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Month-over-month spending trends and daily burn rate",
+        "tags": [
+          "analytics"
         ]
       }
     },
