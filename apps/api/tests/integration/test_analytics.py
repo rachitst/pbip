@@ -18,6 +18,8 @@ from uuid import UUID
 import pytest
 from fastapi.testclient import TestClient
 from pbip_api.core.db import utcnow
+from pbip_api.modules.accounts.models import Account
+from pbip_api.modules.analytics import repository
 from pbip_api.modules.analytics.models import MonthlyCategorySpending
 from pbip_api.modules.analytics.service import materialize_monthly_spending
 from pbip_api.modules.ledger import service as ledger
@@ -384,7 +386,15 @@ def test_materialization_matches_the_live_computation_and_is_idempotent(
     dinner = _transfer(client, alice, payee["id"], 10_000, "Swiggy dinner order")
     now = utcnow()
 
-    # Only Alice's account has debits (the funding deposit debits a SYSTEM account).
+    # Only Alice's account has customer debits (the funding deposit debits the SYSTEM clearing
+    # account, Bob only receives credits).
+    debited = repository.accounts_with_debits(db, now.year, now.month)
+    details = db.execute(
+        select(Account.id, Account.account_number, Account.account_type).where(
+            Account.id.in_(debited)
+        )
+    ).all()
+    assert debited == [alice.account_id], details
     assert materialize_monthly_spending(db, periods=[(now.year, now.month)]) == 1
     assert _stored_rows(db, alice.account_id) == {("groceries", 30_000, 2), ("dining", 10_000, 1)}
     assert _stored_rows(db, bob.account_id) == set()
