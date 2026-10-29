@@ -20,8 +20,13 @@ runner masked any failure as "database unavailable" and exited 0.
 * **Training stays out of the request path.** `pbip_ml.segmentation.pipeline` (K-Means with a
   fixed seed on standardised features, Silhouette and Davies-Bouldin reported) is imported only by
   `analytics/segmentation_job.py`, which `scripts/run_segmentation.py` runs. Router and service
-  import the contract only. `n_clusters` is capped at the five personas, each cluster is named
-  from its centroid in a fixed priority order, and metrics that cannot be computed are `null`.
+  import the contract only (and the package `__init__` exports the contract only, so importing it
+  does not load scikit-learn). There are always exactly five clusters: the persona names are
+  assigned by ranking the centroids, which only means something when every persona has a cluster,
+  so fewer eligible customers than five is a reported skip, not a run. Confidence is a
+  min-shifted softmax over centroid distances (an outlier cannot underflow it to NaN); the
+  explanation states the customer's measured features relative to the population median; metrics
+  that cannot be computed (fewer than two clusters, or one customer per cluster) are `null`.
 * **Persistence:** `customer_segments` (migration `0004`), one row per customer, written by the
   job with `ON CONFLICT` upserts and one commit; re-runs update in place. The job skips cleanly
   (reported, exit 0, nothing written) with fewer than two eligible customers; any other failure

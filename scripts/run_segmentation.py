@@ -6,7 +6,7 @@ Silhouette score and Davies-Bouldin index, stores one segment row per customer i
 exits non-zero and never silently switches to synthetic data.
 
 Usage:
-    uv run python scripts/run_segmentation.py [--clusters 5] [--report-file report.json]
+    uv run python scripts/run_segmentation.py [--report-file report.json]
     uv run python scripts/run_segmentation.py --synthetic   # pipeline check without a database
 """
 
@@ -68,7 +68,6 @@ def print_report(report: ClusteringValidationReport, written: int | None) -> Non
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="PBIP customer behavioural segmentation job")
-    parser.add_argument("--clusters", type=int, default=5, help="Number of segments, 1..5")
     parser.add_argument(
         "--synthetic", action="store_true", help="Cluster a synthetic population, no database"
     )
@@ -77,7 +76,7 @@ def main() -> int:
     now = datetime.now(UTC)
 
     if args.synthetic:
-        _assignments, report = cluster_customers(synthetic_customers(), args.clusters, now=now)
+        _assignments, report = cluster_customers(synthetic_customers(), now=now)
         print_report(report, written=None)
         payload = report.model_dump()
     else:
@@ -85,7 +84,7 @@ def main() -> int:
         from pbip_api.modules.analytics.segmentation_job import run_offline_segmentation_job
 
         with session_scope() as session:
-            result = run_offline_segmentation_job(session, now, n_clusters=args.clusters)
+            result = run_offline_segmentation_job(session, now)
         if result.skipped_reason is not None:
             sys.stdout.write(f"Skipped: {result.skipped_reason}\n")
         else:

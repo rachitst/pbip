@@ -7,23 +7,21 @@ only. Run it from ``scripts/run_segmentation.py``; never from a request.
 
 from datetime import datetime
 
-from pbip_ml.segmentation.pipeline import MIN_CUSTOMERS, cluster_customers
+from pbip_ml.segmentation.pipeline import MAX_CLUSTERS, cluster_customers
 from sqlalchemy.orm import Session
 
 from pbip_api.modules.analytics import repository
 from pbip_api.modules.analytics.schemas import SegmentationJobResponse
 
 
-def run_offline_segmentation_job(
-    session: Session, now: datetime, n_clusters: int = 5
-) -> SegmentationJobResponse:
-    """Cluster every customer with ledger activity and store the labels; one commit at the end.
+def run_offline_segmentation_job(session: Session, now: datetime) -> SegmentationJobResponse:
+    """Cluster every customer with ledger activity into the five personas and store the labels.
 
-    With fewer than ``MIN_CUSTOMERS`` eligible customers nothing is clustered or written and the
-    response says why, instead of failing: an empty or brand-new bank is a normal state.
+    One commit at the end. With fewer than five eligible customers nothing is clustered or
+    written and the response says why, instead of failing: a brand-new bank is a normal state.
     """
     features = repository.extract_all_customers_rfm_features(session, now)
-    if len(features) < MIN_CUSTOMERS:
+    if len(features) < MAX_CLUSTERS:
         return SegmentationJobResponse(
             n_clusters=0,
             n_samples=len(features),
@@ -34,11 +32,11 @@ def run_offline_segmentation_job(
             cluster_centroids={},
             total_customers_assigned=0,
             skipped_reason=(
-                f"{len(features)} customer(s) with ledger activity; at least {MIN_CUSTOMERS} "
-                "are needed to cluster"
+                f"{len(features)} customer(s) with ledger activity; at least {MAX_CLUSTERS} "
+                "are needed for the five personas"
             ),
         )
-    assignments, report = cluster_customers(features, n_clusters=n_clusters, now=now)
+    assignments, report = cluster_customers(features, n_clusters=MAX_CLUSTERS, now=now)
     by_customer = {f.customer_id: f for f in features}
     for assignment in assignments:
         repository.upsert_customer_segment(session, assignment, by_customer[assignment.customer_id])
