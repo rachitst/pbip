@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from pbip_api.core.validation import Text
+from pbip_api.core.validation import EncodableText, Text
 
 
 class CustomerProfileOut(BaseModel):
@@ -28,7 +28,7 @@ class CustomerProfileOut(BaseModel):
 class DeviceRegisterRequest(BaseModel):
     """Device registration payload. The raw fingerprint is never stored or logged in plain text."""
 
-    fingerprint: str | None = Field(
+    fingerprint: EncodableText | None = Field(
         default=None,
         min_length=1,
         max_length=512,

@@ -74,9 +74,9 @@ jobs:
         run: uv run alembic -c apps/api/alembic.ini upgrade head
       - name: Seed database fixtures
         run: uv run python scripts/dev.py seed
-      - name: Start PBIP API server in background
+      - name: Start PBIP API server in background (log kept for 5xx triage)
         run: |
-          uv run uvicorn pbip_api.main:app --host 127.0.0.1 --port 8000 &
+          nohup uv run uvicorn pbip_api.main:app --host 127.0.0.1 --port 8000 > api-server.log 2>&1 &
           echo "API_PID=$!" >> "$GITHUB_ENV"
       - name: Wait for API readiness probe
         run: |
@@ -90,9 +90,14 @@ jobs:
         run: >-
           uv run python scripts/dev.py fuzz --url http://127.0.0.1:8000
           --cases "$CASES" --seed "$SEED" --report-file fuzz-report.json
-      - name: Upload Schemathesis fuzzing report
+      - name: Stop the API server
+        if: always()
+        run: kill "$API_PID" 2>/dev/null || true
+      - name: Upload the fuzzing report and the API server log
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: schemathesis-fuzz-report
-          path: fuzz-report.json
+          path: |
+            fuzz-report.json
+            api-server.log
