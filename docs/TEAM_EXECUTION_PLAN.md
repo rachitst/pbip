@@ -1274,9 +1274,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #63 | **Sprint:** 4 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Sun 25 Oct | **Target deadline:** Sun 25 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (3.7 days of slack)
+- **Start:** Sun 25 Oct | **Target deadline:** Sun 25 Oct | **Actual completion:** Wed 29 Oct (merged in #156; acceptance criteria verified, the < 50 ms response-time figure is a design property not measured in CI) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-008 (#19, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** Parallel: can start immediately
+- **Mode:** Done
 - **Goal:** Analytics endpoints aggregating customer spending by category and month-over-month trends.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -1287,10 +1287,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: BOLA policy guarantees customer can only query their own accounts
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #63`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] GET /api/v1/analytics/spending returns spend breakdown across categories (Groceries, Utilities, etc.)
-  - [ ] GET /api/v1/analytics/trends computes month-over-month percentage changes and burn rate
-  - [ ] Queries leverage pre-aggregated monthly tables to maintain response time < 50ms
-  - [ ] BOLA policy guarantees customer can only query their own accounts
+  - [x] GET /api/v1/analytics/spending returns spend breakdown across categories (Groceries, Utilities, etc.)
+  - [x] GET /api/v1/analytics/trends computes month-over-month percentage changes and burn rate
+  - [x] Queries leverage pre-aggregated monthly tables to maintain response time < 50ms
+  - [x] BOLA policy guarantees customer can only query their own accounts
 - **Definition of done (evidence):** Integration tests verify mathematical accuracy of spend sums and category buckets.
 - **Required checks:**
   - Automated: pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths; correctness tests on aggregates with fixed fixtures (edge cases: empty history, single month)
