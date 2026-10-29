@@ -30,6 +30,7 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("get", f"/api/v1/analytics/spending?account_id={uuid.uuid4()}"),
         ("get", f"/api/v1/analytics/trends?account_id={uuid.uuid4()}"),
         ("get", f"/api/v1/analytics/health-score?account_id={uuid.uuid4()}"),
+        ("get", "/api/v1/analytics/segment"),
         ("get", f"/api/v1/admin/users/{uuid.uuid4()}/lockout"),
         ("post", f"/api/v1/admin/users/{uuid.uuid4()}/unlock"),
     ]:
@@ -82,6 +83,7 @@ def test_staff_have_no_customer_profile(
         ).status_code
         == 403
     )
+    assert client.get("/api/v1/analytics/segment", headers=analyst.headers).status_code == 403
     assert (
         client.post(
             "/api/v1/accounts",

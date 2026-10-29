@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from pbip_api.core.db import get_session
 from pbip_api.modules.analytics import service
 from pbip_api.modules.analytics.schemas import (
+    CustomerSegmentResponse,
     FinancialHealthScoreResponse,
     SpendingBreakdownResponse,
     SpendingTrendsResponse,
@@ -79,3 +80,17 @@ def get_customer_health_score(
     return service.get_financial_health_score(
         session=session, customer_id=customer.id, account_id=account_id
     )
+
+
+@router.get(
+    "/segment",
+    response_model=CustomerSegmentResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Behavioural segment assigned to the customer by the offline job (404 until it ran)",
+)
+def get_customer_segment(
+    customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+) -> CustomerSegmentResponse:
+    """Segment, confidence and the RFM features it was derived from; the principal's own only."""
+    return service.get_customer_segment(session=session, customer_id=customer.id)

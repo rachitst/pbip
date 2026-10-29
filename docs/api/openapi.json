@@ -550,6 +550,91 @@
         "title": "CustomerProfileOut",
         "type": "object"
       },
+      "CustomerSegmentResponse": {
+        "description": "The customer's behavioural segment and the RFM features it was derived from.",
+        "properties": {
+          "assigned_at": {
+            "description": "When the offline job assigned the segment",
+            "format": "date-time",
+            "title": "Assigned At",
+            "type": "string"
+          },
+          "confidence_score": {
+            "description": "Softmax of the distances to the cluster centroids",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence Score",
+            "type": "number"
+          },
+          "customer_id": {
+            "description": "Customer identifier (the principal's own)",
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "discretionary_ratio": {
+            "description": "Share of spend in dining, shopping, entertainment, travel",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Discretionary Ratio",
+            "type": "number"
+          },
+          "explanation": {
+            "description": "Human-readable justification of the segment",
+            "title": "Explanation",
+            "type": "string"
+          },
+          "frequency": {
+            "description": "Debits per 30-day month",
+            "minimum": 0.0,
+            "title": "Frequency",
+            "type": "number"
+          },
+          "monetary_minor": {
+            "description": "Spend per 30-day month, minor units",
+            "minimum": 0.0,
+            "title": "Monetary Minor",
+            "type": "integer"
+          },
+          "recency_days": {
+            "description": "Days since the last ledger entry",
+            "minimum": 0.0,
+            "title": "Recency Days",
+            "type": "integer"
+          },
+          "savings_ratio": {
+            "description": "(credits - debits) / credits; negative = deficit",
+            "title": "Savings Ratio",
+            "type": "number"
+          },
+          "segment": {
+            "description": "Assigned behavioural segment",
+            "enum": [
+              "HIGH_NET_WORTH",
+              "BUDGET_CONSCIOUS",
+              "FREQUENT_TRANSACTOR",
+              "DISCRETIONARY_SPENDER",
+              "INACTIVE_SAVER"
+            ],
+            "title": "Segment",
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_id",
+          "segment",
+          "confidence_score",
+          "recency_days",
+          "frequency",
+          "monetary_minor",
+          "savings_ratio",
+          "discretionary_ratio",
+          "explanation",
+          "assigned_at"
+        ],
+        "title": "CustomerSegmentResponse",
+        "type": "object"
+      },
       "DecisionRequest": {
         "properties": {
           "action": {
@@ -2509,6 +2594,33 @@
           }
         ],
         "summary": "Financial health score (0-100) with explainable components and tips",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/v1/analytics/segment": {
+      "get": {
+        "description": "Segment, confidence and the RFM features it was derived from; the principal's own only.",
+        "operationId": "get_customer_segment_api_v1_analytics_segment_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerSegmentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Behavioural segment assigned to the customer by the offline job (404 until it ran)",
         "tags": [
           "analytics"
         ]

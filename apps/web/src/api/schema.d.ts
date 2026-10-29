@@ -161,6 +161,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/analytics/segment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Behavioural segment assigned to the customer by the offline job (404 until it ran)
+         * @description Segment, confidence and the RFM features it was derived from; the principal's own only.
+         */
+        get: operations["get_customer_segment_api_v1_analytics_segment_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/analytics/spending": {
         parameters: {
             query?: never;
@@ -903,6 +923,65 @@ export interface components {
              * Format: uuid
              */
             user_id: string;
+        };
+        /**
+         * CustomerSegmentResponse
+         * @description The customer's behavioural segment and the RFM features it was derived from.
+         */
+        CustomerSegmentResponse: {
+            /**
+             * Assigned At
+             * Format: date-time
+             * @description When the offline job assigned the segment
+             */
+            assigned_at: string;
+            /**
+             * Confidence Score
+             * @description Softmax of the distances to the cluster centroids
+             */
+            confidence_score: number;
+            /**
+             * Customer Id
+             * Format: uuid
+             * @description Customer identifier (the principal's own)
+             */
+            customer_id: string;
+            /**
+             * Discretionary Ratio
+             * @description Share of spend in dining, shopping, entertainment, travel
+             */
+            discretionary_ratio: number;
+            /**
+             * Explanation
+             * @description Human-readable justification of the segment
+             */
+            explanation: string;
+            /**
+             * Frequency
+             * @description Debits per 30-day month
+             */
+            frequency: number;
+            /**
+             * Monetary Minor
+             * @description Spend per 30-day month, minor units
+             */
+            monetary_minor: number;
+            /**
+             * Recency Days
+             * @description Days since the last ledger entry
+             */
+            recency_days: number;
+            /**
+             * Savings Ratio
+             * @description (credits - debits) / credits; negative = deficit
+             */
+            savings_ratio: number;
+            /**
+             * Segment
+             * @description Assigned behavioural segment
+             * @enum {string}
+             */
+            segment: "HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER";
         };
         /** DecisionRequest */
         DecisionRequest: {
@@ -1886,6 +1965,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_customer_segment_api_v1_analytics_segment_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerSegmentResponse"];
                 };
             };
         };

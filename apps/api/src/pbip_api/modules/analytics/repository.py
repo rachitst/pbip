@@ -8,13 +8,15 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
+from pbip_ml.segmentation.contract import CustomerRFMFeatures, SegmentAssignment
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from pbip_api.modules.accounts.models import Account, AccountType
+from pbip_api.modules.accounts.models import Account, AccountHolder, AccountType
 from pbip_api.modules.analytics.categorization import categorize_transaction, is_debt_repayment
-from pbip_api.modules.analytics.models import MonthlyCategorySpending
+from pbip_api.modules.analytics.models import CustomerSegment, MonthlyCategorySpending
+from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.ledger.models import (
     EntryDirection,
     Transaction,
@@ -225,5 +227,104 @@ def upsert_monthly_aggregates(
                 "transaction_count": stmt.excluded.transaction_count,
                 "updated_at": func.now(),
             },
+        )
+    )
+
+
+DISCRETIONARY_CATEGORIES = frozenset({"dining", "shopping", "entertainment", "travel"})
+DAYS_PER_MONTH = 30.0
+
+
+def extract_customer_rfm_features(
+    session: Session, customer_id: UUID, as_of: datetime
+) -> CustomerRFMFeatures | None:
+    """RFM and lifestyle features of a customer from POSTED, non-REVERSAL entries on their accounts.
+
+    Returns None when the customer has no entries: there is nothing to cluster, and a made-up
+    "dormant" profile would not be a measurement.
+    """
+    account_ids = list(
+        session.execute(
+            select(AccountHolder.account_id).where(AccountHolder.customer_id == customer_id)
+        ).scalars()
+    )
+    if not account_ids:
+        return None
+    stmt = (
+        select(
+            TransactionEntry.amount,
+            TransactionEntry.direction,
+            TransactionEntry.created_at,
+            Transaction.reference,
+            Transaction.type,
+        )
+        .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
+        .where(
+            TransactionEntry.account_id.in_(account_ids),
+            Transaction.status == TransactionStatus.POSTED,
+            Transaction.type != TransactionType.REVERSAL,
+        )
+        .order_by(TransactionEntry.created_at)
+    )
+    rows = session.execute(stmt).all()
+    if not rows:
+        return None
+    credits = debits = debit_count = discretionary = 0
+    for amount, direction, _created_at, reference, tx_type in rows:
+        if direction == EntryDirection.CREDIT:
+            credits += int(amount)
+            continue
+        debits += int(amount)
+        debit_count += 1
+        if categorize_transaction(reference, str(tx_type)) in DISCRETIONARY_CATEGORIES:
+            discretionary += int(amount)
+    first, last = rows[0][2], rows[-1][2]
+    months = max((as_of - first).days / DAYS_PER_MONTH, 1.0)
+    return CustomerRFMFeatures(
+        customer_id=customer_id,
+        recency_days=max((as_of - last).days, 0),
+        frequency=round(debit_count / months, 2),
+        monetary_minor=round(debits / months),
+        savings_ratio=round((credits - debits) / credits, 4) if credits > 0 else 0.0,
+        discretionary_ratio=round(discretionary / debits, 4) if debits > 0 else 0.0,
+    )
+
+
+def extract_all_customers_rfm_features(
+    session: Session, as_of: datetime
+) -> list[CustomerRFMFeatures]:
+    """Features of every customer that has ledger activity, in a stable order."""
+    customer_ids = session.execute(select(Customer.id).order_by(Customer.id)).scalars()
+    features = (extract_customer_rfm_features(session, cid, as_of) for cid in customer_ids)
+    return [f for f in features if f is not None]
+
+
+def get_customer_segment(session: Session, customer_id: UUID) -> CustomerSegment | None:
+    return session.execute(
+        select(CustomerSegment).where(CustomerSegment.customer_id == customer_id)
+    ).scalar_one_or_none()
+
+
+def upsert_customer_segment(
+    session: Session, assignment: SegmentAssignment, rfm: CustomerRFMFeatures
+) -> None:
+    """Insert or replace the customer's segment row under its unique key (safe to re-run)."""
+    values = {
+        "customer_id": assignment.customer_id,
+        "segment": assignment.segment.value,
+        "confidence_score": assignment.confidence_score,
+        "recency_days": rfm.recency_days,
+        "frequency": rfm.frequency,
+        "monetary_minor": rfm.monetary_minor,
+        "savings_ratio": rfm.savings_ratio,
+        "discretionary_ratio": rfm.discretionary_ratio,
+        "explanation": assignment.explanation,
+        "updated_at": assignment.assigned_at,
+    }
+    stmt = insert(CustomerSegment).values(values)
+    session.execute(
+        stmt.on_conflict_do_update(
+            constraint="uq_customer_segments_customer_id",
+            set_={key: getattr(stmt.excluded, key) for key in values if key != "customer_id"},
         )
     )

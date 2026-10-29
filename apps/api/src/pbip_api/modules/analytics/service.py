@@ -14,6 +14,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from pbip_api.core.db import utcnow
+from pbip_api.core.errors import NotFoundError
 from pbip_api.modules.analytics import repository
 from pbip_api.modules.analytics.health import compute_financial_health_score
 from pbip_api.modules.analytics.models import MonthlyCategorySpending
@@ -21,6 +22,7 @@ from pbip_api.modules.analytics.policy import verify_account_ownership
 from pbip_api.modules.analytics.schemas import (
     CategoryShiftItem,
     CategorySpendingItem,
+    CustomerSegmentResponse,
     FinancialHealthScoreResponse,
     MonthlySpendingSummary,
     SpendingBreakdownResponse,
@@ -200,4 +202,23 @@ def get_financial_health_score(
     metrics = repository.get_financial_health_metrics(session, account.id, utcnow())
     return compute_financial_health_score(
         account.id, account.currency, account.available_balance, metrics
+    )
+
+
+def get_customer_segment(session: Session, customer_id: UUID) -> CustomerSegmentResponse:
+    """The segment the offline job assigned to the authenticated customer; 404 until it has run."""
+    record = repository.get_customer_segment(session, customer_id)
+    if record is None:
+        raise NotFoundError("no segment has been assigned to this customer yet")
+    return CustomerSegmentResponse(
+        customer_id=record.customer_id,
+        segment=record.segment,
+        confidence_score=record.confidence_score,
+        recency_days=record.recency_days,
+        frequency=record.frequency,
+        monetary_minor=record.monetary_minor,
+        savings_ratio=record.savings_ratio,
+        discretionary_ratio=record.discretionary_ratio,
+        explanation=record.explanation,
+        assigned_at=record.updated_at,
     )

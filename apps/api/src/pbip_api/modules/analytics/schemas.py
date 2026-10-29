@@ -1,5 +1,6 @@
 """Pydantic schemas for analytics: spending breakdown and trends."""
 
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
@@ -164,3 +165,57 @@ class FinancialHealthScoreResponse(BaseModel):
     window_months: int = Field(..., gt=0, description="Length of the trailing window used")
     components: FinancialHealthComponents = Field(..., description="Component breakdown")
     recommendations: list[str] = Field(default_factory=list, description="Actionable tips")
+
+
+SegmentName = Literal[
+    "HIGH_NET_WORTH",
+    "BUDGET_CONSCIOUS",
+    "FREQUENT_TRANSACTOR",
+    "DISCRETIONARY_SPENDER",
+    "INACTIVE_SAVER",
+]
+
+
+class CustomerSegmentResponse(BaseModel):
+    """The customer's behavioural segment and the RFM features it was derived from."""
+
+    model_config = ConfigDict(frozen=True)
+
+    customer_id: UUID = Field(..., description="Customer identifier (the principal's own)")
+    segment: SegmentName = Field(..., description="Assigned behavioural segment")
+    confidence_score: float = Field(
+        ..., ge=0.0, le=1.0, description="Softmax of the distances to the cluster centroids"
+    )
+    recency_days: int = Field(..., ge=0, description="Days since the last ledger entry")
+    frequency: float = Field(..., ge=0.0, description="Debits per 30-day month")
+    monetary_minor: int = Field(..., ge=0, description="Spend per 30-day month, minor units")
+    savings_ratio: float = Field(
+        ..., description="(credits - debits) / credits; negative = deficit"
+    )
+    discretionary_ratio: float = Field(
+        ..., ge=0.0, le=1.0, description="Share of spend in dining, shopping, entertainment, travel"
+    )
+    explanation: str = Field(..., description="Human-readable justification of the segment")
+    assigned_at: datetime = Field(..., description="When the offline job assigned the segment")
+
+
+class SegmentationJobResponse(BaseModel):
+    """Summary of one offline segmentation run (the cluster distribution report)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    n_clusters: int = Field(..., ge=0, description="Clusters formed; 0 when the run was skipped")
+    n_samples: int = Field(..., ge=0, description="Customers with ledger activity")
+    silhouette_score: float | None = Field(
+        None, description="Silhouette score; None when fewer than two clusters formed"
+    )
+    davies_bouldin_index: float | None = Field(
+        None, ge=0.0, description="Davies-Bouldin index; None when fewer than two clusters formed"
+    )
+    inertia: float | None = Field(None, ge=0.0, description="Within-cluster sum of squares")
+    cluster_distribution: dict[str, int] = Field(description="Customers per segment")
+    cluster_centroids: dict[str, dict[str, float]] = Field(
+        description="Centroids per segment in original feature units"
+    )
+    total_customers_assigned: int = Field(..., ge=0, description="Rows written")
+    skipped_reason: str | None = Field(None, description="Why nothing was clustered, if so")
