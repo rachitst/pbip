@@ -11,7 +11,7 @@ from uuid import UUID
 from pbip_ml.segmentation.contract import CustomerRFMFeatures, SegmentAssignment
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from pbip_api.modules.accounts.models import Account, AccountHolder, AccountType
 from pbip_api.modules.analytics.categorization import categorize_transaction, is_debt_repayment
@@ -162,6 +162,30 @@ def compute_monthly_spending_from_entries(
     ]
     records.sort(key=lambda r: r.total_amount_minor, reverse=True)
     return records
+
+
+def account_months_reversed_since(session: Session, since: datetime) -> list[tuple[UUID, int, int]]:
+    """(account, year, month) of the original debit of every transfer reversed since ``since``.
+
+    A reversal flips the original transaction to REVERSED without adding an entry to the month it
+    was posted in, so stored rows for that month would otherwise never be refreshed.
+    """
+    reversal = aliased(Transaction)
+    stmt = (
+        select(TransactionEntry.account_id, TransactionEntry.created_at)
+        .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
+        .join(reversal, reversal.reversal_of_id == Transaction.id)
+        .where(
+            Transaction.status == TransactionStatus.REVERSED,
+            TransactionEntry.direction == EntryDirection.DEBIT,
+            reversal.created_at >= since,
+        )
+    )
+    seen: set[tuple[UUID, int, int]] = set()
+    for account_id, created_at in session.execute(stmt).all():
+        stamp = created_at.astimezone(UTC)
+        seen.add((account_id, stamp.year, stamp.month))
+    return sorted(seen, key=lambda item: (str(item[0]), item[1], item[2]))
 
 
 def accounts_with_debits(session: Session, year: int, month: int) -> list[UUID]:

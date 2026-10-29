@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
@@ -24,7 +25,7 @@ from pbip_api.modules.analytics.models import MonthlyCategorySpending
 from pbip_api.modules.analytics.service import materialize_monthly_spending
 from pbip_api.modules.ledger import service as ledger
 from pbip_test_support import Actor, age_payee
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine, select, text
 from sqlalchemy.orm import Session
 
 pytestmark = [pytest.mark.integration, pytest.mark.security]
@@ -512,3 +513,38 @@ def test_financial_health_score_moves_with_ledger_activity(
 
     # Bob cannot read Alice's score (BOLA).
     assert client.get(url, headers=bob.headers).status_code == 404
+
+
+def test_a_reversal_refreshes_the_stored_month_even_outside_the_default_periods(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_verified_payee: Callable[..., dict[str, Any]],
+    migrated_engine: Engine,
+    db: Session,
+) -> None:
+    """Audit H5: a reversal flips a past transaction without adding an entry to its month, so the
+    nightly task must re-materialise that month even when it is not one of the default periods."""
+    alice = make_customer(funds=500_000)
+    bob = make_customer()
+    payee = make_verified_payee(alice, bob)
+    age_payee(migrated_engine, payee["id"], 48)
+    _transfer(client, alice, payee["id"], 20_000, "BigBasket weekly groceries")
+    dinner = _transfer(client, alice, payee["id"], 10_000, "Swiggy dinner order")
+    now = utcnow()
+    assert materialize_monthly_spending(db, periods=[(now.year, now.month)]) == 1
+    assert _stored_rows(db, alice.account_id) == {("groceries", 20_000, 1), ("dining", 10_000, 1)}
+
+    ledger.reverse_transaction(db, dinner, None, "customer dispute")
+    db.commit()
+    # Run for an unrelated period only: the reversal lookback still targets this month.
+    far = (2001, 1)
+    written = materialize_monthly_spending(db, periods=[far], now=now)
+    assert written == 1  # the reversed account-month, nothing for 2001-01
+    assert _stored_rows(db, alice.account_id) == {("groceries", 20_000, 1)}
+    # Outside the lookback window nothing is refreshed.
+    db.execute(text("DELETE FROM monthly_category_spending"))
+    db.commit()
+    assert (
+        materialize_monthly_spending(db, periods=[far], reversed_since=now + timedelta(days=1)) == 0
+    )
+    assert _stored_rows(db, alice.account_id) == set()

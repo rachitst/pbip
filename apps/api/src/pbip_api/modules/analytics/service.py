@@ -8,7 +8,7 @@ reversed weeks after it was posted.
 """
 
 import calendar
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -30,6 +30,9 @@ from pbip_api.modules.analytics.schemas import (
 )
 
 MATERIALIZED_MONTHS_BACK = 2
+REVERSAL_LOOKBACK = timedelta(
+    days=2
+)  # overlaps consecutive nightly runs; refreshing twice is harmless
 
 
 def percentage_change(current: int, previous: int) -> float | None:
@@ -64,26 +67,39 @@ def _monthly_aggregates(
 
 
 def materialize_monthly_spending(
-    session: Session, periods: list[tuple[int, int]] | None = None
+    session: Session,
+    periods: list[tuple[int, int]] | None = None,
+    now: datetime | None = None,
+    reversed_since: datetime | None = None,
 ) -> int:
     """Store the per-category spend of every customer account for the given months.
 
-    Defaults to the two most recent closed months. Idempotent (rows are upserted under their
-    unique key, vanished categories are deleted) and committed once at the end. Returns the number
-    of account-months written. A running month may be passed; the read path ignores stored rows
-    for it, so this is only useful to tests.
+    Defaults to the two most recent closed months, plus the posting month of every transfer
+    reversed since ``reversed_since`` (default: the last two days), because a reversal changes a
+    month's spend without adding an entry to it. Idempotent (rows are upserted under their unique
+    key, vanished categories are deleted) and committed once at the end. Returns the number of
+    account-months written. A running month may be passed; the read path ignores stored rows for
+    it, so this is only useful to tests.
     """
-    periods = periods or previous_closed_months(utcnow(), MATERIALIZED_MONTHS_BACK)
-    written = 0
-    for year, month in periods:
-        for account_id in repository.accounts_with_debits(session, year, month):
-            records = repository.compute_monthly_spending_from_entries(
-                session, account_id, year, month
-            )
-            repository.upsert_monthly_aggregates(session, account_id, year, month, records)
-            written += 1
+    now = now or utcnow()
+    if periods is None:
+        periods = previous_closed_months(now, MATERIALIZED_MONTHS_BACK)
+    targets: list[tuple[UUID, int, int]] = [
+        (account_id, year, month)
+        for year, month in periods
+        for account_id in repository.accounts_with_debits(session, year, month)
+    ]
+    since = reversed_since or now - REVERSAL_LOOKBACK
+    targets.extend(
+        item
+        for item in repository.account_months_reversed_since(session, since)
+        if item not in targets
+    )
+    for account_id, year, month in targets:
+        records = repository.compute_monthly_spending_from_entries(session, account_id, year, month)
+        repository.upsert_monthly_aggregates(session, account_id, year, month, records)
     session.commit()
-    return written
+    return len(targets)
 
 
 def get_spending_breakdown(
