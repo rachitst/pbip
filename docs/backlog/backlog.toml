@@ -944,10 +944,15 @@ size = "M"
 labels = ["infra", "analytics"]
 outcome = "Scheduled Celery Beat jobs pre-computing monthly spending summaries and customer health scores."
 acceptance_criteria = [
-    "Celery task runs nightly at 02:00 UTC computing previous day aggregates",
-    "Writes materialized results to customer_analytics_monthly table",
+    # Clarified 2026-10-30 to resolve the overlap with the nightly job TASK-040 already ships (ADR-0011);
+    # no second materialisation job or table. Original wording: "Celery task runs nightly at 02:00 UTC
+    # computing previous day aggregates", "Writes materialized results to customer_analytics_monthly table",
+    # "Logs metrics on execution duration and processed customer count".
+    "Celery task runs nightly at 02:00 UTC materialising the closed-month spending aggregates the analytics endpoints read (ADR-0011)",
+    "Writes materialized results to the monthly_category_spending table (no separate customer_analytics_monthly table)",
     "Idempotent execution: safe to rerun multiple times without double-counting",
-    "Logs metrics on execution duration and processed customer count",
+    "Logs metrics on execution duration and processed account count",
+    "Customer segmentation re-runs weekly through Celery beat with idempotent upserts (ADR-0012)",
 ]
 dependencies = ["TASK-040", "TASK-041"]
 definition_of_done = "Integration tests verify batch execution against test database with 100 accounts."

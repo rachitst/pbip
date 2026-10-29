@@ -16,7 +16,7 @@ DEBIT entry as spend, including reversed transfers and the counterparty's REVERS
   of type REVERSAL. A reversed transfer (status REVERSED) was refunded, so it is not spend; the
   REVERSAL that debits the counterparty is money being returned. Deposits and incoming transfers
   are CREDIT entries and never count. Months are UTC calendar months on the entry timestamp.
-* **Write path:** the Celery beat task `pbip.analytics.materialize_monthly_spending` (02:30 UTC)
+* **Write path:** the Celery beat task `pbip.analytics.materialize_monthly_spending` (02:00 UTC)
   recomputes the two most recent closed months for every customer account with debits and
   upserts the rows under the unique key `(account, year, month, category)`, deleting categories
   that vanished. It is idempotent and commits once. The second month is refreshed because a
@@ -40,3 +40,11 @@ DEBIT entry as spend, including reversed transfers and the counterparty's REVERS
   re-materialisation (`materialize_monthly_spending(session, periods=[...])`); documented limit.
 - Reads of the running month scan that month's entries for one account (bounded by the account's
   monthly debit volume, indexed by account); closed months are one indexed lookup.
+
+## Addendum 2026-10-30: TASK-052 resolved onto this job
+TASK-052 ("Nightly Analytics & Materialization Celery Jobs") specified a 02:00 UTC job writing a
+`customer_analytics_monthly` table, which would have duplicated this one. Its acceptance criteria
+were clarified instead: the single nightly job above now runs at 02:00 UTC, writes
+`monthly_category_spending`, and logs its duration and processed account and account-month counts;
+an integration test materialises 100 accounts and re-runs idempotently. No second spending job or
+table exists. The weekly segmentation run is scheduled separately (ADR-0012).

@@ -37,10 +37,12 @@ runner masked any failure as "database unavailable" and exited 0.
 ## Alternatives considered
 - Rule-based fallback on first read: not K-Means (AC 1), writes on a GET, and fabricates a
   confidence; rejected.
-- Celery beat schedule for the job: deferred; the job is deterministic and cheap to run by hand
-  or from CI, and the blueprint's nightly analytics slot can host it once its cadence is decided.
+- Celery beat schedule for the job: deferred at first; added on 2026-10-30 by TASK-052 as a weekly run
+  (`pbip.analytics.segment_customers`, Sunday 03:00 UTC, after the 02:00 spending job). The task
+  imports the job lazily so scikit-learn stays out of the API and beat processes.
 
 ## Consequences
-- Segments are as fresh as the last job run; `assigned_at` says when.
+- Segments are at most a week old (weekly beat run) or as fresh as the last manual run; `assigned_at`
+  says when.
 - Quality is reported, not gated: a poor Silhouette score is visible in the report and the job
   still persists labels. A gate needs a baseline from real data first.
