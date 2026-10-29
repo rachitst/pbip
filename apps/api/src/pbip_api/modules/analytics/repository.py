@@ -11,7 +11,7 @@ from uuid import UUID
 from pbip_ml.segmentation.contract import CustomerRFMFeatures, SegmentAssignment
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from pbip_api.modules.accounts.models import Account, AccountHolder, AccountType
 from pbip_api.modules.analytics.categorization import categorize_transaction, is_debt_repayment
@@ -95,6 +95,10 @@ def get_financial_health_metrics(
     )
 
 
+# Arbitrary, project-unique key for pg advisory locks taken by the spending materialisation.
+MATERIALIZATION_LOCK_KEY = 4_040_001
+
+
 def month_window(year: int, month: int) -> tuple[datetime, datetime]:
     """[start, end) of a calendar month in UTC; ledger timestamps are UTC."""
     start = datetime(year, month, 1, tzinfo=UTC)
@@ -164,6 +168,40 @@ def compute_monthly_spending_from_entries(
     return records
 
 
+def try_lock_materialization(session: Session) -> bool:
+    """Transaction-scoped advisory lock so two materialisation runs never interleave (released at
+    commit/rollback). Returns False when another run holds it."""
+    return bool(
+        session.execute(
+            select(func.pg_try_advisory_xact_lock(MATERIALIZATION_LOCK_KEY))
+        ).scalar_one()
+    )
+
+
+def account_months_reversed_since(session: Session, since: datetime) -> list[tuple[UUID, int, int]]:
+    """(account, year, month) of the original debit of every transfer reversed since ``since``.
+
+    A reversal flips the original transaction to REVERSED without adding an entry to the month it
+    was posted in, so stored rows for that month would otherwise never be refreshed.
+    """
+    reversal = aliased(Transaction)
+    stmt = (
+        select(TransactionEntry.account_id, TransactionEntry.created_at)
+        .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
+        .join(reversal, reversal.reversal_of_id == Transaction.id)
+        .where(
+            Transaction.status == TransactionStatus.REVERSED,
+            TransactionEntry.direction == EntryDirection.DEBIT,
+            reversal.created_at >= since,
+        )
+    )
+    seen: set[tuple[UUID, int, int]] = set()
+    for account_id, created_at in session.execute(stmt).all():
+        stamp = created_at.astimezone(UTC)
+        seen.add((account_id, stamp.year, stamp.month))
+    return sorted(seen, key=lambda item: (str(item[0]), item[1], item[2]))
+
+
 def accounts_with_debits(session: Session, year: int, month: int) -> list[UUID]:
     """Customer accounts with any debit entry in the month (SYSTEM accounts are not customers)."""
     start, end = month_window(year, month)
@@ -216,7 +254,7 @@ def upsert_monthly_aggregates(
                 "total_amount_minor": record.total_amount_minor,
                 "transaction_count": record.transaction_count,
             }
-            for record in records
+            for record in sorted(records, key=lambda r: r.category)  # stable lock order
         ]
     )
     session.execute(
