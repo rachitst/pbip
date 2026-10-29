@@ -23,7 +23,7 @@ from pbip_api.modules.analytics import repository
 from pbip_api.modules.analytics.models import MonthlyCategorySpending
 from pbip_api.modules.analytics.service import materialize_monthly_spending
 from pbip_api.modules.ledger import service as ledger
-from pbip_test_support import Actor, age_payee
+from pbip_test_support import Actor, FakeClock, age_payee
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
@@ -512,3 +512,71 @@ def test_financial_health_score_moves_with_ledger_activity(
 
     # Bob cannot read Alice's score (BOLA).
     assert client.get(url, headers=bob.headers).status_code == 404
+
+
+def test_transfers_between_own_accounts_are_neither_income_nor_spend(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    db: Session,
+) -> None:
+    """Audit H3: moving money between pockets must not inflate one account's income or the other's spend."""
+    alice = make_customer(funds=300_000)
+    opened = client.post(
+        "/api/v1/accounts", headers=alice.headers, json={"account_type": "CURRENT"}
+    )
+    assert opened.status_code == 201, opened.text
+    second = UUID(opened.json()["id"])
+    moved = client.post(
+        "/api/v1/transfers",
+        headers={**alice.headers, "Idempotency-Key": uuid.uuid4().hex},
+        json={
+            "from_account_id": str(alice.account_id),
+            "amount_minor": 100_000,
+            "to_account_id": str(second),
+        },
+    )
+    assert moved.status_code == 201, moved.text
+
+    owned = repository.owned_account_ids(db, alice.customer_id)
+    assert owned == {alice.account_id, second}
+    source = repository.get_financial_health_metrics(db, alice.account_id, owned, utcnow())
+    target = repository.get_financial_health_metrics(db, second, owned, utcnow())
+    assert (source.income_minor, source.spend_minor) == (300_000, 0)  # the deposit only
+    assert (target.income_minor, target.spend_minor) == (0, 0)
+    for url in (
+        f"/api/v1/analytics/health-score?account_id={alice.account_id}",
+        f"/api/v1/analytics/health-score?account_id={second}",
+    ):
+        resp = client.get(url, headers=alice.headers)
+        assert resp.status_code == 200, resp.text
+    assert client.get(url, headers=alice.headers).json()["components"]["savings_rate"][
+        "assessment"
+    ] == ("INSUFFICIENT_DATA")
+
+
+def test_health_score_uses_closed_months_only_so_the_calendar_day_does_not_move_it(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_verified_payee: Callable[..., dict[str, Any]],
+    migrated_engine: Engine,
+    clock: FakeClock,
+) -> None:
+    """Audit H4: spend posted this month must not feed volatility or the buffer until the month closes."""
+    alice = make_customer(funds=400_000)
+    bob = make_customer()
+    payee = make_verified_payee(alice, bob)
+    age_payee(migrated_engine, payee["id"], 48)
+    _transfer(client, alice, payee["id"], 50_000, "October rent")
+    url = f"/api/v1/analytics/health-score?account_id={alice.account_id}"
+
+    today = client.get(url, headers=alice.headers).json()
+    assert today["components"]["expense_volatility"]["assessment"] == "INSUFFICIENT_DATA"
+    assert today["components"]["buffer_months"]["assessment"] == "INSUFFICIENT_DATA"
+
+    # Two months later the posting month is closed, the month after it had no spend (zero-filled):
+    # volatility is computed from [50,000, 0] and the buffer from their average.
+    clock.advance(62 * 24 * 3600)
+    later = client.get(url, headers=alice.headers).json()
+    assert later["components"]["expense_volatility"]["assessment"] == "VOLATILE"
+    assert later["components"]["buffer_months"]["metric_value"] == 14.0  # 350,000 / 25,000
+    assert later["months_observed"] == 3
