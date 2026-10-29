@@ -88,3 +88,56 @@ class SpendingTrendsResponse(BaseModel):
     top_categories_decreasing: list[CategoryShiftItem] = Field(
         default_factory=list, description="Categories with highest spending decreases"
     )
+
+
+class HealthScoreComponent(BaseModel):
+    """Detailed score and calculation for a single health component."""
+
+    model_config = ConfigDict(frozen=True)
+
+    score: int = Field(..., ge=0, description="Earned points for component")
+    max_score: int = Field(..., gt=0, description="Maximum possible points for component")
+    weight_percentage: float = Field(..., ge=0.0, le=100.0, description="Weight percentage")
+    metric_value: float = Field(..., description="Observed underlying metric value")
+    formatted_value: str = Field(
+        ..., description="Human-readable formatted metric (e.g. '24.5%', '4.2 months')"
+    )
+    assessment: str = Field(
+        ..., description="Assessment summary (e.g. 'OPTIMAL', 'MODERATE', 'VULNERABLE')"
+    )
+
+
+class FinancialHealthComponents(BaseModel):
+    """Component-wise breakdown of the customer financial health score."""
+
+    model_config = ConfigDict(frozen=True)
+
+    savings_rate: HealthScoreComponent = Field(
+        ..., description="Savings rate component (30% weight)"
+    )
+    expense_volatility: HealthScoreComponent = Field(
+        ..., description="Expense volatility component (25% weight)"
+    )
+    emi_to_income: HealthScoreComponent = Field(
+        ..., description="Debt / EMI to income ratio (25% weight)"
+    )
+    buffer_months: HealthScoreComponent = Field(
+        ..., description="Emergency buffer in months (20% weight)"
+    )
+
+
+class FinancialHealthScoreResponse(BaseModel):
+    """Customer financial health score (0-100) with explainable components and advice."""
+
+    model_config = ConfigDict(frozen=True)
+
+    account_id: UUID = Field(..., description="Target account identifier")
+    currency: str = Field(..., min_length=3, max_length=3, description="ISO currency code")
+    overall_score: int = Field(
+        ..., ge=0, le=100, description="Composite financial health score (0-100)"
+    )
+    rating: str = Field(..., description="Rating band: EXCELLENT, GOOD, FAIR, or NEEDS_ATTENTION")
+    components: FinancialHealthComponents = Field(..., description="Component breakdown")
+    recommendations: list[str] = Field(
+        default_factory=list, description="Actionable financial tips"
+    )

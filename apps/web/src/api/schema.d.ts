@@ -141,6 +141,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/analytics/health-score": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Customer financial health score and actionable recommendations
+         * @description Calculate explainable financial health score (0-100) based on savings, debt, and buffer.
+         */
+        get: operations["get_customer_health_score_api_v1_analytics_health_score_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/analytics/spending": {
         parameters: {
             query?: never;
@@ -978,10 +998,94 @@ export interface components {
             /** Transaction Type */
             transaction_type: string;
         };
+        /**
+         * FinancialHealthComponents
+         * @description Component-wise breakdown of the customer financial health score.
+         */
+        FinancialHealthComponents: {
+            /** @description Emergency buffer in months (20% weight) */
+            buffer_months: components["schemas"]["HealthScoreComponent"];
+            /** @description Debt / EMI to income ratio (25% weight) */
+            emi_to_income: components["schemas"]["HealthScoreComponent"];
+            /** @description Expense volatility component (25% weight) */
+            expense_volatility: components["schemas"]["HealthScoreComponent"];
+            /** @description Savings rate component (30% weight) */
+            savings_rate: components["schemas"]["HealthScoreComponent"];
+        };
+        /**
+         * FinancialHealthScoreResponse
+         * @description Customer financial health score (0-100) with explainable components and advice.
+         */
+        FinancialHealthScoreResponse: {
+            /**
+             * Account Id
+             * Format: uuid
+             * @description Target account identifier
+             */
+            account_id: string;
+            /** @description Component breakdown */
+            components: components["schemas"]["FinancialHealthComponents"];
+            /**
+             * Currency
+             * @description ISO currency code
+             */
+            currency: string;
+            /**
+             * Overall Score
+             * @description Composite financial health score (0-100)
+             */
+            overall_score: number;
+            /**
+             * Rating
+             * @description Rating band: EXCELLENT, GOOD, FAIR, or NEEDS_ATTENTION
+             */
+            rating: string;
+            /**
+             * Recommendations
+             * @description Actionable financial tips
+             */
+            recommendations?: string[];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HealthScoreComponent
+         * @description Detailed score and calculation for a single health component.
+         */
+        HealthScoreComponent: {
+            /**
+             * Assessment
+             * @description Assessment summary (e.g. 'OPTIMAL', 'MODERATE', 'VULNERABLE')
+             */
+            assessment: string;
+            /**
+             * Formatted Value
+             * @description Human-readable formatted metric (e.g. '24.5%', '4.2 months')
+             */
+            formatted_value: string;
+            /**
+             * Max Score
+             * @description Maximum possible points for component
+             */
+            max_score: number;
+            /**
+             * Metric Value
+             * @description Observed underlying metric value
+             */
+            metric_value: number;
+            /**
+             * Score
+             * @description Earned points for component
+             */
+            score: number;
+            /**
+             * Weight Percentage
+             * @description Weight percentage
+             */
+            weight_percentage: number;
         };
         /** LiveResponse */
         LiveResponse: {
@@ -1724,6 +1828,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UnlockResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_customer_health_score_api_v1_analytics_health_score_get: {
+        parameters: {
+            query: {
+                /** @description Target account identifier */
+                account_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinancialHealthScoreResponse"];
                 };
             };
             /** @description Validation Error */

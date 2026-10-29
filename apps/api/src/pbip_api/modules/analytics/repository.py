@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, extract, func, select
 from sqlalchemy.orm import Session
 
 from pbip_api.modules.analytics.categorization import categorize_transaction
@@ -98,3 +98,49 @@ def persist_monthly_aggregates(
     for record in records:
         session.add(record)
     session.flush()
+
+
+def get_financial_health_metrics(
+    session: Session, account_id: UUID
+) -> tuple[int, int, list[int], int]:
+    """Retrieve historical total credits, debits, monthly debit breakdown, and EMI debits."""
+    credit_stmt = select(func.coalesce(func.sum(TransactionEntry.amount), 0)).where(
+        TransactionEntry.account_id == account_id,
+        TransactionEntry.direction == EntryDirection.CREDIT,
+    )
+    total_credits = int(session.execute(credit_stmt).scalar_one())
+
+    debit_stmt = select(func.coalesce(func.sum(TransactionEntry.amount), 0)).where(
+        TransactionEntry.account_id == account_id,
+        TransactionEntry.direction == EntryDirection.DEBIT,
+    )
+    total_debits = int(session.execute(debit_stmt).scalar_one())
+
+    year_col = extract("year", TransactionEntry.created_at)
+    month_col = extract("month", TransactionEntry.created_at)
+    monthly_stmt = (
+        select(func.coalesce(func.sum(TransactionEntry.amount), 0))
+        .where(
+            TransactionEntry.account_id == account_id,
+            TransactionEntry.direction == EntryDirection.DEBIT,
+        )
+        .group_by(year_col, month_col)
+        .order_by(year_col, month_col)
+    )
+    monthly_debits = [int(x) for x in session.execute(monthly_stmt).scalars().all()]
+
+    emi_stmt = (
+        select(TransactionEntry.amount, Transaction.reference)
+        .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
+        .where(
+            TransactionEntry.account_id == account_id,
+            TransactionEntry.direction == EntryDirection.DEBIT,
+        )
+    )
+    emi_rows = session.execute(emi_stmt).all()
+    total_emi = 0
+    for amt, ref in emi_rows:
+        if ref and any(term in ref.lower() for term in ("emi", "loan", "mortgage", "installment")):
+            total_emi += int(amt)
+
+    return total_credits, total_debits, monthly_debits, total_emi

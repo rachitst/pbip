@@ -7,11 +7,13 @@ from sqlalchemy.orm import Session
 
 from pbip_api.core.db import utcnow
 from pbip_api.modules.analytics import repository
+from pbip_api.modules.analytics.health import compute_financial_health_score
 from pbip_api.modules.analytics.models import MonthlyCategorySpending
 from pbip_api.modules.analytics.policy import verify_account_ownership
 from pbip_api.modules.analytics.schemas import (
     CategoryShiftItem,
     CategorySpendingItem,
+    FinancialHealthScoreResponse,
     MonthlySpendingSummary,
     SpendingBreakdownResponse,
     SpendingTrendsResponse,
@@ -187,4 +189,29 @@ def get_spending_trends(
         burn_rate_change_percentage=burn_rate_change_pct,
         top_categories_increasing=increasing[:5],
         top_categories_decreasing=decreasing[:5],
+    )
+
+
+def get_financial_health_score(
+    session: Session,
+    customer_id: UUID,
+    account_id: UUID,
+) -> FinancialHealthScoreResponse:
+    """Calculate dynamic customer financial health score from ledger history (BOLA protected)."""
+    account = verify_account_ownership(session, customer_id, account_id)
+    (
+        total_credits,
+        total_debits,
+        monthly_debits,
+        total_emi,
+    ) = repository.get_financial_health_metrics(session, account.id)
+
+    return compute_financial_health_score(
+        account_id=account.id,
+        currency=account.currency,
+        available_balance=account.available_balance,
+        total_credits=total_credits,
+        total_debits=total_debits,
+        monthly_debit_totals=monthly_debits,
+        total_emi_debits=total_emi,
     )

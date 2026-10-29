@@ -283,6 +283,40 @@ def test_analytics_bola_isolation(
     )
     assert resp_non_existent.status_code == 404
 
+    # Bob attempts to inspect Alice's health score
+    resp_health = client.get(
+        f"/api/v1/analytics/health-score?account_id={alice.account_id}",
+        headers=bob.headers,
+    )
+    assert resp_health.status_code == 404
+
+
+def test_financial_health_score_endpoint(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+) -> None:
+    """GET /api/v1/analytics/health-score calculates health components dynamically."""
+    alice = make_customer(funds=200_000)
+
+    resp = client.get(
+        f"/api/v1/analytics/health-score?account_id={alice.account_id}",
+        headers=alice.headers,
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    assert data["account_id"] == str(alice.account_id)
+    assert data["currency"] == "INR"
+    assert 0 <= data["overall_score"] <= 100
+    assert data["rating"] in ("EXCELLENT", "GOOD", "FAIR", "NEEDS_ATTENTION")
+
+    comps = data["components"]
+    assert comps["savings_rate"]["weight_percentage"] == 30.0
+    assert comps["expense_volatility"]["weight_percentage"] == 25.0
+    assert comps["emi_to_income"]["weight_percentage"] == 25.0
+    assert comps["buffer_months"]["weight_percentage"] == 20.0
+    assert len(data["recommendations"]) >= 1
+
 
 def test_analytics_validation(
     client: TestClient,
