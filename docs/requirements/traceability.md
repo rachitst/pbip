@@ -18,7 +18,8 @@ that is merged and CI-verified but includes maintainer-written changes no second
 TASK-094 to TASK-106 were created on 2026-10-30 for requirements no task covered; they are
 unassigned and unscheduled.
 
-Last reviewed against `main` on 2026-10-30.
+Last reviewed against `main` on 2026-10-30 (local verification run recorded in
+`docs/testing/local-verification-2026-10-30.md`).
 
 ## Functional use cases (section 7)
 
@@ -34,7 +35,7 @@ Last reviewed against `main` on 2026-10-30.
 | UC-08 AI assistant | Missing | `modules/assistant/` empty | 057 #80, 058 #81, 059 #82, 060 #83, 061 #84, 067 #90, 076 #99 (Todo), **105 #188 (new)** | FAQ/support, product discovery and investment suggestions had no tool (TASK-105) |
 | UC-09 Fraud detection triggers | Partial | `fraud/baseline.py`: LARGE_AMOUNT, VELOCITY_BURST, AMOUNT_SPIKE, NEW_PAYEE, NEW_PAYEE_LARGE_AMOUNT; score and reasons persisted | 023 #46, 025 #48, 029-034 #52-57 (Todo), **095 #178 (new)** | No rule for login failures or new device/network (TASK-095); geographic location needs a GeoIP data decision (scope conflict, see below) |
 | UC-10 Fraud alert management: alert, customer notified, analyst review | Partial | Alerts API with MFA-gated decision; customer `TRANSFER_UNDER_REVIEW` / declined / posted notifications via outbox; `test_transfers.py`, `test_notifications.py` | 036 #59, 022 #45 (Todo) | No analyst UI (TASK-036); no notification tray (TASK-022) |
-| UC-11 Behaviour analytics: page visits, clickstream, session, product interests, spend and income | Partial | Spend patterns (`/analytics/spending`, `/trends`), RFM segmentation job; `test_analytics.py`, `test_segmentation.py` | 040 #63, 044 #67 (In Review); 055 #78, 056 #79 (Todo) | No clickstream/session capture (TASK-055); no product-interest data |
+| UC-11 Behaviour analytics: page visits, clickstream, session, product interests, spend and income | Partial | Spend patterns (`/analytics/spending`, `/trends`), RFM segmentation job (run end to end on seeded data locally); nightly materialisation run by a real Celery worker locally; `test_analytics.py`, `test_segmentation.py` | 040 #63, 044 #67 (In Review); 055 #78, 056 #79 (Todo) | No clickstream/session capture (TASK-055); no product-interest data |
 | UC-12 Product recommendation engine (demographics, behaviour, spend, existing products) | Missing | Segmentation exists as an input | 054 #77, 062 #85 (Todo) | Whole use case; demographics are not captured (scope conflict, see below) |
 | UC-13 Security monitoring dashboard | Partial | Audit log API with hash-chain verification; Grafana/Prometheus config | 035 #58 (Todo), **099 #182 (new)** | No security view of high-risk customers, login anomalies, open investigations (TASK-099) |
 
@@ -62,7 +63,7 @@ Last reviewed against `main` on 2026-10-30.
 | Role-based access control | Verified | `require_roles`, `test_rbac_bola.py` | | |
 | Audit logs | Verified | hash-chained `audit_logs`, `test_audit_and_outbox.py` | 048 #71 (UI) | |
 | OWASP Top 10 | Partial | threat model mapping, Bandit, CodeQL, nightly fuzzing (run 40948518916: 940 cases, 0 5xx) | 028 (Done), 070 (In Review), 090 #113 | No DAST against a deployed environment |
-| Page load < 2 s, API < 500 ms, login < 3 s | Unverified | `infra/k6/baseline.js` (TASK-012) | 078 #101, **102 #185 (new)** | Never measured against the targets; no page-load measurement task existed |
+| Page load < 2 s, API < 500 ms, login < 3 s | Partial | Analytics endpoints measured locally at p95 21-34 ms ([local verification](../testing/local-verification-2026-10-30.md)); `infra/k6/baseline.js` (TASK-012) | 078 #101, **102 #185 (new)** | Page load and login never measured; other routes and load not measured |
 | 99% availability in test environment | Unverified | | **103 #186 (new)** | No environment deployed; no task existed |
 | Horizontal scaling, stateless APIs, containers | Partial | Docker images, compose files, JWT access tokens | 082 (Done), 079 #102 | Multi-replica deployment never exercised |
 | Centralised logging, error tracking, health, metrics | Unverified | `infra/{loki,alloy,prometheus,grafana}`, `/api/health/*` | 069 #92, 085 #108, **103 #186 (new)** | Error tracking had no task; nothing deployed |
@@ -76,7 +77,7 @@ Last reviewed against `main` on 2026-10-30.
 | AI assistant | Missing | 057-061, 067, 076, 105 | |
 | Fraud monitoring dashboard, reporting dashboard | Missing | 036, 049, 066, 099, 100, 101 | |
 | API documentation | Verified | | OpenAPI drift-checked in CI |
-| Automated tests, >= 70% coverage | Verified (backend) | 087 #110 | Backend 96% in CI; frontend threshold not traced here |
+| Automated tests, >= 70% coverage | Verified (backend) | 087 #110 | Backend 96% in CI and 95.99% in a local run against PostgreSQL ([local verification](../testing/local-verification-2026-10-30.md)); frontend threshold not traced here |
 | UI testing of critical journeys | Partial | 077 #100 | Transfers, payees, statements lack E2E |
 | CI: build, test, quality scan, security scan | Verified | | |
 | CI: package, deploy, smoke test | Unverified | 082 (Done) | Deploy gated off; never run against a host |
