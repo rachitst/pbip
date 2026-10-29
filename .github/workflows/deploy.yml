@@ -177,7 +177,10 @@ jobs:
           scp infra/deploy/docker-compose.prod.yml infra/deploy/deploy.sh staging:~/pbip/
       - name: Deploy (pull, migrate, health-gated start)
         if: env.DRY_RUN != 'true'
-        run: ssh staging "cd ~/pbip && bash deploy.sh deploy '$IMAGE_PREFIX' '$IMAGE_TAG'"
+        # The runner's values are meant to reach the host: quote them with %q into one remote command.
+        run: |
+          remote="$(printf 'cd ~/pbip && bash deploy.sh deploy %q %q' "$IMAGE_PREFIX" "$IMAGE_TAG")"
+          ssh staging "$remote"
       - uses: actions/setup-python@v7
         if: env.DRY_RUN != 'true'
         with: { python-version: "${{ env.PYTHON_VERSION }}" }
