@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from pbip_api.core.db import get_session
 from pbip_api.modules.analytics import service
 from pbip_api.modules.analytics.schemas import (
+    CustomerSegmentResponse,
     FinancialHealthScoreResponse,
     SpendingBreakdownResponse,
     SpendingTrendsResponse,
@@ -80,4 +81,21 @@ def get_customer_health_score(
         session=session,
         customer_id=customer.id,
         account_id=account_id,
+    )
+
+
+@router.get(
+    "/segment",
+    response_model=CustomerSegmentResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Customer behavioral segmentation persona and RFM profile",
+)
+def get_customer_segment(
+    customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+) -> CustomerSegmentResponse:
+    """Retrieve explainable behavioral segment and RFM lifestyle profile for current customer."""
+    return service.get_customer_segment(
+        session=session,
+        customer_id=customer.id,
     )

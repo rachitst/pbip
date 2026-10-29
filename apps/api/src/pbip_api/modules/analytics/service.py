@@ -3,6 +3,11 @@
 import calendar
 from uuid import UUID
 
+from pbip_ml.segmentation import cluster_customers
+from pbip_ml.segmentation.contract import (
+    CustomerSegmentName,
+    SegmentAssignment,
+)
 from sqlalchemy.orm import Session
 
 from pbip_api.core.db import utcnow
@@ -13,8 +18,10 @@ from pbip_api.modules.analytics.policy import verify_account_ownership
 from pbip_api.modules.analytics.schemas import (
     CategoryShiftItem,
     CategorySpendingItem,
+    CustomerSegmentResponse,
     FinancialHealthScoreResponse,
     MonthlySpendingSummary,
+    SegmentationJobResponse,
     SpendingBreakdownResponse,
     SpendingTrendsResponse,
 )
@@ -214,4 +221,122 @@ def get_financial_health_score(
         total_debits=total_debits,
         monthly_debit_totals=monthly_debits,
         total_emi_debits=total_emi,
+    )
+
+
+def get_customer_segment(
+    session: Session,
+    customer_id: UUID,
+) -> CustomerSegmentResponse:
+    """Retrieve customer behavioral segment or perform initial on-the-fly profiling."""
+    record = repository.get_customer_segment(session, customer_id)
+    if record:
+        return CustomerSegmentResponse(
+            customer_id=record.customer_id,
+            segment=record.segment,
+            confidence_score=record.confidence_score,
+            recency_days=record.recency_days,
+            frequency=record.frequency,
+            monetary_minor=record.monetary_minor,
+            savings_ratio=record.savings_ratio,
+            discretionary_ratio=record.discretionary_ratio,
+            explanation=record.explanation,
+            assigned_at=record.updated_at,
+        )
+
+    # Initial assignment if offline clustering hasn't run yet
+    rfm = repository.extract_customer_rfm_features(session, customer_id)
+    now = utcnow()
+
+    # Rule-based initial assignment
+    if rfm.monetary_minor > 200_000_00:  # > 200,000 INR
+        segment = CustomerSegmentName.HIGH_NET_WORTH
+        explanation = (
+            f"High monthly expenditures ({rfm.monetary_minor // 100:,} major units) "
+            f"indicate premium wealth capacity."
+        )
+    elif rfm.frequency > 25.0:
+        segment = CustomerSegmentName.FREQUENT_TRANSACTOR
+        explanation = (
+            f"High transactional frequency ({rfm.frequency:.1f} tx/mo) "
+            "across daily payment channels."
+        )
+    elif rfm.discretionary_ratio > 0.45:
+        segment = CustomerSegmentName.DISCRETIONARY_SPENDER
+        explanation = (
+            f"Significant lifestyle spending ({rfm.discretionary_ratio * 100:.1f}%) "
+            f"in dining and shopping."
+        )
+    elif rfm.recency_days > 45:
+        segment = CustomerSegmentName.INACTIVE_SAVER
+        explanation = (
+            f"Dormant activity profile with {rfm.recency_days} days since last transaction."
+        )
+    else:
+        segment = CustomerSegmentName.BUDGET_CONSCIOUS
+        explanation = "Balanced spending habits focused primarily on essentials and steady savings."
+
+    assignment = SegmentAssignment(
+        customer_id=customer_id,
+        segment=segment,
+        confidence_score=0.85,
+        assigned_at=now,
+        explanation=explanation,
+    )
+    persisted = repository.upsert_customer_segment(session, assignment, rfm)
+    session.commit()
+
+    return CustomerSegmentResponse(
+        customer_id=persisted.customer_id,
+        segment=persisted.segment,
+        confidence_score=persisted.confidence_score,
+        recency_days=persisted.recency_days,
+        frequency=persisted.frequency,
+        monetary_minor=persisted.monetary_minor,
+        savings_ratio=persisted.savings_ratio,
+        discretionary_ratio=persisted.discretionary_ratio,
+        explanation=persisted.explanation,
+        assigned_at=persisted.updated_at,
+    )
+
+
+def run_offline_segmentation_job(
+    session: Session,
+    n_clusters: int = 5,
+) -> SegmentationJobResponse:
+    """Run batch offline clustering job across all bank customers and persist results."""
+    all_rfm = repository.extract_all_customers_rfm_features(session)
+    if not all_rfm:
+        return SegmentationJobResponse(
+            n_clusters=0,
+            n_samples=0,
+            silhouette_score=0.0,
+            davies_bouldin_index=0.0,
+            inertia=0.0,
+            cluster_distribution={},
+            cluster_centroids={},
+            total_customers_assigned=0,
+        )
+
+    assignments, report = cluster_customers(all_rfm, n_clusters=n_clusters)
+
+    rfm_map = {f.customer_id: f for f in all_rfm}
+    assigned_count = 0
+    for assign in assignments:
+        rfm = rfm_map.get(assign.customer_id)
+        if rfm:
+            repository.upsert_customer_segment(session, assign, rfm)
+            assigned_count += 1
+
+    session.commit()
+
+    return SegmentationJobResponse(
+        n_clusters=report.n_clusters,
+        n_samples=report.n_samples,
+        silhouette_score=report.silhouette_score,
+        davies_bouldin_index=report.davies_bouldin_index,
+        inertia=report.inertia,
+        cluster_distribution=report.cluster_distribution,
+        cluster_centroids=report.cluster_centroids,
+        total_customers_assigned=assigned_count,
     )

@@ -1,5 +1,6 @@
 """Pydantic schemas for analytics: spending breakdown and trends."""
 
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -140,4 +141,52 @@ class FinancialHealthScoreResponse(BaseModel):
     components: FinancialHealthComponents = Field(..., description="Component breakdown")
     recommendations: list[str] = Field(
         default_factory=list, description="Actionable financial tips"
+    )
+
+
+class CustomerSegmentResponse(BaseModel):
+    """Customer behavioral segmentation profile with RFM metrics and justification."""
+
+    model_config = ConfigDict(frozen=True)
+
+    customer_id: UUID = Field(..., description="Target customer identifier")
+    segment: str = Field(..., description="Assigned behavioral segment name")
+    confidence_score: float = Field(
+        ..., ge=0.0, le=1.0, description="Clustering proximity confidence score"
+    )
+    recency_days: int = Field(..., ge=0, description="Days elapsed since last transaction")
+    frequency: float = Field(..., ge=0.0, description="Average monthly transaction frequency")
+    monetary_minor: int = Field(
+        ..., ge=0, description="Average monthly spend in integer minor units"
+    )
+    savings_ratio: float = Field(..., description="Inflow vs outflow savings ratio")
+    discretionary_ratio: float = Field(
+        ..., ge=0.0, le=1.0, description="Discretionary non-essential spending ratio"
+    )
+    explanation: str = Field(..., description="Human-readable justification for the segment")
+    assigned_at: datetime = Field(..., description="UTC timestamp of the assignment")
+
+
+class SegmentationJobResponse(BaseModel):
+    """Execution summary of the offline customer behavioral segmentation clustering job."""
+
+    model_config = ConfigDict(frozen=True)
+
+    n_clusters: int = Field(..., gt=0, description="Number of clusters evaluated")
+    n_samples: int = Field(..., ge=0, description="Number of customer profiles processed")
+    silhouette_score: float = Field(
+        ..., description="Silhouette score measuring cluster cohesion and separation"
+    )
+    davies_bouldin_index: float = Field(
+        ..., ge=0.0, description="Davies-Bouldin index for clustering validation"
+    )
+    inertia: float = Field(..., ge=0.0, description="Within-cluster sum of squared distances")
+    cluster_distribution: dict[str, int] = Field(
+        description="Number of customers classified into each segment"
+    )
+    cluster_centroids: dict[str, dict[str, float]] = Field(
+        description="Feature centroid values for each segment"
+    )
+    total_customers_assigned: int = Field(
+        ..., ge=0, description="Total customers with updated segment in the database"
     )

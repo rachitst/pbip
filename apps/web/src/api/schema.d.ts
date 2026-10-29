@@ -161,6 +161,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/analytics/segment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Customer behavioral segmentation persona and RFM profile
+         * @description Retrieve explainable behavioral segment and RFM lifestyle profile for current customer.
+         */
+        get: operations["get_customer_segment_api_v1_analytics_segment_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/analytics/spending": {
         parameters: {
             query?: never;
@@ -903,6 +923,64 @@ export interface components {
              * Format: uuid
              */
             user_id: string;
+        };
+        /**
+         * CustomerSegmentResponse
+         * @description Customer behavioral segmentation profile with RFM metrics and justification.
+         */
+        CustomerSegmentResponse: {
+            /**
+             * Assigned At
+             * Format: date-time
+             * @description UTC timestamp of the assignment
+             */
+            assigned_at: string;
+            /**
+             * Confidence Score
+             * @description Clustering proximity confidence score
+             */
+            confidence_score: number;
+            /**
+             * Customer Id
+             * Format: uuid
+             * @description Target customer identifier
+             */
+            customer_id: string;
+            /**
+             * Discretionary Ratio
+             * @description Discretionary non-essential spending ratio
+             */
+            discretionary_ratio: number;
+            /**
+             * Explanation
+             * @description Human-readable justification for the segment
+             */
+            explanation: string;
+            /**
+             * Frequency
+             * @description Average monthly transaction frequency
+             */
+            frequency: number;
+            /**
+             * Monetary Minor
+             * @description Average monthly spend in integer minor units
+             */
+            monetary_minor: number;
+            /**
+             * Recency Days
+             * @description Days elapsed since last transaction
+             */
+            recency_days: number;
+            /**
+             * Savings Ratio
+             * @description Inflow vs outflow savings ratio
+             */
+            savings_ratio: number;
+            /**
+             * Segment
+             * @description Assigned behavioral segment name
+             */
+            segment: string;
         };
         /** DecisionRequest */
         DecisionRequest: {
@@ -1869,6 +1947,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_customer_segment_api_v1_analytics_segment_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerSegmentResponse"];
                 };
             };
         };
