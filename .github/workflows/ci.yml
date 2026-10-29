@@ -207,10 +207,23 @@ jobs:
         if: failure()
         with: { name: playwright-report, path: apps/web/playwright-report }
 
+  workflows:
+    name: Workflow files - actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      # Not a GitHub Action: the official actionlint image, pinned by digest (ADR-0006 supply-chain rule).
+      - name: actionlint (syntax, expressions, shellcheck of run steps)
+        run: >-
+          docker run --rm -v "$PWD:/repo:ro" -w /repo
+          rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9
+          -color
+
   ci-gate:
     name: CI Gate
     if: always()
-    needs: [api-quality, api-tests, ml-tests, web, security, docker, e2e]
+    needs: [api-quality, api-tests, ml-tests, web, security, docker, e2e, workflows]
     runs-on: ubuntu-latest
     steps:
       # Every result must be "success": a skipped job (e.g. an `if:` added to a job) proves nothing.

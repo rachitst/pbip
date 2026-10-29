@@ -57,8 +57,9 @@ Repository configuration (labels, sprint milestones, ruleset) can be initialized
 `scripts` seed/OpenAPI/smoke/GitHub setup - `demo` live scenarios.
 
 ## Deploying (staging VM)
-Push a tag from `main` (`git tag v0.1.0 && git push --tags`): CI/CD builds images to GHCR and, when repository
-variable `DEPLOY_ENABLED=true`, deploys over SSH and runs `scripts/smoke_test.sh`. Required secrets:
+Push a `vX.Y.Z` tag from `main` (`git tag v0.1.0 && git push origin v0.1.0`): the workflow verifies the tag is on
+`main`, builds images to GHCR and, when repository variable `DEPLOY_ENABLED=true`, deploys over SSH with a
+health-gated start, runs `scripts/smoke_test.sh` and rolls back automatically on failure. Required secrets:
 `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`; variable `STAGING_URL`. Server `.env`:
 `infra/deploy/.env.prod.example`. Rollback, secret rotation, backup/restore and incident playbooks:
 `docs/operations/runbook.md`.
