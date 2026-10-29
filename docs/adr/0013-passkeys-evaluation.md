@@ -1,8 +1,11 @@
-# ADR 0008: FIDO2 / WebAuthn Passkey Authentication Architecture Evaluation and Implementation Roadmap
+# ADR 0013: FIDO2 / WebAuthn Passkey Authentication Architecture Evaluation and Implementation Roadmap
 - Status: Proposed (Evaluation Spike — TASK-073 / Issue #96)
 - Date: 2026-10-29
 - Deciders: Architecture Team, Security & Core Banking Engineering
 - Technical References: TASK-073, Issue #96, Sprint 5 (Epic: Identity & Core Banking)
+- Numbering: the backlog's definition of done names `0008-passkeys-evaluation.md`, but number 0008
+  is already `0008-ledger-keyset-cursor.md` (cited from code and docs); this ADR takes the next free
+  number instead of creating a duplicate.
 
 ---
 
@@ -75,17 +78,23 @@ PBIP's current authentication framework (`apps/api/src/pbip_api/modules/auth/`, 
 
 ### 4.1 Library Overview and Provenance
 - **Package Name:** `webauthn` (commonly referenced as `py_webauthn`).
-- **Maintainer / Upstream:** Duo Security / Cisco & Yubico ([duo-labs/py_webauthn](https://github.com/duo-labs/py_webauthn)).
-- **Latest PyPI Release:** Version 3.0.x (verified October 2026).
-- **License:** BSD 3-Clause.
-- **Python Compatibility:** Python 3.10, 3.11, 3.12, 3.13 (fully aligned with PBIP's Python 3.12 target).
+- **Maintainer / Upstream:** Duo Labs (Cisco) ([duo-labs/py_webauthn](https://github.com/duo-labs/py_webauthn)).
+- **Latest PyPI Release:** 3.0.1 (PyPI metadata checked 2026-10-30).
+- **License:** BSD-3-Clause.
+- **Python Compatibility:** `requires_python >= 3.10` (PBIP targets 3.12).
 
 ### 4.2 Dependencies and Supply-Chain Impact
-- **Core Dependencies:**
-  1. `cryptography`: Used for digital signature verification (ECDSA, RSA, EdDSA) and X.509 attestation certificate chain parsing. *Note: `cryptography` is already an explicit core dependency in PBIP (`pyproject.toml`), minimizing new transitive binary surface.*
-  2. `cbor2`: Pure-Python / C-accelerated CBOR (Concise Binary Object Representation) decoder required to parse authenticator data and attestation statements.
-  3. `pydantic`: Utilized for structural model validation and JSON serialization. Fully compatible with Pydantic v2 used throughout PBIP.
-- **Supply-Chain Assessment (ADR-0006 compliance):** Duo Labs is a premier contributor to W3C WebAuthn standards. The library is mature, maintained, pinned via `uv.lock`, and verified clean by `pip-audit` and Bandit.
+Declared dependencies of `webauthn` 3.0.1 (PyPI `requires_dist`):
+1. `cryptography>=49.0.0`: signature verification (ECDSA, RSA, EdDSA) and X.509 parsing. PBIP already
+   depends on `cryptography` (`apps/api/pyproject.toml`: `>=44`; locked at 50.0.2 in `uv.lock`), so
+   the lower bound is satisfied by the current lock.
+2. `cbor2>=6.1.2`: CBOR decoding of authenticator data and attestation statements (new to PBIP).
+3. `pyOpenSSL>=26.3.0`: attestation certificate-chain handling (new to PBIP).
+4. `pyasn1>=0.6.2` and `pyasn1-modules>=0.4.2`: ASN.1 parsing for attestation formats (new to PBIP).
+
+The library does not depend on Pydantic. Adding it brings four packages new to PBIP, which must be
+added with `uv add --package pbip-api webauthn`, locked in `uv.lock`, and pass the CI `pip-audit`
+and Bandit gates (ADR-0006) in the Phase 2 PR. None of this is done by this spike.
 
 ### 4.3 Functional Capabilities
 - **Registration Ceremony:**
@@ -122,7 +131,7 @@ The library supports the standard COSE algorithm identifiers required by modern 
 | **Microsoft Edge** | Edge 79+ (Chromium) | Windows Hello, Platform TPM | Edge 108+ |
 | **Mozilla Firefox** | Firefox 60+ (Core), Firefox 122+ (Passkeys) | Windows Hello, macOS Touch ID, Soft token | Firefox 122+ |
 
-*Global Support Status:* Can I Use reports over 98.2% global browser support for core WebAuthn APIs across active desktop and mobile web devices.
+*Global Support Status:* caniuse.com reports near-universal support for the core WebAuthn API in current browsers; the exact percentage changes over time and was not independently re-verified for this ADR.
 
 ### 5.3 Synced (Multi-Device) Passkeys vs. Device-Bound Security Keys
 1. **Multi-Device Synced Passkeys:**
@@ -149,7 +158,7 @@ The browser WebAuthn API is strictly restricted to Secure Contexts (`window.isSe
 PBIP will adopt FIDO2 / WebAuthn passkeys via the Python `webauthn` library following a **phased hybrid architecture** (Option C):
 1. **Passkey as a Phishing-Resistant MFA Factor:** Customers and bank staff may register one or more FIDO2 authenticators as an MFA method alongside TOTP.
 2. **Token Representation & AMR:** Sessions authenticated via password + WebAuthn passkey will carry the Authentication Method Reference `webauthn` (`amr: ["pwd", "webauthn"]`). The principal authorization dependency (`require_roles(..., mfa=True)`) will accept either `otp` or `webauthn` as fulfilling the MFA mandate.
-3. **High-Risk Payment Step-Up:** Payments triggering a risk escalation (`score >= 30` or transfers exceeding £10,000) will support cryptographic step-up via WebAuthn with PSD2 dynamic linking.
+3. **High-Risk Payment Step-Up:** Transfers that the fraud engine already sends to step-up (`score >= STEP_UP_AT`, currently 30, in `modules/fraud/baseline.py`; amounts are INR minor units) will accept a WebAuthn assertion as the second factor, with PSD2-style dynamic linking of amount and payee.
 4. **Passkey-First Authentication (Future Phase):** Customers with registered passkeys may opt into biometric autofill login (`conditional` mediation) without entering a password.
 
 ---
@@ -235,8 +244,8 @@ Extend `SecurityEventType` enum to feed audit logs and fraud engine features:
    - `GET /api/v1/auth/webauthn/credentials`: Lists registered credentials (IDs, friendly names, created/last used timestamps; never private or raw public keys).
    - `DELETE /api/v1/auth/webauthn/credentials/{id}`: Revokes passkey. Cannot revoke last credential if customer has disabled password authentication.
 4. **Transaction Step-Up:**
-   - `POST /api/v1/payments/transfers/{id}/step-up/webauthn-options`: Generates challenge with dynamic transaction linking.
-   - `POST /api/v1/payments/transfers/{id}/step-up/webauthn-verify`: Validates signature over transaction amount and recipient before posting transfer.
+   - `POST /api/v1/transfers/{transfer_id}/step-up/webauthn-options`: Generates a challenge with dynamic transaction linking (alongside the existing TOTP `POST /api/v1/transfers/{transfer_id}/step-up`).
+   - `POST /api/v1/transfers/{transfer_id}/step-up/webauthn-verify`: Validates the signature over transaction amount and payee before posting the transfer.
 
 ---
 
@@ -244,44 +253,44 @@ Extend `SecurityEventType` enum to feed audit logs and fraud engine features:
 
 ```mermaid
 flowchart TD
-    subgraph Phase 1 [Sprint 5 - Architecture Evaluation]
-        P1[TASK-073 Spike & ADR 0008]
+    subgraph P1 [Phase 1 - Sprint 5 - Architecture Evaluation]
+        P1A[TASK-073 Spike and ADR 0013]
     end
 
-    subgraph Phase 2 [Sprint 6 - Backend Core & MFA]
+    subgraph P2 [Phase 2 - Sprint 6 - Backend Core and MFA]
         P2A[Add webauthn dependency via uv]
         P2B[Alembic Migration: webauthn_credentials]
         P2C[Redis Challenge Lifecycle Service]
-        P2D[AuthService WebAuthn Registration & Verification]
-        P2E[Security & BOLA Test Suite]
+        P2D[AuthService WebAuthn Registration and Verification]
+        P2E[Security and BOLA Test Suite]
     end
 
-    subgraph Phase 3 [Sprint 6 - Frontend Web Client]
+    subgraph P3 [Phase 3 - Sprint 6 - Frontend Web Client]
         P3A[Passkey Management in Settings]
         P3B[WebAuthn MFA Verification Modal]
         P3C[Playwright E2E with Virtual Authenticators]
     end
 
-    subgraph Phase 4 [Sprint 7 - Step-Up & Dynamic Linking]
+    subgraph P4 [Phase 4 - Sprint 7 - Step-Up and Dynamic Linking]
         P4A[High-Risk Transfer Step-Up]
         P4B[Dynamic Transaction Data Binding]
     end
 
-    subgraph Phase 5 [Sprint 7 - Passwordless & Conditional UI]
+    subgraph P5 [Phase 5 - Sprint 7 - Passwordless and Conditional UI]
         P5A[Passkey Autofill / Conditional Mediation]
         P5B[Discoverable Passkey-First Login]
     end
 
-    Phase 1 --> Phase 2
-    Phase 2 --> Phase 3
-    Phase 3 --> Phase 4
-    Phase 4 --> Phase 5
+    P1 --> P2
+    P2 --> P3
+    P3 --> P4
+    P4 --> P5
 ```
 
 ### Milestone Deliverables & Acceptance Criteria:
-- **Phase 1 (TASK-073 - Done upon ADR approval):** ADR 0008 committed; architectural buy-in; documentation updated.
+- **Phase 1 (TASK-073 - Done upon ADR approval):** ADR 0013 committed; architectural buy-in; documentation updated.
 - **Phase 2 (Backend Foundation):**
-  - Dependency `webauthn>=3.0.0` added to `apps/api/pyproject.toml`.
+  - Dependency `webauthn>=3.0.1` added with `uv add --package pbip-api` (lockfile, pip-audit and Bandit clean).
   - Alembic migration creating `webauthn_credentials` with up/down tests.
   - Unit tests verifying challenge generation, attestation parsing, signature validation, expired challenge rejection, and bad origin rejection.
   - BOLA tests proving user B cannot delete or access user A's passkeys.
@@ -336,11 +345,11 @@ Because WebAuthn operates as an additive authentication factor alongside Argon2i
    - *Passkeys Architectural Overview and Guidance*: https://fidoalliance.org/passkeys/
    - *Multi-Device FIDO Credentials / Synced Passkeys*: https://fidoalliance.org/white-paper-multi-device-fido-credentials/
 3. **PyWebAuthn (Duo Labs / Cisco):**
-   - *py_webauthn Repository & Documentation*: https://github.com/duo-labs/py_webauthn (Verified version 3.0.x on PyPI; requires Python $\ge 3.10$, depends on `cryptography` and `cbor2`).
+   - *py_webauthn Repository & Documentation*: https://github.com/duo-labs/py_webauthn (PyPI 3.0.1; requires Python >= 3.10; depends on `cryptography`, `cbor2`, `pyOpenSSL`, `pyasn1`, `pyasn1-modules`).
 4. **European Banking Authority (EBA):**
    - *Guidelines on ICT and security risk management* (EBA/GL/2019/04): https://www.eba.europa.eu/regulation-and-policy/internal-governance/guidelines-on-ict-and-security-risk-management
    - *Regulatory Technical Standards on Strong Customer Authentication (SCA) under PSD2*: https://www.eba.europa.eu/regulation-and-policy/payment-services-and-electronic-money/regulatory-technical-standards-on-strong-customer-authentication-and-secure-communication-under-psd2
 5. **Can I Use:**
-   - *Web Authentication API Browser Support Matrix*: https://caniuse.com/webauthn (Verified $> 98\%$ global desktop and mobile browser support).
+   - *Web Authentication API Browser Support Matrix*: https://caniuse.com/webauthn
 6. **Mozilla Developer Network (MDN):**
    - *Web Authentication API*: https://developer.mozilla.org/en-US/docs/Web/API/Web_Authentication_API
