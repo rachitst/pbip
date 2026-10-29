@@ -76,7 +76,9 @@ CATEGORY_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
 )
 
 
-DEBT_REPAYMENT = re.compile(r"\b(emi|loan|mortgage|instal?lment|repayment)\b", re.IGNORECASE)
+DEBT_REPAYMENT = re.compile(
+    r"\b(emis?|loans?|mortgages?|instal?lments?|repayments?)\b", re.IGNORECASE
+)
 
 
 def is_debt_repayment(reference: str | None) -> bool:

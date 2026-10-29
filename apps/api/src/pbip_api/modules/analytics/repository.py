@@ -31,11 +31,17 @@ INCOME_TYPES = (TransactionType.DEPOSIT, TransactionType.TRANSFER)
 
 @dataclass(frozen=True)
 class HealthMetrics:
-    """Ledger facts behind the financial health score, over the trailing window (minor units)."""
+    """Ledger facts behind the financial health score, over the trailing window (minor units).
 
-    income_minor: int  # CREDIT entries of POSTED deposits and transfers (refunds excluded)
-    spend_minor: int  # DEBIT entries of POSTED non-REVERSAL transactions (as in the breakdown)
-    monthly_spend_minor: list[int]  # spend per calendar month that had any, oldest first
+    Transfers between the customer's own accounts are neither income nor spend: money moved
+    between pockets was not earned or consumed.
+    """
+
+    income_minor: int  # CREDIT entries of POSTED deposits and transfers from other parties
+    spend_minor: int  # DEBIT entries of POSTED non-REVERSAL transactions to other parties
+    closed_monthly_spend_minor: list[int]  # every closed calendar month since the first entry,
+    # oldest first, zero-filled; the running month is excluded (it is partial)
+    running_month_spend_minor: int
     debt_repayments_minor: int  # the part of spend whose reference marks a loan or EMI instalment
     months_observed: int  # calendar months from the first entry in the window to now; 0 if none
 
@@ -46,8 +52,25 @@ def window_start(now: datetime, months: int) -> datetime:
     return datetime(index // 12, index % 12 + 1, 1, tzinfo=UTC)
 
 
+def _closed_months(first: datetime, now: datetime) -> list[tuple[int, int]]:
+    """Calendar months from ``first``'s month up to, but excluding, ``now``'s month."""
+    months: list[tuple[int, int]] = []
+    year, month = first.year, first.month
+    while (year, month) < (now.year, now.month):
+        months.append((year, month))
+        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+    return months
+
+
+def owned_account_ids(session: Session, customer_id: UUID) -> set[UUID]:
+    rows = session.execute(
+        select(AccountHolder.account_id).where(AccountHolder.customer_id == customer_id)
+    ).scalars()
+    return set(rows)
+
+
 def get_financial_health_metrics(
-    session: Session, account_id: UUID, now: datetime
+    session: Session, account_id: UUID, owned: set[UUID], now: datetime
 ) -> HealthMetrics:
     """One pass over the account's entries in the window (which bounds the work per request)."""
     start = window_start(now, HEALTH_WINDOW_MONTHS)
@@ -58,6 +81,8 @@ def get_financial_health_metrics(
             TransactionEntry.created_at,
             Transaction.type,
             Transaction.reference,
+            Transaction.debit_account_id,
+            Transaction.credit_account_id,
         )
         .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
         .where(
@@ -69,29 +94,36 @@ def get_financial_health_metrics(
         .order_by(TransactionEntry.created_at)
     )
     income = spend = debt = 0
-    monthly: dict[tuple[int, int], int] = {}
+    by_month: dict[tuple[int, int], int] = {}
     first: datetime | None = None
-    for amount, direction, created_at, tx_type, reference in session.execute(stmt).all():
+    for amount, direction, created_at, tx_type, reference, debit_acc, credit_acc in session.execute(
+        stmt
+    ).all():
         first = first or created_at
         if direction == EntryDirection.CREDIT:
-            if tx_type in INCOME_TYPES:
+            if tx_type in INCOME_TYPES and debit_acc not in owned:
                 income += int(amount)
             continue
+        if credit_acc in owned:
+            continue  # moved to another of the customer's own accounts
         spend += int(amount)
         stamp = created_at.astimezone(UTC)
-        monthly[(stamp.year, stamp.month)] = monthly.get((stamp.year, stamp.month), 0) + int(amount)
+        by_month[(stamp.year, stamp.month)] = by_month.get((stamp.year, stamp.month), 0) + int(
+            amount
+        )
         if is_debt_repayment(reference):
             debt += int(amount)
-    months_observed = 0
-    if first is not None:
-        begin = first.astimezone(UTC)
-        months_observed = (now.year - begin.year) * 12 + (now.month - begin.month) + 1
+    if first is None:
+        return HealthMetrics(income, spend, [], 0, debt, 0)
+    begin = first.astimezone(UTC)
+    closed = [by_month.get(key, 0) for key in _closed_months(begin, now)]
     return HealthMetrics(
         income_minor=income,
         spend_minor=spend,
-        monthly_spend_minor=[monthly[key] for key in sorted(monthly)],
+        closed_monthly_spend_minor=closed,
+        running_month_spend_minor=by_month.get((now.year, now.month), 0),
         debt_repayments_minor=debt,
-        months_observed=months_observed,
+        months_observed=(now.year - begin.year) * 12 + (now.month - begin.month) + 1,
     )
 
 

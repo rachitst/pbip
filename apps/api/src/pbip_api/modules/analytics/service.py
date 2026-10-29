@@ -218,11 +218,15 @@ def get_spending_trends(
 
 
 def get_financial_health_score(
-    session: Session, customer_id: UUID, account_id: UUID
+    session: Session, customer_id: UUID, account_id: UUID, now: datetime | None = None
 ) -> FinancialHealthScoreResponse:
-    """Explainable health score of one owned account from its trailing ledger history."""
+    """Explainable health score of one owned account from its trailing ledger history.
+
+    ``now`` is injected by the router from the request clock so month boundaries are testable.
+    """
     account = verify_account_ownership(session, customer_id, account_id)
-    metrics = repository.get_financial_health_metrics(session, account.id, utcnow())
+    owned = repository.owned_account_ids(session, customer_id)
+    metrics = repository.get_financial_health_metrics(session, account.id, owned, now or utcnow())
     return compute_financial_health_score(
         account.id, account.currency, account.available_balance, metrics
     )
