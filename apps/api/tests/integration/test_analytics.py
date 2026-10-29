@@ -475,6 +475,7 @@ def test_financial_health_score_moves_with_ledger_activity(
     make_customer: Callable[..., Actor],
     make_verified_payee: Callable[..., dict[str, Any]],
     migrated_engine: Engine,
+    clock: FakeClock,
 ) -> None:
     """AC3: nothing static. A fresh account scores on what is known, then every transfer moves it."""
     alice = make_customer(funds=300_000)
@@ -502,13 +503,21 @@ def test_financial_health_score_moves_with_ledger_activity(
     assert (
         comps["emi_to_income"]["score"] == 25 and comps["emi_to_income"]["assessment"] == "OPTIMAL"
     )
-    # one month of spend: volatility unknown; buffer 170,000 / 130,000 = 1.3 months -> LOW
+    # spend sits in the running month: volatility and buffer are unknown until it closes
     assert comps["expense_volatility"]["assessment"] == "INSUFFICIENT_DATA"
-    assert comps["buffer_months"]["assessment"] == "LOW" and comps["buffer_months"]["score"] == 9
-    assert data["overall_score"] == 64 and data["rating"] == "GOOD"
+    assert comps["buffer_months"]["assessment"] == "INSUFFICIENT_DATA"
+    assert data["overall_score"] == 55 and data["rating"] == "FAIR"
     assert data["months_observed"] == 1 and data["window_months"] == 12
-    assert any("cash buffer covers 1.3 months" in tip for tip in data["recommendations"])
     assert data["account_id"] == str(alice.account_id) and data["currency"] == "INR"
+
+    # Two months on: closed months [130,000, 0] -> volatile; buffer 170,000 / 65,000 = 2.6 months
+    clock.advance(62 * 24 * 3600)
+    later = client.get(url, headers=alice.headers).json()
+    comps = later["components"]
+    assert comps["expense_volatility"]["assessment"] == "VOLATILE"
+    assert comps["buffer_months"]["assessment"] == "LOW" and comps["buffer_months"]["score"] == 14
+    assert later["overall_score"] == 69 and later["rating"] == "GOOD"
+    assert any("cash buffer covers 2.6 months" in tip for tip in later["recommendations"])
 
     # Bob cannot read Alice's score (BOLA).
     assert client.get(url, headers=bob.headers).status_code == 404
