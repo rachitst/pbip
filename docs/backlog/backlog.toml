@@ -1681,3 +1681,230 @@ acceptance_criteria = [
 ]
 dependencies = ["TASK-081", "TASK-092"]
 definition_of_done = "Rehearsed by the development team, presentation deck committed to demo/."
+
+# ---------------------------------------------------------------------------------------------------
+# Requirement-gap tasks added 2026-10-30 after tracing the use case document v0.2 against the backlog
+# (docs/requirements/traceability.md). Unscheduled and unassigned: ownership and dates are a team
+# decision against the Nov 3 deadline.
+# ---------------------------------------------------------------------------------------------------
+
+[[tasks]]
+id = "TASK-094"
+title = "Payee Edit API with Re-Verification"
+epic = "Core Banking & Ledger"
+sprint = 7
+priority = "must"
+size = "S"
+labels = ["api", "security"]
+outcome = "Customers can edit a payee (UC-05 'Edit payee'), with name changes forcing re-verification."
+acceptance_criteria = [
+    "PATCH /api/v1/payees/{payee_id} updates nickname and name for an owned payee; non-owned and non-existent are 404",
+    "Changing the name resets the payee to unverified and requires POST /verify before it can receive transfers",
+    "Account number and bank code are immutable; changing them requires a new payee",
+    "Edits are audited and the route is added to the BOLA matrix",
+]
+dependencies = []
+definition_of_done = "Integration tests cover edit, re-verification gating, BOLA and validation; OpenAPI regenerated."
+
+[[tasks]]
+id = "TASK-095"
+title = "Fraud Signals for Recent Login Failures and New Device or Network"
+epic = "Core Banking & Ledger"
+sprint = 7
+priority = "must"
+size = "M"
+labels = ["security", "api"]
+outcome = "The transfer risk score uses the UC-09 triggers 'multiple login failures' and 'new location' (as new device or network)."
+acceptance_criteria = [
+    "Rule RECENT_LOGIN_FAILURES adds risk when the user had failed logins in the last 24 hours (from security events)",
+    "Rule NEW_DEVICE_OR_NETWORK adds risk when the transfer comes from a device fingerprint or IP network not seen for this customer",
+    "Each rule returns a human-readable reason with source RULE and is persisted with the feature snapshot",
+    "Geographic location from IP is out of scope unless an approved offline GeoIP dataset is added through an ADR",
+]
+dependencies = []
+definition_of_done = "Unit and integration tests prove each rule fires and does not fire; behaviour-regression thresholds unchanged."
+
+[[tasks]]
+id = "TASK-096"
+title = "Insurance Products Catalogue API"
+epic = "Core Banking & Ledger"
+sprint = 7
+priority = "should"
+size = "S"
+labels = ["api"]
+outcome = "Read-only catalogue of insurance products so the wealth scope and recommendation outputs include insurance."
+acceptance_criteria = [
+    "GET /api/v1/wealth/insurance returns term-life and health products with cover range and indicative premium in minor units",
+    "Products carry eligibility hints (age band, cover limits) without performing underwriting",
+    "Catalogue data is seeded through a migration and is the same in every environment",
+]
+dependencies = ["TASK-063"]
+definition_of_done = "Integration tests on the catalogue, Alembic migration with downgrade, OpenAPI regenerated."
+
+[[tasks]]
+id = "TASK-097"
+title = "Customer Risk-Tolerance Profile API"
+epic = "Analytics & Insights"
+sprint = 7
+priority = "should"
+size = "M"
+labels = ["api", "analytics"]
+outcome = "Captures the customer's risk tolerance, the UC-07 input investment recommendations need."
+acceptance_criteria = [
+    "Customer completes a short validated questionnaire producing a risk band in {LOW, MODERATE, HIGH}",
+    "GET and PUT /api/v1/customers/me/risk-profile for the authenticated customer only",
+    "The profile records when it was last assessed and the answers that produced the band",
+]
+dependencies = []
+definition_of_done = "Integration tests for scoring boundaries, validation and ownership; migration with downgrade."
+
+[[tasks]]
+id = "TASK-098"
+title = "Wealth and Insurance Product Comparison UI"
+epic = "Frontend Web Application"
+sprint = 7
+priority = "could"
+size = "M"
+labels = ["web"]
+outcome = "Side-by-side comparison of wealth and insurance products (scope item 'Product comparison')."
+acceptance_criteria = [
+    "Customer selects two to four products and sees yield, tenure, lock-in, risk level and minimum amount side by side",
+    "Handles loading, error and empty states; values formatted from minor units",
+]
+dependencies = ["TASK-063", "TASK-096"]
+definition_of_done = "Vitest component tests for selection and rendering; accessible and responsive."
+
+[[tasks]]
+id = "TASK-099"
+title = "Security Monitoring Dashboard API and UI"
+epic = "Frontend Web Application"
+sprint = 7
+priority = "must"
+size = "L"
+labels = ["security", "web", "api"]
+outcome = "UC-13: one staff view of high-risk customers, active alerts, login anomalies, fraud events and open investigations."
+acceptance_criteria = [
+    "Staff API (require_roles with MFA) returns high-risk customers, open alerts, login anomalies (failed-login bursts, lockouts) and recent fraud events",
+    "Dashboard page renders each panel with counts and drill-down links to the alert queue",
+    "No customer PII beyond what the analyst role already sees; metrics labelled by route templates only",
+]
+dependencies = ["TASK-035", "TASK-036"]
+definition_of_done = "API RBAC and MFA tests, component tests for each panel, Playwright check of the staff route."
+
+[[tasks]]
+id = "TASK-100"
+title = "Compliance and Risk Dashboard: System Alerts and Exception Management"
+epic = "Frontend Web Application"
+sprint = 7
+priority = "should"
+size = "M"
+labels = ["compliance", "web", "api"]
+outcome = "Compliance & Risk dashboard items beyond audit history: system-generated alerts, exception management, regulatory monitoring."
+acceptance_criteria = [
+    "Exceptions list (blocked transfers, lockouts, audit-chain verification failures) with acknowledge and resolve actions",
+    "Every acknowledge or resolve action is audited with actor and reason",
+    "Summary indicators for regulatory monitoring (counts of reviews pending past SLA, unresolved exceptions)",
+]
+dependencies = ["TASK-048"]
+definition_of_done = "RBAC tests for COMPLIANCE_OFFICER with MFA, audit-trail tests, component tests."
+
+[[tasks]]
+id = "TASK-101"
+title = "Behavioural Analytics Dashboard: Segments, Product Affinity and Engagement"
+epic = "Analytics & Insights"
+sprint = 7
+priority = "should"
+size = "L"
+labels = ["analytics", "web"]
+outcome = "Internal Behavioural Analytics dashboard: segmentation, spending patterns, product affinity and engagement metrics."
+acceptance_criteria = [
+    "Staff API aggregates segment distribution, spending patterns by segment, product affinity and engagement metrics",
+    "Engagement metrics come from clickstream events; product affinity from holdings and recommendation interactions",
+    "Dashboard page with filters by segment and period; no per-customer drill-down without the RM role",
+]
+dependencies = ["TASK-044", "TASK-054", "TASK-055"]
+definition_of_done = "Aggregation tests with known inputs, RBAC tests, component tests."
+
+[[tasks]]
+id = "TASK-102"
+title = "Performance NFR Verification: Page Load, Login and API Budgets"
+epic = "Quality & Verification"
+sprint = 7
+priority = "must"
+size = "M"
+labels = ["test"]
+outcome = "Measured evidence for the section 8 targets: page load < 2 s, API response < 500 ms, login < 3 s."
+acceptance_criteria = [
+    "Automated page-load measurement of the main customer pages against the 2 s budget",
+    "k6 thresholds assert p95 < 500 ms for core API routes and login < 3 s",
+    "Results stored as a CI artifact with the environment described; failures break the job",
+]
+dependencies = ["TASK-012"]
+definition_of_done = "Job runs in CI on the compose stack and its report is linked from the test strategy."
+
+[[tasks]]
+id = "TASK-103"
+title = "Test-Environment Availability Monitoring and Error Tracking"
+epic = "Platform & DevOps"
+sprint = 7
+priority = "should"
+size = "M"
+labels = ["infra"]
+outcome = "Evidence for '99% availability in test environment' and 'error tracking' (section 8)."
+acceptance_criteria = [
+    "Uptime probe of the deployed test environment's health endpoints with a monthly availability figure",
+    "Unhandled errors are captured with request id and route template, without PII, and are searchable",
+    "Alert when availability over a rolling window drops below 99%",
+]
+dependencies = ["TASK-082"]
+definition_of_done = "Running against a deployed test environment for at least one week with the measured availability reported."
+
+[[tasks]]
+id = "TASK-104"
+title = "Business Requirements Specification and User Stories"
+epic = "Documentation & Governance"
+sprint = 7
+priority = "should"
+size = "S"
+labels = ["docs"]
+outcome = "The business documentation deliverables: requirements specification and user stories traced to use cases."
+acceptance_criteria = [
+    "Requirements specification derived from the use case document with numbered functional and non-functional requirements",
+    "User stories for every use case UC-01 to UC-13 with acceptance criteria linked to backlog tasks",
+    "Links to docs/requirements/traceability.md for implementation and verification status",
+]
+dependencies = []
+definition_of_done = "Committed to docs/requirements/, reviewed by a teammate."
+
+[[tasks]]
+id = "TASK-105"
+title = "AI Assistant FAQ, Product Discovery and Investment Suggestion Tools"
+epic = "AI Assistant & Security"
+sprint = 7
+priority = "should"
+size = "M"
+labels = ["api", "security"]
+outcome = "Assistant tools for the UC-08 examples not covered by TASK-057: FAQ and support, product discovery, 'suggest investment options'."
+acceptance_criteria = [
+    "Read-only tools get_faq_answer, list_products and get_investment_suggestions added to the approved registry",
+    "Investment suggestions use the customer's risk profile and recommendation engine output, never free-form arguments",
+    "Adversarial tests cover the new tools (prompt injection, cross-customer requests)",
+]
+dependencies = ["TASK-057", "TASK-054", "TASK-097"]
+definition_of_done = "Tool schema tests and adversarial suite extended; no state-changing tool added."
+
+[[tasks]]
+id = "TASK-106"
+title = "Entity-Relationship Diagram Generated from the Live Schema"
+epic = "Documentation & Governance"
+sprint = 7
+priority = "should"
+size = "S"
+labels = ["docs"]
+outcome = "The ER Diagram deliverable (section 9), kept in sync with the migrations."
+acceptance_criteria = [
+    "ER diagram covering every table, primary and foreign key, generated from the migrated schema",
+    "A check fails CI when the committed diagram no longer matches the schema",
+]
+dependencies = []
+definition_of_done = "Diagram committed under docs/architecture/ with the generation command documented."

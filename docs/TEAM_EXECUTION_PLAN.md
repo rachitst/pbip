@@ -1274,9 +1274,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #63 | **Sprint:** 4 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Sun 25 Oct | **Target deadline:** Sun 25 Oct | **Actual completion:** Wed 29 Oct (merged in #156; acceptance criteria verified, the < 50 ms response-time figure is a design property not measured in CI) | **Status:** Done | **Risk:** Low
+- **Start:** Sun 25 Oct | **Target deadline:** Sun 25 Oct | **Actual completion:** - (merged in #156 on Wed 29 Oct; audit fixes merged in #171 and #174; not complete until a teammate reviews the maintainer-written changes) | **Status:** In Review | **Risk:** Low
 - **Depends on:** TASK-008 (#19, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** Done
+- **Mode:** In Review
 - **Goal:** Analytics endpoints aggregating customer spending by category and month-over-month trends.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -1304,9 +1304,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #64 | **Sprint:** 4 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Sun 25 Oct | **Target deadline:** Sun 25 Oct | **Actual completion:** Wed 29 Oct (merged in #158; acceptance criteria verified) | **Status:** Done | **Risk:** Low
+- **Start:** Sun 25 Oct | **Target deadline:** Sun 25 Oct | **Actual completion:** - (merged in #158 on Wed 29 Oct; audit fixes merged in #170 and #174; not complete until a teammate reviews the maintainer-written changes) | **Status:** In Review | **Risk:** Low
 - **Depends on:** TASK-040 (#63, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** Done
+- **Mode:** In Review
 - **Goal:** Explainable financial health score (0-100) based on savings rate, buffer months, and EMI ratio.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -1390,9 +1390,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #67 | **Sprint:** 4 | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Wed 29 Oct (merged in #161; acceptance criteria verified) | **Status:** Done | **Risk:** Low
+- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (merged in #161 on Wed 29 Oct; audit fixes merged in #167 and #173; not complete until a teammate reviews the maintainer-written changes) | **Status:** In Review | **Risk:** Low
 - **Depends on:** TASK-040 (#63, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** Done
+- **Mode:** In Review
 - **Goal:** Clustering pipeline grouping customers into explainable segments (e.g. High Net Worth, Budget Conscious).
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -2133,9 +2133,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #93 | **Sprint:** 5 | **Priority:** could | **Size:** M (1.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Wed 29 Oct (merged in #154; definition of done shown by fuzz run 40914561750 on main: 984 cases, 0 5xx, 0 schema violations) | **Status:** Done | **Risk:** Low
+- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (merged in #154 on Wed 29 Oct; follow-ups #159, #160, #162, #168, #169; fuzz run 40948518916 on main: 940 cases, 0 5xx; not complete until a teammate reviews the maintainer-written changes) | **Status:** In Review | **Risk:** Low
 - **Depends on:** TASK-001 (#12, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** Done
+- **Mode:** In Review
 - **Goal:** Property-based API fuzzing job running Schemathesis against the OpenAPI specification.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -2214,9 +2214,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #96 | **Sprint:** 5 | **Priority:** could | **Size:** S (0.5 person-days estimate) | **Epic:** Identity & Core Banking
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Fri 30 Oct (merged in #172; ADR committed as `docs/adr/0013-passkeys-evaluation.md` because 0008 is the ledger keyset-cursor ADR) | **Status:** Done | **Risk:** Low
+- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (merged in #172 on Fri 30 Oct as ADR 0013; not complete until a teammate reviews the maintainer's corrections) | **Status:** In Review | **Risk:** Low
 - **Depends on:** none
-- **Mode:** Done
+- **Mode:** In Review
 - **Goal:** Architecture evaluation and proof-of-concept for FIDO2/WebAuthn passkey authentication.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -2793,6 +2793,364 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Required checks:**
   - Automated: document builds/renders, links valid, content matches the code and backlog
   - Manual: a teammate follows the document end to end
+  - Security: no secrets; AGENTS.md section 5 items that apply
+  - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
+- **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
+
+## 6a. Requirement-gap tasks (added 2026-10-30, unassigned and unscheduled)
+
+Added after tracing the use case document v0.2 against the backlog (`docs/requirements/traceability.md`): each covers a
+requirement that no existing task did. They are **not** in the sprint schedule above and have no owner: assigning
+people and dates against the Nov 3 deadline is a team decision (section 1's slip order applies). The `sprint = 7` value
+in the backlog only satisfies the validator's 1-7 range.
+
+### TASK-094 - Payee Edit API with Re-Verification
+
+- **Issue:** #177 | **Sprint:** unscheduled | **Priority:** must | **Size:** S (0.5 person-days estimate) | **Epic:** Core Banking & Ledger
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** none.
+- **Mode:** Unscheduled
+- **Goal:** Customers can edit a payee (UC-05 'Edit payee'), with name changes forcing re-verification.
+- **Implementation steps:**
+  1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
+  2. Write failing tests from the acceptance criteria below.
+  3. Implement and make the tests pass for: PATCH /api/v1/payees/{payee_id} updates nickname and name for an owned payee; non-owned and non-existent are 404
+  4. Implement and make the tests pass for: Changing the name resets the payee to unverified and requires POST /verify before it can receive transfers
+  5. Implement and make the tests pass for: Account number and bank code are immutable; changing them requires a new payee
+  6. Implement and make the tests pass for: Edits are audited and the route is added to the BOLA matrix
+  7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #177`) and request review.
+- **Expected end result / acceptance criteria:**
+  - [ ] PATCH /api/v1/payees/{payee_id} updates nickname and name for an owned payee; non-owned and non-existent are 404
+  - [ ] Changing the name resets the payee to unverified and requires POST /verify before it can receive transfers
+  - [ ] Account number and bank code are immutable; changing them requires a new payee
+  - [ ] Edits are audited and the route is added to the BOLA matrix
+- **Definition of done (evidence):** Integration tests cover edit, re-verification gating, BOLA and validation; OpenAPI regenerated.
+- **Required checks:**
+  - Automated: unit + integration tests against PostgreSQL in CI; coverage gate met
+  - Manual: a teammate exercises the change end to end
+  - Security: no secrets; AGENTS.md section 5 items that apply
+  - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
+- **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
+
+### TASK-095 - Fraud Signals for Recent Login Failures and New Device or Network
+
+- **Issue:** #178 | **Sprint:** unscheduled | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Core Banking & Ledger
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** none.
+- **Mode:** Unscheduled
+- **Goal:** The transfer risk score uses the UC-09 triggers 'multiple login failures' and 'new location' (as new device or network).
+- **Implementation steps:**
+  1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
+  2. Write failing tests from the acceptance criteria below.
+  3. Implement and make the tests pass for: Rule RECENT_LOGIN_FAILURES adds risk when the user had failed logins in the last 24 hours (from security events)
+  4. Implement and make the tests pass for: Rule NEW_DEVICE_OR_NETWORK adds risk when the transfer comes from a device fingerprint or IP network not seen for this customer
+  5. Implement and make the tests pass for: Each rule returns a human-readable reason with source RULE and is persisted with the feature snapshot
+  6. Implement and make the tests pass for: Geographic location from IP is out of scope unless an approved offline GeoIP dataset is added through an ADR
+  7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #178`) and request review.
+- **Expected end result / acceptance criteria:**
+  - [ ] Rule RECENT_LOGIN_FAILURES adds risk when the user had failed logins in the last 24 hours (from security events)
+  - [ ] Rule NEW_DEVICE_OR_NETWORK adds risk when the transfer comes from a device fingerprint or IP network not seen for this customer
+  - [ ] Each rule returns a human-readable reason with source RULE and is persisted with the feature snapshot
+  - [ ] Geographic location from IP is out of scope unless an approved offline GeoIP dataset is added through an ADR
+- **Definition of done (evidence):** Unit and integration tests prove each rule fires and does not fire; behaviour-regression thresholds unchanged.
+- **Required checks:**
+  - Automated: unit + integration tests against PostgreSQL in CI; coverage gate met
+  - Manual: a teammate exercises the change end to end
+  - Security: no secrets; AGENTS.md section 5 items that apply
+  - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
+- **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
+
+### TASK-096 - Insurance Products Catalogue API
+
+- **Issue:** #179 | **Sprint:** unscheduled | **Priority:** should | **Size:** S (0.5 person-days estimate) | **Epic:** Core Banking & Ledger
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-063 (#86, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Mode:** Unscheduled
+- **Goal:** Read-only catalogue of insurance products so the wealth scope and recommendation outputs include insurance.
+- **Implementation steps:**
+  1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
+  2. Write failing tests from the acceptance criteria below.
+  3. Implement and make the tests pass for: GET /api/v1/wealth/insurance returns term-life and health products with cover range and indicative premium in minor units
+  4. Implement and make the tests pass for: Products carry eligibility hints (age band, cover limits) without performing underwriting
+  5. Implement and make the tests pass for: Catalogue data is seeded through a migration and is the same in every environment
+  6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #179`) and request review.
+- **Expected end result / acceptance criteria:**
+  - [ ] GET /api/v1/wealth/insurance returns term-life and health products with cover range and indicative premium in minor units
+  - [ ] Products carry eligibility hints (age band, cover limits) without performing underwriting
+  - [ ] Catalogue data is seeded through a migration and is the same in every environment
+- **Definition of done (evidence):** Integration tests on the catalogue, Alembic migration with downgrade, OpenAPI regenerated.
+- **Required checks:**
+  - Automated: unit + integration tests against PostgreSQL in CI; coverage gate met
+  - Manual: a teammate exercises the change end to end
+  - Security: no secrets; AGENTS.md section 5 items that apply
+  - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
+- **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
+
+### TASK-097 - Customer Risk-Tolerance Profile API
+
+- **Issue:** #180 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** none.
+- **Mode:** Unscheduled
+- **Goal:** Captures the customer's risk tolerance, the UC-07 input investment recommendations need.
+- **Implementation steps:**
+  1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
+  2. Write failing tests from the acceptance criteria below.
+  3. Implement and make the tests pass for: Customer completes a short validated questionnaire producing a risk band in {LOW, MODERATE, HIGH}
+  4. Implement and make the tests pass for: GET and PUT /api/v1/customers/me/risk-profile for the authenticated customer only
+  5. Implement and make the tests pass for: The profile records when it was last assessed and the answers that produced the band
+  6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #180`) and request review.
+- **Expected end result / acceptance criteria:**
+  - [ ] Customer completes a short validated questionnaire producing a risk band in {LOW, MODERATE, HIGH}
+  - [ ] GET and PUT /api/v1/customers/me/risk-profile for the authenticated customer only
+  - [ ] The profile records when it was last assessed and the answers that produced the band
+- **Definition of done (evidence):** Integration tests for scoring boundaries, validation and ownership; migration with downgrade.
+- **Required checks:**
+  - Automated: unit + integration tests against PostgreSQL in CI; coverage gate met
+  - Manual: a teammate exercises the change end to end
+  - Security: no secrets; AGENTS.md section 5 items that apply
+  - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
+- **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
+
+### TASK-098 - Wealth and Insurance Product Comparison UI
+
+- **Issue:** #181 | **Sprint:** unscheduled | **Priority:** could | **Size:** M (1.5 person-days estimate) | **Epic:** Frontend Web Application
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-063 (#86, Sujal), TASK-096 (#?, ?). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Mode:** Unscheduled
+- **Goal:** Side-by-side comparison of wealth and insurance products (scope item 'Product comparison').
+- **Implementation steps:**
+  1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
+  2. Write failing tests from the acceptance criteria below.
+  3. Implement and make the tests pass for: Customer selects two to four products and sees yield, tenure, lock-in, risk level and minimum amount side by side
+  4. Implement and make the tests pass for: Handles loading, error and empty states; values formatted from minor units
+  5. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #181`) and request review.
+- **Expected end result / acceptance criteria:**
+  - [ ] Customer selects two to four products and sees yield, tenure, lock-in, risk level and minimum amount side by side
+  - [ ] Handles loading, error and empty states; values formatted from minor units
+- **Definition of done (evidence):** Vitest component tests for selection and rendering; accessible and responsive.
+- **Required checks:**
+  - Automated: Vitest component tests and, for journeys, Playwright; ESLint strict, no `any`
+  - Manual: a teammate exercises the change end to end
+  - Security: no secrets; AGENTS.md section 5 items that apply
+  - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
+- **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
+
+### TASK-099 - Security Monitoring Dashboard API and UI
+
+- **Issue:** #182 | **Sprint:** unscheduled | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Frontend Web Application
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-035 (#58, Krishna), TASK-036 (#59, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Mode:** Unscheduled
+- **Goal:** UC-13: one staff view of high-risk customers, active alerts, login anomalies, fraud events and open investigations.
+- **Implementation steps:**
+  1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
+  2. Write failing tests from the acceptance criteria below.
+  3. Implement and make the tests pass for: Staff API (require_roles with MFA) returns high-risk customers, open alerts, login anomalies (failed-login bursts, lockouts) and recent fraud events
+  4. Implement and make the tests pass for: Dashboard page renders each panel with counts and drill-down links to the alert queue
+  5. Implement and make the tests pass for: No customer PII beyond what the analyst role already sees; metrics labelled by route templates only
+  6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #182`) and request review.
+- **Expected end result / acceptance criteria:**
+  - [ ] Staff API (require_roles with MFA) returns high-risk customers, open alerts, login anomalies (failed-login bursts, lockouts) and recent fraud events
+  - [ ] Dashboard page renders each panel with counts and drill-down links to the alert queue
+  - [ ] No customer PII beyond what the analyst role already sees; metrics labelled by route templates only
+- **Definition of done (evidence):** API RBAC and MFA tests, component tests for each panel, Playwright check of the staff route.
+- **Required checks:**
+  - Automated: Vitest component tests and, for journeys, Playwright; ESLint strict, no `any`
+  - Manual: a teammate exercises the change end to end
+  - Security: no secrets; AGENTS.md section 5 items that apply
+  - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
+- **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
+
+### TASK-100 - Compliance and Risk Dashboard: System Alerts and Exception Management
+
+- **Issue:** #183 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Frontend Web Application
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-048 (#71, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Mode:** Unscheduled
+- **Goal:** Compliance & Risk dashboard items beyond audit history: system-generated alerts, exception management, regulatory monitoring.
+- **Implementation steps:**
+  1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
+  2. Write failing tests from the acceptance criteria below.
+  3. Implement and make the tests pass for: Exceptions list (blocked transfers, lockouts, audit-chain verification failures) with acknowledge and resolve actions
+  4. Implement and make the tests pass for: Every acknowledge or resolve action is audited with actor and reason
+  5. Implement and make the tests pass for: Summary indicators for regulatory monitoring (counts of reviews pending past SLA, unresolved exceptions)
+  6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #183`) and request review.
+- **Expected end result / acceptance criteria:**
+  - [ ] Exceptions list (blocked transfers, lockouts, audit-chain verification failures) with acknowledge and resolve actions
+  - [ ] Every acknowledge or resolve action is audited with actor and reason
+  - [ ] Summary indicators for regulatory monitoring (counts of reviews pending past SLA, unresolved exceptions)
+- **Definition of done (evidence):** RBAC tests for COMPLIANCE_OFFICER with MFA, audit-trail tests, component tests.
+- **Required checks:**
+  - Automated: Vitest component tests and, for journeys, Playwright; ESLint strict, no `any`
+  - Manual: a teammate exercises the change end to end
+  - Security: no secrets; AGENTS.md section 5 items that apply
+  - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
+- **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
+
+### TASK-101 - Behavioural Analytics Dashboard: Segments, Product Affinity and Engagement
+
+- **Issue:** #184 | **Sprint:** unscheduled | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Analytics & Insights
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-044 (#67, Krishna), TASK-054 (#77, Krishna), TASK-055 (#78, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Mode:** Unscheduled
+- **Goal:** Internal Behavioural Analytics dashboard: segmentation, spending patterns, product affinity and engagement metrics.
+- **Implementation steps:**
+  1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
+  2. Write failing tests from the acceptance criteria below.
+  3. Implement and make the tests pass for: Staff API aggregates segment distribution, spending patterns by segment, product affinity and engagement metrics
+  4. Implement and make the tests pass for: Engagement metrics come from clickstream events; product affinity from holdings and recommendation interactions
+  5. Implement and make the tests pass for: Dashboard page with filters by segment and period; no per-customer drill-down without the RM role
+  6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #184`) and request review.
+- **Expected end result / acceptance criteria:**
+  - [ ] Staff API aggregates segment distribution, spending patterns by segment, product affinity and engagement metrics
+  - [ ] Engagement metrics come from clickstream events; product affinity from holdings and recommendation interactions
+  - [ ] Dashboard page with filters by segment and period; no per-customer drill-down without the RM role
+- **Definition of done (evidence):** Aggregation tests with known inputs, RBAC tests, component tests.
+- **Required checks:**
+  - Automated: Vitest component tests and, for journeys, Playwright; ESLint strict, no `any`
+  - Manual: a teammate exercises the change end to end
+  - Security: no secrets; AGENTS.md section 5 items that apply
+  - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
+- **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
+
+### TASK-102 - Performance NFR Verification: Page Load, Login and API Budgets
+
+- **Issue:** #185 | **Sprint:** unscheduled | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Quality & Verification
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-012 (#23, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Mode:** Unscheduled
+- **Goal:** Measured evidence for the section 8 targets: page load < 2 s, API response < 500 ms, login < 3 s.
+- **Implementation steps:**
+  1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
+  2. Write failing tests from the acceptance criteria below.
+  3. Implement and make the tests pass for: Automated page-load measurement of the main customer pages against the 2 s budget
+  4. Implement and make the tests pass for: k6 thresholds assert p95 < 500 ms for core API routes and login < 3 s
+  5. Implement and make the tests pass for: Results stored as a CI artifact with the environment described; failures break the job
+  6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #185`) and request review.
+- **Expected end result / acceptance criteria:**
+  - [ ] Automated page-load measurement of the main customer pages against the 2 s budget
+  - [ ] k6 thresholds assert p95 < 500 ms for core API routes and login < 3 s
+  - [ ] Results stored as a CI artifact with the environment described; failures break the job
+- **Definition of done (evidence):** Job runs in CI on the compose stack and its report is linked from the test strategy.
+- **Required checks:**
+  - Automated: unit + integration tests against PostgreSQL in CI; coverage gate met
+  - Manual: a teammate exercises the change end to end
+  - Security: no secrets; AGENTS.md section 5 items that apply
+  - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
+- **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
+
+### TASK-103 - Test-Environment Availability Monitoring and Error Tracking
+
+- **Issue:** #186 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Platform & DevOps
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-082 (#105, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Mode:** Unscheduled
+- **Goal:** Evidence for '99% availability in test environment' and 'error tracking' (section 8).
+- **Implementation steps:**
+  1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
+  2. Write failing tests from the acceptance criteria below.
+  3. Implement and make the tests pass for: Uptime probe of the deployed test environment's health endpoints with a monthly availability figure
+  4. Implement and make the tests pass for: Unhandled errors are captured with request id and route template, without PII, and are searchable
+  5. Implement and make the tests pass for: Alert when availability over a rolling window drops below 99%
+  6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #186`) and request review.
+- **Expected end result / acceptance criteria:**
+  - [ ] Uptime probe of the deployed test environment's health endpoints with a monthly availability figure
+  - [ ] Unhandled errors are captured with request id and route template, without PII, and are searchable
+  - [ ] Alert when availability over a rolling window drops below 99%
+- **Definition of done (evidence):** Running against a deployed test environment for at least one week with the measured availability reported.
+- **Required checks:**
+  - Automated: configuration validated in CI; behaviour shown against a running environment
+  - Manual: a teammate exercises the change end to end
+  - Security: no secrets; AGENTS.md section 5 items that apply
+  - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
+- **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
+
+### TASK-104 - Business Requirements Specification and User Stories
+
+- **Issue:** #187 | **Sprint:** unscheduled | **Priority:** should | **Size:** S (0.5 person-days estimate) | **Epic:** Documentation & Governance
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** none.
+- **Mode:** Unscheduled
+- **Goal:** The business documentation deliverables: requirements specification and user stories traced to use cases.
+- **Implementation steps:**
+  1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
+  2. Write failing tests from the acceptance criteria below.
+  3. Implement and make the tests pass for: Requirements specification derived from the use case document with numbered functional and non-functional requirements
+  4. Implement and make the tests pass for: User stories for every use case UC-01 to UC-13 with acceptance criteria linked to backlog tasks
+  5. Implement and make the tests pass for: Links to docs/requirements/traceability.md for implementation and verification status
+  6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #187`) and request review.
+- **Expected end result / acceptance criteria:**
+  - [ ] Requirements specification derived from the use case document with numbered functional and non-functional requirements
+  - [ ] User stories for every use case UC-01 to UC-13 with acceptance criteria linked to backlog tasks
+  - [ ] Links to docs/requirements/traceability.md for implementation and verification status
+- **Definition of done (evidence):** Committed to docs/requirements/, reviewed by a teammate.
+- **Required checks:**
+  - Automated: document builds/renders, links valid, content matches the code and backlog
+  - Manual: a teammate exercises the change end to end
+  - Security: no secrets; AGENTS.md section 5 items that apply
+  - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
+- **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
+
+### TASK-105 - AI Assistant FAQ, Product Discovery and Investment Suggestion Tools
+
+- **Issue:** #188 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** AI Assistant & Security
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-057 (#80, Abbas), TASK-054 (#77, Krishna), TASK-097 (#?, ?). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Mode:** Unscheduled
+- **Goal:** Assistant tools for the UC-08 examples not covered by TASK-057: FAQ and support, product discovery, 'suggest investment options'.
+- **Implementation steps:**
+  1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
+  2. Write failing tests from the acceptance criteria below.
+  3. Implement and make the tests pass for: Read-only tools get_faq_answer, list_products and get_investment_suggestions added to the approved registry
+  4. Implement and make the tests pass for: Investment suggestions use the customer's risk profile and recommendation engine output, never free-form arguments
+  5. Implement and make the tests pass for: Adversarial tests cover the new tools (prompt injection, cross-customer requests)
+  6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #188`) and request review.
+- **Expected end result / acceptance criteria:**
+  - [ ] Read-only tools get_faq_answer, list_products and get_investment_suggestions added to the approved registry
+  - [ ] Investment suggestions use the customer's risk profile and recommendation engine output, never free-form arguments
+  - [ ] Adversarial tests cover the new tools (prompt injection, cross-customer requests)
+- **Definition of done (evidence):** Tool schema tests and adversarial suite extended; no state-changing tool added.
+- **Required checks:**
+  - Automated: unit + integration tests against PostgreSQL in CI; coverage gate met
+  - Manual: a teammate exercises the change end to end
+  - Security: no secrets; AGENTS.md section 5 items that apply
+  - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
+- **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
+
+### TASK-106 - Entity-Relationship Diagram Generated from the Live Schema
+
+- **Issue:** #189 | **Sprint:** unscheduled | **Priority:** should | **Size:** S (0.5 person-days estimate) | **Epic:** Documentation & Governance
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** none.
+- **Mode:** Unscheduled
+- **Goal:** The ER Diagram deliverable (section 9), kept in sync with the migrations.
+- **Implementation steps:**
+  1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
+  2. Write failing tests from the acceptance criteria below.
+  3. Implement and make the tests pass for: ER diagram covering every table, primary and foreign key, generated from the migrated schema
+  4. Implement and make the tests pass for: A check fails CI when the committed diagram no longer matches the schema
+  5. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #189`) and request review.
+- **Expected end result / acceptance criteria:**
+  - [ ] ER diagram covering every table, primary and foreign key, generated from the migrated schema
+  - [ ] A check fails CI when the committed diagram no longer matches the schema
+- **Definition of done (evidence):** Diagram committed under docs/architecture/ with the generation command documented.
+- **Required checks:**
+  - Automated: document builds/renders, links valid, content matches the code and backlog
+  - Manual: a teammate exercises the change end to end
   - Security: no secrets; AGENTS.md section 5 items that apply
   - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
 - **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
