@@ -3,11 +3,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from pbip_api.core.validation import Text
+
 
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=256)
-    full_name: str = Field(min_length=2, max_length=200)
+    full_name: Text = Field(min_length=2, max_length=200)
 
 
 class LoginRequest(BaseModel):
@@ -55,7 +57,7 @@ class RecoveryCodesOut(BaseModel):
 class AdminCreateUserRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=256)
-    full_name: str = Field(min_length=2, max_length=200)
+    full_name: Text = Field(min_length=2, max_length=200)
     roles: list[str] = Field(min_length=1)
 
 
