@@ -97,34 +97,50 @@ def _label_cluster_centroids(
     return assigned
 
 
+def _ratio(value: float, median: float) -> str:
+    if median <= 0:
+        return "n/a"
+    return f"{value / median:.1f}x"
+
+
 def _generate_explanation(
-    segment: CustomerSegmentName,
-    rfm: CustomerRFMFeatures,
+    segment: CustomerSegmentName, rfm: CustomerRFMFeatures, medians: dict[str, float]
 ) -> str:
-    """Generate human-readable justification for the segment assignment."""
+    """Facts about this customer relative to the population, worded for the assigned persona.
+
+    Only measured features appear, each compared with the population median, so the text cannot
+    claim "high" for a below-median value: it states the ratio and lets it speak.
+    """
+    spend = _ratio(float(rfm.monetary_minor), medians["monetary_minor"])
+    freq = _ratio(rfm.frequency, medians["frequency"])
+    disc = f"{rfm.discretionary_ratio * 100:.0f}%"
+    savings = f"{rfm.savings_ratio * 100:.0f}%"
     match segment:
         case CustomerSegmentName.HIGH_NET_WORTH:
             return (
-                f"High monetary expenditure ({rfm.monetary_minor // 100:,} major units/mo) "
-                f"with a savings ratio of {rfm.savings_ratio * 100:.1f}%."
-            )
-        case CustomerSegmentName.BUDGET_CONSCIOUS:
-            return (
-                f"Disciplined budget allocation: non-essential discretionary spending capped at "
-                f"{rfm.discretionary_ratio * 100:.1f}% with steady savings."
+                f"Grouped with the highest-spend cluster: monthly spend {spend} the population "
+                f"median, savings ratio {savings}."
             )
         case CustomerSegmentName.FREQUENT_TRANSACTOR:
             return (
-                f"High transactional frequency ({rfm.frequency:.1f} tx/mo) "
-                f"across multiple day-to-day payment channels."
+                f"Grouped with the most frequent transactors: {rfm.frequency:.1f} debits per "
+                f"month ({freq} the median), monthly spend {spend} the median."
             )
         case CustomerSegmentName.DISCRETIONARY_SPENDER:
             return (
-                f"Elevated lifestyle and leisure spending: {rfm.discretionary_ratio * 100:.1f}% "
-                f"of monthly budget allocated to dining, shopping, and entertainment."
+                f"Grouped with the discretionary spenders: {disc} of spend on dining, shopping, "
+                f"entertainment and travel, savings ratio {savings}."
             )
         case CustomerSegmentName.INACTIVE_SAVER:
-            return f"Low activity frequency with {rfm.recency_days} days since last transaction."
+            return (
+                f"Grouped with the least active customers: {rfm.recency_days} days since the last "
+                f"entry, {rfm.frequency:.1f} debits per month, savings ratio {savings}."
+            )
+        case CustomerSegmentName.BUDGET_CONSCIOUS:
+            return (
+                f"Grouped with the remaining, steadier profiles: {disc} discretionary spend, "
+                f"monthly spend {spend} the median, savings ratio {savings}."
+            )
 
 
 def cluster_customers(
@@ -153,12 +169,16 @@ def cluster_customers(
     if n_samples < MIN_CUSTOMERS:
         msg = f"At least {MIN_CUSTOMERS} customer feature records are required for clustering."
         raise ValueError(msg)
-    if not 1 <= n_clusters <= MAX_CLUSTERS:
-        msg = f"n_clusters must be between 1 and {MAX_CLUSTERS} (one persona per cluster)."
+    if n_clusters != MAX_CLUSTERS:
+        msg = (
+            f"n_clusters must be {MAX_CLUSTERS}: the persona names are assigned by ranking the "
+            "centroids, which only means something when every persona has a cluster."
+        )
         raise ValueError(msg)
-
-    # Bound n_clusters to the available samples; a single cluster is allowed but uninformative.
-    k = min(n_clusters, n_samples)
+    if n_samples < MAX_CLUSTERS:
+        msg = f"At least {MAX_CLUSTERS} customers are needed for {MAX_CLUSTERS} personas."
+        raise ValueError(msg)
+    k = n_clusters
 
     feat_matrix = np.array(
         [
@@ -212,11 +232,12 @@ def cluster_customers(
     unique_labels = np.unique(labels)
     sil_score: float | None = None
     db_index: float | None = None
-    if len(unique_labels) > 1:
+    if 1 < len(unique_labels) < n_samples:  # both metrics need 2 <= labels <= samples - 1
         sil_score = round(float(silhouette_score(scaled_matrix, labels)), 4)
         db_index = round(float(davies_bouldin_score(scaled_matrix, labels)), 4)
 
     cluster_to_segment = _label_cluster_centroids(kmeans.cluster_centers_, FEATURE_NAMES)
+    medians = {name: float(np.median(feat_matrix[:, i])) for i, name in enumerate(FEATURE_NAMES)}
 
     # Compute distance-based confidence scores
     assignments = []
@@ -225,15 +246,16 @@ def cluster_customers(
     for idx, (customer, label) in enumerate(zip(customers, labels, strict=True)):
         sample_scaled = scaled_matrix[idx]
         distances = np.linalg.norm(kmeans.cluster_centers_ - sample_scaled, axis=1)
-        # Softmax over negative distances
-        exp_neg_dist = np.exp(-distances)
+        # Softmax over negative distances, shifted by the minimum so an outlier cannot underflow
+        # every term to 0 (which produced NaN confidences and aborted the job).
+        exp_neg_dist = np.exp(-(distances - distances.min()))
         probs = exp_neg_dist / np.sum(exp_neg_dist)
         confidence = float(np.clip(probs[label], 0.0, 1.0))
 
         segment_name = cluster_to_segment[int(label)]
         distribution_counts[segment_name.value] += 1
 
-        explanation = _generate_explanation(segment_name, customer)
+        explanation = _generate_explanation(segment_name, customer, medians)
 
         assignments.append(
             SegmentAssignment(

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
@@ -23,8 +24,8 @@ from pbip_api.modules.analytics import repository
 from pbip_api.modules.analytics.models import MonthlyCategorySpending
 from pbip_api.modules.analytics.service import materialize_monthly_spending
 from pbip_api.modules.ledger import service as ledger
-from pbip_test_support import Actor, age_payee
-from sqlalchemy import Engine, select
+from pbip_test_support import Actor, FakeClock, age_payee
+from sqlalchemy import Engine, select, text
 from sqlalchemy.orm import Session
 
 pytestmark = [pytest.mark.integration, pytest.mark.security]
@@ -475,6 +476,7 @@ def test_financial_health_score_moves_with_ledger_activity(
     make_customer: Callable[..., Actor],
     make_verified_payee: Callable[..., dict[str, Any]],
     migrated_engine: Engine,
+    clock: FakeClock,
 ) -> None:
     """AC3: nothing static. A fresh account scores on what is known, then every transfer moves it."""
     alice = make_customer(funds=300_000)
@@ -502,13 +504,140 @@ def test_financial_health_score_moves_with_ledger_activity(
     assert (
         comps["emi_to_income"]["score"] == 25 and comps["emi_to_income"]["assessment"] == "OPTIMAL"
     )
-    # one month of spend: volatility unknown; buffer 170,000 / 130,000 = 1.3 months -> LOW
+    # spend sits in the running month: volatility and buffer are unknown until it closes
     assert comps["expense_volatility"]["assessment"] == "INSUFFICIENT_DATA"
-    assert comps["buffer_months"]["assessment"] == "LOW" and comps["buffer_months"]["score"] == 9
-    assert data["overall_score"] == 64 and data["rating"] == "GOOD"
+    assert comps["buffer_months"]["assessment"] == "INSUFFICIENT_DATA"
+    assert data["overall_score"] == 55 and data["rating"] == "FAIR"
     assert data["months_observed"] == 1 and data["window_months"] == 12
-    assert any("cash buffer covers 1.3 months" in tip for tip in data["recommendations"])
     assert data["account_id"] == str(alice.account_id) and data["currency"] == "INR"
+
+    # Two months on: closed months [130,000, 0] -> volatile; buffer 170,000 / 65,000 = 2.6 months
+    clock.advance(62 * 24 * 3600)
+    later = client.get(url, headers=alice.headers).json()
+    comps = later["components"]
+    assert comps["expense_volatility"]["assessment"] == "VOLATILE"
+    assert comps["buffer_months"]["assessment"] == "LOW" and comps["buffer_months"]["score"] == 14
+    assert later["overall_score"] == 69 and later["rating"] == "GOOD"
+    assert any("cash buffer covers 2.6 months" in tip for tip in later["recommendations"])
 
     # Bob cannot read Alice's score (BOLA).
     assert client.get(url, headers=bob.headers).status_code == 404
+
+
+def test_a_reversal_refreshes_the_stored_month_even_outside_the_default_periods(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_verified_payee: Callable[..., dict[str, Any]],
+    migrated_engine: Engine,
+    db: Session,
+) -> None:
+    """Audit H5: a reversal flips a past transaction without adding an entry to its month, so the
+    nightly task must re-materialise that month even when it is not one of the default periods."""
+    alice = make_customer(funds=500_000)
+    bob = make_customer()
+    payee = make_verified_payee(alice, bob)
+    age_payee(migrated_engine, payee["id"], 48)
+    _transfer(client, alice, payee["id"], 20_000, "BigBasket weekly groceries")
+    dinner = _transfer(client, alice, payee["id"], 10_000, "Swiggy dinner order")
+    now = utcnow()
+    assert materialize_monthly_spending(db, periods=[(now.year, now.month)]) == 1
+    assert _stored_rows(db, alice.account_id) == {("groceries", 20_000, 1), ("dining", 10_000, 1)}
+
+    ledger.reverse_transaction(db, dinner, None, "customer dispute")
+    db.commit()
+    # Run for an unrelated period only: the reversal lookback still targets this month.
+    far = (2001, 1)
+    written = materialize_monthly_spending(db, periods=[far], now=now)
+    assert written == 1  # the reversed account-month, nothing for 2001-01
+    assert _stored_rows(db, alice.account_id) == {("groceries", 20_000, 1)}
+    # Outside the lookback window nothing is refreshed.
+    db.execute(text("DELETE FROM monthly_category_spending"))
+    db.commit()
+    assert (
+        materialize_monthly_spending(db, periods=[far], reversed_since=now + timedelta(days=1)) == 0
+    )
+    assert _stored_rows(db, alice.account_id) == set()
+
+
+def test_a_second_materialization_run_skips_while_one_holds_the_lock(
+    make_customer: Callable[..., Actor], migrated_engine: Engine, db: Session
+) -> None:
+    """Audit M2: overlapping runs must not interleave their deletes and upserts."""
+    from pbip_api.modules.analytics.repository import MATERIALIZATION_LOCK_KEY
+
+    make_customer(funds=10_000)
+    with migrated_engine.connect() as other, other.begin():
+        assert other.execute(
+            text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": MATERIALIZATION_LOCK_KEY}
+        ).scalar_one()
+        assert materialize_monthly_spending(db, periods=[(2001, 1)]) == 0  # skipped
+        # Lock released at the end of that transaction: the next run proceeds.
+    assert materialize_monthly_spending(db, periods=[(2001, 1)]) == 0  # nothing to write, but ran
+
+
+def test_transfers_between_own_accounts_are_neither_income_nor_spend(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    db: Session,
+) -> None:
+    """Audit H3: moving money between pockets must not inflate one account's income or the other's spend."""
+    alice = make_customer(funds=300_000)
+    opened = client.post(
+        "/api/v1/accounts", headers=alice.headers, json={"account_type": "CURRENT"}
+    )
+    assert opened.status_code == 201, opened.text
+    second = UUID(opened.json()["id"])
+    moved = client.post(
+        "/api/v1/transfers",
+        headers={**alice.headers, "Idempotency-Key": uuid.uuid4().hex},
+        json={
+            "from_account_id": str(alice.account_id),
+            "amount_minor": 100_000,
+            "to_account_id": str(second),
+        },
+    )
+    assert moved.status_code == 201, moved.text
+
+    owned = repository.owned_account_ids(db, alice.customer_id)
+    assert owned == {alice.account_id, second}
+    source = repository.get_financial_health_metrics(db, alice.account_id, owned, utcnow())
+    target = repository.get_financial_health_metrics(db, second, owned, utcnow())
+    assert (source.income_minor, source.spend_minor) == (300_000, 0)  # the deposit only
+    assert (target.income_minor, target.spend_minor) == (0, 0)
+    for url in (
+        f"/api/v1/analytics/health-score?account_id={alice.account_id}",
+        f"/api/v1/analytics/health-score?account_id={second}",
+    ):
+        resp = client.get(url, headers=alice.headers)
+        assert resp.status_code == 200, resp.text
+    assert client.get(url, headers=alice.headers).json()["components"]["savings_rate"][
+        "assessment"
+    ] == ("INSUFFICIENT_DATA")
+
+
+def test_health_score_uses_closed_months_only_so_the_calendar_day_does_not_move_it(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_verified_payee: Callable[..., dict[str, Any]],
+    migrated_engine: Engine,
+    clock: FakeClock,
+) -> None:
+    """Audit H4: spend posted this month must not feed volatility or the buffer until the month closes."""
+    alice = make_customer(funds=400_000)
+    bob = make_customer()
+    payee = make_verified_payee(alice, bob)
+    age_payee(migrated_engine, payee["id"], 48)
+    _transfer(client, alice, payee["id"], 50_000, "October rent")
+    url = f"/api/v1/analytics/health-score?account_id={alice.account_id}"
+
+    today = client.get(url, headers=alice.headers).json()
+    assert today["components"]["expense_volatility"]["assessment"] == "INSUFFICIENT_DATA"
+    assert today["components"]["buffer_months"]["assessment"] == "INSUFFICIENT_DATA"
+
+    # Two months later the posting month is closed, the month after it had no spend (zero-filled):
+    # volatility is computed from [50,000, 0] and the buffer from their average.
+    clock.advance(62 * 24 * 3600)
+    later = client.get(url, headers=alice.headers).json()
+    assert later["components"]["expense_volatility"]["assessment"] == "VOLATILE"
+    assert later["components"]["buffer_months"]["metric_value"] == 14.0  # 350,000 / 25,000
+    assert later["months_observed"] == 3
