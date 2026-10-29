@@ -210,6 +210,15 @@ def _request_data(case: Case) -> Json:
 
 
 Executor = Callable[["Case", dict[str, str]], tuple[int, FuzzFailure | None]]
+# Schemathesis reports failed checks as a FailureGroup, which derives from BaseExceptionGroup, not
+# Exception: catching only Exception let a real 5xx escape and abort a whole nightly run.
+_CAUGHT = (Exception, BaseExceptionGroup)
+
+
+def _describe(exc: BaseException) -> str:
+    if isinstance(exc, BaseExceptionGroup):
+        return "; ".join(f"{type(e).__name__}: {e}" for e in exc.exceptions)
+    return f"{type(exc).__name__}: {exc}"
 
 
 def _make_executor(target: Target) -> Executor:
@@ -218,13 +227,13 @@ def _make_executor(target: Target) -> Executor:
 
         try:
             response = target.call(case, headers)
-        except Exception as exc:  # a transport or ASGI crash is a finding, not a runner bug
+        except _CAUGHT as exc:  # a transport or ASGI crash is a finding, not a runner bug
             failure = FuzzFailure(
                 method=case.method,
                 path=case.path,
                 status_code=0,
                 error_type="NetworkOrTransportError",
-                message=f"{type(exc).__name__}: {exc}",
+                message=_describe(exc),
                 request_data=_request_data(case),
             )
             return 0, failure
@@ -233,14 +242,14 @@ def _make_executor(target: Target) -> Executor:
             case.validate_response(
                 response, checks=[not_a_server_error, response_schema_conformance]
             )
-        except Exception as exc:  # Schemathesis raises per failed check; the status says which
+        except _CAUGHT as exc:  # one FailureGroup per failed check; the status says which
             error_type = "UnhandledServerError" if status >= 500 else "ResponseSchemaViolation"
             failure = FuzzFailure(
                 method=case.method,
                 path=case.path,
                 status_code=status,
                 error_type=error_type,
-                message=str(exc),
+                message=_describe(exc),
                 request_data=_request_data(case),
             )
             return status, failure
