@@ -20,6 +20,7 @@ from scripts.fuzz import (
     FuzzIdentity,
     FuzzResult,
     Target,
+    _make_executor,
     _Tally,
     main,
     run_fuzz,
@@ -207,3 +208,36 @@ def test_target_needs_exactly_one_of_url_or_app() -> None:
         Target()
     with pytest.raises(ValueError, match="exactly one"):
         Target(base_url="http://x", app=NOT_AN_APP)
+
+
+class _FailingCase:
+    """A case whose request gets a 500 and whose checks report it the way Schemathesis does."""
+
+    method, path, path_parameters, query, headers, body = (
+        "GET",
+        "/api/v1/notifications",
+        None,
+        None,
+        None,
+        None,
+    )
+
+    def call(self, **_kwargs: Any) -> Any:
+        return SimpleNamespace(status_code=500)
+
+    def validate_response(self, _response: Any, **_kwargs: Any) -> None:
+        # schemathesis.core.failures.FailureGroup derives from BaseExceptionGroup, not Exception.
+        raise BaseExceptionGroup(
+            "Schemathesis found 1 distinct failure", [AssertionError("Server error")]
+        )
+
+
+def test_a_failed_check_is_recorded_not_raised() -> None:
+    """Regression: a 5xx found by Schemathesis aborted the whole run instead of being a finding."""
+    execute = _make_executor(Target(base_url="http://fuzz.invalid"))
+
+    status, failure = execute(_FailingCase(), {})  # type: ignore[arg-type]  # minimal Case double
+
+    assert status == 500 and failure is not None
+    assert failure.error_type == "UnhandledServerError"
+    assert "Server error" in failure.message and failure.path == "/api/v1/notifications"
