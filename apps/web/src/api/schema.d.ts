@@ -141,6 +141,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/analytics/spending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Customer spending breakdown across categories
+         * @description Return categorized spending breakdown for an authenticated customer's account.
+         */
+        get: operations["get_customer_spending_api_v1_analytics_spending_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analytics/trends": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Month-over-month spending trends and daily burn rate
+         * @description Return month-over-month spending trends and burn rate comparison.
+         */
+        get: operations["get_customer_trends_api_v1_analytics_trends_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -747,6 +787,63 @@ export interface components {
              */
             updated_count: number;
         };
+        /**
+         * CategoryShiftItem
+         * @description Month-over-month shift in spending for a category.
+         */
+        CategoryShiftItem: {
+            /**
+             * Category
+             * @description Category name
+             */
+            category: string;
+            /**
+             * Change Minor
+             * @description Difference in spend (current - previous) in minor units
+             */
+            change_minor: number;
+            /**
+             * Change Percentage
+             * @description Percentage change (+/-), None if previous was 0
+             */
+            change_percentage?: number | null;
+            /**
+             * Current Amount Minor
+             * @description Current month spend in minor units
+             */
+            current_amount_minor: number;
+            /**
+             * Previous Amount Minor
+             * @description Previous month spend in minor units
+             */
+            previous_amount_minor: number;
+        };
+        /**
+         * CategorySpendingItem
+         * @description Spending total and percentage for a single spending category.
+         */
+        CategorySpendingItem: {
+            /**
+             * Amount Minor
+             * @description Total spend in minor units (pence/cents)
+             */
+            amount_minor: number;
+            /**
+             * Category
+             * @description Category name (e.g. groceries, utilities)
+             */
+            category: string;
+            /**
+             * Percentage
+             * @description Percentage of total spend
+             */
+            percentage: number;
+            /**
+             * Transaction Count
+             * @description Number of debit transactions
+             */
+            transaction_count: number;
+        };
         /** ChainStatusOut */
         ChainStatusOut: {
             /** Checked */
@@ -939,6 +1036,42 @@ export interface components {
             /** Mfa Token */
             mfa_token: string;
         };
+        /**
+         * MonthlySpendingSummary
+         * @description Summary of spending in a calendar month.
+         */
+        MonthlySpendingSummary: {
+            /**
+             * Daily Burn Rate Minor
+             * @description Average daily spend in minor units
+             */
+            daily_burn_rate_minor: number;
+            /**
+             * Month
+             * @description Month (1-12)
+             */
+            month: number;
+            /**
+             * Period
+             * @description Period formatted as YYYY-MM
+             */
+            period: string;
+            /**
+             * Total Spend Minor
+             * @description Total spend in minor units
+             */
+            total_spend_minor: number;
+            /**
+             * Transaction Count
+             * @description Transaction count
+             */
+            transaction_count: number;
+            /**
+             * Year
+             * @description Year
+             */
+            year: number;
+        };
         /** NotificationOut */
         NotificationOut: {
             /** Body */
@@ -1087,6 +1220,99 @@ export interface components {
             full_name: string;
             /** Password */
             password: string;
+        };
+        /**
+         * SpendingBreakdownResponse
+         * @description Response containing categorized spending breakdown for an account.
+         */
+        SpendingBreakdownResponse: {
+            /**
+             * Account Id
+             * Format: uuid
+             * @description Target account identifier
+             */
+            account_id: string;
+            /**
+             * Categories
+             * @description Category-wise spending items
+             */
+            categories?: components["schemas"]["CategorySpendingItem"][];
+            /**
+             * Currency
+             * @description ISO currency code
+             */
+            currency: string;
+            /**
+             * Month
+             * @description Aggregation month (1-12)
+             */
+            month: number;
+            /**
+             * Period
+             * @description Aggregation period formatted as YYYY-MM
+             */
+            period: string;
+            /**
+             * Total Spend Minor
+             * @description Total spending in minor units
+             */
+            total_spend_minor: number;
+            /**
+             * Transaction Count
+             * @description Total debit transactions count
+             */
+            transaction_count: number;
+            /**
+             * Year
+             * @description Aggregation year
+             */
+            year: number;
+        };
+        /**
+         * SpendingTrendsResponse
+         * @description Month-over-month spending trends and burn rate comparison.
+         */
+        SpendingTrendsResponse: {
+            /**
+             * Account Id
+             * Format: uuid
+             * @description Target account identifier
+             */
+            account_id: string;
+            /**
+             * Burn Rate Change Percentage
+             * @description Burn rate percentage change vs previous month
+             */
+            burn_rate_change_percentage?: number | null;
+            /**
+             * Currency
+             * @description ISO currency code
+             */
+            currency: string;
+            /** @description Current month summary */
+            current_month: components["schemas"]["MonthlySpendingSummary"];
+            /**
+             * Daily Burn Rate Minor
+             * @description Current daily burn rate in minor units
+             */
+            daily_burn_rate_minor: number;
+            /**
+             * Mom Spend Change Percentage
+             * @description Month-over-month total spend percentage change (+/-)
+             */
+            mom_spend_change_percentage?: number | null;
+            /** @description Previous month summary (if available) */
+            previous_month?: components["schemas"]["MonthlySpendingSummary"] | null;
+            /**
+             * Top Categories Decreasing
+             * @description Categories with highest spending decreases
+             */
+            top_categories_decreasing?: components["schemas"]["CategoryShiftItem"][];
+            /**
+             * Top Categories Increasing
+             * @description Categories with highest spending increases
+             */
+            top_categories_increasing?: components["schemas"]["CategoryShiftItem"][];
         };
         /** StepUpRequest */
         StepUpRequest: {
@@ -1498,6 +1724,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UnlockResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_customer_spending_api_v1_analytics_spending_get: {
+        parameters: {
+            query: {
+                /** @description Target account identifier */
+                account_id: string;
+                /** @description Calendar year (e.g. 2026) */
+                year?: number | null;
+                /** @description Calendar month (1-12) */
+                month?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpendingBreakdownResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_customer_trends_api_v1_analytics_trends_get: {
+        parameters: {
+            query: {
+                /** @description Target account identifier */
+                account_id: string;
+                /** @description Calendar year (e.g. 2026) */
+                year?: number | null;
+                /** @description Calendar month (1-12) */
+                month?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpendingTrendsResponse"];
                 };
             };
             /** @description Validation Error */
