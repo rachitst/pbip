@@ -2,7 +2,8 @@ name: Nightly API Fuzzing
 
 # Scheduled property-based API fuzzing with Schemathesis against the PBIP OpenAPI contract.
 # Runs nightly at 02:00 UTC and on manual workflow_dispatch triggers.
-# Fulfills TASK-070 Definition of Done: >= 500 cases with zero unhandled 500 errors and 100% schema conformance.
+# TASK-070 definition of done: >= 500 cases with zero unhandled 5xx errors and 100% schema conformance.
+# How the runner works (modes, authentication, reproduction): docs/testing/fuzzing.md.
 
 on:
   schedule:
@@ -80,10 +81,15 @@ jobs:
       - name: Wait for API readiness probe
         run: |
           curl --fail --silent --retry 30 --retry-delay 2 --retry-all-errors http://127.0.0.1:8000/api/health/ready
-      - name: Execute property-based API fuzzing (>= 500 cases)
-        run: |
-          CASES="${{ inputs.cases || '500' }}"
-          uv run python scripts/dev.py fuzz --url http://127.0.0.1:8000 --cases "$CASES" --report-file fuzz-report.json
+      # Authenticated by default: the runner registers a disposable customer on the ephemeral database.
+      # The run number is the Hypothesis seed, so a failing night can be replayed with --seed.
+      - name: Execute property-based API fuzzing (>= 500 cases, positive and negative inputs)
+        env:
+          CASES: ${{ inputs.cases || '500' }}
+          SEED: ${{ github.run_number }}
+        run: >-
+          uv run python scripts/dev.py fuzz --url http://127.0.0.1:8000
+          --cases "$CASES" --seed "$SEED" --report-file fuzz-report.json
       - name: Upload Schemathesis fuzzing report
         if: always()
         uses: actions/upload-artifact@v7

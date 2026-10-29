@@ -1,103 +1,112 @@
 # Property-Based API Fuzzing with Schemathesis
 
-PBIP uses [Schemathesis](https://schemathesis.readthedocs.io/) and Hypothesis for property-based API testing and boundary fuzzing against the authoritative OpenAPI contract at `docs/api/openapi.json`.
+PBIP fuzzes its API with [Schemathesis](https://schemathesis.readthedocs.io/) and Hypothesis,
+driven by the committed OpenAPI contract `docs/api/openapi.json` (TASK-070). The runner is
+`scripts/fuzz.py`; the nightly job is `.github/workflows/fuzz.yml`.
 
-## 1. Objectives & Quality Gate
+## 1. What a run proves
 
-In a regulated banking platform, API contracts must strictly guarantee:
-1. **Zero Unhandled HTTP 500 Errors:** Endpoints must reject invalid, malformed, or boundary inputs with appropriate HTTP 4xx errors (e.g. 400 Bad Request, 401 Unauthorized, 403 Forbidden, 422 Unprocessable Entity, 429 Rate Limited), never with unhandled 500 Internal Server Errors.
-2. **100% Response Schema Conformance:** Every returned response payload must strictly conform to the declared JSON schema in the OpenAPI specification for the corresponding HTTP status code.
-3. **Definition of Done (TASK-070):** The fuzz test executes at least **500 test cases** across API endpoints with zero unhandled 500 errors and zero schema violations.
+Every operation in the contract receives generated requests in two modes:
 
-## 2. Architecture & Components
+| Mode | Inputs | What it exercises |
+|---|---|---|
+| `positive` | schema-valid path/query/header/body values | the service layer behind validation |
+| `negative` | values that violate the schema (wrong types, out-of-range, missing fields) | validation and error handling |
 
-```
-                docs/api/openapi.json
-                          │
-                          ▼
-             schemathesis.openapi.from_path()
-                          │
-                          ▼
-         Hypothesis Parameter & Payload Strategy
-                          │
-              ┌───────────┴───────────┐
-              ▼                       ▼
-      [In-Process ASGI]      [Live HTTP Service]
-       Isolated FastAPI       http://127.0.0.1:8000
-       (FuzzSession +         (PostgreSQL + Redis)
-        FakeEngine +
-        fakeredis)
-              │                       │
-              └───────────┬───────────┘
-                          ▼
-            Property Checks & Assertions:
-            - not_a_server_error (no 5xx)
-            - response_schema_conformance
-```
+Two checks apply to every response:
 
-- **Fuzz Runner (`scripts/fuzz.py`):** Standalone script and library managing test case generation, dispatch, error capture, and telemetry.
-- **Developer Command Runner (`scripts/dev.py fuzz`):** Cross-platform CLI entry point for local execution.
-- **Unit Contract Test (`apps/api/tests/unit/test_fuzz_contract.py`):** Pytest unit test ensuring the fuzzing harness and OpenAPI specification remain integrated in local test suites.
-- **Nightly CI Pipeline (`.github/workflows/fuzz.yml`):** Scheduled GitHub Actions workflow running 500+ test cases nightly against a live containerized database and Redis backend.
+1. **`not_a_server_error`:** no 5xx and no transport/ASGI crash. Invalid, boundary or
+   adversarial input must be rejected with a 4xx problem+json, never with a stack trace.
+2. **`response_schema_conformance`:** the body matches the schema declared for that status code.
 
-## 3. Running Locally
+**Definition of done (TASK-070):** at least 500 cases with zero unhandled 5xx and zero schema
+violations. The runner exits non-zero if either count is non-zero, if any request failed at the
+transport level, or if fewer cases than requested were executed.
 
-### In-Process Execution (Fast & Dependency-Free)
+## 2. Authentication (why it is built in)
 
-To run the fuzzing suite locally against the in-process FastAPI application:
+Without a bearer token every protected route answers 401 before any validation runs, so an
+unauthenticated run only proves that the auth guard comes first. By default the runner therefore
+**registers a disposable customer through the API under test** (`POST /api/v1/auth/register`,
+then `POST /api/v1/auth/login`) and fuzzes with that customer's token. Before each operation it
+checks `GET /api/v1/auth/me` and logs in again if a fuzzed operation invalidated the session.
+
+Limits of this coverage, stated honestly:
+
+* Staff routes require roles and MFA (`amr: otp`); with a customer token they are exercised only
+  on their authorization-denied path (403). Pass `--token <staff access token>` to go further.
+* Rate-limited routes (login, register, password change) start answering 429 during a run. 429 is
+  not documented in the contract, so the schema check skips it; it is still not a failure.
+* Money-moving operations run against the fuzz customer's own fresh account on an ephemeral
+  database (CI service container or your local test database). Never point `--url` at a shared
+  environment with real data.
+
+`--no-auth` fuzzes the unauthenticated surface only.
+
+## 3. Targets
+
+| Target | Flag | Needs |
+|---|---|---|
+| Live server | `--url http://127.0.0.1:8000` | a running API (what the nightly job does) |
+| In-process app | default | a migrated PostgreSQL via `--database-url` or `TEST_DATABASE_URL` (as for `make test-int`); Redis is replaced by `fakeredis` |
+
+The in-process target is the real application on a real database; there is no mocked session,
+because a mocked persistence layer can itself crash and would misreport its own failures as API
+defects.
+
+## 4. Running locally
 
 ```bash
-# Using dev.py runner
-python scripts/dev.py fuzz --cases 500
+# In-process, against the local test database (make infra-up; migrations are applied by the app's
+# integration fixtures, or run `python scripts/dev.py migrate` with TEST_DATABASE_URL first)
+python scripts/dev.py fuzz --cases 500 --seed 7
 
-# Or via Makefile (Linux/macOS)
-make fuzz
+# Against a running server
+python scripts/dev.py infra-up && python scripts/dev.py migrate && python scripts/dev.py dev-api
+python scripts/dev.py fuzz --url http://127.0.0.1:8000 --cases 500 --report-file fuzz-report.json
 
-# Or via PowerShell (Windows)
+# Windows
 .\dev.ps1 fuzz --cases 500
 ```
 
-### Live Service Fuzzing
+| Option | Default | Description |
+|---|---|---|
+| `--cases` | 500 | Minimum number of cases to execute |
+| `--url` | in-process | Base URL of a running API |
+| `--database-url` | `TEST_DATABASE_URL` | PostgreSQL for the in-process target |
+| `--no-auth` | off | Do not register a fuzz customer |
+| `--token` | none | Bearer token to use instead of the registered customer |
+| `--mode` | `both` | `positive`, `negative` or `both` |
+| `--seed` | random | Hypothesis seed; the same seed generates the same inputs |
+| `--spec` | `docs/api/openapi.json` | OpenAPI contract |
+| `--report-file` | none | Write the JSON report |
 
-To fuzz against a running PBIP API server (e.g., in Docker or local dev server):
+## 5. Reproducing a failure
 
-```bash
-# 1. Start infrastructure and backend
-python scripts/dev.py infra-up
-python scripts/dev.py migrate
-python scripts/dev.py seed
-python scripts/dev.py dev-api
+The report (console and `--report-file`) contains, per failure, the method, path, status, check
+message and the generated request (path parameters, query, headers without `Authorization`, body).
+It also contains the **seed** and an **input digest** (SHA-256 over every generated request): the
+same seed reproduces the same inputs, and equal digests confirm it. The nightly job uses the
+workflow run number as the seed, so a failing night is replayed with
+`python scripts/dev.py fuzz --url ... --seed <run number>`.
 
-# 2. Run fuzzer against live URL
-python scripts/dev.py fuzz --url http://127.0.0.1:8000 --cases 500
-```
+Ordinary unit tests cover the runner itself (`apps/api/tests/unit/test_fuzz_contract.py`, no
+database, stubbed executor), and `apps/api/tests/integration/test_fuzz_contract.py` runs the real
+application on PostgreSQL in the CI `api-tests` job with a fixed seed.
 
-### Command-Line Options
+## 6. Nightly job
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `--cases` | int | 500 | Minimum number of test cases to generate and execute |
-| `--url` | string | `None` | Base URL of running API. If omitted, runs in-process via ASGI |
-| `--token` | string | `None` | Optional Bearer token for authenticated endpoint testing |
-| `--spec` | path | `docs/api/openapi.json` | Path to OpenAPI JSON contract |
-| `--seed` | int | `None` | Hypothesis random seed for reproducible runs |
-| `--report-file` | path | `None` | Path to export execution results as JSON |
+`.github/workflows/fuzz.yml` runs at 02:00 UTC and on `workflow_dispatch` (input `cases`). It
+provisions PostgreSQL 16 and Redis 7, applies migrations, seeds demo data, starts the API, waits for
+`/api/health/ready`, runs 500+ authenticated cases in both modes, and uploads `fuzz-report.json`.
 
-## 4. Continuous Integration & Scheduled Runs
+## 7. Triage
 
-A dedicated workflow is configured at `.github/workflows/fuzz.yml`:
-- **Schedule:** Nightly at 02:00 UTC (`cron: '0 2 * * *'`)
-- **Manual Trigger:** Supports `workflow_dispatch` with customizable case counts.
-- **Environment:** Provisions PostgreSQL 16 and Redis 7 services, migrates schema, seeds demo data, and executes `scripts/dev.py fuzz --url http://127.0.0.1:8000 --cases 500`.
-- **Artifact:** Generates and uploads `fuzz-report.json` containing status distributions and detailed failure records.
-
-## 5. Triage & Failure Diagnosis
-
-When the fuzzer reports a failure:
-1. **Unhandled 500 Server Errors:**
-   - Inspect the failed endpoint and payload in the test output or `fuzz-report.json`.
-   - Identify the unhandled exception (e.g. unhandled boundary value, null dereference, database constraint error).
-   - Add appropriate input validation in Pydantic models or domain error handling in the service layer returning RFC 7807 problem details.
-2. **Response Schema Violations:**
-   - Schemathesis compares the actual response body against the OpenAPI schema defined for that status code.
-   - If the API response contains fields not in the schema or violates types, update the router's `response_model` or regenerate the schema via `python scripts/dev.py openapi`.
+1. **Unhandled 5xx or transport failure:** take the request from the report, reproduce it with the
+   seed, find the unhandled exception, and add validation (Pydantic bounds) or a `DomainError`
+   mapped to problem+json. Add a regression test that fails without the fix.
+2. **Schema violation:** the response body does not match the contract for that status. Fix the
+   `response_model` (or the error handler) and regenerate the contract with
+   `python scripts/dev.py openapi`; never hand-edit `openapi.json`.
+3. **"Not generated" entries** list operations that have no input to corrupt in negative mode
+   (for example `GET /api/health/live`); they are informational, not failures.

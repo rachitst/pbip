@@ -1,17 +1,26 @@
-"""Unit test validating Schemathesis property-based API fuzzing contract and failure modes."""
+"""Unit tests for ``scripts/fuzz.py``: generation, bookkeeping and exit codes, without a database.
 
+The runner's real target (the application on PostgreSQL) is exercised in
+``tests/integration/test_fuzz_contract.py``. Here the request executor is stubbed, so the tests are
+fast and deterministic while still driving real Schemathesis/Hypothesis generation from the
+committed OpenAPI contract.
+"""
+
+import json
 import sys
-from collections import Counter
-from dataclasses import asdict
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
 from scripts.fuzz import (
+    GENERATION_MODES,
     FuzzFailure,
+    FuzzIdentity,
     FuzzResult,
-    _record_outcome,
-    build_isolated_app,
+    Target,
+    _Tally,
     main,
     run_fuzz,
 )
@@ -19,155 +28,182 @@ from scripts.fuzz import (
 pytestmark = pytest.mark.unit
 
 SPEC_PATH = Path(__file__).resolve().parents[4] / "docs" / "api" / "openapi.json"
+NOT_AN_APP = object()  # the stubbed executor never touches the target
 
 
-def _make_dummy_result(
-    server_errors: int = 0,
-    schema_violations: int = 0,
-    failures: list[FuzzFailure] | None = None,
-    total_cases: int = 10,
-) -> FuzzResult:
-    failure_objs = failures or []
+def _ok(_case: object, _headers: dict[str, str]) -> tuple[int, FuzzFailure | None]:
+    return 200, None
+
+
+def _case(method: str = "GET", path: str = "/api/v1/accounts") -> Any:
+    """The attributes of a Schemathesis Case that the tally reads."""
+    return SimpleNamespace(
+        method=method, path=path, path_parameters=None, query=None, headers=None, body=None
+    )
+
+
+def _result(failures: list[FuzzFailure], total_cases: int = 10) -> FuzzResult:
+    server_errors = sum(1 for f in failures if f.status_code >= 500)
+    violations = sum(1 for f in failures if f.error_type == "ResponseSchemaViolation")
     return FuzzResult(
         spec_path="docs/api/openapi.json",
         target="test-target",
+        authenticated=True,
+        generation_modes=list(GENERATION_MODES),
+        seed=1,
         total_cases=total_cases,
         operations_count=5,
-        passed_cases=total_cases - len(failure_objs),
+        passed_cases=total_cases - len(failures),
         server_errors=server_errors,
-        schema_violations=schema_violations,
+        schema_violations=violations,
         status_codes={"200": total_cases},
+        per_operation={},
+        unsatisfiable=[],
+        input_digest="0" * 64,
         duration_seconds=1.0,
-        failures=[asdict(f) for f in failure_objs],
+        failures=[f.__dict__ for f in failures],
     )
 
 
-def test_openapi_spec_exists() -> None:
-    """Verify that committed OpenAPI specification file exists."""
-    assert SPEC_PATH.exists(), f"Missing OpenAPI specification at {SPEC_PATH}"
+def test_same_seed_reproduces_the_inputs_and_every_operation_is_fuzzed_in_both_modes() -> None:
+    first = run_fuzz(
+        spec_path=SPEC_PATH, app=NOT_AN_APP, auth=False, min_cases=80, seed=11, execute=_ok
+    )
+    again = run_fuzz(
+        spec_path=SPEC_PATH, app=NOT_AN_APP, auth=False, min_cases=80, seed=11, execute=_ok
+    )
+    other = run_fuzz(
+        spec_path=SPEC_PATH, app=NOT_AN_APP, auth=False, min_cases=80, seed=12, execute=_ok
+    )
+
+    assert first.input_digest == again.input_digest
+    assert first.input_digest != other.input_digest
+    assert first.total_cases >= 80 and first.operations_count >= 30
+    assert first.seed == 11 and first.generation_modes == ["positive", "negative"]
+    assert len(first.per_operation) == first.operations_count  # every operation got requests
+    # Only operations without any input to corrupt are skipped, and only in negative mode.
+    assert first.unsatisfiable and all(u.startswith("negative ") for u in first.unsatisfiable)
+    assert first.is_success and first.authenticated is False
 
 
-def test_isolated_app_builds_cleanly() -> None:
-    """Verify isolated test FastAPI app initializes with test doubles."""
-    app = build_isolated_app()
-    assert app is not None
-    assert hasattr(app, "dependency_overrides")
+def test_bearer_token_is_sent_with_every_request() -> None:
+    seen: set[str | None] = set()
 
+    def spy(_case: object, headers: dict[str, str]) -> tuple[int, FuzzFailure | None]:
+        seen.add(headers.get("Authorization"))
+        return 200, None
 
-def test_property_based_fuzz_contract_compliance() -> None:
-    """Exercise API operations with Schemathesis and verify schema conformance.
-
-    Asserts zero unhandled HTTP 500 errors, zero schema violations, and zero failures.
-    """
     result = run_fuzz(
-        spec_path=SPEC_PATH,
-        min_cases=38,
-        seed=42,
+        spec_path=SPEC_PATH, app=NOT_AN_APP, bearer_token="t0k", min_cases=40, seed=1, execute=spy
+    )
+    assert seen == {"Bearer t0k"}
+    assert result.authenticated is True
+
+
+def test_tally_classifies_server_errors_schema_violations_and_transport_failures() -> None:
+    tally = _Tally(goal=10)
+    tally.record(_case(), 200, None)
+    tally.record(
+        _case("POST", "/api/v1/auth/login"),
+        500,
+        FuzzFailure("POST", "/api/v1/auth/login", 500, "UnhandledServerError", "boom"),
+    )
+    tally.record(
+        _case(), 200, FuzzFailure("GET", "/api/v1/accounts", 200, "ResponseSchemaViolation", "x")
+    )
+    tally.record(
+        _case("POST", "/api/v1/auth/register"),
+        0,
+        FuzzFailure("POST", "/api/v1/auth/register", 0, "NetworkOrTransportError", "reset"),
     )
 
-    assert result.is_success, f"Fuzzing detected failures: {result.failures}"
-    assert result.server_errors == 0, f"Detected unhandled 500 errors: {result.failures}"
-    assert result.schema_violations == 0, f"Detected schema violations: {result.failures}"
-    assert len(result.failures) == 0, f"Unexpected failures in successful run: {result.failures}"
-    assert result.passed_cases == result.total_cases
-    assert result.total_cases >= 38
-    assert result.operations_count >= 30
+    assert tally.executed == 4
+    assert tally.server_errors == 1 and tally.schema_violations == 1 and len(tally.failures) == 3
+    assert tally.status_counts == {"200": 2, "500": 1}  # a transport failure has no status
+    assert tally.per_operation["POST /api/v1/auth/register"]["0"] == 1
+    assert len(tally.input_digest) == 64
 
 
-def test_regression_transport_failure_causes_failure_and_nonzero_cli(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Regression test: status code 0 transport failures must fail is_success and exit nonzero."""
-    transport_failure = FuzzFailure(
-        method="GET",
-        path="/api/health/live",
-        status_code=0,
-        error_type="NetworkOrTransportError",
-        message="Connection reset by peer",
-    )
-    result = _make_dummy_result(
-        server_errors=0,
-        schema_violations=0,
-        failures=[transport_failure],
-    )
-
-    assert not result.is_success, (
-        "Transport failure with status 0 must cause is_success to be False"
-    )
-    assert result.passed_cases < result.total_cases
-
-    monkeypatch.setattr(sys, "argv", ["fuzz.py", "--cases", "10"])
-    monkeypatch.setattr("scripts.fuzz.run_fuzz", lambda **_kw: result)
-    exit_code = main()
-    assert exit_code == 1, "CLI must return nonzero exit code on transport failure"
+@pytest.mark.parametrize("status_code", [401, 403, 404, 409, 422, 429])
+def test_expected_client_responses_are_not_failures(status_code: int) -> None:
+    tally = _Tally(goal=1)
+    tally.record(_case(), status_code, None)
+    assert not tally.failures and tally.server_errors == 0 and tally.schema_violations == 0
+    assert tally.status_counts[str(status_code)] == 1
 
 
-def test_http_5xx_failure_causes_failure_and_nonzero_cli(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Unhandled HTTP 500 server errors must fail is_success and exit nonzero."""
-    server_error = FuzzFailure(
-        method="POST",
-        path="/api/v1/auth/login",
-        status_code=500,
-        error_type="UnhandledServerError",
-        message="500 Internal Server Error",
-    )
-    result = _make_dummy_result(
-        server_errors=1,
-        schema_violations=0,
-        failures=[server_error],
-    )
-
-    assert not result.is_success, "HTTP 500 server error must cause is_success to be False"
-    assert result.server_errors == 1
-
-    monkeypatch.setattr(sys, "argv", ["fuzz.py", "--cases", "10"])
-    monkeypatch.setattr("scripts.fuzz.run_fuzz", lambda **_kw: result)
-    exit_code = main()
-    assert exit_code == 1, "CLI must return nonzero exit code on 500 server error"
+def test_any_failure_kind_makes_the_run_unsuccessful() -> None:
+    transport = FuzzFailure("GET", "/api/health/live", 0, "NetworkOrTransportError", "reset")
+    server = FuzzFailure("POST", "/api/v1/auth/login", 500, "UnhandledServerError", "boom")
+    schema = FuzzFailure("GET", "/api/v1/accounts", 200, "ResponseSchemaViolation", "missing")
+    for failure in (transport, server, schema):
+        assert not _result([failure]).is_success, failure.error_type
+    assert _result([]).is_success
 
 
-def test_schema_violation_causes_failure_and_nonzero_cli(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Response schema violations must fail is_success and exit nonzero."""
-    schema_violation = FuzzFailure(
-        method="GET",
-        path="/api/v1/accounts",
-        status_code=200,
-        error_type="ResponseSchemaViolation",
-        message="Missing required property: ledger_balance",
-    )
-    result = _make_dummy_result(
-        server_errors=0,
-        schema_violations=1,
-        failures=[schema_violation],
-    )
+def test_cli_exit_code_and_report(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    report = tmp_path / "out" / "fuzz-report.json"
+    calls: list[dict[str, Any]] = []
 
-    assert not result.is_success, "Schema violation must cause is_success to be False"
-    assert result.schema_violations == 1
+    def fake_run_fuzz(**kwargs: Any) -> FuzzResult:
+        calls.append(kwargs)
+        return outcome
 
-    monkeypatch.setattr(sys, "argv", ["fuzz.py", "--cases", "10"])
-    monkeypatch.setattr("scripts.fuzz.run_fuzz", lambda **_kw: result)
-    exit_code = main()
-    assert exit_code == 1, "CLI must return nonzero exit code on schema violation"
+    monkeypatch.setattr("scripts.fuzz.run_fuzz", fake_run_fuzz)
+    argv = ["fuzz.py", "--cases", "10", "--seed", "5", "--mode", "negative", "--report-file"]
+    monkeypatch.setattr(sys, "argv", [*argv, str(report)])
+
+    outcome = _result([])
+    assert main() == 0
+    assert calls[-1]["seed"] == 5 and calls[-1]["modes"] == ("negative",)
+    assert calls[-1]["auth"] is True
+    written = json.loads(report.read_text(encoding="utf-8"))
+    assert written["total_cases"] == 10 and written["seed"] == 1 and written["failures"] == []
+
+    outcome = _result([], total_cases=9)  # fewer cases than requested is a failed run
+    assert main() == 1
+    outcome = _result([FuzzFailure("GET", "/x", 500, "UnhandledServerError", "boom")])
+    assert main() == 1
 
 
-@pytest.mark.parametrize("status_code", [401, 403, 422, 429])
-def test_expected_client_responses_are_not_treated_as_failures(status_code: int) -> None:
-    """Expected HTTP 4xx client errors that conform to OpenAPI contract must not be failures."""
-    status_counts: Counter[str] = Counter()
-    failures: list[FuzzFailure] = []
+class _FakeTarget(Target):
+    """Register and login succeed; the session is reported invalid once (e.g. after a logout)."""
 
-    s_err, sch_err = _record_outcome(
-        status=status_code,
-        failure=None,
-        status_counts=status_counts,
-        failures=failures,
-    )
+    def __init__(self, register_status: int = 201) -> None:
+        super().__init__(base_url="http://fuzz.invalid")
+        self.register_status = register_status
+        self.logins = 0
+        self.me_statuses = [401, 200]
 
-    assert s_err == 0
-    assert sch_err == 0
-    assert len(failures) == 0
-    assert status_counts[str(status_code)] == 1
+    def post_json(self, path: str, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        if path.endswith("/register"):
+            assert payload["email"].startswith("fuzz-") and len(payload["password"]) >= 12
+            return self.register_status, {}
+        self.logins += 1
+        return 200, {"access_token": f"token-{self.logins}"}
+
+    def get_status(self, _path: str, headers: dict[str, str]) -> int:
+        assert headers["Authorization"].startswith("Bearer token-")
+        return self.me_statuses.pop(0)
+
+
+def test_identity_registers_then_logs_in_again_only_when_the_session_became_invalid() -> None:
+    target = _FakeTarget()
+    identity = FuzzIdentity(target)
+
+    assert identity.provision() == {"Authorization": "Bearer token-1"}
+    assert identity.ensure() == {"Authorization": "Bearer token-2"}  # /me said 401
+    assert identity.ensure() == {"Authorization": "Bearer token-2"}  # /me said 200
+    assert target.logins == 2
+
+
+def test_identity_fails_clearly_when_registration_is_refused() -> None:
+    with pytest.raises(RuntimeError, match="HTTP 429"):
+        FuzzIdentity(_FakeTarget(register_status=429)).provision()
+
+
+def test_target_needs_exactly_one_of_url_or_app() -> None:
+    with pytest.raises(ValueError, match="exactly one"):
+        Target()
+    with pytest.raises(ValueError, match="exactly one"):
+        Target(base_url="http://x", app=NOT_AN_APP)
