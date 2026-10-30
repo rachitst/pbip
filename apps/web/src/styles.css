@@ -350,7 +350,7 @@ td.right {
 }
 .details {
   display: grid;
-  grid-template-columns: max-content 1fr;
+  grid-template-columns: max-content minmax(0, 1fr);
   gap: var(--space-2) var(--space-5);
   margin: 0;
 }
@@ -359,6 +359,7 @@ td.right {
 }
 .details dd {
   margin: 0;
+  overflow-wrap: anywhere; /* long emails and references wrap instead of widening the page */
 }
 .details__row {
   display: contents;
@@ -388,7 +389,7 @@ td.right {
   margin-top: var(--space-5);
 }
 
-/* ---- Shell (TASK-019; replaced by the routed AppShell in the follow-up PR) ----------------- */
+/* ---- Sign-in card ------------------------------------------------------------------------- */
 .card {
   max-width: 640px;
   margin: var(--space-7) auto;
@@ -400,26 +401,128 @@ td.right {
 .narrow {
   max-width: 380px;
 }
-.nav {
+
+/* ---- Application shell (ADR-0016): header, navigation, main ------------------------------ */
+.app {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "header header"
+    "nav main";
+}
+.skip-link {
+  position: absolute;
+  left: var(--space-3);
+  top: -4rem;
+  z-index: 10;
+  padding: var(--space-2) var(--space-3);
+  color: var(--brand-contrast);
+  background: var(--brand);
+  border-radius: var(--radius);
+}
+.skip-link:focus {
+  top: var(--space-3);
+}
+.app-header {
+  grid-area: header;
+  display: flex;
+  align-items: center;
   gap: var(--space-4);
-  margin-bottom: var(--space-4);
-  padding-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-5);
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
-.tabs {
-  display: flex;
-  gap: var(--space-1);
-  flex-wrap: wrap;
-}
-.tab {
-  padding: var(--space-2) var(--space-3);
-  color: var(--muted);
+.app-brand {
   font-weight: var(--weight-strong);
-}
-.tab.active {
   color: var(--brand);
-  box-shadow: inset 0 -2px 0 var(--brand);
+  letter-spacing: 0.04em;
 }
+.menu-button {
+  display: none;
+}
+.app-header .session-bar {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+}
+.app-nav {
+  grid-area: nav;
+  padding: var(--space-4) var(--space-3);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+.app-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.app-nav__link {
+  display: block;
+  padding: var(--space-2) var(--space-3);
+  color: var(--text);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+  border-radius: var(--radius);
+}
+.app-nav__link:hover {
+  background: var(--surface-sunken);
+}
+.app-nav__link[aria-current="page"] {
+  color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 10%, var(--surface));
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+.app-main {
+  grid-area: main;
+  min-width: 0;
+  padding: var(--space-6);
+}
+.app-main:focus {
+  outline: none;
+}
+.page {
+  max-width: 56rem;
+}
+.page h1:focus {
+  outline: none;
+}
+a {
+  color: var(--brand);
+}
+
+@media (max-width: 1023px) {
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "header"
+      "main";
+  }
+  .menu-button {
+    display: inline-flex;
+  }
+  .app-nav {
+    display: none;
+    grid-area: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .app-nav[data-open="true"] {
+    display: block;
+    grid-row: 2;
+    grid-column: 1;
+    z-index: 5;
+    align-self: start;
+    box-shadow: var(--shadow-overlay);
+  }
+  .app-main {
+    padding: var(--space-4);
+  }
+}
+
 .session-bar {
   display: flex;
   align-items: center;
@@ -443,6 +546,7 @@ td.right {
   color: var(--text);
 }
 .session-badge {
+  margin-left: var(--space-2);
   display: inline-flex;
   align-items: center;
   padding: 0.15rem var(--space-2);
@@ -478,6 +582,15 @@ td.right {
 }
 
 @media (max-width: 640px) {
+  .app-header {
+    flex-wrap: wrap;
+    padding: var(--space-2) var(--space-4);
+  }
+  /* The name stays visible; the email and badge would push the content a third row down. */
+  .session-email,
+  .session-badge {
+    display: none;
+  }
   .card {
     margin: 0;
     border-radius: 0;

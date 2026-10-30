@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { account, json, renderApp, urlOf } from "../test-utils";
+import { account, customerMe, json, renderApp, urlOf } from "../test-utils";
 
 describe("opening an account", () => {
   const fetchMock = vi.fn<typeof fetch>();
@@ -16,6 +16,7 @@ describe("opening an account", () => {
     fetchMock.mockImplementation((input, init) => {
       const url = urlOf(input);
       if (url.endsWith("/auth/refresh")) return Promise.resolve(json(200, { access_token: "t" }));
+      if (url.endsWith("/auth/me")) return Promise.resolve(json(200, customerMe));
       if (url.endsWith("/payees")) return Promise.resolve(json(200, []));
       if (url.endsWith("/accounts") && init?.method === "POST") {
         if (limitReached) {

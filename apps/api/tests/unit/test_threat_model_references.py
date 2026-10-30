@@ -19,7 +19,7 @@ CODE_ROOTS = [ROOT, _API, _API / "core", _API / "modules"]
 
 _TEST_REF = re.compile(r"`(test_[A-Za-z0-9_]+?)(?:\.py|\.\.\.)?`")
 _TEST_FILE_REF = re.compile(r"`(test_[A-Za-z0-9_]+\.py)`")
-_CODE_REF = re.compile(r"`([A-Za-z0-9_./-]+\.(?:py|ts|tsx))(?::\s*([A-Za-z0-9_.]+))?[^`]*`")
+_CODE_REF = re.compile(r"`([A-Za-z0-9_./-]+\.(?:py|tsx|ts))(?::\s*([A-Za-z0-9_.]+))?[^`]*`")
 
 
 def _text() -> str:
@@ -63,3 +63,11 @@ def test_cited_code_paths_and_symbols_exist() -> None:
         ):
             problems.append(f"{path_text} has no {name}")
     assert not problems, f"threat model cites code that does not exist: {problems}"
+
+
+def test_code_reference_keeps_the_full_tsx_extension() -> None:
+    # Alternation order matters: `ts` before `tsx` captured "x.test.ts" and reported a .tsx
+    # citation as a missing file.
+    match = _CODE_REF.search("`apps/web/src/shell/routing.test.tsx`")
+    assert match is not None
+    assert match.group(1) == "apps/web/src/shell/routing.test.tsx"

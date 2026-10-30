@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { account, json, noContent, renderApp, urlOf } from "../test-utils";
+import { account, customerMe, json, noContent, renderApp, urlOf } from "../test-utils";
 
 const profile = {
   id: "cust-1",
@@ -36,6 +36,7 @@ describe("profile & security", () => {
     fetchMock.mockImplementation((input, init) => {
       const url = urlOf(input);
       if (url.endsWith("/auth/refresh")) return Promise.resolve(json(200, { access_token: "t" }));
+      if (url.endsWith("/auth/me")) return Promise.resolve(json(200, customerMe));
       if (url.endsWith("/auth/logout")) return Promise.resolve(noContent());
       if (url.endsWith("/accounts")) return Promise.resolve(json(200, [account]));
       if (url.endsWith("/payees")) return Promise.resolve(json(200, []));
@@ -70,7 +71,7 @@ describe("profile & security", () => {
   async function openProfile() {
     const user = userEvent.setup();
     renderApp();
-    await user.click(await screen.findByRole("button", { name: "Profile & security" }));
+    await user.click(await screen.findByRole("link", { name: "Profile & security" }));
     return user;
   }
 

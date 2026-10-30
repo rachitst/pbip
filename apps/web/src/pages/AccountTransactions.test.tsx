@@ -1,7 +1,7 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { account, entry, json, renderApp, urlOf } from "../test-utils";
+import { account, customerMe, entry, json, renderApp, urlOf } from "../test-utils";
 
 describe("account transactions (keyset pagination)", () => {
   const fetchMock = vi.fn<typeof fetch>();
@@ -15,6 +15,7 @@ describe("account transactions (keyset pagination)", () => {
       const url = new URL(urlOf(input), "http://localhost");
       if (url.pathname.endsWith("/auth/refresh"))
         return Promise.resolve(json(200, { access_token: "t" }));
+      if (url.pathname.endsWith("/auth/me")) return Promise.resolve(json(200, customerMe));
       if (url.pathname === "/api/v1/accounts") return Promise.resolve(json(200, [account]));
       if (url.pathname === "/api/v1/payees") return Promise.resolve(json(200, []));
       if (url.pathname === "/api/v1/accounts/acc-1/transactions") {
@@ -71,6 +72,7 @@ describe("account transactions (keyset pagination)", () => {
     fetchMock.mockImplementation((input) => {
       const url = urlOf(input);
       if (url.endsWith("/auth/refresh")) return Promise.resolve(json(200, { access_token: "t" }));
+      if (url.endsWith("/auth/me")) return Promise.resolve(json(200, customerMe));
       if (url.endsWith("/accounts")) return Promise.resolve(json(200, [account]));
       if (url.endsWith("/payees")) return Promise.resolve(json(200, []));
       return Promise.resolve(json(200, { items: [], next_cursor: null, has_more: false }));

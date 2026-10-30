@@ -68,3 +68,18 @@ inspection found concrete problems:
 * `light-dark()` is native from Chrome 123 / Firefox 120 / Safari 17.5. The production build does not
   depend on that: Vite's Lightning CSS compiles it to custom-property toggles keyed on the same
   `color-scheme` / `data-theme` rules (checked in the built CSS), so older browsers get both themes.
+
+## Implementation (2026-10-30)
+* PR #200: tokens, primitives, formatting, error mapping.
+* Routing PR: `react-router` 8.4.0 data router (`createBrowserRouter`), created once per signed-in
+  session so no route state outlives a sign-out. `SessionRoot` loads `GET /auth/me`; `CustomerArea`
+  and `StaffArea` choose the layout from its roles (staff-only users are redirected from customer
+  URLs to `/staff`; customers see "not found" for staff URLs). Staff pages show a warning when the
+  session is not MFA-verified, because every staff API will refuse it. Verified against the backend:
+  roles from `RoleName`/`STAFF_ROLES` (`auth/models.py`), `mfa_verified_session` from the token's
+  `amr` (`otp`), and refresh keeps `amr`, so a reloaded staff session stays verified.
+* Accessibility in the shell: skip link, one `main` landmark, focus moves to the page `h1` after
+  navigation, `document.title` per page, `aria-current` on navigation links, Menu button with
+  `aria-expanded`/`aria-controls`, closing on navigation and Esc.
+* Not built here, because no task owns them: registration and MFA-enrolment screens (the APIs
+  exist; TASK-077's first journey assumes them; tracked in #201), and a staff user-administration screen.

@@ -39,7 +39,7 @@ test("customer opens an account, registers a device and rotates their password",
   await expect(page.getByText("No transactions yet.")).toBeVisible();
 
   // TASK-004: profile and device registration.
-  await page.getByRole("button", { name: "Profile & security" }).click();
+  await page.getByRole("link", { name: "Profile & security" }).click();
   await expect(page.getByRole("main").getByText("Erin Endtoend")).toBeVisible();
   await page.getByRole("button", { name: "Register this browser" }).click();
   await expect(page.getByText("This browser is registered.")).toBeVisible();

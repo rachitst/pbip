@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { account, json, noContent, renderApp, urlOf } from "../test-utils";
+import { account, customerMe, json, noContent, renderApp, urlOf } from "../test-utils";
 
 const profileOf = (name: string) => ({
   id: `cust-${name}`,
@@ -25,6 +25,7 @@ describe("signing out", () => {
     fetchMock.mockImplementation((input) => {
       const url = urlOf(input);
       if (url.endsWith("/auth/refresh")) return Promise.resolve(json(200, { access_token: "a" }));
+      if (url.endsWith("/auth/me")) return Promise.resolve(json(200, customerMe));
       if (url.endsWith("/auth/logout")) return Promise.resolve(noContent());
       if (url.endsWith("/auth/login")) return Promise.resolve(json(200, { access_token: "b" }));
       if (url.endsWith("/accounts")) return Promise.resolve(json(200, [account]));
@@ -45,7 +46,7 @@ describe("signing out", () => {
   it("drops the previous customer's cached data before the next person signs in", async () => {
     const user = userEvent.setup();
     renderApp();
-    await user.click(await screen.findByRole("button", { name: "Profile & security" }));
+    await user.click(await screen.findByRole("link", { name: "Profile & security" }));
     expect(await screen.findAllByText("Alice")).not.toHaveLength(0);
 
     await user.click(screen.getByRole("button", { name: "Sign out" }));
@@ -53,7 +54,7 @@ describe("signing out", () => {
     await user.type(await screen.findByLabelText("Email"), "bob@demo.pbip");
     await user.type(screen.getByLabelText("Password"), "Bob-Password-123!"); // pragma: allowlist secret
     await user.click(screen.getByRole("button", { name: "Sign in" }));
-    await user.click(await screen.findByRole("button", { name: "Profile & security" }));
+    await user.click(await screen.findByRole("link", { name: "Profile & security" }));
 
     expect(await screen.findByText("Loading profile...")).toBeInTheDocument();
     expect(screen.queryByText("Alice")).not.toBeInTheDocument();

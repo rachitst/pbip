@@ -669,7 +669,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Wed 29 Oct (merged in #150; acceptance criteria verified in review) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-005 (#16, Sujal), TASK-008 (#19, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Done
-- **Follow-up (2026-10-30, owner Rachit):** shared UI foundations per ADR-0016, in two PRs: (1) design tokens, primitives, shared formatting and error handling; (2) React Router, responsive role-aware shell, customer/staff route separation and accessibility. Existing pages keep their behaviour and tests. TASK-048 and TASK-049 start once both are merged and do not wait for each other or for any staff page.
+- **Follow-up (2026-10-30, owner Rachit):** shared UI foundations per ADR-0016, in two PRs: (1) design tokens, primitives, shared formatting and error handling (#200, merged); (2) React Router, responsive role-aware shell, customer/staff route separation and accessibility. Existing pages keep their behaviour and tests. TASK-048 and TASK-049 start once both are merged and do not wait for each other or for any staff page.
 - **Goal:** React dashboard shell with responsive navigation, account balances, and quick actions.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).

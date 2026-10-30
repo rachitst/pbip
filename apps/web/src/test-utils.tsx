@@ -43,6 +43,16 @@ export const account = {
   available_minor: 1_000_000,
 };
 
+/** GET /auth/me for a customer (UserOut). */
+export const customerMe = {
+  id: "user-1",
+  email: "alice@demo.pbip",
+  roles: ["CUSTOMER"],
+  mfa_enabled: false,
+  mfa_verified_session: false,
+  created_at: "2026-01-15T00:00:00Z",
+};
+
 export const profile = {
   id: "cust-1",
   user_id: "user-1",

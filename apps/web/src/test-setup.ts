@@ -14,3 +14,8 @@ if (typeof HTMLDialogElement !== "undefined" && !("showModal" in HTMLDialogEleme
     },
   });
 }
+
+// The router reads the real URL: start every test at "/" so no test depends on another's path.
+beforeEach(() => {
+  window.history.replaceState(null, "", "/");
+});
