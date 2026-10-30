@@ -615,6 +615,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/recommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Personalized banking product recommendations with explainable reasons
+         * @description Evaluate eligibility and propensity ranking to return top-3 personalized products.
+         */
+        get: operations["get_recommendations_api_v1_recommendations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/transfers": {
         parameters: {
             query?: never;
@@ -1392,6 +1412,58 @@ export interface components {
             name_match: "MATCH" | "NO_MATCH" | "NOT_CHECKED";
             payee: components["schemas"]["PayeeOut"];
         };
+        /**
+         * ProductRecommendationItem
+         * @description A single personalized product recommendation with explainable reasons.
+         */
+        ProductRecommendationItem: {
+            /**
+             * Cta Label
+             * @description Call to action button label
+             */
+            cta_label: string;
+            /**
+             * Cta Path
+             * @description Navigation route or application path
+             */
+            cta_path: string;
+            /**
+             * Description
+             * @description Summary description of the product offer
+             */
+            description: string;
+            /**
+             * Model Version
+             * @description Recommendation model version identifier
+             */
+            model_version: string;
+            /**
+             * Product Id
+             * Format: uuid
+             * @description Unique product catalog identifier
+             */
+            product_id: string;
+            /**
+             * Product Type
+             * @description Product category: SAVINGS, LOAN, INVESTMENT, or INSURANCE
+             */
+            product_type: string;
+            /**
+             * Reasons
+             * @description Human-readable justification reasons
+             */
+            reasons: string[];
+            /**
+             * Score
+             * @description Calibrated propensity score (0.0 to 1.0)
+             */
+            score: number;
+            /**
+             * Title
+             * @description Human-readable product title
+             */
+            title: string;
+        };
         /** ReadyResponse */
         ReadyResponse: {
             /** Checks */
@@ -1403,6 +1475,34 @@ export interface components {
              * @enum {string}
              */
             status: "ok" | "degraded";
+        };
+        /**
+         * RecommendationsResponse
+         * @description Customer personalized product recommendations payload.
+         */
+        RecommendationsResponse: {
+            /**
+             * Customer Id
+             * Format: uuid
+             * @description Target customer identifier
+             */
+            customer_id: string;
+            /**
+             * Evaluated At
+             * Format: date-time
+             * @description UTC timestamp of the recommendation run
+             */
+            evaluated_at: string;
+            /**
+             * Model Version
+             * @description Recommendation engine version
+             */
+            model_version: string;
+            /**
+             * Recommendations
+             * @description Top recommended banking products
+             */
+            recommendations?: components["schemas"]["ProductRecommendationItem"][];
         };
         /** RecoveryCodesOut */
         RecoveryCodesOut: {
@@ -2801,6 +2901,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_recommendations_api_v1_recommendations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendationsResponse"];
                 };
             };
         };
