@@ -62,9 +62,21 @@ Every money-moving or destructive action:
    invent a state the API does not return; never show risk scores or fraud reasons to customers.
 
 ## Navigation and roles
-Implemented by the routing PR (ADR-0016 decision 5). One shell; customer routes under `/`, staff
-routes under `/staff`, chosen from `GET /auth/me` roles. A page appears in navigation only when it
-exists and the user's role can use it. Route guards are a convenience; the API enforces access.
+One shell (`apps/web/src/shell/AppShell.tsx`) for every signed-in page. Routes live in
+`apps/web/src/shell/routes.tsx`:
+
+| Area | Base path | Who | Layout |
+|---|---|---|---|
+| Customer | `/` (home `/accounts`) | users with `CUSTOMER` | customer session bar, customer navigation |
+| Staff | `/staff` | any of `RELATIONSHIP_MANAGER`, `FRAUD_ANALYST`, `COMPLIANCE_OFFICER`, `ADMIN` | staff session bar; MFA warning when the session is not verified |
+
+To add a screen: add a child route under its area in `routes.tsx`, add a `NavItem` to
+`customerNav` or `staffNav` filtered by the roles its API accepts (for example TASK-048: compliance
+officer or admin), and start the page with `<PageHeader>` (it sets the tab title and receives focus
+after navigation). Do not add a layout, a second `<main>`, or a page with no working API behind it.
+
+Route guards only decide what is shown. The API enforces access (`require_roles(..., mfa=True)`,
+`get_current_customer`, policy functions); treat every request as one that may be refused.
 
 ## Accessibility (WCAG 2.2 AA)
 * One `h1` per page (PageHeader); landmarks `header`, `nav`, `main`.

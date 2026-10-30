@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { account, json, profile, renderApp, urlOf } from "./test-utils";
+import { account, customerMe, json, profile, renderApp, urlOf } from "./test-utils";
 
 describe("App shell, session bar, and theme toggle (TASK-019)", () => {
   const fetchMock = vi.fn<typeof fetch>();
@@ -15,6 +15,7 @@ describe("App shell, session bar, and theme toggle (TASK-019)", () => {
     fetchMock.mockImplementation((input) => {
       const url = urlOf(input);
       if (url.endsWith("/auth/refresh")) return Promise.resolve(json(200, { access_token: "t" }));
+      if (url.endsWith("/auth/me")) return Promise.resolve(json(200, customerMe));
       if (url.endsWith("/accounts")) return Promise.resolve(json(200, [account]));
       if (url.endsWith("/payees")) return Promise.resolve(json(200, []));
       if (url.endsWith("/customers/me")) return Promise.resolve(json(200, profile));
@@ -36,14 +37,13 @@ describe("App shell, session bar, and theme toggle (TASK-019)", () => {
     expect(screen.getByLabelText("session status")).toHaveTextContent("Active session");
     expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
 
-    // Verify responsive navigation tabs
+    // Verify responsive navigation ("/" redirects to /accounts, the customer home)
+    expect(await screen.findByRole("heading", { name: "My accounts" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/accounts");
     const nav = screen.getByRole("navigation", { name: "Main" });
     expect(nav).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Accounts" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
-    expect(screen.getByRole("button", { name: "Profile & security" })).not.toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Accounts" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Profile & security" })).not.toHaveAttribute(
       "aria-current",
     );
   });
@@ -99,11 +99,11 @@ describe("App shell, session bar, and theme toggle (TASK-019)", () => {
     expect(await screen.findByRole("heading", { name: "My accounts" })).toBeInTheDocument();
 
     // Switch to Profile
-    await user.click(screen.getByRole("button", { name: "Profile & security" }));
+    await user.click(screen.getByRole("link", { name: "Profile & security" }));
     expect(await screen.findByRole("heading", { name: "Profile & security" })).toBeInTheDocument();
 
     // Switch back to Accounts
-    await user.click(screen.getByRole("button", { name: "Accounts" }));
+    await user.click(screen.getByRole("link", { name: "Accounts" }));
     expect(await screen.findByRole("heading", { name: "My accounts" })).toBeInTheDocument();
   });
 
@@ -111,6 +111,7 @@ describe("App shell, session bar, and theme toggle (TASK-019)", () => {
     fetchMock.mockImplementation((input) => {
       const url = urlOf(input);
       if (url.endsWith("/auth/refresh")) return Promise.resolve(json(200, { access_token: "t" }));
+      if (url.endsWith("/auth/me")) return Promise.resolve(json(200, customerMe));
       if (url.endsWith("/accounts")) return Promise.resolve(json(200, [account]));
       if (url.endsWith("/payees")) return Promise.resolve(json(200, []));
       if (url.endsWith("/customers/me"))

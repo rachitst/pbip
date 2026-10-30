@@ -10,6 +10,7 @@ import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
 import { MoneyInput } from "../ui/MoneyInput";
+import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 import { AccountTransactions } from "./AccountTransactions";
 
@@ -25,8 +26,8 @@ export function Accounts() {
   const [openedId, setOpenedId] = useState<string | null>(null);
 
   return (
-    <main>
-      <h1>My accounts</h1>
+    <div className="page">
+      <PageHeader title="My accounts" />
       {accounts.isPending && <LoadingState label="Loading accounts..." />}
       {accounts.isError && (
         <ErrorState
@@ -56,7 +57,7 @@ export function Accounts() {
           payees={(payees.data ?? []).filter((p) => p.status === "VERIFIED")}
         />
       )}
-    </main>
+    </div>
   );
 }
 

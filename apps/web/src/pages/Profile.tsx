@@ -9,18 +9,19 @@ import { formatDate } from "../lib/format";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
+import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 
 const MIN_PASSWORD_LENGTH = 12; // mirrors the server policy; the server remains the authority
 
 export function Profile() {
   return (
-    <main>
-      <h1>Profile &amp; security</h1>
+    <div className="page">
+      <PageHeader title="Profile & security" />
       <ProfileDetails />
       <Devices />
       <ChangePassword />
-    </main>
+    </div>
   );
 }
 

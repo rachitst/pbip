@@ -5,6 +5,7 @@ import { errorMessage } from "../lib/errors";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
+import { PageHeader } from "../ui/PageHeader";
 
 export function Login() {
   const { login, verifyMfa, mfaToken, notice } = useAuth();
@@ -30,7 +31,7 @@ export function Login() {
 
   return (
     <main className="card narrow">
-      <h1>Sign in</h1>
+      <PageHeader title="Sign in" />
       {notice && <Alert tone="success">{notice}</Alert>}
       <form onSubmit={(event) => void submit(event)}>
         {mfaToken ? (
