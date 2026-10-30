@@ -1,11 +1,16 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import type { EntriesPage } from "../api/client";
+import { formatDateTime } from "../lib/format";
 import { formatMinor } from "../lib/money";
+import { transactionStatus } from "../lib/status";
+import { Amount } from "../ui/Amount";
+import { Alert } from "../ui/Alert";
+import { Button } from "../ui/Button";
+import { EmptyState, ErrorState, LoadingState } from "../ui/States";
+import { StatusBadge } from "../ui/StatusBadge";
 
 const PAGE_SIZE = 10;
-
-const dateFormat = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" });
 
 interface Props {
   accountId: string;
@@ -22,17 +27,20 @@ export function AccountTransactions({ accountId, currency }: Props) {
     getNextPageParam: (last: EntriesPage) => (last.has_more ? last.next_cursor : null),
   });
 
-  if (entries.isPending) return <p className="muted">Loading transactions...</p>;
+  if (entries.isPending) return <LoadingState label="Loading transactions..." />;
   // Only a failed FIRST page replaces the list; a failed "Load older" keeps the rows on screen.
   if (entries.isLoadingError) {
     return (
-      <p role="alert" className="error">
-        Could not load transactions.
-      </p>
+      <ErrorState
+        message="Could not load transactions."
+        onRetry={() => {
+          void entries.refetch();
+        }}
+      />
     );
   }
   const items = entries.data.pages.flatMap((page) => page.items);
-  if (items.length === 0) return <p className="muted">No transactions yet.</p>;
+  if (items.length === 0) return <EmptyState message="No transactions yet." />;
 
   return (
     <div className="entries">
@@ -53,17 +61,21 @@ export function AccountTransactions({ accountId, currency }: Props) {
         <tbody>
           {items.map((entry) => (
             <tr key={entry.entry_seq}>
-              <td>{dateFormat.format(new Date(entry.created_at))}</td>
+              <td>{formatDateTime(entry.created_at)}</td>
               <td>
                 {entry.reference ?? entry.transaction_type}
                 {entry.transaction_status !== "POSTED" && (
-                  <span className="muted"> ({entry.transaction_status})</span>
+                  <>
+                    {" "}
+                    <StatusBadge status={transactionStatus(entry.transaction_status)} />
+                  </>
                 )}
               </td>
-              <td className={entry.direction === "CREDIT" ? "right ok" : "right"}>
-                {formatMinor(
-                  entry.direction === "CREDIT" ? entry.amount_minor : -entry.amount_minor,
-                  currency,
+              <td className="right">
+                {entry.direction === "CREDIT" ? (
+                  <Amount minor={entry.amount_minor} currency={currency} credit />
+                ) : (
+                  <Amount minor={-entry.amount_minor} currency={currency} />
                 )}
               </td>
               <td className="right">{formatMinor(entry.balance_after_minor, currency)}</td>
@@ -72,21 +84,18 @@ export function AccountTransactions({ accountId, currency }: Props) {
         </tbody>
       </table>
       {entries.hasNextPage && (
-        <button
-          type="button"
-          className="secondary"
-          disabled={entries.isFetchingNextPage}
+        <Button
+          variant="secondary"
+          loading={entries.isFetchingNextPage}
           onClick={() => {
             void entries.fetchNextPage();
           }}
         >
           {entries.isFetchingNextPage ? "Loading..." : "Load older"}
-        </button>
+        </Button>
       )}
       {entries.isFetchNextPageError && (
-        <p role="alert" className="error">
-          Could not load older transactions.
-        </p>
+        <Alert tone="error">Could not load older transactions.</Alert>
       )}
     </div>
   );

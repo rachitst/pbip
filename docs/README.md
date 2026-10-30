@@ -19,6 +19,7 @@
 | User manual | `docs/user-manual.md` | Team / Shared | S7 | Todo |
 | Test strategy + report | blueprint section 12 -> `docs/test-report.md` | Quality / Testing | S6 | Strategy done |
 | Architecture decision records | `docs/adr/` | Team / Shared | as decided | 10 accepted |
+| Web UI guidelines and design system | `docs/design/ui-guidelines.md` (ADR-0016) | Frontend | before new screens | v1 |
 | Team execution plan (owners, dates, handoffs) | `docs/TEAM_EXECUTION_PLAN.md` | Team / Shared | Oct 25 - Nov 3 2026 | v2 (Oct 25, hard Nov 3 deadline) |
 
 Rule: a PR that changes behaviour updates the relevant doc in the same PR. Docs are never a week-14 activity.

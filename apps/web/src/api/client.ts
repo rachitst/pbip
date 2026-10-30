@@ -16,6 +16,8 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    /** Server request id from the problem body, for support; never contains customer data. */
+    readonly requestId: string | null = null,
   ) {
     super(message);
   }
@@ -36,6 +38,7 @@ export function setSessionLostHandler(handler: (() => void) | null): void {
 interface Problem {
   code?: string;
   title?: string;
+  request_id?: string | null;
 }
 
 async function toError(response: Response): Promise<ApiError> {
@@ -44,7 +47,12 @@ async function toError(response: Response): Promise<ApiError> {
     response.status,
     problem.code ?? "error",
     problem.title ?? response.statusText,
+    problem.request_id ?? null,
   );
+}
+
+function isProblem(response: Response): boolean {
+  return (response.headers.get("Content-Type") ?? "").includes("application/problem+json");
 }
 
 async function refreshSession(): Promise<boolean> {
@@ -70,9 +78,12 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}, retry = 
     accessToken = null;
     onSessionLost?.();
   }
-  // Transfer bodies for 202 (pending) and 403 (declined) carry state the UI must show.
+  // Transfer bodies for 202 (pending) and 403 (declined) carry state the UI must show. They are
+  // plain JSON; a problem+json 403 (e.g. a non-customer token) is an error, not a transfer.
   const isTransferState =
-    path.startsWith("/api/v1/transfers") && (response.status === 202 || response.status === 403);
+    path.startsWith("/api/v1/transfers") &&
+    (response.status === 202 || response.status === 403) &&
+    !isProblem(response);
   if (!response.ok && !isTransferState) throw await toError(response);
   return (response.status === 204 ? undefined : await response.json()) as T;
 }

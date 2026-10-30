@@ -660,7 +660,7 @@ acceptance_criteria = [
     "Action buttons: RELEASE (captures hold, posts transfer) and REJECT (cancels transfer, releases hold)",
     "Strict role-based rendering ensuring customer accounts cannot view staff routes",
 ]
-dependencies = ["TASK-033", "TASK-035"]
+dependencies = ["TASK-019", "TASK-033", "TASK-035"]
 definition_of_done = "Vitest tests mock analyst actions, optimistic update and error states handled."
 
 [[tasks]]
@@ -1777,7 +1777,7 @@ acceptance_criteria = [
     "Customer selects two to four products and sees yield, tenure, lock-in, risk level and minimum amount side by side",
     "Handles loading, error and empty states; values formatted from minor units",
 ]
-dependencies = ["TASK-063", "TASK-096"]
+dependencies = ["TASK-019", "TASK-063", "TASK-096"]
 definition_of_done = "Vitest component tests for selection and rendering; accessible and responsive."
 
 [[tasks]]
@@ -1794,7 +1794,7 @@ acceptance_criteria = [
     "Dashboard page renders each panel with counts and drill-down links to the alert queue",
     "No customer PII beyond what the analyst role already sees; metrics labelled by route templates only",
 ]
-dependencies = ["TASK-035", "TASK-036"]
+dependencies = ["TASK-019", "TASK-035", "TASK-036"]
 definition_of_done = "API RBAC and MFA tests, component tests for each panel, Playwright check of the staff route."
 
 [[tasks]]
@@ -1828,7 +1828,7 @@ acceptance_criteria = [
     "Engagement metrics come from clickstream events; product affinity from holdings and recommendation interactions",
     "Dashboard page with filters by segment and period; no per-customer drill-down without the RM role",
 ]
-dependencies = ["TASK-044", "TASK-054", "TASK-055"]
+dependencies = ["TASK-019", "TASK-044", "TASK-054", "TASK-055"]
 definition_of_done = "Aggregation tests with known inputs, RBAC tests, component tests."
 
 [[tasks]]
