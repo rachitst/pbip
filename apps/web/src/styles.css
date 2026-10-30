@@ -350,7 +350,7 @@ td.right {
 }
 .details {
   display: grid;
-  grid-template-columns: max-content 1fr;
+  grid-template-columns: max-content minmax(0, 1fr);
   gap: var(--space-2) var(--space-5);
   margin: 0;
 }
@@ -359,6 +359,7 @@ td.right {
 }
 .details dd {
   margin: 0;
+  overflow-wrap: anywhere; /* long emails and references wrap instead of widening the page */
 }
 .details__row {
   display: contents;
