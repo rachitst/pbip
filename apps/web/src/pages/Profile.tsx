@@ -4,10 +4,14 @@ import type { SyntheticEvent } from "react";
 import { ApiError, api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { describeBrowser, getDeviceId } from "../lib/device";
+import { errorMessage } from "../lib/errors";
+import { formatDate } from "../lib/format";
+import { Alert } from "../ui/Alert";
+import { Button } from "../ui/Button";
+import { Field } from "../ui/Field";
+import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 
 const MIN_PASSWORD_LENGTH = 12; // mirrors the server policy; the server remains the authority
-
-const dateFormat = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" });
 
 export function Profile() {
   return (
@@ -22,12 +26,15 @@ export function Profile() {
 
 function ProfileDetails() {
   const profile = useQuery({ queryKey: ["profile"], queryFn: api.profile });
-  if (profile.isPending) return <p>Loading profile...</p>;
+  if (profile.isPending) return <LoadingState label="Loading profile..." />;
   if (profile.isError) {
     return (
-      <p role="alert" className="error">
-        Could not load your profile.
-      </p>
+      <ErrorState
+        message="Could not load your profile."
+        onRetry={() => {
+          void profile.refetch();
+        }}
+      />
     );
   }
   const p = profile.data;
@@ -44,7 +51,7 @@ function ProfileDetails() {
         <dt>KYC status</dt>
         <dd>{p.kyc_status}</dd>
         <dt>Customer since</dt>
-        <dd>{dateFormat.format(new Date(p.created_at))}</dd>
+        <dd>{formatDate(p.created_at)}</dd>
       </dl>
     </section>
   );
@@ -65,21 +72,24 @@ function Devices() {
         Devices you sign in from. New devices are untrusted until they build history; this helps us
         spot sign-ins that are not you.
       </p>
-      {devices.isPending && <p>Loading devices...</p>}
+      {devices.isPending && <LoadingState label="Loading devices..." />}
       {devices.isError && (
-        <p role="alert" className="error">
-          Could not load your devices.
-        </p>
+        <ErrorState
+          message="Could not load your devices."
+          onRetry={() => {
+            void devices.refetch();
+          }}
+        />
       )}
-      {devices.data?.length === 0 && <p className="muted">No devices registered yet.</p>}
+      {devices.data?.length === 0 && <EmptyState message="No devices registered yet." />}
       <ul className="list">
         {devices.data?.map((device) => (
           <li key={device.id} className="row">
             <div>
               <strong>{device.label ?? "Unnamed device"}</strong>
               <div className="muted">
-                First seen {dateFormat.format(new Date(device.first_seen_at))} - last seen{" "}
-                {dateFormat.format(new Date(device.last_seen_at))}
+                First seen {formatDate(device.first_seen_at)} - last seen{" "}
+                {formatDate(device.last_seen_at)}
               </div>
             </div>
             <span className={device.trusted ? "ok" : "muted"}>
@@ -88,36 +98,31 @@ function Devices() {
           </li>
         ))}
       </ul>
-      <button
-        type="button"
-        className="secondary"
-        disabled={register.isPending}
+      <Button
+        variant="secondary"
+        loading={register.isPending}
         onClick={() => {
           register.mutate();
         }}
       >
         {register.isPending ? "Registering..." : "Register this browser"}
-      </button>
-      {register.isSuccess && (
-        <p role="status" className="ok">
-          This browser is registered.
-        </p>
-      )}
+      </Button>
+      {register.isSuccess && <Alert tone="success">This browser is registered.</Alert>}
       {register.isError && (
-        <p role="alert" className="error">
-          Could not register this browser.
-        </p>
+        <Alert tone="error">
+          {errorMessage(register.error, "Could not register this browser.")}
+        </Alert>
       )}
     </section>
   );
 }
 
 function passwordError(error: unknown): string {
-  if (!(error instanceof ApiError)) return "Could not change your password. Try again.";
-  if (error.code === "invalid_current_password") return "Your current password is incorrect.";
-  if (error.status === 423) return "Too many failed attempts. Your account is temporarily locked.";
-  if (error.status === 429) return "Too many requests. Wait a minute and try again.";
-  return error.message; // policy messages (length, common/breached password) are safe to show
+  if (error instanceof ApiError && error.code === "invalid_current_password") {
+    return "Your current password is incorrect.";
+  }
+  // Policy messages (length, common/breached password) are server-written and safe to show.
+  return errorMessage(error, "Could not change your password. Try again.");
 }
 
 function ChangePassword() {
@@ -159,51 +164,53 @@ function ChangePassword() {
       <h2>Change password</h2>
       <p className="muted">Changing your password signs you out on every device.</p>
       <form onSubmit={submit}>
-        <label>
-          Current password
-          <input
-            type="password"
-            value={current}
-            onChange={(event) => {
-              setCurrent(event.target.value);
-            }}
-            autoComplete="current-password"
-            required
-          />
-        </label>
-        <label>
-          New password
-          <input
-            type="password"
-            value={next}
-            onChange={(event) => {
-              setNext(event.target.value);
-            }}
-            autoComplete="new-password"
-            minLength={MIN_PASSWORD_LENGTH}
-            required
-          />
-        </label>
-        <label>
-          Confirm new password
-          <input
-            type="password"
-            value={confirm}
-            onChange={(event) => {
-              setConfirm(event.target.value);
-            }}
-            autoComplete="new-password"
-            required
-          />
-        </label>
-        {message && (
-          <p role="alert" className="error">
-            {message}
-          </p>
-        )}
-        <button type="submit" disabled={change.isPending}>
+        <Field label="Current password">
+          {(control) => (
+            <input
+              {...control}
+              type="password"
+              value={current}
+              onChange={(event) => {
+                setCurrent(event.target.value);
+              }}
+              autoComplete="current-password"
+              required
+            />
+          )}
+        </Field>
+        <Field label="New password">
+          {(control) => (
+            <input
+              {...control}
+              type="password"
+              value={next}
+              onChange={(event) => {
+                setNext(event.target.value);
+              }}
+              autoComplete="new-password"
+              minLength={MIN_PASSWORD_LENGTH}
+              required
+            />
+          )}
+        </Field>
+        <Field label="Confirm new password">
+          {(control) => (
+            <input
+              {...control}
+              type="password"
+              value={confirm}
+              onChange={(event) => {
+                setConfirm(event.target.value);
+              }}
+              autoComplete="new-password"
+              required
+            />
+          )}
+        </Field>
+        {message && <Alert tone="error">{message}</Alert>}
+        <Button type="submit" loading={change.isPending}>
           {change.isPending ? "Changing..." : "Change password"}
-        </button>
+        </Button>
       </form>
     </section>
   );

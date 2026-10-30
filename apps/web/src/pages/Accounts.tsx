@@ -1,9 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import type { SyntheticEvent } from "react";
-import { ApiError, api } from "../api/client";
+import { api } from "../api/client";
 import type { AccountOut, OpenAccountType, TransferOut } from "../api/client";
+import { errorMessage } from "../lib/errors";
 import { formatMinor, parseToMinor } from "../lib/money";
+import { transferStatus } from "../lib/status";
+import { Alert } from "../ui/Alert";
+import { Button } from "../ui/Button";
+import { Field } from "../ui/Field";
+import { MoneyInput } from "../ui/MoneyInput";
+import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 import { AccountTransactions } from "./AccountTransactions";
 
 const ACCOUNT_LABELS: Record<string, string> = {
@@ -20,9 +27,16 @@ export function Accounts() {
   return (
     <main>
       <h1>My accounts</h1>
-      {accounts.isPending && <p>Loading accounts...</p>}
-      {accounts.isError && <p role="alert">Could not load accounts.</p>}
-      {accounts.data?.length === 0 && <p className="muted">You have no accounts yet.</p>}
+      {accounts.isPending && <LoadingState label="Loading accounts..." />}
+      {accounts.isError && (
+        <ErrorState
+          message="Could not load accounts."
+          onRetry={() => {
+            void accounts.refetch();
+          }}
+        />
+      )}
+      {accounts.data?.length === 0 && <EmptyState message="You have no accounts yet." />}
       <ul className="list">
         {accounts.data?.map((account) => (
           <AccountRow
@@ -73,15 +87,14 @@ function AccountRow({ account, expanded, onToggle }: AccountRowProps) {
               {formatMinor(account.held_minor, account.currency)} on hold
             </div>
           </div>
-          <button
-            type="button"
-            className="link"
+          <Button
+            variant="link"
             aria-expanded={expanded}
             aria-controls={panelId}
             onClick={onToggle}
           >
             {expanded ? "Hide transactions" : "Transactions"}
-          </button>
+          </Button>
         </div>
       </div>
       {expanded && (
@@ -111,31 +124,29 @@ function OpenAccount() {
           open.mutate(accountType);
         }}
       >
-        <label>
-          Account type
-          <select
-            value={accountType}
-            onChange={(event) => {
-              setAccountType(event.target.value === "CHECKING" ? "CHECKING" : "SAVINGS");
-            }}
-          >
-            <option value="SAVINGS">Savings</option>
-            <option value="CHECKING">Current (checking)</option>
-          </select>
-        </label>
-        <button type="submit" disabled={open.isPending}>
+        <Field label="Account type">
+          {(control) => (
+            <select
+              {...control}
+              value={accountType}
+              onChange={(event) => {
+                setAccountType(event.target.value === "CHECKING" ? "CHECKING" : "SAVINGS");
+              }}
+            >
+              <option value="SAVINGS">Savings</option>
+              <option value="CHECKING">Current (checking)</option>
+            </select>
+          )}
+        </Field>
+        <Button type="submit" loading={open.isPending}>
           {open.isPending ? "Opening..." : "Open account"}
-        </button>
+        </Button>
       </form>
       {open.isSuccess && (
-        <p role="status" className="ok">
-          Account {open.data.account_number_masked} opened.
-        </p>
+        <Alert tone="success">Account {open.data.account_number_masked} opened.</Alert>
       )}
       {open.isError && (
-        <p role="alert" className="error">
-          {open.error instanceof ApiError ? open.error.message : "Could not open the account."}
-        </p>
+        <Alert tone="error">{errorMessage(open.error, "Could not open the account.")}</Alert>
       )}
     </section>
   );
@@ -152,6 +163,7 @@ function SendMoney({ fromAccountId, payees }: SendMoneyProps) {
   const [amount, setAmount] = useState("");
   const [result, setResult] = useState<TransferOut | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
   // ONE key per user intent. If the request times out and the user presses the button again,
   // the SAME key is reused, so a retry can never create a duplicate transfer.
   const [intentKey, setIntentKey] = useState(() => crypto.randomUUID());
@@ -164,6 +176,7 @@ function SendMoney({ fromAccountId, payees }: SendMoneyProps) {
       setError("Choose a payee and enter a valid amount (up to 2 decimals).");
       return;
     }
+    setSending(true);
     try {
       const transfer = await api.transfer(
         { from_account_id: fromAccountId, payee_id: payeeId, amount_minor: minor },
@@ -174,7 +187,9 @@ function SendMoney({ fromAccountId, payees }: SendMoneyProps) {
       await queryClient.invalidateQueries({ queryKey: ["accounts"] });
       await queryClient.invalidateQueries({ queryKey: ["entries"] });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Transfer failed.");
+      setError(errorMessage(caught, "The transfer could not be sent. Try again."));
+    } finally {
+      setSending(false);
     }
   }
 
@@ -182,44 +197,38 @@ function SendMoney({ fromAccountId, payees }: SendMoneyProps) {
     <section>
       <h2>Send money</h2>
       <form onSubmit={(event) => void submit(event)}>
-        <label>
-          Payee
-          <select
-            value={payeeId}
-            onChange={(event) => {
-              setPayeeId(event.target.value);
-            }}
-          >
-            <option value="">Select a verified payee</option>
-            {payees.map((payee) => (
-              <option key={payee.id} value={payee.id}>
-                {payee.name} ({payee.account_number_masked})
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Amount (INR)
-          <input
-            value={amount}
-            onChange={(event) => {
-              setAmount(event.target.value);
-            }}
-            inputMode="decimal"
-            placeholder="0.00"
-          />
-        </label>
-        {error && (
-          <p role="alert" className="error">
-            {error}
-          </p>
-        )}
-        <button type="submit">Send</button>
+        <Field label="Payee">
+          {(control) => (
+            <select
+              {...control}
+              value={payeeId}
+              onChange={(event) => {
+                setPayeeId(event.target.value);
+              }}
+            >
+              <option value="">Select a verified payee</option>
+              {payees.map((payee) => (
+                <option key={payee.id} value={payee.id}>
+                  {payee.name} ({payee.account_number_masked})
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+        <Field label="Amount (INR)">
+          {(control) => (
+            <MoneyInput {...control} value={amount} onValueChange={setAmount} currency="INR" />
+          )}
+        </Field>
+        {error && <Alert tone="error">{error}</Alert>}
+        <Button type="submit" loading={sending}>
+          Send
+        </Button>
       </form>
       {result && (
-        <p role="status" className={result.status === "POSTED" ? "ok" : "warn"}>
+        <Alert tone={transferStatus(result.status).tone === "success" ? "success" : "warning"}>
           {result.message} ({formatMinor(result.amount_minor, result.currency)})
-        </p>
+        </Alert>
       )}
     </section>
   );

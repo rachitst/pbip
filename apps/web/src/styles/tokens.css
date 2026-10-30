@@ -1,0 +1,66 @@
+/* Design tokens (ADR-0016). Every colour is defined ONCE with light-dark(): the browser picks the
+ * value from `color-scheme`, which follows the OS until ThemeProvider sets data-theme. Contrast
+ * was checked for both themes: text tokens >= 4.5:1 on bg, surface and sunken; borders and
+ * chart colours >= 3:1 on surface. Change a value only after re-checking contrast. */
+:root {
+  color-scheme: light dark;
+
+  --bg: light-dark(#f4f6f8, #0e151b);
+  --surface: light-dark(#ffffff, #16212b);
+  --surface-sunken: light-dark(#eef1f4, #111a22);
+  --text: light-dark(#14202b, #e8eef3);
+  --muted: light-dark(#5b6b7a, #9bacbb);
+  --border: light-dark(#d5dde5, #2a3947);
+  --border-strong: light-dark(#8595a5, #5d7082);
+  --brand: light-dark(#00395d, #5cb3ff);
+  --brand-hover: light-dark(#002a45, #84c6ff);
+  --brand-contrast: light-dark(#ffffff, #06131d);
+  --ok: light-dark(#0a7a43, #4cd18b);
+  --warn: light-dark(#8a5a00, #f0c04d);
+  --danger: light-dark(#b3261e, #ff8a80);
+  --info: light-dark(#0b5cad, #7cb8ff);
+
+  /* Categorical chart palette, in this order. Never encode meaning by colour alone. */
+  --chart-1: light-dark(#1f6fb2, #5cb3ff);
+  --chart-2: light-dark(#12857a, #3cc8b4);
+  --chart-3: light-dark(#b26b00, #e0a63a);
+  --chart-4: light-dark(#6b4fbb, #a48bf0);
+  --chart-5: light-dark(#c2416b, #f07a9f);
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --leading: 1.5;
+  --weight-medium: 500;
+  --weight-strong: 600;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 8px;
+  --shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.18);
+  --duration: 150ms;
+  --control-height: 2.5rem;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration: 0ms;
+  }
+}

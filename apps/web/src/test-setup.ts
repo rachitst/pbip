@@ -1,1 +1,16 @@
 import "@testing-library/jest-dom/vitest";
+
+// jsdom has no HTMLDialogElement.showModal/close. This shim only toggles `open` so components that
+// use <dialog> can be rendered; the focus trap, inert background and Esc handling are browser
+// behaviour that unit tests do not prove.
+if (typeof HTMLDialogElement !== "undefined" && !("showModal" in HTMLDialogElement.prototype)) {
+  Object.assign(HTMLDialogElement.prototype, {
+    showModal(this: HTMLDialogElement) {
+      this.setAttribute("open", "");
+    },
+    close(this: HTMLDialogElement) {
+      this.removeAttribute("open");
+      this.dispatchEvent(new Event("close"));
+    },
+  });
+}

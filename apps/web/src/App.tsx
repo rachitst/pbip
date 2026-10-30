@@ -13,6 +13,8 @@ import { useAuth } from "./auth/AuthContext";
 import { Accounts } from "./pages/Accounts";
 import { Login } from "./pages/Login";
 import { Profile } from "./pages/Profile";
+import { Button } from "./ui/Button";
+import { Icon } from "./ui/Icon";
 
 export type Theme = "light" | "dark";
 const THEME_STORAGE_KEY = "pbip-theme";
@@ -76,14 +78,15 @@ export function useTheme(): ThemeContextValue {
 export function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
   return (
-    <button
-      type="button"
-      className="theme-toggle"
+    <Button
+      variant="ghost"
+      size="sm"
       aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
       onClick={toggleTheme}
     >
-      {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
-    </button>
+      <Icon name={theme === "dark" ? "sun" : "moon"} />
+      {theme === "dark" ? "Light" : "Dark"}
+    </Button>
   );
 }
 
@@ -103,7 +106,7 @@ export function CustomerSessionBar() {
         {profile.data && (
           <div className="session-details" aria-label="Authenticated customer">
             <span className="session-greeting">Customer: </span>
-            <span className="session-name font-semibold" aria-label="Customer name">
+            <span className="session-name" aria-label="Customer name">
               {profile.data.full_name}
             </span>
             {profile.data.email && (
@@ -117,15 +120,15 @@ export function CustomerSessionBar() {
       </div>
       <div className="session-actions">
         <ThemeToggle />
-        <button
-          type="button"
-          className="secondary btn-signout"
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => {
             void logout();
           }}
         >
           Sign out
-        </button>
+        </Button>
       </div>
     </aside>
   );
@@ -148,7 +151,12 @@ export function App() {
 
 function AuthenticatedOrLogin() {
   const { status } = useAuth();
-  if (status === "loading") return <p className="center">Loading...</p>;
+  if (status === "loading")
+    return (
+      <p className="center" role="status">
+        Loading...
+      </p>
+    );
   return status === "authenticated" ? <Shell /> : <Login />;
 }
 
