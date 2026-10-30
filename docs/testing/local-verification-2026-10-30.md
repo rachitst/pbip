@@ -123,3 +123,6 @@ Same limits as before: small dataset, no concurrency, one laptop.
 * GeoIP inside the running stack: the development compose does not mount a database file, so the
   NEW_COUNTRY rule was exercised by the integration test and the real-file unit test only.
 * The beat schedule firing at 02:00 / Sunday 03:00 UTC.
+
+Both are tracked in #198, along with the first real staging deployment. Concurrent load is tracked in
+TASK-078 (#101).

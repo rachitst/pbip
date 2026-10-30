@@ -61,7 +61,7 @@ Last reviewed against `main` on 2026-10-30 (local verification run recorded in
 | Role-based access control | Verified | `require_roles`, `test_rbac_bola.py` | | |
 | Audit logs | Verified | hash-chained `audit_logs`, `test_audit_and_outbox.py` | 048 #71 (UI) | |
 | OWASP Top 10 | Partial | threat model mapping, Bandit, CodeQL, nightly fuzzing (run 40948518916: 940 cases, 0 5xx) | 028 (Done), 070 (Done), 090 #113 | No DAST against a deployed environment |
-| Page load < 2 s, API < 500 ms, login < 3 s | Partial | Analytics endpoints measured locally with `scripts/measure_analytics_latency.py`: p95 12-19 ms, 300 requests each ([local verification](../testing/local-verification-2026-10-30.md)); `infra/k6/baseline.js` (TASK-012) | 078 #101, **102 #185 (new)** | Page load and login never measured; other routes and load not measured |
+| Page load < 2 s, API < 500 ms, login < 3 s | Partial | Analytics endpoints measured locally with `scripts/measure_analytics_latency.py`: p95 12-19 ms, 300 requests each ([local verification](../testing/local-verification-2026-10-30.md)); `infra/k6/baseline.js` (TASK-012) | 078 #101, **102 #185 (new)** | Page load and login never measured; other routes not measured; nothing measured under concurrency (078 #101) |
 | 99% availability in test environment | Unverified | | **103 #186 (new)** | No environment deployed; no task existed |
 | Horizontal scaling, stateless APIs, containers | Partial | Docker images, compose files, JWT access tokens | 082 (Done), 079 #102 | Multi-replica deployment never exercised |
 | Centralised logging, error tracking, health, metrics | Unverified | `infra/{loki,alloy,prometheus,grafana}`, `/api/health/*` | 069 #92, 085 #108, **103 #186 (new)** | Error tracking had no task; nothing deployed |
@@ -78,13 +78,13 @@ Last reviewed against `main` on 2026-10-30 (local verification run recorded in
 | Automated tests, >= 70% coverage | Verified (backend) | 087 #110 | Backend 96% in CI and 95.99% in a local run against PostgreSQL ([local verification](../testing/local-verification-2026-10-30.md)); frontend threshold not traced here |
 | UI testing of critical journeys | Partial | 077 #100 | Transfers, payees, statements lack E2E |
 | CI: build, test, quality scan, security scan | Verified | | |
-| CI: package, deploy, smoke test | Unverified | 082 (Done) | Deploy gated off; never run against a host |
-| Deployment scripts, monitoring configuration | Unverified | 082 (Done), 069 #92 | Not deployed |
+| CI: package, deploy, smoke test | Unverified | 082 (Done), #198 | Deploy gated off; never run against a host (no staging host exists; first deployment tracked in #198) |
+| Deployment scripts, monitoring configuration | Unverified | 082 (Done), 069 #92, #198 | Not deployed |
 | Requirements specification, user stories | Missing | **104 #187 (new)** | No task existed |
 | HLD, LLD, ER diagram | Missing | 053 #76, 027 #50, **106 #189 (new)** | ER diagram had no explicit task |
 | Deployment guide, support guide | Verified | 013, 075 (Done) | |
 | User manual | Missing | 092 #115 | |
-| Peer reviews | Partial | | Ruleset requires 0 approvals; five tasks await independent review |
+| Peer reviews | Partial | | Ruleset requires 0 approvals; by product-owner decision (2026-10-30) completed tasks are not reopened only because a fix lacks an independent review |
 
 ## Scope conflicts (decisions needed, not guessed)
 
