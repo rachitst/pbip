@@ -71,7 +71,7 @@ inspection found concrete problems:
 
 ## Implementation (2026-10-30)
 * PR #200: tokens, primitives, formatting, error mapping.
-* Routing PR: `react-router` 8.4.0 data router (`createBrowserRouter`), created once per signed-in
+* PR #202: `react-router` 8.4.0 data router (`createBrowserRouter`), created once per signed-in
   session so no route state outlives a sign-out. `SessionRoot` loads `GET /auth/me`; `CustomerArea`
   and `StaffArea` choose the layout from its roles (staff-only users are redirected from customer
   URLs to `/staff`; customers see "not found" for staff URLs). Staff pages show a warning when the
