@@ -2569,7 +2569,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #108 | **Sprint:** 6 | **Priority:** could | **Size:** S (0.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (8.7 days of slack)
+- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (PR in progress; ADR committed as `docs/adr/0017-opentelemetry.md` because 0009 is the synthetic-dataset-schema ADR) | **Status:** In Progress | **Risk:** Low (8.7 days of slack)
 - **Depends on:** none
 - **Mode:** Parallel: can start immediately
 - **Goal:** Spike evaluation integrating OpenTelemetry span tracking across FastAPI and database calls.
@@ -2578,12 +2578,12 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   2. Write failing tests from the acceptance criteria below.
   3. Implement and make the tests pass for: Injects trace_id and span_id into structlog logging context
   4. Implement and make the tests pass for: Evaluates overhead on request latency (< 5ms)
-  5. Implement and make the tests pass for: Documents tracing architecture in docs/adr/0009-opentelemetry.md
+  5. Implement and make the tests pass for: Documents tracing architecture in docs/adr/0017-opentelemetry.md (catalogued as 0009 in backlog)
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #108`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Injects trace_id and span_id into structlog logging context
-  - [ ] Evaluates overhead on request latency (< 5ms)
-  - [ ] Documents tracing architecture in docs/adr/0009-opentelemetry.md
+  - [x] Injects trace_id and span_id into structlog logging context
+  - [x] Evaluates overhead on request latency (< 5ms)
+  - [x] Documents tracing architecture in docs/adr/0017-opentelemetry.md (sequenced as ADR 0017 to avoid clash with ADR 0009)
 - **Definition of done (evidence):** ADR committed, sample trace verified in test output.
 - **Required checks:**
   - Automated: CI job or `scripts/dev.py` command exercised in tests; works from a fresh clone

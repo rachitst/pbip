@@ -4,6 +4,7 @@ Nothing sensitive may ever reach a log line (AGENTS.md section 6). Redaction run
 last structlog processor so it also covers values interpolated by other processors.
 """
 
+import contextlib
 import logging
 import re
 import sys
@@ -74,6 +75,21 @@ def redact(value: Any, key: str | None = None) -> Any:
     return value
 
 
+def _opentelemetry_processor(
+    _logger: Any, _method: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
+    """Inject active OpenTelemetry trace_id and span_id into structured logs (TASK-085)."""
+    with contextlib.suppress(Exception):
+        from opentelemetry import trace
+
+        span = trace.get_current_span()
+        ctx = span.get_span_context()
+        if ctx and ctx.is_valid:
+            event_dict["trace_id"] = f"{ctx.trace_id:032x}"
+            event_dict["span_id"] = f"{ctx.span_id:016x}"
+    return event_dict
+
+
 def _redaction_processor(
     _logger: Any, _method: str, event_dict: MutableMapping[str, Any]
 ) -> MutableMapping[str, Any]:
@@ -88,6 +104,7 @@ def configure_logging(level: str = "INFO") -> None:
             structlog.processors.add_log_level,
             structlog.processors.TimeStamper(fmt="iso", utc=True),
             structlog.processors.format_exc_info,
+            _opentelemetry_processor,
             _redaction_processor,
             structlog.processors.JSONRenderer(),
         ],

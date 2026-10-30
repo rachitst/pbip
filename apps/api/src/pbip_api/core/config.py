@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     # onto the database through it. 0 disables caching.
     health_ready_cache_seconds: float = Field(default=1.0, ge=0, le=30)
 
+    # OpenTelemetry distributed tracing (TASK-085 spike)
+    otel_enabled: bool = False
+    otel_service_name: str = "pbip-api"
+    otel_sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+    otel_exporter: Literal["memory", "console", "none"] = "memory"
+
     # Banking limits (INTEGER MINOR UNITS)
     internal_bank_code: str = "PBIP0001"
     max_transfer_minor: int = 20_000_000  # 2,00,000.00 per transfer
