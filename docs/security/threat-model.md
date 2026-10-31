@@ -330,7 +330,7 @@ User message
 
 | Rule | Control | Status |
 |---|---|---|
-| No SQL or free-form DB access | LLM has no SQL tool; no code path from model output to the database except the registry | Implemented (`assistant/tools.py`; SQL requests refused by `guard.py`) |
+| No SQL or free-form DB access | LLM has no SQL tool; no code path from model output to the database except the registry | Implemented (`assistant/tools.py`; SQL requests refused by `assistant/guard.py`) |
 | `customer_id` not a tool parameter | Injected server-side from the authenticated principal; tools reuse the policy functions (§6) | Implemented (`ToolContext`; `test_no_tool_schema_has_an_identity_parameter`) |
 | Arguments are validated enums/bounded values | `period in {this_month,last_month}`, `limit 1–20`, `horizon_days in {7,14,30}`, `category in <categoriser set>`, accounts by position 1–10; enforced by the Ollama JSON-schema grammar and again by Pydantic (`extra=forbid`) | Implemented (`test_every_argument_is_bounded`, `test_out_of_bounds_or_unknown_arguments_are_rejected`) |
 | Tools are read-only | No money-movement tool; tools run in a PostgreSQL `READ ONLY` transaction; money-movement requests refused with a link to Transfers | Implemented (`test_tools_run_in_a_read_only_transaction`, `test_money_movement_is_refused_and_nothing_moves`) |
