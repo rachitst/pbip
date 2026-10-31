@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuditLogOut, ChainStatusOut, UserOut } from "../../api/client";
 import { MeContext } from "../../shell/MeContext";
 import { json, urlOf } from "../../test-utils";
-import { AUDIT_PAGE_SIZE, AuditLog } from "./AuditLog";
+import { AUDIT_PAGE_SIZE, AuditLog, detailValue, detailsSummary } from "./AuditLog";
 
 const complianceOfficerMe: UserOut = {
   id: "user-co",
@@ -173,7 +173,7 @@ describe("Compliance Audit Log UI (TASK-048)", () => {
     renderWithClient(<AuditLog />);
     await screen.findByRole("table");
 
-    const verifyBtn = screen.getByRole("button", { name: "Verify Hash Chain" });
+    const verifyBtn = screen.getByRole("button", { name: "Verify hash chain" });
     await user.click(verifyBtn);
 
     expect(
@@ -205,11 +205,11 @@ describe("Compliance Audit Log UI (TASK-048)", () => {
     renderWithClient(<AuditLog />);
     await screen.findByRole("table");
 
-    const verifyBtn = screen.getByRole("button", { name: "Verify Hash Chain" });
+    const verifyBtn = screen.getByRole("button", { name: "Verify hash chain" });
     await user.click(verifyBtn);
 
     expect(
-      await screen.findByText(/Hash chain broken! Data tampering detected at sequence #102\./),
+      await screen.findByText(/Hash chain broken at entry #102\. Entries #1–#101 verified\./),
     ).toBeInTheDocument();
 
     expect(screen.getByText("TAMPERED")).toBeInTheDocument();
@@ -237,7 +237,7 @@ describe("Compliance Audit Log UI (TASK-048)", () => {
     renderWithClient(<AuditLog />);
     await screen.findByRole("table");
 
-    await user.click(screen.getByRole("button", { name: "Verify Hash Chain" }));
+    await user.click(screen.getByRole("button", { name: "Verify hash chain" }));
 
     expect(await screen.findByText(/Verification request failed/)).toBeInTheDocument();
 
@@ -263,7 +263,7 @@ describe("Compliance Audit Log UI (TASK-048)", () => {
     renderWithClient(<AuditLog />);
     await screen.findByRole("table");
 
-    const verifyBtn = screen.getByRole("button", { name: "Verify Hash Chain" });
+    const verifyBtn = screen.getByRole("button", { name: "Verify hash chain" });
     verifyBtn.focus();
     expect(verifyBtn).toHaveFocus();
 
@@ -274,7 +274,7 @@ describe("Compliance Audit Log UI (TASK-048)", () => {
   it("8. Allows ADMIN role and enforces access restriction for unauthorized staff roles", () => {
     const { unmount } = renderWithClient(<AuditLog />, adminMe);
     expect(screen.getByRole("heading", { name: "Compliance audit log" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Verify Hash Chain" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Verify hash chain" })).toBeInTheDocument();
     unmount();
 
     renderWithClient(<AuditLog />, nonComplianceStaffMe);
@@ -283,7 +283,7 @@ describe("Compliance Audit Log UI (TASK-048)", () => {
         /Access restricted: The compliance audit log requires the Compliance Officer or Administrator role\./,
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Verify Hash Chain" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Verify hash chain" })).not.toBeInTheDocument();
   });
 });
 
@@ -350,7 +350,7 @@ describe("TASK-048 review fixes", () => {
     renderWithClient(<AuditLog />);
     await screen.findByRole("region", { name: "Compliance audit logs table" });
 
-    await user.click(screen.getByRole("button", { name: "Verify Hash Chain" }));
+    await user.click(screen.getByRole("button", { name: "Verify hash chain" }));
     expect(await screen.findByText(/Entry #5 is older than the entries shown/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Load older entries" }));
@@ -370,5 +370,84 @@ describe("TASK-048 review fixes", () => {
     );
     renderWithClient(<AuditLog />);
     expect(await screen.findByText(/Multi-factor authentication required/)).toBeInTheDocument();
+  });
+});
+
+describe("TASK-048 visual review changes", () => {
+  const fetchMock = vi.fn<typeof fetch>();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function serve(logs: AuditLogOut[], verify?: ChainStatusOut) {
+    fetchMock.mockImplementation((input) => {
+      const url = new URL(urlOf(input), "http://localhost");
+      if (url.pathname === "/api/v1/compliance/audit-logs") return Promise.resolve(json(200, logs));
+      if (url.pathname === "/api/v1/compliance/audit-logs/verify" && verify) {
+        return Promise.resolve(json(200, verify));
+      }
+      return Promise.resolve(json(404, { code: "not_found", title: "not found" }));
+    });
+  }
+
+  it("summarises details with their actual values", () => {
+    expect(detailValue(["CUSTOMER", "ADMIN"])).toBe("CUSTOMER, ADMIN");
+    expect(detailValue({ a: 1 })).toBe('{"a":1}');
+    expect(detailValue(null)).toBe("—");
+    expect(detailsSummary({ roles: ["CUSTOMER"] })).toBe("roles: CUSTOMER");
+    expect(detailsSummary({ status: "POSTED", amount_minor: 64900, ip: "1.2.3.4", risk: 45 })).toBe(
+      "status: POSTED · amount_minor: 64900 · +1 more",
+    );
+  });
+
+  it("expands a row to list every detail field, and collapses it again", async () => {
+    const entry = {
+      ...mockLogs[0],
+      details: { roles: ["CUSTOMER"], status: "PENDING_REVIEW", risk_score: 45 },
+    } as AuditLogOut;
+    serve([entry]);
+    const user = userEvent.setup();
+    renderWithClient(<AuditLog />);
+    const toggle = await screen.findByRole("button", { name: /details of entry #102/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveTextContent("roles: CUSTOMER · status: PENDING_REVIEW · +1 more");
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const panel = document.getElementById(toggle.getAttribute("aria-controls") ?? "");
+    expect(panel).not.toBeNull();
+    const list = within(panel as HTMLElement);
+    expect(list.getByText("risk_score")).toBeInTheDocument();
+    expect(list.getByText("45")).toBeInTheDocument();
+    expect(list.getByText("CUSTOMER")).toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(document.getElementById(toggle.getAttribute("aria-controls") ?? "")).toBeNull();
+  });
+
+  it("words a break at the first entry without an empty range", async () => {
+    serve(mockLogs, { valid: false, checked: 0, first_invalid_seq: 1 });
+    const user = userEvent.setup();
+    renderWithClient(<AuditLog />);
+    await user.click(await screen.findByRole("button", { name: "Verify hash chain" }));
+    expect(
+      await screen.findByText(/Hash chain broken at entry #1\. No earlier entries to verify\./),
+    ).toBeInTheDocument();
+  });
+
+  it("renders without inline styles (all styling comes from the stylesheet)", async () => {
+    serve(mockLogs, { valid: false, checked: 101, first_invalid_seq: 102 });
+    const user = userEvent.setup();
+    const { container } = renderWithClient(<AuditLog />);
+    await user.click(await screen.findByRole("button", { name: "Verify hash chain" }));
+    await screen.findByText("TAMPERED");
+    expect(container.querySelectorAll("[style]")).toHaveLength(0);
   });
 });
