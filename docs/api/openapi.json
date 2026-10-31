@@ -1286,6 +1286,19 @@
       },
       "NotificationOut": {
         "properties": {
+          "account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The account the transaction was sent from, for transfers",
+            "title": "Account Id"
+          },
           "body": {
             "title": "Body",
             "type": "string"
@@ -1303,6 +1316,35 @@
           "read": {
             "title": "Read",
             "type": "boolean"
+          },
+          "resource_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The transaction, for transfers",
+            "title": "Resource Id"
+          },
+          "resource_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "transaction",
+                  "security"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the notification is about, when it links somewhere",
+            "title": "Resource Type"
           },
           "title": {
             "title": "Title",

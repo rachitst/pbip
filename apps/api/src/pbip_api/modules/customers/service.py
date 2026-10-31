@@ -18,6 +18,7 @@ from pbip_api.modules.auth.service import RequestMeta
 from pbip_api.modules.compliance.service import AuditService
 from pbip_api.modules.customers.models import Customer, Device
 from pbip_api.modules.customers.schemas import CustomerProfileOut, DeviceOut
+from pbip_api.modules.notifications import service as notifications
 
 
 def mask_phone_number(phone: str) -> str:
@@ -132,6 +133,10 @@ class CustomerService:
                 "is_new": is_new,
             },
         )
+        if is_new:
+            notifications.enqueue_security(
+                self.session, notifications.DEVICE_REGISTERED, customer.user_id
+            )
         self.session.commit()
         return device, is_new
 

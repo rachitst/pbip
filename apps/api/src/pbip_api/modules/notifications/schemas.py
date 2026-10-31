@@ -1,6 +1,7 @@
 """Pydantic schemas for the notifications module."""
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -13,6 +14,13 @@ class NotificationOut(BaseModel):
     body: str
     read: bool
     created_at: datetime
+    resource_type: Literal["transaction", "security"] | None = Field(
+        default=None, description="What the notification is about, when it links somewhere"
+    )
+    resource_id: UUID | None = Field(default=None, description="The transaction, for transfers")
+    account_id: UUID | None = Field(
+        default=None, description="The account the transaction was sent from, for transfers"
+    )
 
 
 class NotificationsPage(BaseModel):
