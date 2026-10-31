@@ -7,6 +7,7 @@ dataset as CSV files for offline analysis. The database URL comes from ``--datab
 
 import argparse
 import csv
+import json
 import os
 import sys
 import time
@@ -14,6 +15,7 @@ from dataclasses import astuple, fields
 from datetime import date
 from pathlib import Path
 
+from pbip_datagen.fraud import FraudLabel, Transfer, generate_labelled
 from pbip_datagen.generator import (
     GeneratorConfig,
     SyntheticCustomer,
@@ -45,6 +47,24 @@ def _write_csv(path: Path, header: list[str], rows: list[tuple[object, ...]]) ->
         writer.writerows(rows)
 
 
+def _export_fraud(config: GeneratorConfig, out: Path) -> dict[str, object]:
+    """v2: transfers with context, fraud labels and the per-scenario counts."""
+    labelled = generate_labelled(config)
+    _write_csv(
+        out / "transfers.csv",
+        [f.name for f in fields(Transfer)],
+        [astuple(t) for t in labelled.transfers],
+    )
+    _write_csv(
+        out / "fraud_labels.csv",
+        [f.name for f in fields(FraudLabel)],
+        [astuple(lb) for lb in labelled.labels],
+    )
+    summary = labelled.summary()
+    (out / "fraud_summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    return summary
+
+
 def _export(dataset: SyntheticDataset, out: Path) -> None:
     out.mkdir(parents=True, exist_ok=True)
     _write_csv(
@@ -71,7 +91,17 @@ def main(argv: list[str] | None = None) -> int:
     generated_in = time.perf_counter() - started
     if args.command == "export":
         _export(dataset, args.out)
-        sys.stdout.write(f"wrote {len(dataset.transactions)} transactions to {args.out}\n")
+        summary = _export_fraud(config, args.out)
+        scenarios = summary["scenarios"]
+        assert isinstance(scenarios, dict)
+        counts = ", ".join(
+            f"{s} {v['incidents']}/{v['transactions']}" for s, v in scenarios.items()
+        )
+        sys.stdout.write(
+            f"wrote {len(dataset.transactions)} transactions, {summary['transfers']} transfers and "
+            f"{summary['fraud_transactions']} fraud labels to {args.out}\n"
+            f"scenarios (incidents/transactions): {counts}\n"
+        )
         return 0
     database_url = args.database_url or os.environ.get("DATABASE_URL")
     if not database_url:
