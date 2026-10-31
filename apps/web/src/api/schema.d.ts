@@ -374,6 +374,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/bills/billers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List registered utility billers */
+        get: operations["list_billers_api_v1_bills_billers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bills/pay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pay a utility bill (idempotent) */
+        post: operations["pay_bill_api_v1_bills_pay_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bills/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List my bill payments */
+        get: operations["list_my_bill_payments_api_v1_bills_payments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bills/payments/{payment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one of my bill payments */
+        get: operations["get_my_bill_payment_api_v1_bills_payments__payment_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/compliance/audit-logs": {
         parameters: {
             query?: never;
@@ -819,6 +887,84 @@ export interface components {
             /** Seq */
             seq: number;
         };
+        /** BillPaymentOut */
+        BillPaymentOut: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Amount Minor */
+            amount_minor: number;
+            /** Biller Code */
+            biller_code: string;
+            /**
+             * Biller Id
+             * Format: uuid
+             */
+            biller_id: string;
+            /** Biller Name */
+            biller_name: string;
+            /** Consumer Reference */
+            consumer_reference: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Customer Id
+             * Format: uuid
+             */
+            customer_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Message */
+            message: string;
+            /** New Balance Minor */
+            new_balance_minor: number;
+            /** Reference */
+            reference: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "POSTED" | "DECLINED" | "REVERSED";
+            /**
+             * Transaction Id
+             * Format: uuid
+             */
+            transaction_id: string;
+        };
+        /**
+         * BillerCategory
+         * @enum {string}
+         */
+        BillerCategory: "ELECTRICITY" | "WATER" | "TELECOM" | "GAS" | "BROADBAND" | "INSURANCE";
+        /** BillerOut */
+        BillerOut: {
+            /** Biller Code */
+            biller_code: string;
+            category: components["schemas"]["BillerCategory"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            status: components["schemas"]["BillerStatus"];
+        };
+        /**
+         * BillerStatus
+         * @enum {string}
+         */
+        BillerStatus: "ACTIVE" | "INACTIVE";
         /** BulkMarkReadResponse */
         BulkMarkReadResponse: {
             /**
@@ -1343,6 +1489,34 @@ export interface components {
             current_password: string;
             /** New Password */
             new_password: string;
+        };
+        /** PayBillRequest */
+        PayBillRequest: {
+            /**
+             * Amount Minor
+             * @description Integer minor units, e.g. paise
+             */
+            amount_minor: number;
+            /**
+             * Biller Id
+             * Format: uuid
+             */
+            biller_id: string;
+            /**
+             * Consumer Reference
+             * @description Customer consumer/subscriber number with the utility biller
+             */
+            consumer_reference: string;
+            /**
+             * Currency
+             * @default INR
+             */
+            currency: string;
+            /**
+             * From Account Id
+             * Format: uuid
+             */
+            from_account_id: string;
         };
         /** PayeeCreate */
         PayeeCreate: {
@@ -2311,6 +2485,136 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_billers_api_v1_bills_billers_get: {
+        parameters: {
+            query?: {
+                /** @description Filter to active billers only */
+                active_only?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillerOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pay_bill_api_v1_bills_pay_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical request; retrying with the same key never duplicates. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PayBillRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillPaymentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_my_bill_payments_api_v1_bills_payments_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillPaymentOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_bill_payment_api_v1_bills_payments__payment_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillPaymentOut"];
                 };
             };
             /** @description Validation Error */

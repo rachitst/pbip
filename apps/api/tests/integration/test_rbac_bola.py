@@ -21,6 +21,10 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("get", "/api/v1/accounts"),
         ("post", "/api/v1/accounts"),
         ("get", "/api/v1/payees"),
+        ("get", "/api/v1/bills/billers"),
+        ("post", "/api/v1/bills/pay"),
+        ("get", "/api/v1/bills/payments"),
+        ("get", f"/api/v1/bills/payments/{uuid.uuid4()}"),
         ("get", "/api/v1/fraud/alerts"),
         ("get", "/api/v1/compliance/audit-logs"),
         ("get", "/api/v1/notifications"),
@@ -65,6 +69,11 @@ def test_staff_have_no_customer_profile(
     assert client.get("/api/v1/customers/me", headers=analyst.headers).status_code == 403
     assert client.get("/api/v1/customers/devices", headers=analyst.headers).status_code == 403
     assert client.get("/api/v1/accounts", headers=analyst.headers).status_code == 403
+    assert client.get("/api/v1/bills/payments", headers=analyst.headers).status_code == 403
+    assert (
+        client.get(f"/api/v1/bills/payments/{uuid.uuid4()}", headers=analyst.headers).status_code
+        == 403
+    )
     assert (
         client.get(
             f"/api/v1/analytics/spending?account_id={uuid.uuid4()}", headers=analyst.headers
@@ -164,11 +173,23 @@ def _victim_resources(
         json={"fingerprint": "alice-victim-device-fp"},
     )
     assert device.status_code == 201, device.text
+    bill_payment = client.post(
+        "/api/v1/bills/pay",
+        headers={**alice.headers, "Idempotency-Key": uuid.uuid4().hex},
+        json={
+            "from_account_id": str(alice.account_id),
+            "biller_id": "00000000-0000-0000-0000-0000000000b1",
+            "consumer_reference": "CA-VICTIM-01",
+            "amount_minor": 500,
+        },
+    )
+    assert bill_payment.status_code == 201, bill_payment.text
     return {
         "account": str(alice.account_id),
         "payee": payee["id"],
         "transfer": transfer.json()["id"],
         "device": device.json()["id"],
+        "bill_payment": bill_payment.json()["id"],
     }
 
 
@@ -247,6 +268,19 @@ def test_bola_customer_b_cannot_touch_customer_a_objects(
         ),
         "random uuid account": client.get(f"/api/v1/accounts/{uuid.uuid4()}", headers=h),
         "get victim device": client.get(f"/api/v1/customers/devices/{ids['device']}", headers=h),
+        "get victim bill payment": client.get(
+            f"/api/v1/bills/payments/{ids['bill_payment']}", headers=h
+        ),
+        "pay bill FROM victim account": client.post(
+            "/api/v1/bills/pay",
+            headers=key(),
+            json={
+                "from_account_id": ids["account"],
+                "biller_id": "00000000-0000-0000-0000-0000000000b1",
+                "consumer_reference": "CA-MALLORY",
+                "amount_minor": 100,
+            },
+        ),
         "mark victim notification read": client.post(
             f"/api/v1/notifications/{notification.id}/read", headers=h
         ),
@@ -255,7 +289,7 @@ def test_bola_customer_b_cannot_touch_customer_a_objects(
         assert response.status_code == 404, f"{name}: expected 404 got {response.status_code}"
     # And nothing of Alice's was disturbed.
     own = client.get(f"/api/v1/accounts/{ids['account']}", headers=alice.headers)
-    assert own.status_code == 200 and own.json()["ledger_balance_minor"] == 99_000
+    assert own.status_code == 200 and own.json()["ledger_balance_minor"] == 98_500
     inbox = client.get("/api/v1/notifications", headers=alice.headers).json()
     assert inbox["unread_count"] == 1 and inbox["items"][0]["read"] is False
 
@@ -263,7 +297,7 @@ def test_bola_customer_b_cannot_touch_customer_a_objects(
 def test_listings_only_contain_the_callers_own_objects(
     client: TestClient, make_customer: Callable[..., Actor]
 ) -> None:
-    alice, bob = make_customer(), make_customer()
+    alice, bob = make_customer(funds=10_000), make_customer(funds=10_000)
     listed = client.get("/api/v1/accounts", headers=alice.headers).json()
     assert [a["id"] for a in listed] == [str(alice.account_id)]
     assert str(bob.account_id) not in str(listed)
@@ -281,3 +315,27 @@ def test_listings_only_contain_the_callers_own_objects(
     devices_listed = client.get("/api/v1/customers/devices", headers=alice.headers).json()
     assert [d["id"] for d in devices_listed] == [alice_dev["id"]]
     assert bob_dev["id"] not in [d["id"] for d in devices_listed]
+
+    alice_bill = client.post(
+        "/api/v1/bills/pay",
+        headers={**alice.headers, "Idempotency-Key": uuid.uuid4().hex},
+        json={
+            "from_account_id": str(alice.account_id),
+            "biller_id": "00000000-0000-0000-0000-0000000000b1",
+            "consumer_reference": "CA-ALICE-01",
+            "amount_minor": 1_000,
+        },
+    ).json()
+    bob_bill = client.post(
+        "/api/v1/bills/pay",
+        headers={**bob.headers, "Idempotency-Key": uuid.uuid4().hex},
+        json={
+            "from_account_id": str(bob.account_id),
+            "biller_id": "00000000-0000-0000-0000-0000000000b1",
+            "consumer_reference": "CA-BOB-01",
+            "amount_minor": 1_000,
+        },
+    ).json()
+    bills_listed = client.get("/api/v1/bills/payments", headers=alice.headers).json()
+    assert [b["id"] for b in bills_listed] == [alice_bill["id"]]
+    assert bob_bill["id"] not in [b["id"] for b in bills_listed]

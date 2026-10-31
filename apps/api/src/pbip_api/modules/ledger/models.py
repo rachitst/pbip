@@ -27,6 +27,7 @@ class TransactionType(StrEnum):
     DEPOSIT = "DEPOSIT"
     REVERSAL = "REVERSAL"
     FEE = "FEE"
+    BILL_PAYMENT = "BILL_PAYMENT"
 
 
 class TransactionStatus(StrEnum):

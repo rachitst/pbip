@@ -14,6 +14,7 @@ from pbip_api.modules.notifications.policy import get_owned_notification
 TRANSFER_POSTED = "TRANSFER_POSTED"
 TRANSFER_DECLINED = "TRANSFER_DECLINED"
 TRANSFER_UNDER_REVIEW = "TRANSFER_UNDER_REVIEW"
+BILL_PAYMENT_POSTED = "BILL_PAYMENT_POSTED"
 
 
 def enqueue(session: Session, event_type: str, payload: dict[str, Any]) -> None:
@@ -32,6 +33,14 @@ def _render(event: OutboxEvent) -> tuple[str, str] | None:
         )
     if event.event_type == TRANSFER_DECLINED:
         return "Transfer not completed", f"Your transfer of {amount} could not be completed."
+    if event.event_type == BILL_PAYMENT_POSTED:
+        biller_name = event.payload.get("biller_name")
+        if isinstance(biller_name, str) and biller_name:
+            return (
+                "Bill payment completed",
+                f"Your bill payment of {amount} to {biller_name} was completed.",
+            )
+        return "Bill payment completed", f"Your bill payment of {amount} was completed."
     return None
 
 

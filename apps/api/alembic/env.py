@@ -16,6 +16,7 @@ if config.config_file_name is not None:
 from pbip_api.modules.accounts import models as _accounts  # noqa: E402, F401
 from pbip_api.modules.analytics import models as _analytics  # noqa: E402, F401
 from pbip_api.modules.auth import models as _auth  # noqa: E402, F401
+from pbip_api.modules.bills import models as _bills  # noqa: E402, F401
 from pbip_api.modules.compliance import models as _compliance  # noqa: E402, F401
 from pbip_api.modules.customers import models as _customers  # noqa: E402, F401
 from pbip_api.modules.fraud import models as _fraud  # noqa: E402, F401
