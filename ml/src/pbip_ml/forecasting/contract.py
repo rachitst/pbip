@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class ForecastKind(StrEnum):
     MONTHLY_SPEND = "MONTHLY_SPEND"
+    DAILY_BALANCE = "DAILY_BALANCE"
     END_OF_MONTH_BALANCE = "END_OF_MONTH_BALANCE"
     FRAUD_VOLUME = "FRAUD_VOLUME"
 

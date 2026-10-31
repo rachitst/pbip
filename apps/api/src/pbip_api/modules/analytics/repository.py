@@ -496,3 +496,40 @@ def customer_activity(
         )
         for row in rows
     ]
+
+
+def daily_balances(session: Session, account_id: UUID, now: datetime, days: int) -> list[int]:
+    """End-of-day ledger balance for each UTC day in the last ``days`` days that the account has
+    existed (from its first entry), forward-filled over days without entries; today is excluded."""
+    start = (now - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    opening = session.execute(
+        select(TransactionEntry.balance_after)
+        .where(TransactionEntry.account_id == account_id, TransactionEntry.created_at < start)
+        .order_by(TransactionEntry.created_at.desc(), TransactionEntry.id.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    rows = session.execute(
+        select(TransactionEntry.created_at, TransactionEntry.balance_after)
+        .where(
+            TransactionEntry.account_id == account_id,
+            TransactionEntry.created_at >= start,
+            TransactionEntry.created_at < today,
+        )
+        .order_by(TransactionEntry.created_at, TransactionEntry.id)
+    ).all()
+    end_of_day: dict[datetime, int] = {}
+    for created_at, balance in rows:
+        end_of_day[
+            created_at.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        ] = int(balance)
+    if opening is None and not end_of_day:
+        return []
+    day = start if opening is not None else min(end_of_day)
+    last = int(opening) if opening is not None else 0
+    series = []
+    while day < today:
+        last = end_of_day.get(day, last)
+        series.append(last)
+        day += timedelta(days=1)
+    return series

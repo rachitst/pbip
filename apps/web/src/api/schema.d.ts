@@ -141,6 +141,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/analytics/forecast": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Projected end-of-day balance with 80% and 95% intervals (Predicted, not exact)
+         * @description Daily balance projection of an owned account. Predicted, not exact.
+         */
+        get: operations["get_balance_forecast_api_v1_analytics_forecast_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/analytics/health-score": {
         parameters: {
             query?: never;
@@ -999,6 +1019,66 @@ export interface components {
             resource_type: string;
             /** Seq */
             seq: number;
+        };
+        /**
+         * BalanceForecastPoint
+         * @description One predicted day. Integer paise; the interval says how sure the model is.
+         */
+        BalanceForecastPoint: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Lower 80 Minor */
+            lower_80_minor: number;
+            /** Lower 95 Minor */
+            lower_95_minor: number;
+            /**
+             * Predicted Minor
+             * @description Predicted, not exact: the model's central estimate
+             */
+            predicted_minor: number;
+            /** Upper 80 Minor */
+            upper_80_minor: number;
+            /** Upper 95 Minor */
+            upper_95_minor: number;
+        };
+        /**
+         * BalanceForecastResponse
+         * @description A projection of the end-of-day balance. Predicted, not exact.
+         */
+        BalanceForecastResponse: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Currency */
+            currency: string;
+            /**
+             * History Days
+             * @description Days of balance history the forecast used
+             */
+            history_days: number;
+            /** Horizon Days */
+            horizon_days: number;
+            /**
+             * Label
+             * @description Always shown with the numbers
+             * @default Predicted, not exact
+             * @constant
+             */
+            label: "Predicted, not exact";
+            /**
+             * Method
+             * @description auto_arima, seasonal_naive or naive (by history length)
+             */
+            method: string;
+            /** Model Version */
+            model_version: string;
+            /** Points */
+            points: components["schemas"]["BalanceForecastPoint"][];
         };
         /** BillPaymentOut */
         BillPaymentOut: {
@@ -2615,6 +2695,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UnlockResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_balance_forecast_api_v1_analytics_forecast_get: {
+        parameters: {
+            query: {
+                /** @description Target account identifier */
+                account_id: string;
+                /** @description Days ahead to project */
+                horizon_days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BalanceForecastResponse"];
                 };
             };
             /** @description Validation Error */

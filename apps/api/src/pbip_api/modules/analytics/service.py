@@ -17,12 +17,14 @@ import structlog
 from sqlalchemy.orm import Session
 
 from pbip_api.core.db import utcnow
-from pbip_api.core.errors import NotFoundError
+from pbip_api.core.errors import NotFoundError, UnprocessableError
 from pbip_api.modules.analytics import repository
 from pbip_api.modules.analytics.health import compute_financial_health_score
 from pbip_api.modules.analytics.models import MonthlyCategorySpending
 from pbip_api.modules.analytics.policy import verify_account_ownership
 from pbip_api.modules.analytics.schemas import (
+    BalanceForecastPoint,
+    BalanceForecastResponse,
     CategoryShiftItem,
     CategorySpendingItem,
     CustomerSegmentResponse,
@@ -289,3 +291,43 @@ def get_customer_activity(
 ) -> list[repository.CustomerActivity]:
     """Balances now and at the window start, and last activity, for every customer (one query)."""
     return repository.customer_activity(session, as_of, window)
+
+
+FORECAST_HISTORY_DAYS = 180
+
+
+def get_balance_forecast(
+    session: Session, customer_id: UUID, account_id: UUID, horizon_days: int, now: datetime
+) -> BalanceForecastResponse:
+    """Daily end-of-day balance projection for an owned account (TASK-042). Predicted, not exact."""
+    from pbip_ml.forecasting.model import MODEL_VERSION, forecast_daily_balance  # lazy: numba
+
+    account = verify_account_ownership(session, customer_id, account_id)
+    history = repository.daily_balances(session, account.id, now, FORECAST_HISTORY_DAYS)
+    if len(history) < 2:
+        raise UnprocessableError("at least two days of account history are needed for a forecast")
+    first_day = now.date()
+    by_level = {
+        round(f.confidence_level * 100): f
+        for f in forecast_daily_balance(history, horizon_days, first_day)
+    }
+    p80, p95 = by_level[80].points, by_level[95].points
+    return BalanceForecastResponse(
+        account_id=account.id,
+        currency=account.currency,
+        method=by_level[80].method,
+        model_version=MODEL_VERSION,
+        history_days=len(history),
+        horizon_days=horizon_days,
+        points=[
+            BalanceForecastPoint(
+                date=a.period_start,
+                predicted_minor=round(a.median),
+                lower_80_minor=round(a.lower),
+                upper_80_minor=round(a.upper),
+                lower_95_minor=round(b.lower),
+                upper_95_minor=round(b.upper),
+            )
+            for a, b in zip(p80, p95, strict=True)
+        ],
+    )

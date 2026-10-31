@@ -150,7 +150,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 | TASK-053 | High-Level Architecture Design (HLD) Document | Rachit | Sun 25 Oct | Mon 26 Oct | - | Par | Low | #76 |
 | TASK-044 | Customer Behavioral Segmentation Engine (K-Means) | Krishna | Sun 25 Oct | Mon 26 Oct | 040 | Seq | Low | #67 |
 | TASK-049 | Customer Financial Analytics & Spending Breakdown UI | Kalpak | Mon 26 Oct | Tue 27 Oct | 040, 041, 019 | Seq | Low | #72 |
-| TASK-042 | Time-Series Cash Flow Forecasting Engine with Prediction Intervals | Krishna | Tue 27 Oct | Wed 28 Oct | 023 | Seq | Low | #65 |
+| TASK-042 | Time-Series Cash Flow Forecasting Engine with Prediction Intervals | Rachit | Tue 27 Oct | Wed 28 Oct | 023 | Seq | Low | #65 |
 | TASK-045 | Loan Products Catalogue & EMI Calculation Engine | Rachit | Tue 27 Oct | Wed 28 Oct | - | Par | Low | #68 |
 | TASK-048 | Compliance Audit Log Inspection UI | Kalpak | Wed 28 Oct | Wed 28 Oct | 019 | Seq | Low | #71 |
 | TASK-046 | Loan Eligibility & Affordability Rules Service | Rachit | Wed 28 Oct | Wed 28 Oct | 041, 045 | Seq | Low | #69 |
@@ -804,7 +804,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   - Manual: inspect outputs/plots for sanity; re-run with the same seed and compare
   - Security: no `pbip_api` imports (import-linter); no customer PII in training artefacts
   - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
-- **Hands off to:** Abbas (`Abbaskazi`), Krishna (`LetRock1`) for TASK-042, TASK-071, TASK-072
+- **Hands off to:** Abbas (`Abbaskazi`) for TASK-071, TASK-072; Rachit (`rachitst`) for TASK-042
 - **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
 
 ### TASK-024 - Fraud Feature Engineering Offline/Online Parity Suite
@@ -1337,10 +1337,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-042 - Time-Series Cash Flow Forecasting Engine with Prediction Intervals
 
 - **Issue:** #65 | **Sprint:** 4 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Data Generation & ML
-- **Owner:** Krishna (`LetRock1`)
-- **Start:** Tue 27 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (1.9 days of slack)
+- **Owner:** Rachit (`rachitst`), taken over from Krishna on Sun 1 Nov to unblock the fraud and AI chain
+- **Start:** Tue 27 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** Sun 1 Nov (AutoARIMA chosen by a rolling-origin backtest: sMAPE 10.3%, 80% coverage 86.6% on synthetic data; seasonal naive and naive for short histories; docs/ml/balance-forecast.md) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-023 (#46, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** Sequential: waits for TASK-023
+- **Mode:** Done
 - **Goal:** Forecasting model generating 30-day balance projections with 80% and 95% confidence intervals.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -1351,10 +1351,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Explicitly labelled 'Predicted, not exact' in API contracts and schema types
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #65`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Uses statsmodels / statsforecast (AutoARIMA / ETS) with fallback to seasonal naive for short histories
-  - [ ] Produces point forecast and lower/upper prediction interval bounds
-  - [ ] Evaluated via rolling-origin backtesting reporting sMAPE and coverage percentage
-  - [ ] Explicitly labelled 'Predicted, not exact' in API contracts and schema types
+  - [x] Uses statsmodels / statsforecast (AutoARIMA / ETS) with fallback to seasonal naive for short histories
+  - [x] Produces point forecast and lower/upper prediction interval bounds
+  - [x] Evaluated via rolling-origin backtesting reporting sMAPE and coverage percentage
+  - [x] Explicitly labelled 'Predicted, not exact' in API contracts and schema types
 - **Definition of done (evidence):** Backtest script verifies interval calibration, pytest tests cover short and long histories.
 - **Required checks:**
   - Automated: pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable; correctness tests on aggregates with fixed fixtures (edge cases: empty history, single month)
@@ -1369,7 +1369,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Issue:** #66 | **Sprint:** 4 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
 - **Owner:** Krishna (`LetRock1`)
 - **Start:** Wed 28 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (5.5 days of slack)
-- **Depends on:** TASK-015 (#38, Sujal), TASK-042 (#65, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Depends on:** TASK-015 (#38, Sujal), TASK-042 (#65, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-015, TASK-042
 - **Goal:** Deterministic projection integrating scheduled transfers, recurring bills, and forecasted spend.
 - **Implementation steps:**
@@ -1572,7 +1572,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Issue:** #73 | **Sprint:** 4 | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Kalpak (`Patil-Kalpak`)
 - **Start:** Thu 29 Oct | **Target deadline:** Thu 29 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (5.5 days of slack)
-- **Depends on:** TASK-042 (#65, Krishna), TASK-043 (#66, Krishna), TASK-049 (#72, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Depends on:** TASK-042 (#65, Rachit), TASK-043 (#66, Krishna), TASK-049 (#72, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-042, TASK-043, TASK-049
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; charts follow the TASK-049 conventions (palette tokens, text summary, table fallback).
 - **Goal:** Visual 30-day balance forecast chart rendering projection line and shaded prediction interval band.
@@ -1776,7 +1776,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Issue:** #80 | **Sprint:** 5 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** AI Assistant & Security
 - **Owner:** Abbas (`Abbaskazi`)
 - **Start:** Wed 28 Oct | **Target deadline:** Thu 29 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (1.6 days of slack)
-- **Depends on:** TASK-005 (#16, Sujal), TASK-040 (#63, Krishna), TASK-042 (#65, Krishna), TASK-046 (#69, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Depends on:** TASK-005 (#16, Sujal), TASK-040 (#63, Krishna), TASK-042 (#65, Rachit), TASK-046 (#69, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-040, TASK-042, TASK-046
 - **Goal:** Hardened tool registry exposing read-only banking functions with server-injected customer ID.
 - **Implementation steps:**
@@ -2652,7 +2652,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Issue:** #111 | **Sprint:** 6 | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Krishna (`LetRock1`)
 - **Start:** Mon 02 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Medium (1.1 days of slack before downstream work is delayed)
-- **Depends on:** TASK-029 (#52, Pranay), TASK-042 (#65, Krishna), TASK-084 (#107, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Depends on:** TASK-029 (#52, Pranay), TASK-042 (#65, Rachit), TASK-084 (#107, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-029, TASK-042, TASK-084
 - **Goal:** Standardized model cards documenting training data, ethical considerations, and limitations.
 - **Implementation steps:**
@@ -3220,7 +3220,7 @@ decision in ADR-0015.
 | TASK-018 | Abbas | TASK-026 | Sujal | Sun 25 Oct | Mon 26 Oct |
 | TASK-024 | Pranay | TASK-030 | Krishna | Mon 26 Oct | Mon 26 Oct |
 | TASK-014 | Sujal | TASK-020 | Kalpak | Mon 26 Oct | Tue 27 Oct |
-| TASK-023 | Rachit | TASK-042 | Krishna | Mon 26 Oct | Tue 27 Oct |
+| TASK-023 | Rachit | TASK-042 | Rachit | Mon 26 Oct | Tue 27 Oct |
 | TASK-014 | Sujal | TASK-027 | Rachit | Mon 26 Oct | Tue 27 Oct |
 | TASK-015 | Sujal | TASK-027 | Rachit | Mon 26 Oct | Tue 27 Oct |
 | TASK-015 | Sujal | TASK-021 | Kalpak | Mon 26 Oct | Tue 27 Oct |

@@ -80,7 +80,7 @@ explicit_package_bases = true
 namespace_packages = true
 
 [[tool.mypy.overrides]]
-module = ["celery.*", "pyotp.*", "sklearn.*"]
+module = ["celery.*", "pyotp.*", "sklearn.*", "statsforecast.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
