@@ -282,3 +282,10 @@ def get_customer_segment(session: Session, customer_id: UUID) -> CustomerSegment
         explanation=record.explanation,
         assigned_at=record.updated_at,
     )
+
+
+def get_customer_activity(
+    session: Session, as_of: datetime, window: timedelta
+) -> list[repository.CustomerActivity]:
+    """Balances now and at the window start, and last activity, for every customer (one query)."""
+    return repository.customer_activity(session, as_of, window)

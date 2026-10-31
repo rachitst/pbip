@@ -490,6 +490,141 @@
         "title": "ChainStatusOut",
         "type": "object"
       },
+      "ChurnRiskLevel": {
+        "description": "Categorical classification of customer churn risk.",
+        "enum": [
+          "LOW",
+          "MEDIUM",
+          "HIGH"
+        ],
+        "title": "ChurnRiskLevel",
+        "type": "string"
+      },
+      "CustomerInsightItem": {
+        "description": "What an RM needs to prioritise outreach: no email, address, birth date or account number.",
+        "properties": {
+          "balance_decline_rate": {
+            "description": "Share of the balance lost over the last 30 days",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Balance Decline Rate",
+            "type": "number"
+          },
+          "churn_risk_level": {
+            "$ref": "#/components/schemas/ChurnRiskLevel",
+            "description": "Categorical churn risk rating: LOW, MEDIUM, or HIGH"
+          },
+          "churn_risk_score": {
+            "description": "Rule-based: 55% balance decline + 45% inactivity",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Churn Risk Score",
+            "type": "number"
+          },
+          "customer_id": {
+            "description": "Unique customer identifier",
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "full_name": {
+            "description": "Customer full name",
+            "title": "Full Name",
+            "type": "string"
+          },
+          "high_value": {
+            "default": false,
+            "description": "Balance of INR 1,00,000 or more, or the HIGH_NET_WORTH segment",
+            "title": "High Value",
+            "type": "boolean"
+          },
+          "inactivity_days": {
+            "description": "Elapsed days since the last customer activity or transaction",
+            "minimum": 0.0,
+            "title": "Inactivity Days",
+            "type": "integer"
+          },
+          "segment": {
+            "description": "Behavioral segment (e.g. HIGH_NET_WORTH)",
+            "title": "Segment",
+            "type": "string"
+          },
+          "top_product_score": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Rule-based relevance (not a probability)",
+            "title": "Top Product Score"
+          },
+          "top_recommended_product": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Top eligible product from the recommendation rules",
+            "title": "Top Recommended Product"
+          },
+          "total_balance_minor": {
+            "description": "Current spendable balance across all accounts in minor units",
+            "title": "Total Balance Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "customer_id",
+          "full_name",
+          "segment",
+          "total_balance_minor",
+          "inactivity_days",
+          "balance_decline_rate",
+          "churn_risk_score",
+          "churn_risk_level"
+        ],
+        "title": "CustomerInsightItem",
+        "type": "object"
+      },
+      "CustomerInsightsListResponse": {
+        "description": "Paginated collection of prioritized customer insights for Relationship Managers.",
+        "properties": {
+          "evaluated_at": {
+            "description": "Server evaluation timestamp in UTC",
+            "format": "date-time",
+            "title": "Evaluated At",
+            "type": "string"
+          },
+          "items": {
+            "description": "Prioritized list of customer insight profiles",
+            "items": {
+              "$ref": "#/components/schemas/CustomerInsightItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "description": "Total matching customers count",
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "evaluated_at"
+        ],
+        "title": "CustomerInsightsListResponse",
+        "type": "object"
+      },
       "CustomerProfileOut": {
         "description": "Authenticated customer profile details. Sensitive PII like phone is masked.",
         "properties": {
@@ -3908,6 +4043,112 @@
         "summary": "RELEASE (false positive, posts the held transfer) or REJECT (confirmed fraud)",
         "tags": [
           "fraud"
+        ]
+      }
+    },
+    "/api/v1/insights/customers": {
+      "get": {
+        "description": "One page of customers ordered by churn risk (RM or admin with an MFA-verified session).",
+        "operationId": "get_prioritized_customer_insights_api_v1_insights_customers_get",
+        "parameters": [
+          {
+            "description": "Minimum churn risk score filter (0.0 to 1.0)",
+            "in": "query",
+            "name": "min_churn_risk",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Minimum churn risk score filter (0.0 to 1.0)",
+              "title": "Min Churn Risk"
+            }
+          },
+          {
+            "description": "Behavioral segment filter",
+            "in": "query",
+            "name": "segment",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 50,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Behavioral segment filter",
+              "title": "Segment"
+            }
+          },
+          {
+            "description": "Page size",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "description": "Page size",
+              "maximum": 25,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Page offset",
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "description": "Page offset",
+              "maximum": 100000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerInsightsListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Customers ordered by churn risk, with churn signals and the top eligible product",
+        "tags": [
+          "insights"
         ]
       }
     },
