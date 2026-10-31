@@ -1,1 +1,1 @@
-"""Loan catalogue, EMI calculator, eligibility, applications, tracking."""
+"""Loans (TASK-045, TASK-046): catalogue, EMI schedule and eligibility."""

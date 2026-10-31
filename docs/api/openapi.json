@@ -1137,6 +1137,202 @@
         "title": "DeviceRegisterRequest",
         "type": "object"
       },
+      "EligibilityOut": {
+        "properties": {
+          "dti_existing": {
+            "description": "Existing repayments / income",
+            "title": "Dti Existing",
+            "type": "number"
+          },
+          "dti_with_loan": {
+            "description": "(Existing + proposed EMI) / income; limit 0.50",
+            "title": "Dti With Loan",
+            "type": "number"
+          },
+          "existing_emi_minor": {
+            "description": "Loan repayments already being made each month",
+            "title": "Existing Emi Minor",
+            "type": "integer"
+          },
+          "max_eligible_amount_minor": {
+            "description": "Largest amount at the requested tenure",
+            "title": "Max Eligible Amount Minor",
+            "type": "integer"
+          },
+          "monthly_income_minor": {
+            "description": "Average monthly income from the ledger",
+            "title": "Monthly Income Minor",
+            "type": "integer"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "proposed_emi_minor": {
+            "title": "Proposed Emi Minor",
+            "type": "integer"
+          },
+          "reasons": {
+            "description": "Why, in plain words with the figures",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Reasons",
+            "type": "array"
+          },
+          "requested_amount_minor": {
+            "title": "Requested Amount Minor",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "ELIGIBLE",
+              "NOT_ELIGIBLE"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tenor_options": {
+            "items": {
+              "$ref": "#/components/schemas/TenorOption"
+            },
+            "title": "Tenor Options",
+            "type": "array"
+          },
+          "tenure_months": {
+            "title": "Tenure Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status",
+          "product_id",
+          "requested_amount_minor",
+          "tenure_months",
+          "monthly_income_minor",
+          "existing_emi_minor",
+          "proposed_emi_minor",
+          "dti_existing",
+          "dti_with_loan",
+          "max_eligible_amount_minor",
+          "tenor_options",
+          "reasons"
+        ],
+        "title": "EligibilityOut",
+        "type": "object"
+      },
+      "EligibilityRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "amount_minor": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 10000000000.0,
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "tenure_months": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 480.0,
+            "title": "Tenure Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "product_id",
+          "amount_minor",
+          "tenure_months"
+        ],
+        "title": "EligibilityRequest",
+        "type": "object"
+      },
+      "EmiOut": {
+        "properties": {
+          "annual_rate_bps": {
+            "title": "Annual Rate Bps",
+            "type": "integer"
+          },
+          "emi_minor": {
+            "title": "Emi Minor",
+            "type": "integer"
+          },
+          "principal_minor": {
+            "title": "Principal Minor",
+            "type": "integer"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "schedule": {
+            "items": {
+              "$ref": "#/components/schemas/InstalmentOut"
+            },
+            "title": "Schedule",
+            "type": "array"
+          },
+          "tenure_months": {
+            "title": "Tenure Months",
+            "type": "integer"
+          },
+          "total_interest_minor": {
+            "title": "Total Interest Minor",
+            "type": "integer"
+          },
+          "total_payable_minor": {
+            "title": "Total Payable Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "product_id",
+          "annual_rate_bps",
+          "principal_minor",
+          "tenure_months",
+          "emi_minor",
+          "total_interest_minor",
+          "total_payable_minor",
+          "schedule"
+        ],
+        "title": "EmiOut",
+        "type": "object"
+      },
+      "EmiRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "principal_minor": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 10000000000.0,
+            "title": "Principal Minor",
+            "type": "integer"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "tenure_months": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 480.0,
+            "title": "Tenure Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "product_id",
+          "principal_minor",
+          "tenure_months"
+        ],
+        "title": "EmiRequest",
+        "type": "object"
+      },
       "EntriesPage": {
         "properties": {
           "has_more": {
@@ -1471,6 +1667,39 @@
         "title": "HealthScoreComponent",
         "type": "object"
       },
+      "InstalmentOut": {
+        "properties": {
+          "balance_after_minor": {
+            "title": "Balance After Minor",
+            "type": "integer"
+          },
+          "interest_minor": {
+            "title": "Interest Minor",
+            "type": "integer"
+          },
+          "month": {
+            "title": "Month",
+            "type": "integer"
+          },
+          "payment_minor": {
+            "title": "Payment Minor",
+            "type": "integer"
+          },
+          "principal_minor": {
+            "title": "Principal Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "month",
+          "payment_minor",
+          "principal_minor",
+          "interest_minor",
+          "balance_after_minor"
+        ],
+        "title": "InstalmentOut",
+        "type": "object"
+      },
       "LiveResponse": {
         "properties": {
           "status": {
@@ -1483,6 +1712,59 @@
           "status"
         ],
         "title": "LiveResponse",
+        "type": "object"
+      },
+      "LoanProductOut": {
+        "properties": {
+          "annual_rate_bps": {
+            "description": "Indicative annual rate in basis points (1150 = 11.50%)",
+            "title": "Annual Rate Bps",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "loan_type": {
+            "enum": [
+              "PERSONAL",
+              "AUTO",
+              "HOME"
+            ],
+            "title": "Loan Type",
+            "type": "string"
+          },
+          "max_amount_minor": {
+            "title": "Max Amount Minor",
+            "type": "integer"
+          },
+          "min_amount_minor": {
+            "title": "Min Amount Minor",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "tenures_months": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Tenures Months",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "loan_type",
+          "name",
+          "annual_rate_bps",
+          "min_amount_minor",
+          "max_amount_minor",
+          "tenures_months"
+        ],
+        "title": "LoanProductOut",
         "type": "object"
       },
       "LockoutStatusOut": {
@@ -2456,6 +2738,29 @@
         ],
         "title": "TelemetryEventType",
         "type": "string"
+      },
+      "TenorOption": {
+        "properties": {
+          "emi_at_max_minor": {
+            "title": "Emi At Max Minor",
+            "type": "integer"
+          },
+          "max_amount_minor": {
+            "title": "Max Amount Minor",
+            "type": "integer"
+          },
+          "tenure_months": {
+            "title": "Tenure Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenure_months",
+          "max_amount_minor",
+          "emi_at_max_minor"
+        ],
+        "title": "TenorOption",
+        "type": "object"
       },
       "TokenResponse": {
         "properties": {
@@ -4762,6 +5067,128 @@
         "summary": "Customers ordered by churn risk, with churn signals and the top eligible product",
         "tags": [
           "insights"
+        ]
+      }
+    },
+    "/api/v1/loans/calculate-emi": {
+      "post": {
+        "operationId": "calculate_emi_api_v1_loans_calculate_emi_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmiRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmiOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "EMI and repayment schedule",
+        "tags": [
+          "loans"
+        ]
+      }
+    },
+    "/api/v1/loans/check-eligibility": {
+      "post": {
+        "operationId": "check_eligibility_api_v1_loans_check_eligibility_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EligibilityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EligibilityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Explainable eligibility from the customer's own ledger figures",
+        "tags": [
+          "loans"
+        ]
+      }
+    },
+    "/api/v1/loans/products": {
+      "get": {
+        "operationId": "list_products_api_v1_loans_products_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LoanProductOut"
+                  },
+                  "title": "Response List Products Api V1 Loans Products Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Loan catalogue",
+        "tags": [
+          "loans"
         ]
       }
     },

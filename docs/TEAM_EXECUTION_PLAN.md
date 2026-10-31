@@ -151,9 +151,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 | TASK-044 | Customer Behavioral Segmentation Engine (K-Means) | Krishna | Sun 25 Oct | Mon 26 Oct | 040 | Seq | Low | #67 |
 | TASK-049 | Customer Financial Analytics & Spending Breakdown UI | Kalpak | Mon 26 Oct | Tue 27 Oct | 040, 041, 019 | Seq | Low | #72 |
 | TASK-042 | Time-Series Cash Flow Forecasting Engine with Prediction Intervals | Rachit | Tue 27 Oct | Wed 28 Oct | 023 | Seq | Low | #65 |
-| TASK-045 | Loan Products Catalogue & EMI Calculation Engine | Sujal | Tue 27 Oct | Wed 28 Oct | - | Par | Low | #68 |
+| TASK-045 | Loan Products Catalogue & EMI Calculation Engine | Rachit | Tue 27 Oct | Wed 28 Oct | - | Par | Low | #68 |
 | TASK-048 | Compliance Audit Log Inspection UI | Kalpak | Wed 28 Oct | Wed 28 Oct | 019 | Seq | Low | #71 |
-| TASK-046 | Loan Eligibility & Affordability Rules Service | Sujal | Wed 28 Oct | Wed 28 Oct | 041, 045 | Seq | Low | #69 |
+| TASK-046 | Loan Eligibility & Affordability Rules Service | Rachit | Wed 28 Oct | Wed 28 Oct | 041, 045 | Seq | Low | #69 |
 | TASK-043 | End-of-Month Balance Projection Pipeline | Krishna | Wed 28 Oct | Wed 28 Oct | 015, 042 | Seq | Low | #66 |
 | TASK-047 | Loan Application & Ledger Disbursal Workflow | Sujal | Wed 28 Oct | Thu 29 Oct | 045, 046 | Seq | Low | #70 |
 | TASK-052 | Nightly Analytics & Materialization Celery Jobs | Krishna | Wed 28 Oct | Thu 29 Oct | 040, 041 | Seq | Low | #75 |
@@ -1422,10 +1422,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-045 - Loan Products Catalogue & EMI Calculation Engine
 
 - **Issue:** #68 | **Sprint:** 4 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Core Banking & Ledger
-- **Owner:** Sujal (`SUJALGPM`)
-- **Start:** Tue 27 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (1.6 days of slack)
+- **Owner:** Rachit (`rachitst`), taken over from Sujal on Sun 1 Nov to unblock the fraud and AI chain
+- **Start:** Tue 27 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** Sun 1 Nov (catalogue, EMI schedule in integer paise with Hypothesis properties) | **Status:** Done | **Risk:** Low
 - **Depends on:** none
-- **Mode:** Parallel: can start immediately
+- **Mode:** Done
 - **Goal:** Lending catalogue API and property-based verified EMI amortization schedule calculation engine.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -1436,10 +1436,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Hypothesis property tests prove sum(principal_repaid) == total_principal across all tenures
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #68`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] GET /api/v1/loans/products lists available loan offerings (Personal, Auto, Home) with interest rates
-  - [ ] POST /api/v1/loans/calculate-emi computes monthly installment, total interest, and schedule table
-  - [ ] Financial calculation strictly uses integer minor units (no floating-point rounding errors)
-  - [ ] Hypothesis property tests prove sum(principal_repaid) == total_principal across all tenures
+  - [x] GET /api/v1/loans/products lists available loan offerings (Personal, Auto, Home) with interest rates
+  - [x] POST /api/v1/loans/calculate-emi computes monthly installment, total interest, and schedule table
+  - [x] Financial calculation strictly uses integer minor units (no floating-point rounding errors)
+  - [x] Hypothesis property tests prove sum(principal_repaid) == total_principal across all tenures
 - **Definition of done (evidence):** Property-based tests pass with 500 examples, OpenAPI documentation verified.
 - **Required checks:**
   - Automated: pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths
@@ -1452,10 +1452,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-046 - Loan Eligibility & Affordability Rules Service
 
 - **Issue:** #69 | **Sprint:** 4 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Core Banking & Ledger
-- **Owner:** Sujal (`SUJALGPM`)
-- **Start:** Wed 28 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (1.6 days of slack)
+- **Owner:** Rachit (`rachitst`), taken over from Sujal on Sun 1 Nov to unblock the fraud and AI chain
+- **Start:** Wed 28 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** Sun 1 Nov (DTI from ledger income and repayments, 50% limit, recent lockout refuses, explained result with tenor options) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-041 (#64, Krishna), TASK-045 (#68, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** Sequential: waits for TASK-041, TASK-045
+- **Mode:** Done
 - **Goal:** Automated loan eligibility evaluation endpoint based on income, EMI burden, and account tenure.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -1465,9 +1465,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Returns explainable eligibility status with maximum approved loan amount and tenor options
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #69`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] POST /api/v1/loans/check-eligibility calculates debt-to-income (DTI) and maximum eligible amount
-  - [ ] Rejects customers with DTI > 50% or recent progressive lockout history
-  - [ ] Returns explainable eligibility status with maximum approved loan amount and tenor options
+  - [x] POST /api/v1/loans/check-eligibility calculates debt-to-income (DTI) and maximum eligible amount
+  - [x] Rejects customers with DTI > 50% or recent progressive lockout history
+  - [x] Returns explainable eligibility status with maximum approved loan amount and tenor options
 - **Definition of done (evidence):** Unit tests verify boundary cases (unemployed, borderline DTI, excellent score).
 - **Required checks:**
   - Automated: pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths; correctness tests on aggregates with fixed fixtures (edge cases: empty history, single month)
@@ -3225,16 +3225,16 @@ decision in ADR-0015.
 | TASK-015 | Sujal | TASK-027 | Rachit | Mon 26 Oct | Tue 27 Oct |
 | TASK-015 | Sujal | TASK-021 | Kalpak | Mon 26 Oct | Tue 27 Oct |
 | TASK-030 | Krishna | TASK-031 | Pranay | Tue 27 Oct | Tue 27 Oct |
-| TASK-041 | Krishna | TASK-046 | Sujal | Sun 25 Oct | Wed 28 Oct |
+| TASK-041 | Krishna | TASK-046 | Rachit | Sun 25 Oct | Wed 28 Oct |
 | TASK-015 | Sujal | TASK-043 | Krishna | Mon 26 Oct | Wed 28 Oct |
 | TASK-040 | Krishna | TASK-057 | Abbas | Sun 25 Oct | Wed 28 Oct |
-| TASK-042 | Rachit | TASK-057 | Abbas | Wed 28 Oct | Wed 28 Oct |
-| TASK-046 | Sujal | TASK-057 | Abbas | Wed 28 Oct | Wed 28 Oct |
-| TASK-042 | Rachit | TASK-050 | Kalpak | Wed 28 Oct | Thu 29 Oct |
+| TASK-042 | Krishna | TASK-057 | Abbas | Wed 28 Oct | Wed 28 Oct |
+| TASK-046 | Rachit | TASK-057 | Abbas | Wed 28 Oct | Wed 28 Oct |
+| TASK-042 | Krishna | TASK-050 | Kalpak | Wed 28 Oct | Thu 29 Oct |
 | TASK-043 | Krishna | TASK-050 | Kalpak | Wed 28 Oct | Thu 29 Oct |
 | TASK-033 | Pranay | TASK-037 | Kalpak | Thu 29 Oct | Thu 29 Oct |
 | TASK-033 | Pranay | TASK-078 | Rachit | Thu 29 Oct | Thu 29 Oct |
-| TASK-045 | Sujal | TASK-051 | Kalpak | Wed 28 Oct | Thu 29 Oct |
+| TASK-045 | Rachit | TASK-051 | Kalpak | Wed 28 Oct | Thu 29 Oct |
 | TASK-047 | Sujal | TASK-051 | Kalpak | Thu 29 Oct | Thu 29 Oct |
 | TASK-033 | Pranay | TASK-035 | Krishna | Thu 29 Oct | Fri 30 Oct |
 | TASK-030 | Krishna | TASK-039 | Pranay | Tue 27 Oct | Fri 30 Oct |

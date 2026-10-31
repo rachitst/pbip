@@ -642,3 +642,18 @@ class AuthService:
         if user is None:
             raise NotFoundError("user not found")
         return user
+
+
+def recent_lockouts(session: Session, user_id: UUID, since: datetime) -> int:
+    """How many times the account was locked (progressive lockout) since ``since``."""
+    return int(
+        session.execute(
+            select(func.count())
+            .select_from(SecurityEvent)
+            .where(
+                SecurityEvent.user_id == user_id,
+                SecurityEvent.event_type == SecurityEventType.ACCOUNT_LOCKED,
+                SecurityEvent.created_at >= since,
+            )
+        ).scalar_one()
+    )
