@@ -13,8 +13,9 @@ type Tone = "success" | "warning" | "danger" | "neutral";
 
 /** The notification types the API produces (modules/notifications/service.py): transfer outcomes
  * and security events (password changed, two-step verification on, new device). */
-const NOTIFICATION_TYPES: Record<string, { label: string; tone: Tone }> = {
-  TRANSFER_POSTED: { label: "Transfer", tone: "success" },
+// A completed transfer needs no tag (the title says it); outcomes and security events keep one.
+const NOTIFICATION_TYPES: Record<string, { label: string | null; tone: Tone }> = {
+  TRANSFER_POSTED: { label: null, tone: "success" },
   TRANSFER_UNDER_REVIEW: { label: "Under review", tone: "warning" },
   TRANSFER_DECLINED: { label: "Not completed", tone: "danger" },
   PASSWORD_CHANGED: { label: "Security", tone: "warning" },
@@ -23,7 +24,7 @@ const NOTIFICATION_TYPES: Record<string, { label: string; tone: Tone }> = {
 };
 
 /** A type the API adds later is shown neutrally. */
-export function notificationKind(type: string): { label: string; tone: Tone } {
+export function notificationKind(type: string): { label: string | null; tone: Tone } {
   return NOTIFICATION_TYPES[type] ?? { label: "Notification", tone: "neutral" };
 }
 
@@ -215,7 +216,9 @@ export function NotificationBell() {
                         }}
                       >
                         <span className="notification-item__top">
-                          <span className={`badge badge--${kind.tone}`}>{kind.label}</span>
+                          {kind.label !== null && (
+                            <span className={`badge badge--${kind.tone}`}>{kind.label}</span>
+                          )}
                           <time className="muted" dateTime={item.created_at}>
                             {formatDateTime(item.created_at)}
                           </time>

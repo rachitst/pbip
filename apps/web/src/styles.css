@@ -671,6 +671,7 @@ a {
   gap: var(--space-2);
 }
 .notification-item__top time {
+  margin-left: auto; /* stays right-aligned when there is no tag */
   font-size: var(--text-xs);
   white-space: nowrap;
 }
