@@ -619,6 +619,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/loans/calculate-emi": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** EMI and repayment schedule */
+        post: operations["calculate_emi_api_v1_loans_calculate_emi_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/loans/check-eligibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Explainable eligibility from the customer's own ledger figures */
+        post: operations["check_eligibility_api_v1_loans_check_eligibility_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/loans/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Loan catalogue */
+        get: operations["list_products_api_v1_loans_products_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/notifications": {
         parameters: {
             query?: never;
@@ -1334,6 +1385,103 @@ export interface components {
              */
             label?: string | null;
         };
+        /** EligibilityOut */
+        EligibilityOut: {
+            /**
+             * Dti Existing
+             * @description Existing repayments / income
+             */
+            dti_existing: number;
+            /**
+             * Dti With Loan
+             * @description (Existing + proposed EMI) / income; limit 0.50
+             */
+            dti_with_loan: number;
+            /**
+             * Existing Emi Minor
+             * @description Loan repayments already being made each month
+             */
+            existing_emi_minor: number;
+            /**
+             * Max Eligible Amount Minor
+             * @description Largest amount at the requested tenure
+             */
+            max_eligible_amount_minor: number;
+            /**
+             * Monthly Income Minor
+             * @description Average monthly income from the ledger
+             */
+            monthly_income_minor: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Proposed Emi Minor */
+            proposed_emi_minor: number;
+            /**
+             * Reasons
+             * @description Why, in plain words with the figures
+             */
+            reasons: string[];
+            /** Requested Amount Minor */
+            requested_amount_minor: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ELIGIBLE" | "NOT_ELIGIBLE";
+            /** Tenor Options */
+            tenor_options: components["schemas"]["TenorOption"][];
+            /** Tenure Months */
+            tenure_months: number;
+        };
+        /** EligibilityRequest */
+        EligibilityRequest: {
+            /** Amount Minor */
+            amount_minor: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Tenure Months */
+            tenure_months: number;
+        };
+        /** EmiOut */
+        EmiOut: {
+            /** Annual Rate Bps */
+            annual_rate_bps: number;
+            /** Emi Minor */
+            emi_minor: number;
+            /** Principal Minor */
+            principal_minor: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Schedule */
+            schedule: components["schemas"]["InstalmentOut"][];
+            /** Tenure Months */
+            tenure_months: number;
+            /** Total Interest Minor */
+            total_interest_minor: number;
+            /** Total Payable Minor */
+            total_payable_minor: number;
+        };
+        /** EmiRequest */
+        EmiRequest: {
+            /** Principal Minor */
+            principal_minor: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Tenure Months */
+            tenure_months: number;
+        };
         /** EntriesPage */
         EntriesPage: {
             /** Has More */
@@ -1518,6 +1666,19 @@ export interface components {
              */
             weight_percentage: number;
         };
+        /** InstalmentOut */
+        InstalmentOut: {
+            /** Balance After Minor */
+            balance_after_minor: number;
+            /** Interest Minor */
+            interest_minor: number;
+            /** Month */
+            month: number;
+            /** Payment Minor */
+            payment_minor: number;
+            /** Principal Minor */
+            principal_minor: number;
+        };
         /** LiveResponse */
         LiveResponse: {
             /**
@@ -1525,6 +1686,32 @@ export interface components {
              * @constant
              */
             status: "ok";
+        };
+        /** LoanProductOut */
+        LoanProductOut: {
+            /**
+             * Annual Rate Bps
+             * @description Indicative annual rate in basis points (1150 = 11.50%)
+             */
+            annual_rate_bps: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Loan Type
+             * @enum {string}
+             */
+            loan_type: "PERSONAL" | "AUTO" | "HOME";
+            /** Max Amount Minor */
+            max_amount_minor: number;
+            /** Min Amount Minor */
+            min_amount_minor: number;
+            /** Name */
+            name: string;
+            /** Tenures Months */
+            tenures_months: number[];
         };
         /** LockoutStatusOut */
         LockoutStatusOut: {
@@ -2020,6 +2207,15 @@ export interface components {
          * @enum {string}
          */
         TelemetryEventType: "page_view" | "loan_calculator_used" | "transfer_initiated" | "account_viewed" | "product_clicked" | "search_performed";
+        /** TenorOption */
+        TenorOption: {
+            /** Emi At Max Minor */
+            emi_at_max_minor: number;
+            /** Max Amount Minor */
+            max_amount_minor: number;
+            /** Tenure Months */
+            tenure_months: number;
+        };
         /** TokenResponse */
         TokenResponse: {
             /** Access Token */
@@ -3271,6 +3467,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    calculate_emi_api_v1_loans_calculate_emi_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmiRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmiOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_eligibility_api_v1_loans_check_eligibility_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EligibilityRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EligibilityOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_products_api_v1_loans_products_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoanProductOut"][];
                 };
             };
         };
