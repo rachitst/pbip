@@ -23,6 +23,7 @@ class AuditLogOut(BaseModel):
     resource_type: str
     resource_id: str | None
     request_id: str | None
+    ip: str | None = None
     details: dict[str, Any]
     created_at: datetime
     hash: str
@@ -50,6 +51,7 @@ def list_audit_logs(
             resource_type=r.resource_type,
             resource_id=r.resource_id,
             request_id=r.request_id,
+            ip=r.ip,
             details=r.details,
             created_at=r.created_at,
             hash=r.hash,

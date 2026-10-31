@@ -11,6 +11,7 @@ import { errorMessage } from "../lib/errors";
 import { Accounts } from "../pages/Accounts";
 import { NotFound } from "../pages/NotFound";
 import { Profile } from "../pages/Profile";
+import { AuditLog } from "../pages/staff/AuditLog";
 import { StaffHome } from "../pages/staff/StaffHome";
 import { Alert } from "../ui/Alert";
 import { ErrorState, LoadingState } from "../ui/States";
@@ -36,6 +37,9 @@ function customerNav(me: UserOut): NavItem[] {
 /** Staff tools are added here by their tasks (TASK-036, TASK-048, ...), each filtered by role. */
 function staffNav(me: UserOut): NavItem[] {
   const items: NavItem[] = [{ to: "/staff", label: "Overview", end: true }];
+  if (me.roles.includes("COMPLIANCE_OFFICER") || me.roles.includes("ADMIN")) {
+    items.push({ to: "/staff/audit-log", label: "Audit log" });
+  }
   if (isCustomer(me)) items.push({ to: "/accounts", label: "My banking" });
   return items;
 }
@@ -168,7 +172,10 @@ export const routes: RouteObject[] = [
       {
         path: "staff",
         element: <StaffArea />,
-        children: [{ index: true, element: <StaffHome /> }],
+        children: [
+          { index: true, element: <StaffHome /> },
+          { path: "audit-log", element: <AuditLog /> },
+        ],
       },
       { path: "*", element: <OutsideArea /> },
     ],

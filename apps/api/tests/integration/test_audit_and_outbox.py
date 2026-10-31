@@ -123,3 +123,58 @@ def test_oversized_before_seq_is_a_validation_error_not_a_server_error(
         f"/api/v1/compliance/audit-logs?before_seq={too_big - 1}", headers=officer.headers
     )
     assert ok.status_code == 200
+
+
+def test_compliance_audit_logs_role_and_mfa_authorization(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_staff: Callable[..., Actor],
+) -> None:
+    """TASK-048: verify COMPLIANCE_OFFICER and ADMIN with MFA, and deny unauthorized roles."""
+    officer = make_staff(RoleName.COMPLIANCE_OFFICER, mfa=True)
+    admin = make_staff(RoleName.ADMIN, mfa=True)
+    analyst = make_staff(RoleName.FRAUD_ANALYST, mfa=True)
+    officer_no_mfa = make_staff(RoleName.COMPLIANCE_OFFICER, mfa=False)
+    customer = make_customer()
+
+    # Authorized: Compliance Officer and Admin with MFA
+    assert client.get("/api/v1/compliance/audit-logs", headers=officer.headers).status_code == 200
+    assert (
+        client.get("/api/v1/compliance/audit-logs/verify", headers=officer.headers).status_code
+        == 200
+    )
+    assert client.get("/api/v1/compliance/audit-logs", headers=admin.headers).status_code == 200
+    assert (
+        client.get("/api/v1/compliance/audit-logs/verify", headers=admin.headers).status_code == 200
+    )
+
+    # Denied: unauthorized staff role (Fraud Analyst)
+    assert client.get("/api/v1/compliance/audit-logs", headers=analyst.headers).status_code == 403
+    assert (
+        client.get("/api/v1/compliance/audit-logs/verify", headers=analyst.headers).status_code
+        == 403
+    )
+
+    # Denied: customer role
+    assert client.get("/api/v1/compliance/audit-logs", headers=customer.headers).status_code == 403
+    assert (
+        client.get("/api/v1/compliance/audit-logs/verify", headers=customer.headers).status_code
+        == 403
+    )
+
+    # Denied: missing MFA session
+    assert (
+        client.get("/api/v1/compliance/audit-logs", headers=officer_no_mfa.headers).status_code
+        == 403
+    )
+    assert (
+        client.get(
+            "/api/v1/compliance/audit-logs/verify", headers=officer_no_mfa.headers
+        ).status_code
+        == 403
+    )
+
+    # IP field is exposed in the serialized output and remains nullable
+    logs = client.get("/api/v1/compliance/audit-logs?limit=5", headers=officer.headers).json()
+    assert len(logs) > 0
+    assert "ip" in logs[0]

@@ -10,6 +10,8 @@ export type DeviceOut = components["schemas"]["DeviceOut"];
 export type EntriesPage = components["schemas"]["EntriesPage"];
 export type EntryOut = components["schemas"]["EntryOut"];
 export type OpenAccountType = components["schemas"]["OpenAccountType"];
+export type AuditLogOut = components["schemas"]["AuditLogOut"];
+export type ChainStatusOut = components["schemas"]["ChainStatusOut"];
 export type SpendingBreakdownResponse = components["schemas"]["SpendingBreakdownResponse"];
 export type CategorySpendingItem = components["schemas"]["CategorySpendingItem"];
 export type SpendingTrendsResponse = components["schemas"]["SpendingTrendsResponse"];
@@ -153,6 +155,12 @@ export const api = {
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(body),
     }),
+  auditLogs: (limit = 50, beforeSeq?: number) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (beforeSeq !== undefined) params.set("before_seq", String(beforeSeq));
+    return apiFetch<AuditLogOut[]>(`/api/v1/compliance/audit-logs?${params.toString()}`);
+  },
+  verifyAuditChain: () => apiFetch<ChainStatusOut>("/api/v1/compliance/audit-logs/verify"),
   spendingBreakdown: (accountId: string, year?: number, month?: number) => {
     const params = new URLSearchParams({ account_id: accountId });
     if (year !== undefined) params.set("year", String(year));
