@@ -105,3 +105,23 @@ def age_payee(engine: Engine, payee_id: str, hours: int) -> None:
             ),
             {"h": hours, "id": payee_id},
         )
+
+
+def reset_tracing() -> None:
+    """Undo tracing setup between tests.
+
+    Test-only: the OpenTelemetry API lets a process set the global provider once, so this clears
+    its private once-flag. Production code never does this (`core/tracing.py` is idempotent).
+    """
+    from opentelemetry import trace
+    from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+    from pbip_api.core import tracing
+
+    if SQLAlchemyInstrumentor().is_instrumented_by_opentelemetry:
+        SQLAlchemyInstrumentor().uninstrument()
+    if tracing._tracer_provider is not None:
+        tracing._tracer_provider.shutdown()
+    tracing._tracer_provider = None
+    tracing._in_memory_exporter = None
+    trace._TRACER_PROVIDER = None
+    trace._TRACER_PROVIDER_SET_ONCE._done = False
