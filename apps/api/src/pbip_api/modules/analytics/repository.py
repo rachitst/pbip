@@ -5,18 +5,20 @@ the only table this module writes is ``monthly_category_spending``.
 """
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from pbip_ml.segmentation.contract import CustomerRFMFeatures, SegmentAssignment
-from sqlalchemy import delete, func, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, aliased
 
 from pbip_api.modules.accounts.models import Account, AccountHolder, AccountType
 from pbip_api.modules.analytics.categorization import categorize_transaction, is_debt_repayment
 from pbip_api.modules.analytics.models import CustomerSegment, MonthlyCategorySpending
+from pbip_api.modules.auth.models import User
 from pbip_api.modules.customers.models import Customer
+from pbip_api.modules.events.models import ClickstreamEvent
 from pbip_api.modules.ledger.models import (
     EntryDirection,
     Transaction,
@@ -407,3 +409,90 @@ def upsert_customer_segment(
             set_={key: getattr(stmt.excluded, key) for key in values if key != "customer_id"},
         )
     )
+
+
+@dataclass(frozen=True)
+class CustomerActivity:
+    """Ledger and activity facts of one customer as of a point in time (minor units)."""
+
+    customer_id: UUID
+    full_name: str
+    segment: str | None
+    created_at: datetime
+    balance_minor: int  # posted entries on the customer's accounts up to ``as_of``
+    balance_window_start_minor: int  # the same, up to ``as_of - window``
+    last_activity_at: datetime | None  # latest login, ledger entry or clickstream event
+
+
+def customer_activity(
+    session: Session, as_of: datetime, window: timedelta
+) -> list[CustomerActivity]:
+    """Every customer's balances and last activity in ONE query (no per-customer round trips).
+
+    Balances are summed from the immutable entries rather than read from ``accounts`` so that they
+    can be taken at any point in time; transfers between a customer's own accounts net to zero.
+    """
+    start = as_of - window
+    signed = case(
+        (TransactionEntry.direction == EntryDirection.CREDIT, TransactionEntry.amount),
+        else_=-TransactionEntry.amount,
+    )
+    ledger = (
+        select(
+            AccountHolder.customer_id.label("customer_id"),
+            func.coalesce(func.sum(signed), 0).label("balance"),
+            func.coalesce(
+                func.sum(case((TransactionEntry.created_at <= start, signed), else_=0)), 0
+            ).label("balance_start"),
+            func.max(TransactionEntry.created_at).label("last_entry"),
+        )
+        .join(TransactionEntry, TransactionEntry.account_id == AccountHolder.account_id)
+        .where(TransactionEntry.created_at <= as_of)
+        .group_by(AccountHolder.customer_id)
+        .subquery()
+    )
+    events = (
+        select(
+            ClickstreamEvent.customer_id.label("customer_id"),
+            func.max(ClickstreamEvent.event_timestamp).label("last_event"),
+        )
+        .where(ClickstreamEvent.event_timestamp <= as_of)
+        .group_by(ClickstreamEvent.customer_id)
+        .subquery()
+    )
+    rows = session.execute(
+        select(
+            Customer.id,
+            Customer.full_name,
+            Customer.segment,
+            Customer.created_at,
+            User.last_login_at,
+            ledger.c.balance,
+            ledger.c.balance_start,
+            ledger.c.last_entry,
+            events.c.last_event,
+        )
+        .join(User, User.id == Customer.user_id)
+        .outerjoin(ledger, ledger.c.customer_id == Customer.id)
+        .outerjoin(events, events.c.customer_id == Customer.id)
+        .order_by(Customer.id)
+    ).all()
+    return [
+        CustomerActivity(
+            customer_id=row.id,
+            full_name=row.full_name,
+            segment=row.segment,
+            created_at=row.created_at,
+            balance_minor=int(row.balance or 0),
+            balance_window_start_minor=int(row.balance_start or 0),
+            last_activity_at=max(
+                (
+                    ts
+                    for ts in (row.last_login_at, row.last_entry, row.last_event)
+                    if ts is not None and ts <= as_of
+                ),
+                default=None,
+            ),
+        )
+        for row in rows
+    ]

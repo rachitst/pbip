@@ -753,7 +753,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #45 | **Sprint:** 2 | **Priority:** must | **Size:** S (0.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Kalpak (`Patil-Kalpak`)
-- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (8.8 days of slack)
+- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Sat 31 Oct (#224: polled badge, tray, mark read; #227: link targets, security notifications, the bell opens the highlighted transaction or Profile & security) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-018 (#41, Abbas), TASK-019 (#42, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-018, TASK-019
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; the bell sits in the shell's top bar and links to routed pages.
@@ -766,9 +766,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Clicking notification marks it as read and navigates to relevant transaction or alert
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #45`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Bell icon displays badge with unread count polled via TanStack Query
-  - [ ] Clicking bell opens notification dropdown showing transfers, security alerts, and statements
-  - [ ] Clicking notification marks it as read and navigates to relevant transaction or alert
+  - [x] Bell icon displays badge with unread count polled via TanStack Query
+  - [x] Clicking bell opens notification dropdown showing transfers, security alerts, and statements *(accepted clarification 2026-10-31: statements are notified once statements exist, with TASK-016 #39 / TASK-074 #97)*
+  - [x] Clicking notification marks it as read and navigates to relevant transaction or alert
 - **Definition of done (evidence):** Unit tests verify badge count updates and click handlers, zero accessibility errors.
 - **Required checks:**
   - Automated: Vitest + Testing Library covering loading, empty, error and success states; Playwright journey for critical flows; types only from `schema.d.ts`
@@ -1511,9 +1511,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #71 | **Sprint:** 4 | **Priority:** should | **Size:** S (0.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Kalpak (`Patil-Kalpak`)
-- **Start:** Wed 28 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (6.8 days of slack)
+- **Start:** Wed 28 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** Sat 31 Oct (merged in #211 with maintainer review fixes: keyset pagination so older chain breaks are reachable, server error reasons, expandable details row; tamper detection verified end to end against the local stack: entry #120 edited, reported and marked TAMPERED, restored and re-verified) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-019 (#42, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** Sequential: waits for TASK-019
+- **Mode:** Done
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; lives in the staff route tree (`/staff`). Needs only the two foundation PRs.
 - **Goal:** Staff web dashboard displaying tamper-evident audit logs with cryptographic hash-chain verification.
 - **Implementation steps:**
@@ -1525,10 +1525,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Protected by require_roles([COMPLIANCE_OFFICER, ADMIN], mfa=True)
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #71`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Displays chronological audit log entries with user, action, IP address, and timestamp
-  - [ ] One-click 'Verify Hash Chain' button calling /api/v1/compliance/audit-logs/verify
-  - [ ] Visually highlights any detected chain break or data tampering
-  - [ ] Protected by require_roles([COMPLIANCE_OFFICER, ADMIN], mfa=True)
+  - [x] Displays chronological audit log entries with user, action, IP address, and timestamp
+  - [x] One-click 'Verify Hash Chain' button calling /api/v1/compliance/audit-logs/verify
+  - [x] Visually highlights any detected chain break or data tampering
+  - [x] Protected by require_roles([COMPLIANCE_OFFICER, ADMIN], mfa=True)
 - **Definition of done (evidence):** Component tests test valid chain display and tamper alert state.
 - **Required checks:**
   - Automated: Vitest + Testing Library covering loading, empty, error and success states; Playwright journey for critical flows; types only from `schema.d.ts`; audit-log entries asserted in integration tests (actor, action, resource)
@@ -1541,9 +1541,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #72 | **Sprint:** 4 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Kalpak (`Patil-Kalpak`)
-- **Start:** Mon 26 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (7.4 days of slack)
+- **Start:** Mon 26 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** Sat 31 Oct (merged in #221 with maintainer review fixes: percentage tooltips, dark-mode tooltip contrast, named chart focus stops, top four categories plus Other, plain labels; verified in the browser with real spending; the two-month bar chart is covered by component tests only, because a previous month cannot be created locally without editing ledger timestamps) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-040 (#63, Krishna), TASK-041 (#64, Krishna), TASK-019 (#42, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** Sequential: waits for TASK-040, TASK-041, TASK-019
+- **Mode:** Done
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; a customer route (Insights). Needs the foundation PRs only, not any staff page. Adds Recharts 3.10.x (approved in ADR-0016; `Cell` is deprecated, use `shape`/`content`).
 - **Goal:** Interactive financial analytics page with category donut charts, burn rate, and health score.
 - **Implementation steps:**
@@ -1555,10 +1555,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Accessible color contrast and mobile responsive layout
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #72`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Recharts donut chart showing spending distribution by category with percentage tooltips
-  - [ ] Financial health score gauge with component progress bars (Savings, Buffer, Debt)
-  - [ ] Month-over-month comparison bar chart with spending delta indicators
-  - [ ] Accessible color contrast and mobile responsive layout
+  - [x] Recharts donut chart showing spending distribution by category with percentage tooltips
+  - [x] Financial health score gauge with component progress bars (Savings, Buffer, Debt)
+  - [x] Month-over-month comparison bar chart with spending delta indicators
+  - [x] Accessible color contrast and mobile responsive layout
 - **Definition of done (evidence):** Vitest tests mock analytics responses and test responsive rendering.
 - **Required checks:**
   - Automated: Vitest + Testing Library covering loading, empty, error and success states; Playwright journey for critical flows; types only from `schema.d.ts`; correctness tests on aggregates with fixed fixtures (edge cases: empty history, single month)
@@ -1689,7 +1689,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #77 | **Sprint:** 5 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (3.2 days of slack)
+- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (partially delivered in #204 on Sat 31 Oct: eligibility first, top 3 with reasons from real figures, p95 35 ms measured on a laptop; the score is a documented rule-based ranking, a trained model needs product take-up data first, see #77) | **Status:** In Progress | **Risk:** Medium (criterion 2 needs data that does not exist yet)
 - **Depends on:** TASK-041 (#64, Krishna), TASK-044 (#67, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-041, TASK-044
 - **Goal:** Recommendation engine scoring customer eligibility and propensity for banking products.
@@ -1702,10 +1702,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: GET /api/v1/recommendations endpoint responds in < 40ms
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #77`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Evaluates eligibility rules first (e.g. savings buffer for investments, income for premium cards)
+  - [x] Evaluates eligibility rules first (e.g. savings buffer for investments, income for premium cards)
   - [ ] Scores customer propensity using logistic regression / gradient boosting ranking
-  - [ ] Returns top-3 recommended products with clear, human-readable justification reasons
-  - [ ] GET /api/v1/recommendations endpoint responds in < 40ms
+  - [x] Returns top-3 recommended products with clear, human-readable justification reasons
+  - [x] GET /api/v1/recommendations endpoint responds in < 40ms
 - **Definition of done (evidence):** Unit tests verify eligibility exclusion filters and ranking score stability.
 - **Required checks:**
   - Automated: pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable; pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths
@@ -1719,7 +1719,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #78 | **Sprint:** 5 | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Fri 30 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (2.4 days of slack)
+- **Start:** Fri 30 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** - (partially delivered in #222 on Sat 31 Oct: authenticated batch endpoint, monthly partitions with a daily job creating future months, strict validation; the insert is synchronous and committed before the 202, the < 15 ms target is not measured; 500 events/s load test deferred to #101, see #78) | **Status:** In Progress | **Risk:** Low
 - **Depends on:** none
 - **Mode:** Parallel: can start immediately
 - **Goal:** High-throughput clickstream event ingestion API writing to monthly partitioned PostgreSQL tables.
@@ -1732,10 +1732,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Strict schema validation rejecting untyped or malformed payloads
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #78`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] POST /api/v1/events/batch accepts telemetry events (page_view, loan_calculator_used, transfer_initiated)
-  - [ ] PostgreSQL table partitioned monthly by event_timestamp
+  - [x] POST /api/v1/events/batch accepts telemetry events (page_view, loan_calculator_used, transfer_initiated)
+  - [x] PostgreSQL table partitioned monthly by event_timestamp
   - [ ] Asynchronous batch insert to minimize request latency (< 15ms)
-  - [ ] Strict schema validation rejecting untyped or malformed payloads
+  - [x] Strict schema validation rejecting untyped or malformed payloads
 - **Definition of done (evidence):** Alembic migration for partitioned table, load test verifies 500 events/sec throughput.
 - **Required checks:**
   - Automated: pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths; correctness tests on aggregates with fixed fixtures (edge cases: empty history, single month)
@@ -1748,7 +1748,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #79 | **Sprint:** 5 | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Sat 31 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (2.4 days of slack)
+- **Start:** Sat 31 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** - (partially delivered in #223 on Sat 31 Oct: churn signals from the ledger, RM/admin with MFA, one set-based query and paginated; the list is ordered by churn risk, not product propensity, see #79) | **Status:** In Progress | **Risk:** Low
 - **Depends on:** TASK-054 (#77, Krishna), TASK-055 (#78, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-054, TASK-055
 - **Goal:** Staff endpoints aggregating customer churn risk, high-value transfer trends, and loan interest.
@@ -1761,8 +1761,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #79`) and request review.
 - **Expected end result / acceptance criteria:**
   - [ ] GET /api/v1/insights/customers returns prioritized list of high-propensity customers
-  - [ ] Calculates churn signals based on balance decline rate and inactivity days
-  - [ ] Protected by require_roles([RELATIONSHIP_MANAGER, ADMIN], mfa=True)
+  - [x] Calculates churn signals based on balance decline rate and inactivity days
+  - [x] Protected by require_roles([RELATIONSHIP_MANAGER, ADMIN], mfa=True)
 - **Definition of done (evidence):** Integration tests verify RM authorization and calculation accuracy.
 - **Required checks:**
   - Automated: pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths; correctness tests on aggregates with fixed fixtures (edge cases: empty history, single month)
@@ -2569,9 +2569,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #108 | **Sprint:** 6 | **Priority:** could | **Size:** S (0.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (8.7 days of slack)
+- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Sat 31 Oct (merged in #205 with maintainer review fixes on the same PR; CI blockers on main fixed in #207; overhead +1.2-1.6 ms median measured locally against PostgreSQL, recorded in ADR 0017) | **Status:** Done | **Risk:** Low
 - **Depends on:** none
-- **Mode:** Parallel: can start immediately
+- **Mode:** Done
+- **Follow-up (2026-10-31, owner Rachit):** post-merge hardening in one PR: the fuzz workflow starts uvicorn with `--no-access-log` (its log is uploaded as an artifact), with a test that fails if any launch path enables uvicorn's access log; tracing exclusions anchored to `/metrics` and `/api/health/*` only; SQLAlchemy 2.1 support rechecked (latest instrumentation 0.66b2 still declares < 2.1). Deferred work (OTLP and collector, Celery, Redis, production overhead) is tracked unassigned in #209.
 - **Goal:** Spike evaluation integrating OpenTelemetry span tracking across FastAPI and database calls.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -2581,9 +2582,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Documents tracing architecture in docs/adr/0009-opentelemetry.md
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #108`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Injects trace_id and span_id into structlog logging context
-  - [ ] Evaluates overhead on request latency (< 5ms)
-  - [ ] Documents tracing architecture in docs/adr/0009-opentelemetry.md
+  - [x] Injects trace_id and span_id into structlog logging context
+  - [x] Evaluates overhead on request latency (< 5ms)
+  - [x] Documents tracing architecture in docs/adr/0009-opentelemetry.md *(accepted clarification: delivered as `docs/adr/0017-opentelemetry.md`, because 0009 is the synthetic-dataset ADR and ADR numbers are unique)*
 - **Definition of done (evidence):** ADR committed, sample trace verified in test output.
 - **Required checks:**
   - Automated: CI job or `scripts/dev.py` command exercised in tests; works from a fresh clone

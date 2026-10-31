@@ -58,7 +58,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with: { python-version: "${{ env.PYTHON_VERSION }}" }
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/uv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -74,9 +74,11 @@ jobs:
         run: uv run alembic -c apps/api/alembic.ini upgrade head
       - name: Seed database fixtures
         run: uv run python scripts/dev.py seed
+      # --no-access-log: uvicorn's access line carries the raw query string and this log is uploaded as
+      # an artifact; the app's own access line (route, status, request id) is enough for 5xx triage.
       - name: Start PBIP API server in background (log kept for 5xx triage)
         run: |
-          nohup uv run uvicorn pbip_api.main:app --host 127.0.0.1 --port 8000 > api-server.log 2>&1 &
+          nohup uv run uvicorn pbip_api.main:app --host 127.0.0.1 --port 8000 --no-access-log > api-server.log 2>&1 &
           echo "API_PID=$!" >> "$GITHUB_ENV"
       - name: Wait for API readiness probe
         run: |

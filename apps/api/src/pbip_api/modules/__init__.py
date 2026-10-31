@@ -22,6 +22,7 @@ from pbip_api.modules.auth import models as _auth  # noqa: F401
 from pbip_api.modules.bills import models as _bills  # noqa: F401
 from pbip_api.modules.compliance import models as _compliance  # noqa: F401
 from pbip_api.modules.customers import models as _customers  # noqa: F401
+from pbip_api.modules.events import models as _events  # noqa: F401
 from pbip_api.modules.fraud import models as _fraud  # noqa: F401
 from pbip_api.modules.ledger import models as _ledger  # noqa: F401
 from pbip_api.modules.notifications import models as _notifications  # noqa: F401

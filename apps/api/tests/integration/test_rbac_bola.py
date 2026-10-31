@@ -35,6 +35,9 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("get", f"/api/v1/analytics/trends?account_id={uuid.uuid4()}"),
         ("get", f"/api/v1/analytics/health-score?account_id={uuid.uuid4()}"),
         ("get", "/api/v1/analytics/segment"),
+        ("get", "/api/v1/recommendations"),
+        ("post", "/api/v1/events/batch"),
+        ("get", "/api/v1/insights/customers"),
         ("get", f"/api/v1/admin/users/{uuid.uuid4()}/lockout"),
         ("post", f"/api/v1/admin/users/{uuid.uuid4()}/unlock"),
     ]:
@@ -47,6 +50,7 @@ def test_customer_cannot_use_staff_endpoints(
     alice = make_customer()
     assert client.get("/api/v1/fraud/alerts", headers=alice.headers).status_code == 403
     assert client.get("/api/v1/compliance/audit-logs", headers=alice.headers).status_code == 403
+    assert client.get("/api/v1/insights/customers", headers=alice.headers).status_code == 403
     assert (
         client.post(
             "/api/v1/admin/users",
@@ -93,6 +97,23 @@ def test_staff_have_no_customer_profile(
         == 403
     )
     assert client.get("/api/v1/analytics/segment", headers=analyst.headers).status_code == 403
+    assert client.get("/api/v1/recommendations", headers=analyst.headers).status_code == 403
+    assert (
+        client.post(
+            "/api/v1/events/batch",
+            headers=analyst.headers,
+            json={
+                "events": [
+                    {
+                        "event_type": "page_view",
+                        "event_timestamp": "2026-10-31T10:00:00Z",
+                        "session_id": "sess-staff",
+                    }
+                ]
+            },
+        ).status_code
+        == 403
+    )
     assert (
         client.post(
             "/api/v1/accounts",

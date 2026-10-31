@@ -31,6 +31,7 @@ ENDPOINTS = {
     "trends": "/api/v1/analytics/trends?account_id={account}",
     "health-score": "/api/v1/analytics/health-score?account_id={account}",
     "segment": "/api/v1/analytics/segment",
+    "recommendations": "/api/v1/recommendations",
 }
 
 

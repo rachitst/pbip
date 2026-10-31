@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useSearchParams } from "react-router";
 import type { SyntheticEvent } from "react";
 import { api } from "../api/client";
 import type { AccountOut, OpenAccountType, TransferOut } from "../api/client";
 import { errorMessage } from "../lib/errors";
+import { accountTypeLabel } from "../lib/format";
 import { formatMinor, parseToMinor } from "../lib/money";
 import { transferStatus } from "../lib/status";
 import { Alert } from "../ui/Alert";
@@ -14,16 +16,21 @@ import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 import { AccountTransactions } from "./AccountTransactions";
 
-const ACCOUNT_LABELS: Record<string, string> = {
-  SAVINGS: "Savings",
-  CURRENT: "Current (checking)",
-  CHECKING: "Current (checking)",
-};
-
 export function Accounts() {
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts });
   const payees = useQuery({ queryKey: ["payees"], queryFn: api.payees });
-  const [openedId, setOpenedId] = useState<string | null>(null);
+  // A notification link (?account=&transaction=) opens that account and highlights the transaction;
+  // a new link replaces whatever the customer had opened (state is reset during render, not in an
+  // effect, so there is no flash of the old state).
+  const [params] = useSearchParams();
+  const linkedAccount = params.get("account");
+  const linkedTransaction = params.get("transaction");
+  const [openedId, setOpenedId] = useState<string | null>(linkedAccount);
+  const [link, setLink] = useState(params.toString());
+  if (link !== params.toString()) {
+    setLink(params.toString());
+    setOpenedId(linkedAccount);
+  }
 
   return (
     <div className="page">
@@ -44,6 +51,7 @@ export function Accounts() {
             key={account.id}
             account={account}
             expanded={openedId === account.id}
+            highlightTransactionId={account.id === linkedAccount ? linkedTransaction : null}
             onToggle={() => {
               setOpenedId(openedId === account.id ? null : account.id);
             }}
@@ -64,16 +72,17 @@ export function Accounts() {
 interface AccountRowProps {
   account: AccountOut;
   expanded: boolean;
+  highlightTransactionId: string | null;
   onToggle: () => void;
 }
 
-function AccountRow({ account, expanded, onToggle }: AccountRowProps) {
+function AccountRow({ account, expanded, highlightTransactionId, onToggle }: AccountRowProps) {
   const panelId = `transactions-${account.id}`;
   return (
     <li className="account">
       <div className="row account-header">
         <div>
-          <strong>{ACCOUNT_LABELS[account.account_type] ?? account.account_type}</strong>
+          <strong>{accountTypeLabel(account.account_type)}</strong>
           <div className="muted">{account.account_number_masked}</div>
         </div>
         <div className="right account-balances">
@@ -100,7 +109,11 @@ function AccountRow({ account, expanded, onToggle }: AccountRowProps) {
       </div>
       {expanded && (
         <div id={panelId}>
-          <AccountTransactions accountId={account.id} currency={account.currency} />
+          <AccountTransactions
+            accountId={account.id}
+            currency={account.currency}
+            highlightTransactionId={highlightTransactionId}
+          />
         </div>
       )}
     </li>

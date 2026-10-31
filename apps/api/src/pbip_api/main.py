@@ -16,12 +16,15 @@ from pbip_api.modules.auth.router import router as auth_router
 from pbip_api.modules.bills.router import router as bills_router
 from pbip_api.modules.compliance.router import router as compliance_router
 from pbip_api.modules.customers.router import router as customers_router
+from pbip_api.modules.events.router import router as events_router
 from pbip_api.modules.fraud.router import router as fraud_router
 from pbip_api.modules.health.router import ReadinessCache
 from pbip_api.modules.health.router import router as health_router
+from pbip_api.modules.insights.router import router as insights_router
 from pbip_api.modules.notifications.router import router as notifications_router
 from pbip_api.modules.payees.router import router as payees_router
 from pbip_api.modules.payments.router import router as payments_router
+from pbip_api.modules.recommendations.router import router as recommendations_router
 
 ROUTERS = (
     health_router,
@@ -30,6 +33,9 @@ ROUTERS = (
     customers_router,
     accounts_router,
     analytics_router,
+    recommendations_router,
+    events_router,
+    insights_router,
     payees_router,
     payments_router,
     bills_router,
@@ -42,6 +48,11 @@ ROUTERS = (
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.log_level)
+
+    if settings.otel_enabled:
+        from pbip_api.core.tracing import instrument_app, setup_tracing
+
+        setup_tracing(settings)
 
     docs = settings.docs_enabled
     app = FastAPI(
@@ -71,6 +82,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.add_middleware(SecurityHeadersMiddleware, hsts=settings.cookie_secure)
     app.add_middleware(RequestContextMiddleware)
+
+    if settings.otel_enabled:
+        instrument_app(app, settings)
 
     app.state.readiness_cache = ReadinessCache(settings.health_ready_cache_seconds)
     register_error_handlers(app)

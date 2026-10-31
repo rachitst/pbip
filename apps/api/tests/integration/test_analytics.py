@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from typing import Any
 from uuid import UUID
@@ -335,6 +335,17 @@ def _transfer(client: TestClient, actor: Actor, payee_id: str, amount: int, refe
     return UUID(resp.json()["id"])
 
 
+def _advance_two_calendar_months(clock: FakeClock) -> None:
+    """Move to the 15th of the month after next (UTC), so exactly two closed months follow the postings.
+
+    A fixed "+62 days" lands three months later when the test runs at the end of a month
+    (31 October -> 1 January), which turns [spend, 0] into [spend, 0, 0].
+    """
+    now = datetime.fromtimestamp(clock.now, tz=UTC)
+    index = now.year * 12 + now.month - 1 + 2
+    clock.now = datetime(index // 12, index % 12 + 1, 15, 12, tzinfo=UTC).timestamp()
+
+
 def _stored_rows(db: Session, account_id: UUID | None) -> set[tuple[str, int, int]]:
     db.expire_all()
     rows = db.execute(
@@ -514,7 +525,7 @@ def test_financial_health_score_moves_with_ledger_activity(
     assert data["account_id"] == str(alice.account_id) and data["currency"] == "INR"
 
     # Two months on: closed months [130,000, 0] -> volatile; buffer 170,000 / 65,000 = 2.6 months
-    clock.advance(62 * 24 * 3600)
+    _advance_two_calendar_months(clock)
     later = client.get(url, headers=alice.headers).json()
     comps = later["components"]
     assert comps["expense_volatility"]["assessment"] == "VOLATILE"
@@ -638,7 +649,7 @@ def test_health_score_uses_closed_months_only_so_the_calendar_day_does_not_move_
 
     # Two months later the posting month is closed, the month after it had no spend (zero-filled):
     # volatility is computed from [50,000, 0] and the buffer from their average.
-    clock.advance(62 * 24 * 3600)
+    _advance_two_calendar_months(clock)
     later = client.get(url, headers=alice.headers).json()
     assert later["components"]["expense_volatility"]["assessment"] == "VOLATILE"
     assert later["components"]["buffer_months"]["metric_value"] == 14.0  # 350,000 / 25,000

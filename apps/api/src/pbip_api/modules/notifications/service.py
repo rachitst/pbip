@@ -15,6 +15,34 @@ TRANSFER_POSTED = "TRANSFER_POSTED"
 TRANSFER_DECLINED = "TRANSFER_DECLINED"
 TRANSFER_UNDER_REVIEW = "TRANSFER_UNDER_REVIEW"
 BILL_PAYMENT_POSTED = "BILL_PAYMENT_POSTED"
+BILL_PAYMENT_DECLINED = "BILL_PAYMENT_DECLINED"
+# Security notifications for events the auth and customers modules already record (#45).
+PASSWORD_CHANGED = "PASSWORD_CHANGED"  # noqa: S105  # pragma: allowlist secret - an event type name
+MFA_ENABLED = "MFA_ENABLED"
+DEVICE_REGISTERED = "DEVICE_REGISTERED"
+
+_TRANSFER_TYPES = {
+    TRANSFER_POSTED,
+    TRANSFER_UNDER_REVIEW,
+    TRANSFER_DECLINED,
+    BILL_PAYMENT_POSTED,
+    BILL_PAYMENT_DECLINED,
+}
+_SECURITY_TEXT = {
+    PASSWORD_CHANGED: (
+        "Password changed",
+        "Your password was changed and other sessions were signed out. If this wasn't you, "
+        "contact the bank.",
+    ),
+    MFA_ENABLED: (
+        "Two-step verification turned on",
+        "Sign-ins now need a code from your authenticator app.",
+    ),
+    DEVICE_REGISTERED: (
+        "New device registered",
+        "A new device was registered on your account. If this wasn't you, contact the bank.",
+    ),
+}
 
 
 def enqueue(session: Session, event_type: str, payload: dict[str, Any]) -> None:
@@ -22,7 +50,14 @@ def enqueue(session: Session, event_type: str, payload: dict[str, Any]) -> None:
     session.add(OutboxEvent(event_type=event_type, payload=payload))
 
 
-def _render(event: OutboxEvent) -> tuple[str, str] | None:
+def enqueue_security(session: Session, event_type: str, user_id: UUID) -> None:
+    """A security notification for ``user_id``, committed with the change that caused it."""
+    if event_type not in _SECURITY_TEXT:
+        raise ValueError(f"not a security notification type: {event_type}")
+    enqueue(session, event_type, {"user_id": str(user_id)})
+
+
+def _transfer_text(event: OutboxEvent) -> tuple[str, str] | None:
     amount = format_minor(int(event.payload["amount_minor"]), str(event.payload["currency"]))
     if event.event_type == TRANSFER_POSTED:
         return "Transfer completed", f"Your transfer of {amount} was completed."
@@ -33,14 +68,47 @@ def _render(event: OutboxEvent) -> tuple[str, str] | None:
         )
     if event.event_type == TRANSFER_DECLINED:
         return "Transfer not completed", f"Your transfer of {amount} could not be completed."
+    name = event.payload.get("biller_name")
+    to_biller = f" to {name}" if isinstance(name, str) and name else ""
     if event.event_type == BILL_PAYMENT_POSTED:
-        biller_name = event.payload.get("biller_name")
-        if isinstance(biller_name, str) and biller_name:
-            return (
-                "Bill payment completed",
-                f"Your bill payment of {amount} to {biller_name} was completed.",
-            )
-        return "Bill payment completed", f"Your bill payment of {amount} was completed."
+        return "Bill payment completed", f"Your bill payment of {amount}{to_biller} was completed."
+    if event.event_type == BILL_PAYMENT_DECLINED:
+        return (
+            "Bill payment not completed",
+            f"Your bill payment of {amount}{to_biller} could not be completed.",
+        )
+    return None
+
+
+def _uuid_or_none(value: object) -> UUID | None:
+    return UUID(str(value)) if value else None
+
+
+def _notification(event: OutboxEvent) -> Notification | None:
+    user_id = UUID(str(event.payload["user_id"]))
+    if event.event_type in _TRANSFER_TYPES:
+        text = _transfer_text(event)
+        if text is None:
+            return None
+        return Notification(
+            user_id=user_id,
+            type=event.event_type,
+            title=text[0],
+            body=text[1],
+            resource_type="transaction",
+            resource_id=_uuid_or_none(event.payload.get("transaction_id")),
+            # events enqueued before #45 carry no account id: the link opens Accounts instead
+            account_id=_uuid_or_none(event.payload.get("account_id")),
+        )
+    if event.event_type in _SECURITY_TEXT:
+        title, body = _SECURITY_TEXT[event.event_type]
+        return Notification(
+            user_id=user_id,
+            type=event.event_type,
+            title=title,
+            body=body,
+            resource_type="security",
+        )
     return None
 
 
@@ -58,17 +126,9 @@ def relay_outbox(session: Session, batch_size: int = 100) -> int:
         .all()
     )
     for event in events:
-        rendered = _render(event)
-        if rendered is not None:
-            title, body = rendered
-            session.add(
-                Notification(
-                    user_id=UUID(str(event.payload["user_id"])),
-                    type=event.event_type,
-                    title=title,
-                    body=body,
-                )
-            )
+        notification = _notification(event)
+        if notification is not None:
+            session.add(notification)
         event.processed_at = utcnow()
     session.flush()
     return len(events)

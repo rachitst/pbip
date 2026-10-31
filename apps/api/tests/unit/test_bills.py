@@ -18,7 +18,8 @@ from pbip_api.modules.bills.schemas import BillerOut, BillPaymentOut, PayBillReq
 from pbip_api.modules.bills.service import BillsService, PayBillCommand
 from pbip_api.modules.ledger.models import TransactionType
 from pbip_api.modules.notifications.models import OutboxEvent
-from pbip_api.modules.notifications.service import BILL_PAYMENT_POSTED, _render
+from pbip_api.modules.notifications.service import BILL_PAYMENT_POSTED
+from pbip_api.modules.notifications.service import _transfer_text as _render
 from pydantic import ValidationError
 from sqlalchemy import CheckConstraint
 
