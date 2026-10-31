@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { SignOutButton } from "./AppShell";
+import { NotificationBell } from "./NotificationBell";
 import { ThemeToggle } from "./theme";
 
 export function CustomerSessionBar() {
@@ -31,6 +32,7 @@ export function CustomerSessionBar() {
         )}
       </div>
       <div className="session-actions">
+        <NotificationBell />
         <ThemeToggle />
         <SignOutButton />
       </div>

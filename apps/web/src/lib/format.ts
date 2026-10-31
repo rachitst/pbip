@@ -5,6 +5,17 @@ const dateTimeFormat = new Intl.DateTimeFormat("en-IN", {
   timeStyle: "short",
 });
 
+const ACCOUNT_TYPE_LABELS: Record<string, string> = {
+  SAVINGS: "Savings",
+  CURRENT: "Current (checking)",
+  CHECKING: "Current (checking)",
+};
+
+/** One name per account type on every page (Accounts, Insights). */
+export function accountTypeLabel(accountType: string): string {
+  return ACCOUNT_TYPE_LABELS[accountType] ?? accountType;
+}
+
 export function formatDate(iso: string): string {
   return dateFormat.format(new Date(iso));
 }
