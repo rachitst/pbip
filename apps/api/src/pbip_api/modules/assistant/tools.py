@@ -29,7 +29,7 @@ from pbip_api.core.pagination import PageDirection
 from pbip_api.modules.accounts import service as accounts_service
 from pbip_api.modules.accounts.models import Account
 from pbip_api.modules.analytics import service as analytics_service
-from pbip_api.modules.assistant.sanitize import clean_untrusted_text
+from pbip_api.modules.assistant.sanitize import untrusted_block
 from pbip_api.modules.loans import service as loans_service
 from pbip_api.modules.loans.catalogue import PRODUCTS, LoanType
 
@@ -173,7 +173,7 @@ def recent_transactions(ctx: ToolContext, raw: Mapping[str, object]) -> ToolRepl
     lines = []
     for entry in page.items:
         sign = "-" if entry.direction == "DEBIT" else "+"
-        what = clean_untrusted_text(entry.reference) or entry.transaction_type.lower()
+        what = untrusted_block(entry.reference) or entry.transaction_type.lower()
         lines.append(
             f"{entry.created_at:%d %b}: {sign}{format_minor(entry.amount_minor, account.currency)}"
             f" ({what})"

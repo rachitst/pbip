@@ -1,5 +1,6 @@
 """HTTP shapes for the assistant. The request carries text only - never an identifier."""
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -23,3 +24,14 @@ class ChatResponse(BaseModel):
         description="llm: Ollama chose the tool; rules: the deterministic fallback did"
     )
     link: str | None = Field(default=None, description="Where in the app to see or act on this")
+
+
+class AssistantMessageOut(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(description="Stored after redaction of account numbers, tokens, emails")
+    tool: ToolName | None
+    created_at: datetime
+
+
+class AssistantHistory(BaseModel):
+    items: list[AssistantMessageOut]

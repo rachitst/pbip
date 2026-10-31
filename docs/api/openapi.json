@@ -273,6 +273,62 @@
         "title": "AlertSummary",
         "type": "object"
       },
+      "AssistantHistory": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantMessageOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AssistantHistory",
+        "type": "object"
+      },
+      "AssistantMessageOut": {
+        "properties": {
+          "content": {
+            "description": "Stored after redaction of account numbers, tokens, emails",
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolName"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "role",
+          "content",
+          "tool",
+          "created_at"
+        ],
+        "title": "AssistantMessageOut",
+        "type": "object"
+      },
       "AuditLogOut": {
         "properties": {
           "action": {
@@ -4030,6 +4086,102 @@
           }
         ],
         "summary": "Ask the read-only banking assistant about your own accounts",
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
+    "/api/v1/assistant/chat/stream": {
+      "post": {
+        "operationId": "chat_stream_api_v1_assistant_chat_stream_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "text/event-stream: tool_call, tool_result, token..., then done (or error)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The same assistant as /chat, streamed as Server-Sent Events",
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
+    "/api/v1/assistant/messages": {
+      "get": {
+        "operationId": "history_api_v1_assistant_messages_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantHistory"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Your own recent assistant conversation (redacted)",
         "tags": [
           "assistant"
         ]

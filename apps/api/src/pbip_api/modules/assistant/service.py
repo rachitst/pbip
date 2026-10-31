@@ -1,18 +1,25 @@
-"""Assistant use case (TASK-057/058): guard -> route (LLM or rules) -> approved tool -> reply.
+"""Assistant use case (TASK-057..060): clean -> guard -> route -> approved tool -> reply.
 
 Pipeline, in order:
 
-1. :mod:`guard` refuses money movement, other people's data, SQL and instruction overrides
-   before any model sees the message.
-2. The LLM router picks a tool (grammar-constrained JSON, validated again here). If Ollama is
+1. :func:`sanitize.clean_user_message` normalises the text (NFKC, no control or zero-width
+   characters, 500 characters max).
+2. :mod:`guard` refuses money movement, other people's data, SQL, privilege requests and
+   instruction overrides (also inside base64) before any model sees the message.
+3. The LLM router picks a tool (grammar-constrained JSON, validated again here). If Ollama is
    off, slow or wrong, the deterministic :mod:`fallback` router answers instead.
-3. The tool runs in a ``READ ONLY`` transaction with the customer id from the access token.
-4. The server writes the reply from the tool's structured result.
-5. One audit row (tool name or refusal reason, outcome, engine - never the message or the
-   result) is committed in a separate, writable transaction.
+4. The tool runs in a ``READ ONLY`` transaction with the customer id from the access token.
+5. The server writes the reply from the tool's structured result; :func:`sanitize.redact_output`
+   masks account numbers, tokens and emails.
+6. In one writable transaction: the redacted exchange is stored (``assistant_messages``) and one
+   audit row is written (tool or refusal reason, outcome, engine - never the message or result).
+
+:meth:`AssistantService.run` yields the steps as events, so the JSON endpoint and the SSE stream
+(TASK-060) share one implementation.
 """
 
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
@@ -20,15 +27,22 @@ from uuid import UUID
 
 import structlog
 from pydantic import ValidationError
+from sqlalchemy import Engine as DbEngine
 from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from pbip_api.core.errors import DomainError
-from pbip_api.modules.assistant import fallback, guard
+from pbip_api.modules.assistant import fallback, guard, repository
 from pbip_api.modules.assistant.fallback import Route
 from pbip_api.modules.assistant.llm import ChatModel, LLMUnavailableError, llm_route
 from pbip_api.modules.assistant.prompts import system_prompt
-from pbip_api.modules.assistant.schemas import ChatResponse
+from pbip_api.modules.assistant.sanitize import clean_user_message, redact_output
+from pbip_api.modules.assistant.schemas import (
+    AssistantHistory,
+    AssistantMessageOut,
+    ChatResponse,
+)
+from pbip_api.modules.assistant.sse import format_event, reply_chunks
 from pbip_api.modules.assistant.tools import (
     ToolContext,
     ToolInputError,
@@ -51,6 +65,26 @@ Engine = Literal["llm", "rules"]
 
 
 @dataclass(frozen=True)
+class ToolCalled:
+    tool: ToolName
+    engine: Engine
+
+
+@dataclass(frozen=True)
+class ToolFinished:
+    tool: ToolName
+    outcome: str
+
+
+@dataclass(frozen=True)
+class Finished:
+    response: ChatResponse
+
+
+ChatEvent = ToolCalled | ToolFinished | Finished
+
+
+@dataclass(frozen=True)
 class _Decision:
     route: Route
     engine: Engine
@@ -62,8 +96,17 @@ class AssistantService:
         self.model = model
 
     def chat(self, customer_id: UUID, user_id: UUID, message: str, now: datetime) -> ChatResponse:
+        for event in self.run(customer_id, user_id, message, now):
+            if isinstance(event, Finished):
+                return event.response
+        raise RuntimeError("assistant pipeline ended without a reply")  # unreachable by design
+
+    def run(
+        self, customer_id: UUID, user_id: UUID, message: str, now: datetime
+    ) -> Iterator[ChatEvent]:
         started = time.perf_counter()
-        refusal = guard.check(message)
+        cleaned = clean_user_message(message)
+        refusal = guard.check(cleaned)
         if refusal is not None:
             response = ChatResponse(
                 reply=guard.REFUSAL_TEXT[refusal],
@@ -74,8 +117,32 @@ class AssistantService:
             )
             self._audit(user_id, "assistant.refused", {"reason": refusal.value})
         else:
-            decision = self._decide(message)
-            response = self._answer(customer_id, user_id, decision, now)
+            decision = self._decide(cleaned)
+            tool = decision.route.tool
+            if tool is None:
+                response = ChatResponse(
+                    reply=HELP_TEXT, outcome="help", tool=None, engine=decision.engine
+                )
+            else:
+                yield ToolCalled(tool, decision.engine)
+                ctx = ToolContext(self.session, customer_id, user_id, now)
+                reply, outcome = self._run_read_only(ctx, tool, decision.route.arguments)
+                yield ToolFinished(tool, outcome)
+                self._audit(
+                    user_id,
+                    "assistant.tool_call",
+                    {"tool": tool.value, "outcome": outcome, "engine": decision.engine},
+                )
+                response = ChatResponse(
+                    reply=redact_output(reply.text),
+                    outcome="answered" if outcome in ("ok", "input") else "unavailable",
+                    tool=tool,
+                    engine=decision.engine,
+                    link=reply.link,
+                )
+        repository.add_exchange(
+            self.session, customer_id, redact_output(cleaned), response.reply, response.tool
+        )
         self.session.commit()
         _logger.info(
             "assistant_chat",
@@ -84,7 +151,21 @@ class AssistantService:
             engine=response.engine,
             elapsed_ms=round((time.perf_counter() - started) * 1000),
         )
-        return response
+        yield Finished(response)
+
+    def history(self, customer_id: UUID, limit: int) -> AssistantHistory:
+        rows = repository.list_messages(self.session, customer_id, limit)
+        return AssistantHistory(
+            items=[
+                AssistantMessageOut(
+                    role="user" if row.role == "user" else "assistant",
+                    content=row.content,
+                    tool=ToolName(row.tool_name) if row.tool_name else None,
+                    created_at=row.created_at,
+                )
+                for row in rows
+            ]
+        )
 
     def _decide(self, message: str) -> _Decision:
         if self.model is not None:
@@ -93,28 +174,6 @@ class AssistantService:
             except LLMUnavailableError as exc:
                 _logger.warning("assistant_llm_fallback", reason=str(exc))
         return _Decision(fallback.route(message), "rules")
-
-    def _answer(
-        self, customer_id: UUID, user_id: UUID, decision: _Decision, now: datetime
-    ) -> ChatResponse:
-        tool = decision.route.tool
-        if tool is None:
-            return ChatResponse(reply=HELP_TEXT, outcome="help", tool=None, engine=decision.engine)
-        reply, outcome = self._run_read_only(
-            ToolContext(self.session, customer_id, user_id, now), tool, decision.route.arguments
-        )
-        self._audit(
-            user_id,
-            "assistant.tool_call",
-            {"tool": tool.value, "outcome": outcome, "engine": decision.engine},
-        )
-        return ChatResponse(
-            reply=reply.text,
-            outcome="answered" if outcome in ("ok", "input") else "unavailable",
-            tool=tool,
-            engine=decision.engine,
-            link=reply.link,
-        )
 
     def _run_read_only(
         self, ctx: ToolContext, tool: ToolName, arguments: dict[str, object]
@@ -139,3 +198,39 @@ class AssistantService:
 
     def _audit(self, user_id: UUID, action: str, details: dict[str, object]) -> None:
         AuditService(self.session).record(user_id, action, "assistant", details=dict(details))
+
+
+def stream_chat(
+    engine: DbEngine,
+    model: ChatModel | None,
+    customer_id: UUID,
+    user_id: UUID,
+    message: str,
+    now: datetime,
+) -> Iterator[str]:
+    """Server-Sent Events for one message (TASK-060).
+
+    The stream outlives the request's dependencies, so it owns its session. Events:
+    ``tool_call`` when a tool is chosen, ``tool_result`` when it ran, ``token`` chunks of the
+    (server-written, redacted) reply, then ``done`` with the full response. Any failure ends the
+    stream with a generic ``error`` event - no details, no stack trace.
+    """
+    with sessionmaker(bind=engine, expire_on_commit=False)() as session:
+        try:
+            for event in AssistantService(session, model).run(customer_id, user_id, message, now):
+                if isinstance(event, ToolCalled):
+                    yield format_event(
+                        "tool_call", {"tool": event.tool.value, "engine": event.engine}
+                    )
+                elif isinstance(event, ToolFinished):
+                    yield format_event(
+                        "tool_result", {"tool": event.tool.value, "outcome": event.outcome}
+                    )
+                else:
+                    for chunk in reply_chunks(event.response.reply):
+                        yield format_event("token", {"text": chunk})
+                    yield format_event("done", event.response.model_dump(mode="json"))
+        except Exception as exc:
+            session.rollback()
+            _logger.warning("assistant_stream_failed", error=type(exc).__name__)
+            yield format_event("error", {"detail": UNAVAILABLE_TEXT})

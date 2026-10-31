@@ -38,8 +38,11 @@ router answers instead. The response says which one did (`engine: llm | rules`).
 ## Consequences
 - Figures in replies are exact (they come from the same services as the REST API) and labelled where they are
   predictions ("Predicted, not exact").
-- Replies are templated and less conversational. No conversation memory is kept yet (single-turn); the
-  `assistant_*` tables in Blueprint §6 are not created.
+- Replies are templated and less conversational. Routing is single-turn: earlier messages are stored
+  (`assistant_messages`, redacted, per customer, TASK-060) but never fed back to the model.
+- Streaming (`/chat/stream`) sends the server-written reply in word chunks after the tool ran; the
+  `tool_call` event is emitted as soon as the router has chosen, so the UI can show progress during the
+  slow model step.
 - The 2.5 s acceptance criterion of TASK-058 is not met with the LLM on the reference laptop; the rules engine
   answers in well under it. This is recorded on the task, not hidden.
 - New runtime dependency: `httpx` (BSD-3, already in the lockfile through FastAPI's test client) for the
