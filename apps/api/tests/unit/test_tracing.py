@@ -12,9 +12,11 @@ from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from opentelemetry import trace
 from opentelemetry.sdk.trace.sampling import ALWAYS_OFF, ALWAYS_ON, TraceIdRatioBased
+from opentelemetry.util.http import parse_excluded_urls
 from pbip_api.core.config import Settings
 from pbip_api.core.logging import _opentelemetry_processor
 from pbip_api.core.tracing import (
+    _EXCLUDED_URLS,
     _build_sampler,
     get_active_trace_context,
     get_in_memory_exporter,
@@ -154,6 +156,31 @@ def test_health_and_metrics_are_not_traced() -> None:
     exporter = get_in_memory_exporter()
     assert exporter is not None
     assert exporter.get_finished_spans() == ()
+
+
+def test_only_the_exact_health_and_metrics_paths_are_excluded() -> None:
+    """The exclusions are searched in "scheme://host/path": unanchored, "/metrics" would also
+    silence any route that merely contains it, with no error to notice."""
+    excluded = parse_excluded_urls(_EXCLUDED_URLS)
+    for url in ("http://testserver/api/health/live", "https://api:8000/api/health/ready",
+                "http://testserver/metrics"):  # fmt: skip
+        assert excluded.url_disabled(url), url
+    for url in ("http://testserver/api/v1/x/metrics", "http://testserver/metrics/extra",
+                "http://testserver/api/v1/metrics", "http://testserver/api/healthz",
+                "http://testserver/api/v1/api/health/live"):  # fmt: skip
+        assert not excluded.url_disabled(url), url
+
+
+def test_a_route_containing_metrics_is_still_traced() -> None:
+    app = create_app(_traced_settings())
+    with TestClient(app) as client:
+        assert client.get("/api/v1/x/metrics").status_code == 404
+    exporter = get_in_memory_exporter()
+    assert exporter is not None
+    servers = [s for s in exporter.get_finished_spans() if s.kind.name == "SERVER"]
+    assert len(servers) == 1
+    assert servers[0].attributes is not None
+    assert servers[0].attributes.get("http.status_code") == 404
 
 
 def test_sample_rate_zero_records_no_spans_but_requests_still_work() -> None:

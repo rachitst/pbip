@@ -33,9 +33,11 @@ from pbip_api.core.config import Settings, get_settings
 
 _logger = structlog.get_logger(__name__)
 
-# Comma-separated regexes matched against the request URL. Health probes run every few seconds
+# Comma-separated regexes, searched (not matched) by the ASGI instrumentation against
+# "scheme://host/path", so each is anchored to the start of the path: an unanchored "/metrics"
+# would also silence any future route that merely contains it. Health probes run every few seconds
 # (compose healthchecks, nginx) and /metrics is scraped by Prometheus: tracing them is noise.
-_EXCLUDED_URLS = "/api/health/,/metrics"
+_EXCLUDED_URLS = r"^[a-z]+://[^/]+/api/health/,^[a-z]+://[^/]+/metrics$"
 
 # One provider per process: the OpenTelemetry API allows the global provider to be set once.
 _tracer_provider: TracerProvider | None = None

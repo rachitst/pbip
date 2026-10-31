@@ -2572,6 +2572,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Sat 31 Oct (merged in #205 with maintainer review fixes on the same PR; CI blockers on main fixed in #207; overhead +1.2-1.6 ms median measured locally against PostgreSQL, recorded in ADR 0017) | **Status:** Done | **Risk:** Low
 - **Depends on:** none
 - **Mode:** Done
+- **Follow-up (2026-10-31, owner Rachit):** post-merge hardening in one PR: the fuzz workflow starts uvicorn with `--no-access-log` (its log is uploaded as an artifact), with a test that fails if any launch path enables uvicorn's access log; tracing exclusions anchored to `/metrics` and `/api/health/*` only; SQLAlchemy 2.1 support rechecked (latest instrumentation 0.66b2 still declares < 2.1). Deferred work (OTLP and collector, Celery, Redis, production overhead) is tracked unassigned in #209.
 - **Goal:** Spike evaluation integrating OpenTelemetry span tracking across FastAPI and database calls.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
