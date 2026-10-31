@@ -11,6 +11,7 @@ from collections.abc import Mapping, MutableMapping
 from typing import Any
 
 import structlog
+from opentelemetry import trace
 
 REDACTED = "[REDACTED]"
 
@@ -74,6 +75,21 @@ def redact(value: Any, key: str | None = None) -> Any:
     return value
 
 
+def _opentelemetry_processor(
+    _logger: Any, _method: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
+    """Add the active trace_id/span_id so a log line can be joined to its trace (TASK-085).
+
+    Outside a span, or with tracing disabled (the API returns an invalid no-op span), nothing
+    is added. Runs before redaction like every other processor.
+    """
+    context = trace.get_current_span().get_span_context()
+    if context.is_valid:
+        event_dict["trace_id"] = f"{context.trace_id:032x}"
+        event_dict["span_id"] = f"{context.span_id:016x}"
+    return event_dict
+
+
 def _redaction_processor(
     _logger: Any, _method: str, event_dict: MutableMapping[str, Any]
 ) -> MutableMapping[str, Any]:
@@ -88,6 +104,7 @@ def configure_logging(level: str = "INFO") -> None:
             structlog.processors.add_log_level,
             structlog.processors.TimeStamper(fmt="iso", utc=True),
             structlog.processors.format_exc_info,
+            _opentelemetry_processor,
             _redaction_processor,
             structlog.processors.JSONRenderer(),
         ],
