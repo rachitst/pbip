@@ -237,3 +237,96 @@ def test_rate_limited_per_user(
     over = client.post("/api/v1/assistant/chat", headers=alice.headers, json={"message": "hello"})
     assert over.status_code == 429 and over.headers["Retry-After"] == "60"
     assert _chat(client, bob, "hello")["outcome"] == "help"  # per user, not global
+
+
+def _events(raw: str) -> list[tuple[str, Any]]:
+    out = []
+    for frame in raw.strip().split("\n\n"):
+        name, data = frame.split("\n")
+        out.append((name.removeprefix("event: "), json.loads(data.removeprefix("data: "))))
+    return out
+
+
+def test_stream_emits_tool_events_tokens_and_done(
+    client: TestClient, make_customer: Callable[..., Actor]
+) -> None:
+    alice = make_customer(funds=5_000_00)
+    resp = client.post(
+        "/api/v1/assistant/chat/stream", headers=alice.headers, json={"message": "my balance"}
+    )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/event-stream")
+    assert resp.headers["cache-control"] == "no-store"
+    events = _events(resp.text)
+    names = [name for name, _ in events]
+    assert names[:2] == ["tool_call", "tool_result"] and names[-1] == "done"
+    assert set(names[2:-1]) == {"token"}
+    assert events[0][1] == {"tool": "get_account_summary", "engine": "rules"}
+    assert events[1][1] == {"tool": "get_account_summary", "outcome": "ok"}
+    done = events[-1][1]
+    assert "".join(data["text"] for name, data in events if name == "token") == done["reply"]
+    assert "INR 5,000.00 available" in done["reply"]
+
+
+def test_stream_refusal_has_no_tool_events(
+    client: TestClient, make_customer: Callable[..., Actor]
+) -> None:
+    alice = make_customer()
+    resp = client.post(
+        "/api/v1/assistant/chat/stream", headers=alice.headers, json={"message": "send 500 to Bob"}
+    )
+    names = [name for name, _ in _events(resp.text)]
+    assert "tool_call" not in names and names[-1] == "done"
+    assert _events(resp.text)[-1][1]["outcome"] == "refused"
+
+
+def test_stream_failure_ends_with_a_generic_error_event(
+    client: TestClient, make_customer: Callable[..., Actor], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pbip_api.modules.assistant import repository
+
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("relation assistant_messages does not exist: SELECT secret")
+
+    monkeypatch.setattr(repository, "add_exchange", boom)
+    alice = make_customer()
+    resp = client.post(
+        "/api/v1/assistant/chat/stream", headers=alice.headers, json={"message": "hello"}
+    )
+    events = _events(resp.text)
+    assert events[-1][0] == "error"
+    assert "SELECT" not in resp.text and "relation" not in resp.text
+
+
+def test_conversation_is_stored_redacted_and_private(
+    client: TestClient, make_customer: Callable[..., Actor], db: Session
+) -> None:
+    alice, bob = make_customer(funds=5_000_00), make_customer()
+    _chat(client, alice, "what's my balance? reply to alice@example.com")
+    _chat(client, alice, "hello")
+    items = client.get("/api/v1/assistant/messages", headers=alice.headers).json()["items"]
+    assert [(i["role"], i["tool"]) for i in items] == [
+        ("user", None),
+        ("assistant", "get_account_summary"),
+        ("user", None),
+        ("assistant", None),
+    ]
+    assert items[0]["content"] == "what's my balance? reply to [email removed]"
+    assert alice.account_number not in str(items)
+    assert client.get("/api/v1/assistant/messages", headers=bob.headers).json()["items"] == []
+    stored = db.execute(text("SELECT content FROM assistant_messages")).scalars().all()
+    assert all("alice@example.com" not in c for c in stored)
+
+
+def test_chat_and_stream_share_the_per_user_limit(
+    client: TestClient, make_customer: Callable[..., Actor], settings: Settings
+) -> None:
+    assert settings.rate_limit_assistant_per_minute == 10
+    alice = make_customer()
+    for i in range(10):
+        path = "/api/v1/assistant/chat" + ("/stream" if i % 2 else "")
+        assert client.post(path, headers=alice.headers, json={"message": "hi"}).status_code == 200
+    over = client.post(
+        "/api/v1/assistant/chat/stream", headers=alice.headers, json={"message": "hi"}
+    )
+    assert over.status_code == 429

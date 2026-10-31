@@ -6,6 +6,8 @@ The tool registry is the real boundary (read-only, no identifiers); this layer g
 customer a clear answer and an audit record instead of a confused tool call.
 """
 
+import base64
+import binascii
 import re
 from enum import StrEnum
 
@@ -15,6 +17,7 @@ class Refusal(StrEnum):
     OTHER_CUSTOMER = "other_customer"
     SQL = "sql"
     INSTRUCTION_OVERRIDE = "instruction_override"
+    PRIVILEGE = "privilege"
 
 
 REFUSAL_TEXT: dict[Refusal, str] = {
@@ -28,6 +31,7 @@ REFUSAL_TEXT: dict[Refusal, str] = {
         "I can't change how I work. I can help with your balance, transactions, spending, "
         "balance forecast and loan affordability."
     ),
+    Refusal.PRIVILEGE: "I can't change roles or permissions. I can only read your own accounts.",
 }
 
 REFUSAL_LINK: dict[Refusal, str | None] = {
@@ -35,6 +39,7 @@ REFUSAL_LINK: dict[Refusal, str | None] = {
     Refusal.OTHER_CUSTOMER: None,
     Refusal.SQL: None,
     Refusal.INSTRUCTION_OVERRIDE: None,
+    Refusal.PRIVILEGE: None,
 }
 
 _I = re.IGNORECASE
@@ -68,10 +73,45 @@ _OVERRIDE = re.compile(
 )
 
 
+_PRIVILEGE = re.compile(
+    r"\b(admin|administrator|root|superuser|staff|analyst|compliance)\s+(rights|access|"
+    r"privileges?|role|mode|panel|permissions?)\b"
+    r"|\b(make|grant|give|promote)\s+me\b.{0,30}\b(admin|staff|analyst|superuser|root)\b"
+    r"|\b(credentials?|passwords?|api[\s_-]?keys?|secrets?|tokens?)\b.{0,30}"
+    r"\b(database|db|server|system|admin)\b"
+    r"|\b(database|db|server|system|admin)\b.{0,30}\b(credentials?|passwords?|secrets?)\b",
+    _I,
+)
+_BASE64 = re.compile(r"[A-Za-z0-9+/]{16,}={0,2}")
+
+
+def _decoded_variants(message: str) -> list[str]:
+    """Base64 runs decoded to text, so an encoded instruction meets the same checks."""
+    out = []
+    for token in _BASE64.findall(message):
+        try:
+            text = base64.b64decode(token + "=" * (-len(token) % 4), validate=True).decode()
+        except (binascii.Error, UnicodeDecodeError):
+            continue
+        if text.isprintable():
+            out.append(text)
+    return out
+
+
 def check(message: str) -> Refusal | None:
-    """Return why this message must be refused, or ``None`` if it may be routed."""
+    """Return why this message (or a base64 payload inside it) must be refused, or ``None``."""
+    for variant in (message, *_decoded_variants(message)):
+        refusal = _check_one(variant)
+        if refusal is not None:
+            return refusal
+    return None
+
+
+def _check_one(message: str) -> Refusal | None:
     if _OVERRIDE.search(message):
         return Refusal.INSTRUCTION_OVERRIDE
+    if _PRIVILEGE.search(message):
+        return Refusal.PRIVILEGE
     if _SQL.search(message):
         return Refusal.SQL
     if _OTHER.search(message):

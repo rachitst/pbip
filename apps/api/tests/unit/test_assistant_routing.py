@@ -271,7 +271,7 @@ def test_ollama_url_must_be_plain_http_host_and_port(url: str) -> None:
 
 
 def test_untrusted_text_is_stripped_and_capped() -> None:
-    assert clean_untrusted_text("Café‮\x00 \n Shop") == "Café Shop"
+    assert clean_untrusted_text("Café\u202e\x00 \n Shop") == "Café Shop"
     long = clean_untrusted_text("x" * 100)
     assert len(long) == 40 and long.endswith("…")
     assert clean_untrusted_text(None) == ""
