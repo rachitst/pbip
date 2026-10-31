@@ -28,7 +28,7 @@ Last reviewed against `main` on 2026-10-30 (local verification run recorded in
 | UC-03 Download statement (PDF) | Missing | `modules/statements/` empty | 016 #39, 074 #97 (Todo) | Whole use case |
 | UC-04 Transfer money: source, payee, amount, review, confirm; balance, fraud, limits | Partial | API: `modules/payments/`, ledger, fraud scoring, limits, idempotency, TOTP step-up (`test_transfers.py`, `test_ledger*.py`); UI: "Send money" form on the accounts page | 037 #60 (Todo) | No review/confirm step and no step-up modal in the UI; transfers have no E2E test |
 | UC-05 Manage payees: add, edit, delete, verify | Partial | API add, list, get, delete, verify (`modules/payees/`, BOLA matrix); UI lists payees in the send-money form only | 020 #43 (Todo), **094 #177 (new)** | No edit endpoint (TASK-094); no add/verify/delete UI (TASK-020) |
-| UC-06 Loan recommendation | Missing | `modules/loans/` empty; health score (TASK-041) is a possible input | 045 #68, 046 #69, 047 #70, 051 #74, 054 #77 (Todo) | Whole use case |
+| UC-06 Loan recommendation | Partial | `modules/loans/`: catalogue, EMI schedule (integer paise, Hypothesis properties), explainable eligibility from ledger income and repayments (DTI <= 50%, recent lockout refuses); `test_loans.py`, `test_loan_emi.py` | 045 #68, 046 #69 (Done); 047 #70, 051 #74 (Todo); 054 #77 (In Progress) | Loan suggestions on the dashboard, applications and tracking |
 | UC-07 Investment recommendation (risk tolerance, savings, income, funds) | Missing | `modules/wealth/`, `modules/recommendations/` empty | 054 #77, 063 #86, 064 #87, 065 #88 (Todo), **097 #180 (new)** | Risk tolerance had no task (TASK-097) |
 | UC-08 AI assistant | Missing | `modules/assistant/` empty | 057 #80, 058 #81, 059 #82, 060 #83, 061 #84, 067 #90, 076 #99 (Todo), **105 #188 (new)** | FAQ/support, product discovery and investment suggestions had no tool (TASK-105) |
 | UC-09 Fraud detection triggers | Partial | `fraud/baseline.py` (`baseline-rules-0.2`): LARGE_AMOUNT, VELOCITY_BURST, AMOUNT_SPIKE, NEW_PAYEE, NEW_PAYEE_LARGE_AMOUNT, **NEW_COUNTRY** (DB-IP Lite country, ADR-0014; approximate, signal only); score and reasons persisted; `test_transfers.py`, `test_geoip.py` | 023 #46, 025 #48, 029-034 #52-57 (Todo), 095 #178 (In Progress) | No rule for login failures or new device/network (TASK-095); location accuracy unevaluated (no labelled data) |
@@ -44,7 +44,7 @@ Last reviewed against `main` on 2026-10-30 (local verification run recorded in
 | Financial health indicators | Partial (API verified) | 041 #64 (Done), 049 #72 (Todo) | No UI |
 | Account details, transaction search, statements, settings | Partial | 005, 008 (Done); 017 #40, 016 #39, 074 #97 (Todo) | Search/filter (TASK-017) and statements missing; profile, devices, password change verified (`Profile.tsx`, `test_customers.py`, E2E) |
 | Bill payments, scheduled transfers | Missing | 014 #37, 015 #38, 020 #43, 021 #44 (Todo) | |
-| Loans: catalogue, eligibility, EMI calculator, applications, tracking | Missing | 045, 046, 047, 051 (Todo) | |
+| Loans: catalogue, eligibility, EMI calculator, applications, tracking | Partial | catalogue, EMI calculator, eligibility: 045, 046 (Done) | applications and tracking: 047, 051 (Todo) |
 | Wealth: fixed deposits, mutual funds, stocks and bonds | Missing | 063, 064, 065 (Todo) | |
 | Wealth: insurance products | Missing | **096 #179 (new)** | No task covered insurance |
 | Wealth: product comparison | Missing | **098 #181 (new)** | No task covered comparison |
