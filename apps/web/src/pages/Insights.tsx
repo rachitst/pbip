@@ -211,10 +211,10 @@ function FinancialHealthSection({ health }: { health: FinancialHealthScoreRespon
           ariaLabel="Debt repayments score"
         />
         <HealthComponent
-          name="Expense Volatility"
+          name="Spending variability"
           component={health.components.expense_volatility}
-          metricLabel="Spending variability"
-          ariaLabel="Expense volatility score"
+          metricLabel="Month to month"
+          ariaLabel="Spending variability score"
         />
       </div>
 
@@ -273,8 +273,8 @@ function CategorySpendingSection({ spending }: { spending: SpendingBreakdownResp
   const categories = spending.categories ?? [];
   const hasCategories = categories.length > 0 && spending.total_spend_minor > 0;
   const slices = donutSlices(categories);
-  const swatch = (category: string) =>
-    slices.find((slice) => slice.categories.includes(category))?.colorIndex ?? slices.length;
+  const sliceOf = (category: string) => slices.find((slice) => slice.categories.includes(category));
+  const swatch = (category: string) => sliceOf(category)?.colorIndex ?? slices.length;
 
   const summaryText = hasCategories
     ? `Total spending of ${formatMinor(spending.total_spend_minor, spending.currency)} across ${categories.length} categories in ${spending.period}.`
@@ -342,6 +342,9 @@ function CategorySpendingSection({ spending }: { spending: SpendingBreakdownResp
                     <span className="muted insights-legend__count">
                       {paymentCount(cat.transaction_count)}
                     </span>
+                    {sliceOf(cat.category)?.name === "Other" && (
+                      <span className="muted insights-legend__count">· in Other</span>
+                    )}
                   </span>
                   <span className="insights-legend__figures">
                     <strong>

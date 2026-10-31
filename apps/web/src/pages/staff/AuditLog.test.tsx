@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -451,5 +452,12 @@ describe("TASK-048 visual review changes", () => {
     await user.click(await screen.findByRole("button", { name: "Verify hash chain" }));
     await screen.findByText("TAMPERED");
     expect(container.querySelectorAll("[style]")).toHaveLength(0);
+  });
+});
+
+describe("TASK-048 polish", () => {
+  it("keeps the TAMPERED badge on the entry number's line", () => {
+    const css = readFileSync("src/styles.css", "utf8");
+    expect(css).toMatch(/\.audit-log__seq \{\s*white-space: nowrap;/);
   });
 });
