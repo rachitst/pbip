@@ -126,4 +126,34 @@ describe("App shell, session bar, and theme toggle (TASK-019)", () => {
     expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "My accounts" })).toBeInTheDocument();
   });
+
+  it("renders notification bell in customer session bar", async () => {
+    fetchMock.mockImplementation((input) => {
+      const url = urlOf(input);
+      if (url.endsWith("/auth/refresh")) return Promise.resolve(json(200, { access_token: "t" }));
+      if (url.endsWith("/auth/me")) return Promise.resolve(json(200, customerMe));
+      if (url.endsWith("/accounts")) return Promise.resolve(json(200, [account]));
+      if (url.endsWith("/payees")) return Promise.resolve(json(200, []));
+      if (url.endsWith("/customers/me")) return Promise.resolve(json(200, profile));
+      if (url.endsWith("/customers/devices")) return Promise.resolve(json(200, []));
+      if (url.includes("/api/v1/notifications")) {
+        return Promise.resolve(
+          json(200, {
+            items: [],
+            total: 0,
+            unread_count: 3,
+            limit: 20,
+            offset: 0,
+          }),
+        );
+      }
+      return Promise.resolve(json(404, { code: "not_found", title: "not found" }));
+    });
+
+    renderApp();
+
+    const bell = await screen.findByRole("button", { name: "Notifications (3 unread)" });
+    expect(bell).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+  });
 });
