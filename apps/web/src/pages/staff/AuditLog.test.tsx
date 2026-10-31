@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuditLogOut, ChainStatusOut, UserOut } from "../../api/client";
 import { MeContext } from "../../shell/MeContext";
 import { json, urlOf } from "../../test-utils";
-import { AuditLog } from "./AuditLog";
+import { AUDIT_PAGE_SIZE, AuditLog } from "./AuditLog";
 
 const complianceOfficerMe: UserOut = {
   id: "user-co",
@@ -284,5 +284,91 @@ describe("Compliance Audit Log UI (TASK-048)", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Verify Hash Chain" })).not.toBeInTheDocument();
+  });
+});
+
+/** `count` entries, newest first, ending at `oldest`. */
+function entries(newest: number, count: number): AuditLogOut[] {
+  return Array.from({ length: count }, (_, i) => ({
+    ...mockLogs[0],
+    seq: newest - i,
+    request_id: null,
+    hash: "d".repeat(64),
+  })) as AuditLogOut[];
+}
+
+describe("TASK-048 review fixes", () => {
+  const fetchMock = vi.fn<typeof fetch>();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function serveLog(total: number, verify?: ChainStatusOut) {
+    fetchMock.mockImplementation((input) => {
+      const url = new URL(urlOf(input), "http://localhost");
+      if (url.pathname === "/api/v1/compliance/audit-logs") {
+        const before = Number(url.searchParams.get("before_seq") ?? total + 1);
+        const limit = Number(url.searchParams.get("limit"));
+        const newest = before - 1;
+        return Promise.resolve(json(200, entries(newest, Math.max(0, Math.min(limit, newest)))));
+      }
+      if (url.pathname === "/api/v1/compliance/audit-logs/verify" && verify) {
+        return Promise.resolve(json(200, verify));
+      }
+      return Promise.resolve(json(404, { code: "not_found", title: "not found" }));
+    });
+  }
+
+  it("pages through older entries with before_seq until the oldest page", async () => {
+    serveLog(120);
+    const user = userEvent.setup();
+    renderWithClient(<AuditLog />);
+    const table = await screen.findByRole("region", { name: "Compliance audit logs table" });
+    expect(within(table).getAllByRole("row")).toHaveLength(AUDIT_PAGE_SIZE + 1); // + header
+
+    await user.click(screen.getByRole("button", { name: "Load older entries" }));
+    expect(await within(table).findByText("#70")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([input]) => urlOf(input).includes("before_seq=71"))).toBe(
+      true,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Load older entries" }));
+    expect(await within(table).findByText("#1")).toBeInTheDocument();
+    expect(within(table).getAllByRole("row")).toHaveLength(120 + 1);
+    expect(screen.queryByRole("button", { name: "Load older entries" })).not.toBeInTheDocument();
+  });
+
+  it("says when the broken entry is older than the loaded page, and marks it once loaded", async () => {
+    serveLog(120, { valid: false, checked: 120, first_invalid_seq: 5 });
+    const user = userEvent.setup();
+    renderWithClient(<AuditLog />);
+    await screen.findByRole("region", { name: "Compliance audit logs table" });
+
+    await user.click(screen.getByRole("button", { name: "Verify Hash Chain" }));
+    expect(await screen.findByText(/Entry #5 is older than the entries shown/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Load older entries" }));
+    await user.click(await screen.findByRole("button", { name: "Load older entries" }));
+    const row = (await screen.findByText("#5")).closest("tr");
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByText("TAMPERED")).toBeInTheDocument();
+    expect(screen.queryByText(/Entry #5 is older than the entries shown/)).not.toBeInTheDocument();
+  });
+
+  it("shows the server's reason when the log cannot be loaded", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({ code: "forbidden", title: "Multi-factor authentication required" }),
+        { status: 403, headers: { "Content-Type": "application/problem+json" } },
+      ),
+    );
+    renderWithClient(<AuditLog />);
+    expect(await screen.findByText(/Multi-factor authentication required/)).toBeInTheDocument();
   });
 });

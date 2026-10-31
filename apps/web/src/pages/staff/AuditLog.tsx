@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../../api/client";
 import type { AuditLogOut, ChainStatusOut } from "../../api/client";
@@ -9,6 +9,9 @@ import { Alert } from "../../ui/Alert";
 import { Button } from "../../ui/Button";
 import { PageHeader } from "../../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../../ui/States";
+
+/** Page size for the keyset-paginated log (newest first; `before_seq` fetches older pages). */
+export const AUDIT_PAGE_SIZE = 50;
 
 function resolveIp(entry: AuditLogOut): string {
   if (typeof entry.ip === "string" && entry.ip.length > 0) return entry.ip;
@@ -39,9 +42,17 @@ export function AuditLog() {
 
   const [verifyResult, setVerifyResult] = useState<ChainStatusOut | null>(null);
 
-  const logsQuery = useQuery({
+  const logsQuery = useInfiniteQuery({
     queryKey: ["compliance", "audit-logs"],
-    queryFn: () => api.auditLogs(),
+    queryFn: ({ pageParam }) => api.auditLogs(AUDIT_PAGE_SIZE, pageParam),
+    initialPageParam: undefined as number | undefined,
+    // A short page is the oldest one; otherwise continue below its last (oldest) sequence number.
+    getNextPageParam: (page) => {
+      const oldest = page.at(-1)?.seq;
+      return page.length < AUDIT_PAGE_SIZE || oldest === undefined || oldest <= 1
+        ? undefined
+        : oldest;
+    },
     enabled: hasComplianceRole,
   });
 
@@ -67,7 +78,9 @@ export function AuditLog() {
     );
   }
 
-  const items: AuditLogOut[] = logsQuery.data ?? [];
+  const items: AuditLogOut[] = logsQuery.data?.pages.flat() ?? [];
+  const brokenSeq = verifyResult && !verifyResult.valid ? verifyResult.first_invalid_seq : null;
+  const brokenEntryLoaded = brokenSeq !== null && items.some((entry) => entry.seq === brokenSeq);
 
   return (
     <div className="page">
@@ -115,6 +128,13 @@ export function AuditLog() {
             <Alert tone="error">
               Hash chain broken! Data tampering detected at sequence #
               {verifyResult.first_invalid_seq}. Checked {verifyResult.checked} total entries.
+              {brokenSeq !== null && !brokenEntryLoaded && (
+                <>
+                  {" "}
+                  Entry #{brokenSeq} is older than the entries shown: load older entries to reach
+                  it.
+                </>
+              )}
             </Alert>
           )}
         </div>
@@ -122,9 +142,9 @@ export function AuditLog() {
 
       {logsQuery.isPending && <LoadingState label="Loading audit logs..." />}
 
-      {logsQuery.isError && (
+      {logsQuery.isError && !logsQuery.isFetchNextPageError && (
         <ErrorState
-          message="Could not load compliance audit logs."
+          message={errorMessage(logsQuery.error, "Could not load compliance audit logs.")}
           onRetry={() => {
             void logsQuery.refetch();
           }}
@@ -137,7 +157,7 @@ export function AuditLog() {
 
       {items.length > 0 && (
         <div
-          className="entries table-scroll-container"
+          className="entries"
           tabIndex={0}
           role="region"
           aria-label="Compliance audit logs table"
@@ -176,7 +196,6 @@ export function AuditLog() {
                   <tr
                     key={entry.seq}
                     data-seq={entry.seq}
-                    className={isTampered ? "row--invalid" : undefined}
                     style={
                       isTampered
                         ? {
@@ -250,6 +269,24 @@ export function AuditLog() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {logsQuery.isFetchNextPageError && (
+        <Alert tone="error">
+          {errorMessage(logsQuery.error, "Could not load older audit log entries.")}
+        </Alert>
+      )}
+
+      {logsQuery.hasNextPage && (
+        <Button
+          variant="secondary"
+          loading={logsQuery.isFetchingNextPage}
+          onClick={() => {
+            void logsQuery.fetchNextPage();
+          }}
+        >
+          Load older entries
+        </Button>
       )}
     </div>
   );
