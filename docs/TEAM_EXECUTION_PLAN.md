@@ -100,7 +100,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 | TASK-015 | Scheduled & Recurring Transfers Engine | Sujal | Sun 25 Oct | Mon 26 Oct | 005 | Par | Low | #38 |
 | TASK-018 | Notifications Inbox Service & Read Status Tracking | Abbas | Sun 25 Oct | Sun 25 Oct | - | Par | Low | #41 |
 | TASK-019 | Customer Web Dashboard Shell & Accounts Overview | Kalpak | Sun 25 Oct | Mon 26 Oct | 005, 008 | Par | Low | #42 |
-| TASK-023 | Synthetic Data Generator v2 with Labelled Fraud Injectors F1-F6 | Pranay | Sun 25 Oct | Mon 26 Oct | 009 | Par | High | #46 |
+| TASK-023 | Synthetic Data Generator v2 with Labelled Fraud Injectors F1-F6 | Rachit | Sun 25 Oct | Mon 26 Oct | 009 | Par | High | #46 |
 | TASK-028 | Threat Model Specification & OWASP Mapping v1 | Abbas | Sun 25 Oct | Sun 25 Oct | - | Par | Low | #51 |
 | TASK-014 | Bill Payments Core Models, Validation & Service | Sujal | Mon 26 Oct | Mon 26 Oct | 005 | Par | Low | #37 |
 | TASK-022 | Web Notifications Tray & Alert Badges | Kalpak | Mon 26 Oct | Mon 26 Oct | 018, 019 | Seq | Low | #45 |
@@ -780,10 +780,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-023 - Synthetic Data Generator v2 with Labelled Fraud Injectors F1-F6
 
 - **Issue:** #46 | **Sprint:** 2 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Data Generation & ML
-- **Owner:** Pranay (`pranaysanap`)
-- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
+- **Owner:** Rachit (`rachitst`), taken over from Pranay on Sun 1 Nov to unblock the fraud and AI chain
+- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Sun 1 Nov (data-gen v2: F1-F6 injected with a label file and per-scenario counts, deterministic by seed) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-009 (#20, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** Parallel: can start immediately
+- **Mode:** Done
 - **Goal:** Data generator injecting realistic fraud scenarios F1-F6 with ground-truth labels.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -794,10 +794,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Generates clean metadata output linking injected transaction ID to fraud scenario label
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #46`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Injects F1 (APP scam: new payee + large transfer) and F2 (velocity burst)
-  - [ ] Injects F3 (Account takeover sequence) and F4 (Impossible travel/geo jump)
-  - [ ] Injects F5 (Amount anomaly vs customer baseline) and F6 (Mule pass-through flow)
-  - [ ] Generates clean metadata output linking injected transaction ID to fraud scenario label
+  - [x] Injects F1 (APP scam: new payee + large transfer) and F2 (velocity burst)
+  - [x] Injects F3 (Account takeover sequence) and F4 (Impossible travel/geo jump)
+  - [x] Injects F5 (Amount anomaly vs customer baseline) and F6 (Mule pass-through flow)
+  - [x] Generates clean metadata output linking injected transaction ID to fraud scenario label
 - **Definition of done (evidence):** Dataset generated with fixed seed, statistical balance checked, documentation in data-gen.
 - **Required checks:**
   - Automated: pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable
@@ -3215,12 +3215,12 @@ decision in ADR-0015.
 | TASK-018 | Abbas | TASK-022 | Kalpak | Sun 25 Oct | Mon 26 Oct |
 | TASK-040 | Krishna | TASK-049 | Kalpak | Sun 25 Oct | Mon 26 Oct |
 | TASK-041 | Krishna | TASK-049 | Kalpak | Sun 25 Oct | Mon 26 Oct |
-| TASK-023 | Pranay | TASK-071 | Abbas | Mon 26 Oct | Mon 26 Oct |
-| TASK-023 | Pranay | TASK-072 | Abbas | Mon 26 Oct | Mon 26 Oct |
+| TASK-023 | Rachit | TASK-071 | Abbas | Mon 26 Oct | Mon 26 Oct |
+| TASK-023 | Rachit | TASK-072 | Abbas | Mon 26 Oct | Mon 26 Oct |
 | TASK-018 | Abbas | TASK-026 | Sujal | Sun 25 Oct | Mon 26 Oct |
 | TASK-024 | Pranay | TASK-030 | Krishna | Mon 26 Oct | Mon 26 Oct |
 | TASK-014 | Sujal | TASK-020 | Kalpak | Mon 26 Oct | Tue 27 Oct |
-| TASK-023 | Pranay | TASK-042 | Krishna | Mon 26 Oct | Tue 27 Oct |
+| TASK-023 | Rachit | TASK-042 | Krishna | Mon 26 Oct | Tue 27 Oct |
 | TASK-014 | Sujal | TASK-027 | Rachit | Mon 26 Oct | Tue 27 Oct |
 | TASK-015 | Sujal | TASK-027 | Rachit | Mon 26 Oct | Tue 27 Oct |
 | TASK-015 | Sujal | TASK-021 | Kalpak | Mon 26 Oct | Tue 27 Oct |
