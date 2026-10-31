@@ -9,6 +9,10 @@ x-api-env: &api-env
   FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY}
   CORS_ORIGINS: ${CORS_ORIGINS}
   COOKIE_SECURE: ${COOKIE_SECURE:-false}
+  # AI assistant (blueprint section 8): Ollama runs on the HOST; containers reach it via
+  # host.docker.internal (mapped to the host gateway on the api service below).
+  OLLAMA_BASE_URL: ${OLLAMA_CONTAINER_URL:-http://host.docker.internal:11434}
+  OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b-instruct}
 
 x-api-build: &api-build
   context: .
@@ -57,6 +61,7 @@ services:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
     ports: ["127.0.0.1:8000:8000"]
+    extra_hosts: ["host.docker.internal:host-gateway"]  # Linux; Docker Desktop provides it already
     restart: unless-stopped
 
   worker:
