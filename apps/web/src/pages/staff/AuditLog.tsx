@@ -229,7 +229,7 @@ export function AuditLog() {
                       data-seq={entry.seq}
                       className={isTampered ? "audit-log__row--tampered" : undefined}
                     >
-                      <td>
+                      <td className="audit-log__seq">
                         #{entry.seq}
                         {isTampered && (
                           <span className="badge badge--danger audit-log__badge">TAMPERED</span>

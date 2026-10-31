@@ -265,7 +265,8 @@ describe("Customer Real-Time Notifications (TASK-022)", () => {
       expect(
         within(dialog).getByText("Your transfer of INR 500.00 was completed."),
       ).toBeInTheDocument();
-      expect(within(dialog).getByText("Transfer")).toBeInTheDocument();
+      // a completed transfer has no type tag: its title already says what it is
+      expect(within(dialog).queryByText("Transfer")).not.toBeInTheDocument();
 
       // Held for review: a transfer outcome, not a "security alert"
       expect(within(dialog).getByText("Transfer under review")).toBeInTheDocument();

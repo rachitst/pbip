@@ -671,6 +671,7 @@ a {
   gap: var(--space-2);
 }
 .notification-item__top time {
+  margin-left: auto; /* stays right-aligned when there is no tag */
   font-size: var(--text-xs);
   white-space: nowrap;
 }
@@ -700,7 +701,7 @@ a {
   white-space: nowrap;
 }
 .audit-log__badge {
-  margin-left: var(--space-2);
+  margin-left: var(--space-1);
 }
 .audit-log__retry {
   margin-left: var(--space-2);
@@ -710,8 +711,12 @@ a {
   background: color-mix(in srgb, var(--danger) 15%, transparent);
   outline: 2px solid var(--danger);
 }
+/* The TAMPERED badge stays on the entry number's line; the details summary gives up the room. */
+.audit-log__seq {
+  white-space: nowrap;
+}
 .audit-log__details {
-  max-width: 12rem;
+  max-width: 9rem;
 }
 /* position: relative keeps the toggle's sr-only text inside the scrolling table region; without
    it the absolutely positioned span escaped the region and widened the page at phone width. */
