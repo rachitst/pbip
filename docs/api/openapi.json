@@ -4244,7 +4244,27 @@
               },
               "text/event-stream": {
                 "schema": {
-                  "type": "string"
+                  "properties": {
+                    "data": {
+                      "description": "JSON payload",
+                      "type": "string"
+                    },
+                    "event": {
+                      "enum": [
+                        "tool_call",
+                        "tool_result",
+                        "token",
+                        "done",
+                        "error"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "event",
+                    "data"
+                  ],
+                  "type": "object"
                 }
               }
             },
