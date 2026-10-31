@@ -753,7 +753,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #45 | **Sprint:** 2 | **Priority:** must | **Size:** S (0.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Kalpak (`Patil-Kalpak`)
-- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (8.8 days of slack)
+- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (partially delivered in #224 on Sat 31 Oct: polled unread badge, transfer notifications, mark read; security/statement notifications and per-transaction navigation need API support first, see #45) | **Status:** In Progress | **Risk:** Medium (two criteria depend on backend work not yet planned)
 - **Depends on:** TASK-018 (#41, Abbas), TASK-019 (#42, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-018, TASK-019
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; the bell sits in the shell's top bar and links to routed pages.
@@ -1511,9 +1511,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #71 | **Sprint:** 4 | **Priority:** should | **Size:** S (0.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Kalpak (`Patil-Kalpak`)
-- **Start:** Wed 28 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (6.8 days of slack)
+- **Start:** Wed 28 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** Sat 31 Oct (merged in #211 with maintainer review fixes: keyset pagination so older chain breaks are reachable, server error reasons, expandable details row; tamper detection verified end to end against the local stack: entry #120 edited, reported and marked TAMPERED, restored and re-verified) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-019 (#42, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** Sequential: waits for TASK-019
+- **Mode:** Done
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; lives in the staff route tree (`/staff`). Needs only the two foundation PRs.
 - **Goal:** Staff web dashboard displaying tamper-evident audit logs with cryptographic hash-chain verification.
 - **Implementation steps:**
@@ -1525,10 +1525,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Protected by require_roles([COMPLIANCE_OFFICER, ADMIN], mfa=True)
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #71`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Displays chronological audit log entries with user, action, IP address, and timestamp
-  - [ ] One-click 'Verify Hash Chain' button calling /api/v1/compliance/audit-logs/verify
-  - [ ] Visually highlights any detected chain break or data tampering
-  - [ ] Protected by require_roles([COMPLIANCE_OFFICER, ADMIN], mfa=True)
+  - [x] Displays chronological audit log entries with user, action, IP address, and timestamp
+  - [x] One-click 'Verify Hash Chain' button calling /api/v1/compliance/audit-logs/verify
+  - [x] Visually highlights any detected chain break or data tampering
+  - [x] Protected by require_roles([COMPLIANCE_OFFICER, ADMIN], mfa=True)
 - **Definition of done (evidence):** Component tests test valid chain display and tamper alert state.
 - **Required checks:**
   - Automated: Vitest + Testing Library covering loading, empty, error and success states; Playwright journey for critical flows; types only from `schema.d.ts`; audit-log entries asserted in integration tests (actor, action, resource)
@@ -1541,9 +1541,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #72 | **Sprint:** 4 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Kalpak (`Patil-Kalpak`)
-- **Start:** Mon 26 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (7.4 days of slack)
+- **Start:** Mon 26 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** Sat 31 Oct (merged in #221 with maintainer review fixes: percentage tooltips, dark-mode tooltip contrast, named chart focus stops, top four categories plus Other, plain labels; verified in the browser with real spending; the two-month bar chart is covered by component tests only, because a previous month cannot be created locally without editing ledger timestamps) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-040 (#63, Krishna), TASK-041 (#64, Krishna), TASK-019 (#42, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
-- **Mode:** Sequential: waits for TASK-040, TASK-041, TASK-019
+- **Mode:** Done
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; a customer route (Insights). Needs the foundation PRs only, not any staff page. Adds Recharts 3.10.x (approved in ADR-0016; `Cell` is deprecated, use `shape`/`content`).
 - **Goal:** Interactive financial analytics page with category donut charts, burn rate, and health score.
 - **Implementation steps:**
@@ -1555,10 +1555,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Accessible color contrast and mobile responsive layout
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #72`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Recharts donut chart showing spending distribution by category with percentage tooltips
-  - [ ] Financial health score gauge with component progress bars (Savings, Buffer, Debt)
-  - [ ] Month-over-month comparison bar chart with spending delta indicators
-  - [ ] Accessible color contrast and mobile responsive layout
+  - [x] Recharts donut chart showing spending distribution by category with percentage tooltips
+  - [x] Financial health score gauge with component progress bars (Savings, Buffer, Debt)
+  - [x] Month-over-month comparison bar chart with spending delta indicators
+  - [x] Accessible color contrast and mobile responsive layout
 - **Definition of done (evidence):** Vitest tests mock analytics responses and test responsive rendering.
 - **Required checks:**
   - Automated: Vitest + Testing Library covering loading, empty, error and success states; Playwright journey for critical flows; types only from `schema.d.ts`; correctness tests on aggregates with fixed fixtures (edge cases: empty history, single month)

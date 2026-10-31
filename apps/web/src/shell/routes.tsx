@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import type { ReactNode } from "react";
 import { Navigate, Outlet } from "react-router";
 import type { RouteObject } from "react-router";
@@ -10,6 +11,7 @@ import { errorMessage } from "../lib/errors";
 import { Accounts } from "../pages/Accounts";
 import { NotFound } from "../pages/NotFound";
 import { Profile } from "../pages/Profile";
+import { AuditLog } from "../pages/staff/AuditLog";
 import { StaffHome } from "../pages/staff/StaffHome";
 import { Alert } from "../ui/Alert";
 import { ErrorState, LoadingState } from "../ui/States";
@@ -17,11 +19,15 @@ import { AppShell, SignOutButton } from "./AppShell";
 import type { NavItem } from "./AppShell";
 import { MeContext, useCurrentUser } from "./MeContext";
 
+// Recharts is large: load the Insights page (and the chart library) only when it is opened.
+const Insights = lazy(() => import("../pages/Insights"));
+
 const HOME_PATH: Record<Area, string> = { customer: "/accounts", staff: "/staff", none: "/" };
 
 function customerNav(me: UserOut): NavItem[] {
   const items: NavItem[] = [
     { to: "/accounts", label: "Accounts" },
+    { to: "/insights", label: "Spending & health" },
     { to: "/profile", label: "Profile & security" },
   ];
   if (isStaff(me)) items.push({ to: "/staff", label: "Staff workspace" });
@@ -31,6 +37,9 @@ function customerNav(me: UserOut): NavItem[] {
 /** Staff tools are added here by their tasks (TASK-036, TASK-048, ...), each filtered by role. */
 function staffNav(me: UserOut): NavItem[] {
   const items: NavItem[] = [{ to: "/staff", label: "Overview", end: true }];
+  if (me.roles.includes("COMPLIANCE_OFFICER") || me.roles.includes("ADMIN")) {
+    items.push({ to: "/staff/audit-log", label: "Audit log" });
+  }
   if (isCustomer(me)) items.push({ to: "/accounts", label: "My banking" });
   return items;
 }
@@ -149,13 +158,24 @@ export const routes: RouteObject[] = [
         children: [
           { index: true, element: <Navigate to="/accounts" replace /> },
           { path: "accounts", element: <Accounts /> },
+          {
+            path: "insights",
+            element: (
+              <Suspense fallback={<LoadingState label="Loading spending & financial health..." />}>
+                <Insights />
+              </Suspense>
+            ),
+          },
           { path: "profile", element: <Profile /> },
         ],
       },
       {
         path: "staff",
         element: <StaffArea />,
-        children: [{ index: true, element: <StaffHome /> }],
+        children: [
+          { index: true, element: <StaffHome /> },
+          { path: "audit-log", element: <AuditLog /> },
+        ],
       },
       { path: "*", element: <OutsideArea /> },
     ],

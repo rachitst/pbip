@@ -22,7 +22,7 @@ def get_recommendations(
     customer: Customer = Depends(get_current_customer),
     session: Session = Depends(get_session),
 ) -> RecommendationsResponse:
-    """Evaluate eligibility and propensity ranking to return top-3 personalized products."""
+    """Top 3 eligible products for the authenticated customer, with reasons from their data."""
     return service.get_customer_recommendations(
         session=session,
         customer_id=customer.id,

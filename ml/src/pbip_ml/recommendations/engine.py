@@ -1,10 +1,13 @@
-"""Product recommendation engine: eligibility rules, propensity scoring, and explainability.
+"""Product recommendations: eligibility rules, then a rule-based relevance ranking (TASK-054).
 
-Architecture (TASK-054):
-1. Evaluates eligibility rules first (e.g. savings buffer for investments, income for loans).
-2. Scores customer propensity using a calibrated logistic regression ranking model.
-3. Generates human-readable, grounded justification reasons.
-4. Returns top-3 recommendations, adhering to ADR-0015 (demographics/age-band).
+1. Eligibility rules run first and exclude products the customer does not qualify for (buffer,
+   income, debt ratio, balance, health score), from the customer's real ledger-derived figures.
+2. Eligible products are ordered by a fixed, hand-weighted relevance formula. It is NOT a trained
+   model and the score is NOT a probability: it only orders products for one customer. No data
+   exists yet to train a propensity model on (there are no recorded product take-ups).
+3. Each recommendation carries reasons built from the customer's own figures, in INR.
+4. ADR-0015: the age band is never used for ranking; it can only add an eligibility reason, and it
+   stays "unknown" until consented date of birth exists (TASK-107).
 """
 
 import math
@@ -18,306 +21,218 @@ from pbip_ml.recommendations.contract import (
     Recommendation,
 )
 
-MODEL_VERSION = "rec-v1.0.0"
+MODEL_VERSION = "rules-v1"
 
-# Fixed deterministic UUIDs for standard banking catalogue
-SAVINGS_ACCELERATOR_ID = UUID("00000000-0000-4000-a000-000000000001")
+SAVINGS_ACCOUNT_ID = UUID("00000000-0000-4000-a000-000000000001")
 FIXED_DEPOSIT_ID = UUID("00000000-0000-4000-a000-000000000002")
 CREDIT_LINE_ID = UUID("00000000-0000-4000-a000-000000000003")
 REWARDS_CARD_ID = UUID("00000000-0000-4000-a000-000000000004")
 INDEX_SIP_ID = UUID("00000000-0000-4000-a000-000000000005")
-FAMILY_SHIELD_ID = UUID("00000000-0000-4000-a000-000000000006")
+FAMILY_COVER_ID = UUID("00000000-0000-4000-a000-000000000006")
 
-
+# The catalogue states what each product is and how it is priced, never a rate or limit PBIP does
+# not publish: those are quoted on application.
 PRODUCT_CATALOGUE: tuple[BankingProduct, ...] = (
     BankingProduct(
-        product_id=SAVINGS_ACCELERATOR_ID,
+        product_id=SAVINGS_ACCOUNT_ID,
         product_type=ProductType.SAVINGS,
-        title="High-Yield Savings Accelerator",
-        description=(
-            "Earn 6.5% APY on idle deposits with automated round-ups and daily liquidity."
-        ),
-        min_income_minor=0,
-        min_buffer_months=0.0,
-        min_savings_ratio=-1.0,
-        max_emi_ratio=1.0,
-        min_balance_minor=0,
-        min_health_score=0,
-        min_discretionary_ratio=0.0,
+        title="Savings account",
+        description="A separate savings account to set money aside from everyday spending.",
         target_segments=["BUDGET_CONSCIOUS", "INACTIVE_SAVER"],
-        cta_label="Open Account",
-        cta_path="/accounts/open?type=SAVINGS",
+        cta_label="Open account",
     ),
     BankingProduct(
         product_id=FIXED_DEPOSIT_ID,
         product_type=ProductType.SAVINGS,
-        title="Fixed Term Deposit",
-        description=(
-            "Guaranteed 7.5% p.a. returns (8.0% for Senior Citizens 60+) with flexible tenures."
-        ),
-        min_income_minor=0,
+        title="Fixed deposit",
+        description="Lock savings away for a fixed term; the rate is shown before you book.",
         min_buffer_months=2.0,
         min_savings_ratio=0.05,
         max_emi_ratio=0.60,
-        min_balance_minor=50_000_00,  # 50,000 INR
+        min_balance_minor=50_000_00,
         min_health_score=40,
-        min_discretionary_ratio=0.0,
         target_segments=["HIGH_NET_WORTH", "BUDGET_CONSCIOUS"],
-        cta_label="Book Deposit",
-        cta_path="/deposits/new",
+        cta_label="Book deposit",
     ),
     BankingProduct(
         product_id=CREDIT_LINE_ID,
         product_type=ProductType.LOAN,
-        title="Instant Personal Credit Line",
-        description=(
-            "Pre-approved credit line up to ₹5,00,000. Interest charged only on utilized funds."
-        ),
-        min_income_minor=25_000_00,  # 25,000 INR monthly inflow
-        min_buffer_months=0.0,
+        title="Personal credit line",
+        description="Borrow as needed up to an agreed limit, subject to a credit check.",
+        min_income_minor=25_000_00,
         min_savings_ratio=-0.20,
-        max_emi_ratio=0.45,  # Existing debt must not exceed 45% of income
-        min_balance_minor=0,
+        max_emi_ratio=0.45,
         min_health_score=30,
-        min_discretionary_ratio=0.0,
         target_segments=["FREQUENT_TRANSACTOR", "DISCRETIONARY_SPENDER"],
-        cta_label="Apply for Loan",
-        cta_path="/loans/apply?type=PERSONAL",
+        cta_label="Check eligibility",
     ),
     BankingProduct(
         product_id=REWARDS_CARD_ID,
         product_type=ProductType.LOAN,
-        title="Titanium Rewards Credit Card",
+        title="Rewards credit card",
         description=(
-            "3% unlimited cashback on dining and travel, airport lounge access, and zero forex fee."
+            "A credit card that earns rewards on everyday spending, subject to a credit check."
         ),
-        min_income_minor=35_000_00,  # 35,000 INR monthly inflow
+        min_income_minor=35_000_00,
         min_buffer_months=0.5,
         min_savings_ratio=0.0,
         max_emi_ratio=0.50,
-        min_balance_minor=0,
         min_health_score=40,
-        min_discretionary_ratio=0.20,  # Must spend at least 20% on discretionary
+        min_discretionary_ratio=0.20,
         target_segments=["DISCRETIONARY_SPENDER", "FREQUENT_TRANSACTOR", "HIGH_NET_WORTH"],
-        cta_label="Get Card",
-        cta_path="/cards/apply?tier=TITANIUM",
+        cta_label="Check eligibility",
     ),
     BankingProduct(
         product_id=INDEX_SIP_ID,
         product_type=ProductType.INVESTMENT,
-        title="Balanced Index Wealth SIP",
+        title="Index fund SIP",
         description=(
-            "Low-cost automated index fund investing in blue-chip equities with zero exit load."
+            "A monthly investment in an index fund. Market-linked: returns are not guaranteed."
         ),
         min_income_minor=30_000_00,
-        min_buffer_months=3.0,  # Requires at least 3 months emergency buffer
+        min_buffer_months=3.0,
         min_savings_ratio=0.15,
         max_emi_ratio=0.40,
-        min_balance_minor=100_000_00,  # 100,000 INR
+        min_balance_minor=100_000_00,
         min_health_score=55,
-        min_discretionary_ratio=0.0,
         target_segments=["HIGH_NET_WORTH", "BUDGET_CONSCIOUS"],
-        cta_label="Start SIP",
-        cta_path="/investments/sip/start",
+        cta_label="Learn more",
     ),
     BankingProduct(
-        product_id=FAMILY_SHIELD_ID,
+        product_id=FAMILY_COVER_ID,
         product_type=ProductType.INSURANCE,
-        title="Comprehensive Family Protection Shield",
-        description=(
-            "₹1 Crore term life protection paired with cashless family health cover and riders."
-        ),
+        title="Family protection cover",
+        description="Term life and family health cover; the premium is quoted on application.",
         min_income_minor=15_000_00,
-        min_buffer_months=0.0,
         min_savings_ratio=-0.10,
         max_emi_ratio=0.70,
-        min_balance_minor=0,
-        min_health_score=0,
-        min_discretionary_ratio=0.0,
         target_segments=["FREQUENT_TRANSACTOR", "BUDGET_CONSCIOUS", "DISCRETIONARY_SPENDER"],
-        cta_label="View Coverage",
-        cta_path="/insurance/quote",
+        cta_label="Get a quote",
     ),
 )
 
 
-def evaluate_eligibility(
-    product: BankingProduct,
-    ctx: CustomerRecommendationContext,
-) -> bool:
-    """Evaluate hard eligibility exclusion criteria. Returns True if eligible."""
-    if ctx.monthly_inflow_minor < product.min_income_minor:
-        return False
-    if ctx.buffer_months < product.min_buffer_months:
-        return False
-    if ctx.savings_ratio < product.min_savings_ratio:
-        return False
-    if ctx.emi_ratio > product.max_emi_ratio:
-        return False
-    if ctx.total_balance_minor < product.min_balance_minor:
-        return False
-    if ctx.health_score < product.min_health_score:
-        return False
-    return ctx.discretionary_ratio >= product.min_discretionary_ratio
+def format_inr(minor: int) -> str:
+    """INR with Indian digit grouping, e.g. 2,01,072.00 (pbip_ml must not import pbip_api)."""
+    sign = "-" if minor < 0 else ""
+    rupees, paise = divmod(abs(minor), 100)
+    digits = str(rupees)
+    if len(digits) > 3:
+        head, tail = digits[:-3], digits[-3:]
+        groups: list[str] = []
+        while len(head) > 2:
+            groups.insert(0, head[-2:])
+            head = head[:-2]
+        if head:
+            groups.insert(0, head)
+        digits = ",".join([*groups, tail])
+    return f"{sign}INR {digits}.{paise:02d}"
 
 
-def _score_product_propensity(
-    product: BankingProduct,
-    ctx: CustomerRecommendationContext,
-) -> float:
-    """Calculate calibrated propensity probability score using logistic model."""
-    # Normalized feature inputs [0.0, 1.0]
-    savings_norm = min(max(ctx.savings_ratio, 0.0), 1.0)
-    disc_norm = min(max(ctx.discretionary_ratio, 0.0), 1.0)
-    buffer_norm = min(ctx.buffer_months / 12.0, 1.0)
-    income_norm = min(ctx.monthly_inflow_minor / 300_000_00, 1.0)
-    health_norm = ctx.health_score / 100.0
-    segment_match = 1.0 if ctx.segment in product.target_segments else 0.0
+def evaluate_eligibility(product: BankingProduct, ctx: CustomerRecommendationContext) -> bool:
+    """Hard eligibility rules, applied before any ranking. True if the customer qualifies."""
+    return (
+        ctx.monthly_inflow_minor >= product.min_income_minor
+        and ctx.buffer_months >= product.min_buffer_months
+        and ctx.savings_ratio >= product.min_savings_ratio
+        and ctx.emi_ratio <= product.max_emi_ratio
+        and ctx.total_balance_minor >= product.min_balance_minor
+        and ctx.health_score >= product.min_health_score
+        and ctx.discretionary_ratio >= product.min_discretionary_ratio
+    )
+
+
+def relevance_score(product: BankingProduct, ctx: CustomerRecommendationContext) -> float:
+    """Fixed weighted formula squashed into (0, 1) for ordering. Not trained, not a probability."""
+    savings = min(max(ctx.savings_ratio, 0.0), 1.0)
+    discretionary = min(max(ctx.discretionary_ratio, 0.0), 1.0)
+    buffer = min(ctx.buffer_months / 12.0, 1.0)
+    income = min(ctx.monthly_inflow_minor / 300_000_00, 1.0)
+    health = ctx.health_score / 100.0
+    segment = 1.0 if ctx.segment in product.target_segments else 0.0
+    debt_room = 1.0 - min(ctx.emi_ratio, 1.0)
 
     match product.product_type:
         case ProductType.SAVINGS:
-            # Fixed Deposit / High-Yield Savings prioritize buffer, savings rate, and health
-            linear = (
-                -0.5
-                + 1.8 * savings_norm
-                + 1.5 * buffer_norm
-                + 1.2 * health_norm
-                + 1.0 * segment_match
-            )
-            # Senior Citizen bonus per ADR-0015
-            if product.product_id == FIXED_DEPOSIT_ID and ctx.age_band == "60+":
-                linear += 0.8
+            linear = -0.5 + 1.8 * savings + 1.5 * buffer + 1.2 * health + 1.0 * segment
         case ProductType.INVESTMENT:
-            # Investments prioritize strong health, high buffer, and high income
-            linear = (
-                -1.2
-                + 2.2 * buffer_norm
-                + 1.8 * health_norm
-                + 1.5 * savings_norm
-                + 1.2 * income_norm
-                + 1.2 * segment_match
-            )
+            linear = -1.2 + 2.2 * buffer + 1.8 * health + 1.5 * savings + 1.2 * income
+            linear += 1.2 * segment
+        case ProductType.LOAN if product.product_id == REWARDS_CARD_ID:
+            linear = -1.0 + 3.0 * discretionary + 1.5 * income + 1.0 * debt_room + 1.5 * segment
         case ProductType.LOAN:
-            if product.product_id == REWARDS_CARD_ID:
-                linear = (
-                    -1.0
-                    + 3.0 * disc_norm
-                    + 1.5 * income_norm
-                    + 1.0 * (1.0 - ctx.emi_ratio)
-                    + 1.5 * segment_match
-                )
-            else:
-                # Credit line emphasizes liquidity cushion and manageable existing debt
-                linear = (
-                    -0.8
-                    + 1.0 * disc_norm
-                    + 1.6 * income_norm
-                    + 1.5 * (1.0 - ctx.emi_ratio)
-                    + 1.2 * segment_match
-                )
+            linear = -0.8 + 1.0 * discretionary + 1.6 * income + 1.5 * debt_room + 1.2 * segment
         case ProductType.INSURANCE:
-            # Insurance covers liabilities and protection
-            linear = (
-                -0.2
-                + 1.0 * ctx.emi_ratio
-                + 1.0 * (1.0 - health_norm)
-                + 0.8 * income_norm
-                + 0.8 * segment_match
-            )
-
-    # Calibrated Sigmoid probability: P = 1 / (1 + e^(-linear))
-    score = 1.0 / (1.0 + math.exp(-linear))
-    return round(float(min(max(score, 0.01), 0.99)), 4)
+            linear = -0.2 + 1.0 * min(ctx.emi_ratio, 1.0) + 1.0 * (1.0 - health) + 0.8 * income
+            linear += 0.8 * segment
+    return round(1.0 / (1.0 + math.exp(-linear)), 4)
 
 
-def _reasons_for_fixed_deposit(ctx: CustomerRecommendationContext) -> list[str]:
-    reasons: list[str] = []
-    if ctx.age_band == "60+":
-        reasons.append("Eligible for Senior Citizen 8.0% p.a. guaranteed interest rate.")
-    reasons.append(
-        f"Your liquid cash buffer ({ctx.buffer_months:.1f} months) allows locking in "
-        "risk-free fixed compounding."
-    )
-    if ctx.segment == "HIGH_NET_WORTH":
-        reasons.append("Optimal for capital preservation and high-bracket deposit yields.")
-    else:
-        reasons.append("Guaranteed returns without exposure to market fluctuations.")
+def _savings_reasons(ctx: CustomerRecommendationContext) -> list[str]:
+    if ctx.monthly_inflow_minor > ctx.monthly_spend_minor > 0:
+        kept = ctx.monthly_inflow_minor - ctx.monthly_spend_minor
+        return [
+            f"You keep about {format_inr(kept)} of {format_inr(ctx.monthly_inflow_minor)} "
+            "income each month; a separate account keeps it apart from spending."
+        ]
+    return [
+        f"Your spending averages {format_inr(ctx.monthly_spend_minor)} a month; a separate "
+        "account makes it easier to set money aside."
+    ]
+
+
+def _deposit_reasons(ctx: CustomerRecommendationContext) -> list[str]:
+    reasons = [
+        f"Your balance of {format_inr(ctx.total_balance_minor)} covers "
+        f"{ctx.buffer_months:.1f} months of your average spending.",
+        f"Your financial health score is {ctx.health_score}/100.",
+    ]
+    if ctx.age_band == "60+":  # ADR-0015: an eligibility reason only, never a ranking input
+        reasons.append("Senior-citizen deposit rates apply because you are 60 or over.")
     return reasons
 
 
-def _reasons_for_savings_accelerator(ctx: CustomerRecommendationContext) -> list[str]:
-    reasons: list[str] = []
-    if ctx.savings_ratio > 0.15:
-        pct_str = f"{ctx.savings_ratio * 100:.1f}%"
-        reasons.append(f"Accelerates your {pct_str} monthly savings rate with 6.5% APY.")
-    else:
-        reasons.append("Instant liquidity with automated round-up savings on every purchase.")
-    reasons.append("Zero balance maintenance penalty and unlimited free transfers.")
-    return reasons
-
-
-def _reasons_for_credit_line(ctx: CustomerRecommendationContext) -> list[str]:
+def _credit_line_reasons(ctx: CustomerRecommendationContext) -> list[str]:
     return [
-        (
-            f"Low existing debt commitments ({ctx.emi_ratio * 100:.1f}% EMI-to-income) "
-            "qualify you for our lowest APR tier."
-        ),
-        "Flexible overdraft cushion: borrow as needed and repay anytime.",
+        f"Loan repayments take {ctx.emi_ratio * 100:.1f}% of your income of "
+        f"{format_inr(ctx.monthly_inflow_minor)} a month, within the 45% limit.",
     ]
 
 
-def _reasons_for_rewards_card(ctx: CustomerRecommendationContext) -> list[str]:
-    disc_pct = f"{ctx.discretionary_ratio * 100:.1f}%"
+def _rewards_card_reasons(ctx: CustomerRecommendationContext) -> list[str]:
+    lifestyle = round(ctx.monthly_spend_minor * ctx.discretionary_ratio)
     return [
-        (
-            f"Lifestyle spending ({disc_pct} on dining, shopping & travel) "
-            "earns accelerated 3% cashback."
-        ),
-        "Complimentary airport lounge access and zero international markup.",
+        f"{ctx.discretionary_ratio * 100:.1f}% of your spending (about {format_inr(lifestyle)} a "
+        "month) goes on dining, shopping, entertainment and travel.",
     ]
 
 
-def _reasons_for_index_sip(ctx: CustomerRecommendationContext) -> list[str]:
+def _sip_reasons(ctx: CustomerRecommendationContext) -> list[str]:
     return [
-        (
-            f"High Financial Health Score ({ctx.health_score}/100) and steady surplus "
-            "make you a prime candidate for equity wealth building."
-        ),
-        ("Long-term inflation-beating returns with low-cost Nifty 50 index allocation."),
+        f"Your balance of {format_inr(ctx.total_balance_minor)} covers "
+        f"{ctx.buffer_months:.1f} months of spending, above the 3 months we look for first.",
+        f"You save {ctx.savings_ratio * 100:.1f}% of your income and your financial health "
+        f"score is {ctx.health_score}/100.",
     ]
 
 
-def _reasons_for_family_shield(ctx: CustomerRecommendationContext) -> list[str]:
-    reasons: list[str] = []
+def _cover_reasons(ctx: CustomerRecommendationContext) -> list[str]:
     if ctx.emi_ratio > 0.20:
-        reasons.append(
-            "Protects active credit and loan obligations against unforeseen emergencies."
-        )
-    else:
-        reasons.append("Comprehensive family medical and term security with cashless claims.")
-    reasons.append("Tax-advantaged protection with comprehensive critical illness coverage.")
-    return reasons
+        return [
+            f"Loan repayments take {ctx.emi_ratio * 100:.1f}% of your income; cover protects "
+            "those commitments."
+        ]
+    return [f"Your income averages {format_inr(ctx.monthly_inflow_minor)} a month."]
 
 
-_REASON_BUILDERS: dict[UUID, Callable[[CustomerRecommendationContext], list[str]]] = {
-    FIXED_DEPOSIT_ID: _reasons_for_fixed_deposit,
-    SAVINGS_ACCELERATOR_ID: _reasons_for_savings_accelerator,
-    CREDIT_LINE_ID: _reasons_for_credit_line,
-    REWARDS_CARD_ID: _reasons_for_rewards_card,
-    INDEX_SIP_ID: _reasons_for_index_sip,
-    FAMILY_SHIELD_ID: _reasons_for_family_shield,
+_REASONS: dict[UUID, Callable[[CustomerRecommendationContext], list[str]]] = {
+    SAVINGS_ACCOUNT_ID: _savings_reasons,
+    FIXED_DEPOSIT_ID: _deposit_reasons,
+    CREDIT_LINE_ID: _credit_line_reasons,
+    REWARDS_CARD_ID: _rewards_card_reasons,
+    INDEX_SIP_ID: _sip_reasons,
+    FAMILY_COVER_ID: _cover_reasons,
 }
-
-
-def _build_product_reasons(
-    product: BankingProduct,
-    ctx: CustomerRecommendationContext,
-) -> list[str]:
-    """Build grounded human-readable reasons explaining the recommendation."""
-    builder = _REASON_BUILDERS.get(product.product_id)
-    if builder is None:
-        return []
-    return builder(ctx)[:3]
 
 
 def generate_recommendations(
@@ -326,41 +241,19 @@ def generate_recommendations(
     top_k: int = 3,
     model_version: str = MODEL_VERSION,
 ) -> list[Recommendation]:
-    """Generate top-k personalized product recommendations with explainable reasons.
-
-    Workflow:
-    1. Filter catalogue through eligibility rules.
-    2. Score propensity for all eligible products.
-    3. Sort products by score descending.
-    4. Attach grounded human-readable reasons.
-    """
-    eligible_scored: list[tuple[BankingProduct, float, list[str]]] = []
-
-    for product in catalogue:
-        if not evaluate_eligibility(product, ctx):
-            continue
-
-        score = _score_product_propensity(product, ctx)
-        reasons = _build_product_reasons(product, ctx)
-        eligible_scored.append((product, score, reasons))
-
-    # Sort descending by propensity score
-    eligible_scored.sort(key=lambda item: item[1], reverse=True)
-
-    recommendations: list[Recommendation] = []
-    for product, score, reasons in eligible_scored[:top_k]:
-        recommendations.append(
-            Recommendation(
-                product_id=product.product_id,
-                product_type=product.product_type,
-                score=score,
-                reasons=reasons,
-                model_version=model_version,
-                title=product.title,
-                description=product.description,
-                cta_label=product.cta_label,
-                cta_path=product.cta_path,
-            )
+    """Eligible products only, ordered by relevance, each with reasons from the customer's data."""
+    eligible = [product for product in catalogue if evaluate_eligibility(product, ctx)]
+    ranked = sorted(eligible, key=lambda product: relevance_score(product, ctx), reverse=True)
+    return [
+        Recommendation(
+            product_id=product.product_id,
+            product_type=product.product_type,
+            score=relevance_score(product, ctx),
+            reasons=_REASONS[product.product_id](ctx)[:3],
+            model_version=model_version,
+            title=product.title,
+            description=product.description,
+            cta_label=product.cta_label,
         )
-
-    return recommendations
+        for product in ranked[:top_k]
+    ]

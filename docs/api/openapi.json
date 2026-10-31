@@ -305,6 +305,17 @@
             "title": "Hash",
             "type": "string"
           },
+          "ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip"
+          },
           "request_id": {
             "anyOf": [
               {
@@ -477,147 +488,6 @@
           "first_invalid_seq"
         ],
         "title": "ChainStatusOut",
-        "type": "object"
-      },
-      "ChurnRiskLevel": {
-        "description": "Categorical classification of customer churn risk.",
-        "enum": [
-          "LOW",
-          "MEDIUM",
-          "HIGH"
-        ],
-        "title": "ChurnRiskLevel",
-        "type": "string"
-      },
-      "CustomerInsightItem": {
-        "description": "Behavioral profile, churn signals, and product propensity for a single customer.",
-        "properties": {
-          "balance_decline_rate": {
-            "description": "Normalized balance decline rate over the last 30-60 days",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Balance Decline Rate",
-            "type": "number"
-          },
-          "churn_risk_level": {
-            "$ref": "#/components/schemas/ChurnRiskLevel",
-            "description": "Categorical churn risk rating: LOW, MEDIUM, or HIGH"
-          },
-          "churn_risk_score": {
-            "description": "Calculated churn risk score (0.0 to 1.0)",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Churn Risk Score",
-            "type": "number"
-          },
-          "customer_id": {
-            "description": "Unique customer identifier",
-            "format": "uuid",
-            "title": "Customer Id",
-            "type": "string"
-          },
-          "email": {
-            "description": "Customer email address",
-            "title": "Email",
-            "type": "string"
-          },
-          "full_name": {
-            "description": "Customer full name",
-            "title": "Full Name",
-            "type": "string"
-          },
-          "high_value_transactor": {
-            "default": false,
-            "description": "Flag indicating if customer conducts high-value transactions",
-            "title": "High Value Transactor",
-            "type": "boolean"
-          },
-          "inactivity_days": {
-            "description": "Elapsed days since the last customer activity or transaction",
-            "minimum": 0.0,
-            "title": "Inactivity Days",
-            "type": "integer"
-          },
-          "segment": {
-            "description": "Behavioral segment (e.g. HIGH_NET_WORTH)",
-            "title": "Segment",
-            "type": "string"
-          },
-          "top_propensity_score": {
-            "anyOf": [
-              {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Propensity score of the top recommended product",
-            "title": "Top Propensity Score"
-          },
-          "top_recommended_product": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Title of top propensity banking product",
-            "title": "Top Recommended Product"
-          },
-          "total_balance_minor": {
-            "description": "Current spendable balance across all accounts in minor units",
-            "title": "Total Balance Minor",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "customer_id",
-          "full_name",
-          "email",
-          "segment",
-          "total_balance_minor",
-          "inactivity_days",
-          "balance_decline_rate",
-          "churn_risk_score",
-          "churn_risk_level"
-        ],
-        "title": "CustomerInsightItem",
-        "type": "object"
-      },
-      "CustomerInsightsListResponse": {
-        "description": "Paginated collection of prioritized customer insights for Relationship Managers.",
-        "properties": {
-          "evaluated_at": {
-            "description": "Server evaluation timestamp in UTC",
-            "format": "date-time",
-            "title": "Evaluated At",
-            "type": "string"
-          },
-          "items": {
-            "description": "Prioritized list of customer insight profiles",
-            "items": {
-              "$ref": "#/components/schemas/CustomerInsightItem"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "total": {
-            "description": "Total matching customers count",
-            "minimum": 0.0,
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "total",
-          "evaluated_at"
-        ],
-        "title": "CustomerInsightsListResponse",
         "type": "object"
       },
       "CustomerProfileOut": {
@@ -985,10 +855,11 @@
         "type": "object"
       },
       "EventBatchRequest": {
+        "additionalProperties": false,
         "description": "Batch payload containing up to 100 telemetry events.",
         "properties": {
           "events": {
-            "description": "List of telemetry events to ingest (1 to 100 items per batch)",
+            "description": "Telemetry events to ingest (1 to 100 per batch)",
             "items": {
               "$ref": "#/components/schemas/TelemetryEventIn"
             },
@@ -1005,10 +876,10 @@
         "type": "object"
       },
       "EventBatchResponse": {
-        "description": "Result of batch event ingestion.",
+        "description": "Result of batch event ingestion. The events are committed before this is returned.",
         "properties": {
           "accepted": {
-            "description": "Count of accepted events in batch",
+            "description": "Events stored by this request",
             "minimum": 0.0,
             "title": "Accepted",
             "type": "integer"
@@ -1019,6 +890,12 @@
             "title": "Batch Id",
             "type": "string"
           },
+          "duplicates": {
+            "description": "Events already stored (same event_id and timestamp), skipped",
+            "minimum": 0.0,
+            "title": "Duplicates",
+            "type": "integer"
+          },
           "received_at": {
             "description": "UTC server timestamp of receipt",
             "format": "date-time",
@@ -1028,6 +905,7 @@
         },
         "required": [
           "accepted",
+          "duplicates",
           "received_at"
         ],
         "title": "EventBatchResponse",
@@ -1680,11 +1558,6 @@
             "title": "Cta Label",
             "type": "string"
           },
-          "cta_path": {
-            "description": "Navigation route or application path",
-            "title": "Cta Path",
-            "type": "string"
-          },
           "description": {
             "description": "Summary description of the product offer",
             "title": "Description",
@@ -1716,7 +1589,7 @@
             "type": "array"
           },
           "score": {
-            "description": "Calibrated propensity score (0.0 to 1.0)",
+            "description": "Rule-based relevance, for ordering only; not a probability",
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Score",
@@ -1736,8 +1609,7 @@
           "score",
           "reasons",
           "model_version",
-          "cta_label",
-          "cta_path"
+          "cta_label"
         ],
         "title": "ProductRecommendationItem",
         "type": "object"
@@ -2031,7 +1903,8 @@
         "type": "string"
       },
       "TelemetryEventIn": {
-        "description": "Individual client-side or server-side telemetry event payload.",
+        "additionalProperties": false,
+        "description": "One client-side or server-side telemetry event.",
         "properties": {
           "event_id": {
             "anyOf": [
@@ -2043,7 +1916,7 @@
                 "type": "null"
               }
             ],
-            "description": "Optional client-generated event UUID",
+            "description": "Client-generated id; resending the same event is a no-op",
             "title": "Event Id"
           },
           "event_timestamp": {
@@ -2059,26 +1932,41 @@
           "page_url": {
             "anyOf": [
               {
-                "maxLength": 1024,
+                "maxLength": 256,
+                "pattern": "^/[A-Za-z0-9/_.-]*$",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Application route or URL path",
+            "description": "Route path only, e.g. /accounts (no query string or fragment)",
             "title": "Page Url"
           },
           "properties": {
-            "additionalProperties": true,
-            "description": "Arbitrary event metadata properties",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Up to 20 numeric, boolean or identifier-like values (keys snake_case, strings up to 64 characters of letters, digits and _.:-); no free text",
             "title": "Properties",
             "type": "object"
           },
           "session_id": {
-            "description": "User session token or browser identifier",
-            "maxLength": 128,
-            "minLength": 1,
+            "description": "Opaque browser session identifier",
+            "pattern": "^[A-Za-z0-9._-]{1,128}$",
             "title": "Session Id",
             "type": "string"
           }
@@ -3797,7 +3685,7 @@
     },
     "/api/v1/events/batch": {
       "post": {
-        "description": "Ingest up to 100 telemetry events with high-throughput database persistence.",
+        "description": "Store up to 100 events for the authenticated customer; committed before the response.",
         "operationId": "ingest_events_batch_api_v1_events_batch_post",
         "requestBody": {
           "content": {
@@ -4020,111 +3908,6 @@
         "summary": "RELEASE (false positive, posts the held transfer) or REJECT (confirmed fraud)",
         "tags": [
           "fraud"
-        ]
-      }
-    },
-    "/api/v1/insights/customers": {
-      "get": {
-        "description": "Return prioritized high-propensity customers with churn indicators for RM staff.",
-        "operationId": "get_prioritized_customer_insights_api_v1_insights_customers_get",
-        "parameters": [
-          {
-            "description": "Minimum churn risk score filter (0.0 to 1.0)",
-            "in": "query",
-            "name": "min_churn_risk",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maximum": 1.0,
-                  "minimum": 0.0,
-                  "type": "number"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Minimum churn risk score filter (0.0 to 1.0)",
-              "title": "Min Churn Risk"
-            }
-          },
-          {
-            "description": "Behavioral segment filter",
-            "in": "query",
-            "name": "segment",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 50,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Behavioral segment filter",
-              "title": "Segment"
-            }
-          },
-          {
-            "description": "Page item limit",
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 50,
-              "description": "Page item limit",
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Page item offset",
-            "in": "query",
-            "name": "offset",
-            "required": false,
-            "schema": {
-              "default": 0,
-              "description": "Page item offset",
-              "minimum": 0,
-              "title": "Offset",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CustomerInsightsListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Prioritized customer behavioral insights, churn signals, and propensity ranking",
-        "tags": [
-          "insights"
         ]
       }
     },
@@ -4478,7 +4261,7 @@
     },
     "/api/v1/recommendations": {
       "get": {
-        "description": "Evaluate eligibility and propensity ranking to return top-3 personalized products.",
+        "description": "Top 3 eligible products for the authenticated customer, with reasons from their data.",
         "operationId": "get_recommendations_api_v1_recommendations_get",
         "responses": {
           "200": {

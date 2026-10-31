@@ -471,7 +471,7 @@ export interface paths {
         put?: never;
         /**
          * Batch ingest client-side and server-side telemetry events
-         * @description Ingest up to 100 telemetry events with high-throughput database persistence.
+         * @description Store up to 100 events for the authenticated customer; committed before the response.
          */
         post: operations["ingest_events_batch_api_v1_events_batch_post"];
         delete?: never;
@@ -525,26 +525,6 @@ export interface paths {
         put?: never;
         /** RELEASE (false positive, posts the held transfer) or REJECT (confirmed fraud) */
         post: operations["decide_alert_api_v1_fraud_alerts__alert_id__decision_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/insights/customers": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Prioritized customer behavioral insights, churn signals, and propensity ranking
-         * @description Return prioritized high-propensity customers with churn indicators for RM staff.
-         */
-        get: operations["get_prioritized_customer_insights_api_v1_insights_customers_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -664,7 +644,7 @@ export interface paths {
         };
         /**
          * Personalized banking product recommendations with explainable reasons
-         * @description Evaluate eligibility and propensity ranking to return top-3 personalized products.
+         * @description Top 3 eligible products for the authenticated customer, with reasons from their data.
          */
         get: operations["get_recommendations_api_v1_recommendations_get"];
         put?: never;
@@ -870,6 +850,8 @@ export interface components {
             };
             /** Hash */
             hash: string;
+            /** Ip */
+            ip?: string | null;
             /** Request Id */
             request_id: string | null;
             /** Resource Id */
@@ -952,99 +934,6 @@ export interface components {
             first_invalid_seq: number | null;
             /** Valid */
             valid: boolean;
-        };
-        /**
-         * ChurnRiskLevel
-         * @description Categorical classification of customer churn risk.
-         * @enum {string}
-         */
-        ChurnRiskLevel: "LOW" | "MEDIUM" | "HIGH";
-        /**
-         * CustomerInsightItem
-         * @description Behavioral profile, churn signals, and product propensity for a single customer.
-         */
-        CustomerInsightItem: {
-            /**
-             * Balance Decline Rate
-             * @description Normalized balance decline rate over the last 30-60 days
-             */
-            balance_decline_rate: number;
-            /** @description Categorical churn risk rating: LOW, MEDIUM, or HIGH */
-            churn_risk_level: components["schemas"]["ChurnRiskLevel"];
-            /**
-             * Churn Risk Score
-             * @description Calculated churn risk score (0.0 to 1.0)
-             */
-            churn_risk_score: number;
-            /**
-             * Customer Id
-             * Format: uuid
-             * @description Unique customer identifier
-             */
-            customer_id: string;
-            /**
-             * Email
-             * @description Customer email address
-             */
-            email: string;
-            /**
-             * Full Name
-             * @description Customer full name
-             */
-            full_name: string;
-            /**
-             * High Value Transactor
-             * @description Flag indicating if customer conducts high-value transactions
-             * @default false
-             */
-            high_value_transactor: boolean;
-            /**
-             * Inactivity Days
-             * @description Elapsed days since the last customer activity or transaction
-             */
-            inactivity_days: number;
-            /**
-             * Segment
-             * @description Behavioral segment (e.g. HIGH_NET_WORTH)
-             */
-            segment: string;
-            /**
-             * Top Propensity Score
-             * @description Propensity score of the top recommended product
-             */
-            top_propensity_score?: number | null;
-            /**
-             * Top Recommended Product
-             * @description Title of top propensity banking product
-             */
-            top_recommended_product?: string | null;
-            /**
-             * Total Balance Minor
-             * @description Current spendable balance across all accounts in minor units
-             */
-            total_balance_minor: number;
-        };
-        /**
-         * CustomerInsightsListResponse
-         * @description Paginated collection of prioritized customer insights for Relationship Managers.
-         */
-        CustomerInsightsListResponse: {
-            /**
-             * Evaluated At
-             * Format: date-time
-             * @description Server evaluation timestamp in UTC
-             */
-            evaluated_at: string;
-            /**
-             * Items
-             * @description Prioritized list of customer insight profiles
-             */
-            items?: components["schemas"]["CustomerInsightItem"][];
-            /**
-             * Total
-             * @description Total matching customers count
-             */
-            total: number;
         };
         /**
          * CustomerProfileOut
@@ -1237,18 +1126,18 @@ export interface components {
         EventBatchRequest: {
             /**
              * Events
-             * @description List of telemetry events to ingest (1 to 100 items per batch)
+             * @description Telemetry events to ingest (1 to 100 per batch)
              */
             events: components["schemas"]["TelemetryEventIn"][];
         };
         /**
          * EventBatchResponse
-         * @description Result of batch event ingestion.
+         * @description Result of batch event ingestion. The events are committed before this is returned.
          */
         EventBatchResponse: {
             /**
              * Accepted
-             * @description Count of accepted events in batch
+             * @description Events stored by this request
              */
             accepted: number;
             /**
@@ -1257,6 +1146,11 @@ export interface components {
              * @description Unique batch tracking UUID
              */
             batch_id?: string;
+            /**
+             * Duplicates
+             * @description Events already stored (same event_id and timestamp), skipped
+             */
+            duplicates: number;
             /**
              * Received At
              * Format: date-time
@@ -1590,11 +1484,6 @@ export interface components {
              */
             cta_label: string;
             /**
-             * Cta Path
-             * @description Navigation route or application path
-             */
-            cta_path: string;
-            /**
              * Description
              * @description Summary description of the product offer
              */
@@ -1622,7 +1511,7 @@ export interface components {
             reasons: string[];
             /**
              * Score
-             * @description Calibrated propensity score (0.0 to 1.0)
+             * @description Rule-based relevance, for ordering only; not a probability
              */
             score: number;
             /**
@@ -1794,12 +1683,12 @@ export interface components {
         SupportedCurrency: "INR";
         /**
          * TelemetryEventIn
-         * @description Individual client-side or server-side telemetry event payload.
+         * @description One client-side or server-side telemetry event.
          */
         TelemetryEventIn: {
             /**
              * Event Id
-             * @description Optional client-generated event UUID
+             * @description Client-generated id; resending the same event is a no-op
              */
             event_id?: string | null;
             /**
@@ -1812,19 +1701,19 @@ export interface components {
             event_type: components["schemas"]["TelemetryEventType"];
             /**
              * Page Url
-             * @description Application route or URL path
+             * @description Route path only, e.g. /accounts (no query string or fragment)
              */
             page_url?: string | null;
             /**
              * Properties
-             * @description Arbitrary event metadata properties
+             * @description Up to 20 numeric, boolean or identifier-like values (keys snake_case, strings up to 64 characters of letters, digits and _.:-); no free text
              */
             properties?: {
-                [key: string]: unknown;
+                [key: string]: boolean | number | string;
             };
             /**
              * Session Id
-             * @description User session token or browser identifier
+             * @description Opaque browser session identifier
              */
             session_id: string;
         };
@@ -2909,44 +2798,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_prioritized_customer_insights_api_v1_insights_customers_get: {
-        parameters: {
-            query?: {
-                /** @description Minimum churn risk score filter (0.0 to 1.0) */
-                min_churn_risk?: number | null;
-                /** @description Behavioral segment filter */
-                segment?: string | null;
-                /** @description Page item limit */
-                limit?: number;
-                /** @description Page item offset */
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CustomerInsightsListResponse"];
-                };
             };
             /** @description Validation Error */
             422: {

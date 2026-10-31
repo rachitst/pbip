@@ -102,11 +102,11 @@ def test_reject_properties_with_excessive_keys() -> None:
             session_id="session-1",
             properties=excessive_props,
         )
-    assert "cannot exceed 50 keys" in str(exc.value)
+    assert "cannot exceed 20 keys" in str(exc.value)  # review: at most 20 structured values
 
 
 def test_reject_oversized_property_value_string() -> None:
-    """String values in properties exceeding 1000 characters must be rejected."""
+    """Long strings are free text, not identifiers: rejected (review: no free text in events)."""
     now = datetime.now(UTC)
     with pytest.raises(ValidationError) as exc:
         TelemetryEventIn(
@@ -115,7 +115,7 @@ def test_reject_oversized_property_value_string() -> None:
             session_id="session-1",
             properties={"large_payload": "a" * 1500},
         )
-    assert "exceeds 1000 characters" in str(exc.value)
+    assert "property strings must be identifiers" in str(exc.value)
 
 
 def test_event_batch_request_bounds() -> None:
@@ -145,7 +145,7 @@ def test_event_batch_response_model() -> None:
     """Event batch response format and validation."""
     now = datetime.now(UTC)
     batch_id = uuid4()
-    resp = EventBatchResponse(accepted=5, batch_id=batch_id, received_at=now)
+    resp = EventBatchResponse(accepted=5, duplicates=0, batch_id=batch_id, received_at=now)
     assert resp.accepted == 5
     assert resp.batch_id == batch_id
     assert resp.received_at == now

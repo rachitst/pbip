@@ -32,6 +32,11 @@ celery_app.conf.update(
             "task": "pbip.analytics.materialize_monthly_spending",
             "schedule": crontab(hour=2, minute=0),
         },
+        # TASK-055: monthly clickstream partitions are created months ahead (idempotent).
+        "ensure-clickstream-partitions": {
+            "task": "pbip.events.ensure_partitions",
+            "schedule": crontab(hour=1, minute=30),
+        },
         # TASK-052 / ADR-0012: segments are recomputed weekly (Sunday), after the nightly job.
         "segment-customers-weekly": {
             "task": "pbip.analytics.segment_customers",

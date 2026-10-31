@@ -2,6 +2,7 @@
 
 from pbip_api.core.db import session_scope
 from pbip_api.modules.analytics.service import materialize_monthly_spending
+from pbip_api.modules.events.partitions import ensure_monthly_partitions
 from pbip_api.modules.notifications.service import relay_outbox
 from pbip_api.worker.celery_app import celery_app
 
@@ -39,3 +40,12 @@ def segment_customers_task() -> int:
     with session_scope() as session:
         result = run_offline_segmentation_job(session, utcnow())
     return result.total_customers_assigned
+
+
+@celery_app.task(name="pbip.events.ensure_partitions")
+def ensure_clickstream_partitions_task() -> list[str]:
+    """Create the coming months' clickstream partitions ahead (daily via beat). Idempotent."""
+    from pbip_api.core.db import utcnow
+
+    with session_scope() as session:
+        return ensure_monthly_partitions(session, utcnow().date())

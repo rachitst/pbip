@@ -1,4 +1,4 @@
-"""Product recommendations: eligibility + suitability rules, then propensity ranking."""
+"""Product recommendations: eligibility rules, then a rule-based relevance ranking (not a model)."""
 
 from pbip_ml.recommendations.contract import (
     BankingProduct,
