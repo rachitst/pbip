@@ -14,12 +14,20 @@ from pbip_api.modules.notifications.policy import get_owned_notification
 TRANSFER_POSTED = "TRANSFER_POSTED"
 TRANSFER_DECLINED = "TRANSFER_DECLINED"
 TRANSFER_UNDER_REVIEW = "TRANSFER_UNDER_REVIEW"
+BILL_PAYMENT_POSTED = "BILL_PAYMENT_POSTED"
+BILL_PAYMENT_DECLINED = "BILL_PAYMENT_DECLINED"
 # Security notifications for events the auth and customers modules already record (#45).
 PASSWORD_CHANGED = "PASSWORD_CHANGED"  # noqa: S105  # pragma: allowlist secret - an event type name
 MFA_ENABLED = "MFA_ENABLED"
 DEVICE_REGISTERED = "DEVICE_REGISTERED"
 
-_TRANSFER_TYPES = {TRANSFER_POSTED, TRANSFER_UNDER_REVIEW, TRANSFER_DECLINED}
+_TRANSFER_TYPES = {
+    TRANSFER_POSTED,
+    TRANSFER_UNDER_REVIEW,
+    TRANSFER_DECLINED,
+    BILL_PAYMENT_POSTED,
+    BILL_PAYMENT_DECLINED,
+}
 _SECURITY_TEXT = {
     PASSWORD_CHANGED: (
         "Password changed",
@@ -60,6 +68,15 @@ def _transfer_text(event: OutboxEvent) -> tuple[str, str] | None:
         )
     if event.event_type == TRANSFER_DECLINED:
         return "Transfer not completed", f"Your transfer of {amount} could not be completed."
+    name = event.payload.get("biller_name")
+    to_biller = f" to {name}" if isinstance(name, str) and name else ""
+    if event.event_type == BILL_PAYMENT_POSTED:
+        return "Bill payment completed", f"Your bill payment of {amount}{to_biller} was completed."
+    if event.event_type == BILL_PAYMENT_DECLINED:
+        return (
+            "Bill payment not completed",
+            f"Your bill payment of {amount}{to_biller} could not be completed.",
+        )
     return None
 
 

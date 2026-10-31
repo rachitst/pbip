@@ -54,11 +54,23 @@ def clean_db(migrated_engine: Engine) -> None:
                 "TRUNCATE users, user_roles, refresh_tokens, mfa_recovery_codes, security_events, "
                 "customers, devices, account_holders, payees, transactions, transaction_entries, "
                 "holds, idempotency_keys, fraud_events, fraud_alerts, audit_logs, notifications, "
-                "outbox_events, monthly_category_spending, customer_segments, clickstream_events CASCADE"
+                "outbox_events, monthly_category_spending, customer_segments, clickstream_events, "
+                "bill_payments CASCADE"
             )
         )
         connection.execute(text("DELETE FROM accounts WHERE account_type <> 'SYSTEM'"))
         connection.execute(text("UPDATE accounts SET ledger_balance = 0, held_amount = 0"))
+        connection.execute(
+            text(
+                "DELETE FROM billers WHERE id NOT IN ("
+                "'00000000-0000-0000-0000-0000000000b1', "
+                "'00000000-0000-0000-0000-0000000000b2', "
+                "'00000000-0000-0000-0000-0000000000b3', "
+                "'00000000-0000-0000-0000-0000000000b4', "
+                "'00000000-0000-0000-0000-0000000000b5')"
+            )
+        )
+        connection.execute(text("UPDATE billers SET status = 'ACTIVE'"))
 
 
 @pytest.fixture

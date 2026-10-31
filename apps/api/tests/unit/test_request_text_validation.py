@@ -3,6 +3,7 @@
 import pytest
 from pbip_api.core.validation import encodable_text, storable_text
 from pbip_api.modules.auth.schemas import LoginRequest, PasswordChangeRequest, RegisterRequest
+from pbip_api.modules.bills.schemas import PayBillRequest
 from pbip_api.modules.customers.schemas import DeviceRegisterRequest
 from pbip_api.modules.payees.schemas import PayeeCreate
 from pbip_api.modules.payments.schemas import TransferRequest
@@ -44,6 +45,15 @@ def test_registration_name_and_transfer_reference_are_validated() -> None:
                 "amount_minor": 1,
                 "payee_id": "00000000-0000-0000-0000-000000000000",
                 "reference": "x\ud800",
+            }
+        )
+    with pytest.raises(ValidationError):
+        PayBillRequest.model_validate(
+            {
+                "from_account_id": "00000000-0000-0000-0000-000000000000",
+                "biller_id": "00000000-0000-0000-0000-0000000000b1",
+                "consumer_reference": "CA\x00123",
+                "amount_minor": 100,
             }
         )
 
