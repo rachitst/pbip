@@ -1501,11 +1501,6 @@
             "title": "Cta Label",
             "type": "string"
           },
-          "cta_path": {
-            "description": "Navigation route or application path",
-            "title": "Cta Path",
-            "type": "string"
-          },
           "description": {
             "description": "Summary description of the product offer",
             "title": "Description",
@@ -1537,7 +1532,7 @@
             "type": "array"
           },
           "score": {
-            "description": "Calibrated propensity score (0.0 to 1.0)",
+            "description": "Rule-based relevance, for ordering only; not a probability",
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Score",
@@ -1557,8 +1552,7 @@
           "score",
           "reasons",
           "model_version",
-          "cta_label",
-          "cta_path"
+          "cta_label"
         ],
         "title": "ProductRecommendationItem",
         "type": "object"
@@ -4073,7 +4067,7 @@
     },
     "/api/v1/recommendations": {
       "get": {
-        "description": "Evaluate eligibility and propensity ranking to return top-3 personalized products.",
+        "description": "Top 3 eligible products for the authenticated customer, with reasons from their data.",
         "operationId": "get_recommendations_api_v1_recommendations_get",
         "responses": {
           "200": {

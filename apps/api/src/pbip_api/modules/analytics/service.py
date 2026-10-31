@@ -9,6 +9,7 @@ reversed weeks after it was posted.
 
 import calendar
 import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -236,6 +237,31 @@ def get_financial_health_score(
     metrics = repository.get_financial_health_metrics(session, account.id, owned, now or utcnow())
     return compute_financial_health_score(
         account.id, account.currency, account.available_balance, metrics
+    )
+
+
+@dataclass(frozen=True)
+class CashFlowProfile:
+    """Monthly averages over the health window, from the ledger (minor units)."""
+
+    monthly_income_minor: int
+    monthly_spend_minor: int
+    discretionary_ratio: float  # share of spend on dining, shopping, entertainment and travel
+
+
+def get_cash_flow_profile(
+    session: Session, customer_id: UUID, account_id: UUID, now: datetime
+) -> CashFlowProfile:
+    """Real income, spend and lifestyle share of one owned account, for recommendations."""
+    account = verify_account_ownership(session, customer_id, account_id)
+    owned = repository.owned_account_ids(session, customer_id)
+    metrics = repository.get_financial_health_metrics(session, account.id, owned, now)
+    months = max(metrics.months_observed, 1)
+    rfm = repository.extract_customer_rfm_features(session, customer_id, now)
+    return CashFlowProfile(
+        monthly_income_minor=metrics.income_minor // months,
+        monthly_spend_minor=metrics.spend_minor // months,
+        discretionary_ratio=rfm.discretionary_ratio if rfm else 0.0,
     )
 
 

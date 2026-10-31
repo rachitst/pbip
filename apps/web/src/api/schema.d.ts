@@ -624,7 +624,7 @@ export interface paths {
         };
         /**
          * Personalized banking product recommendations with explainable reasons
-         * @description Evaluate eligibility and propensity ranking to return top-3 personalized products.
+         * @description Top 3 eligible products for the authenticated customer, with reasons from their data.
          */
         get: operations["get_recommendations_api_v1_recommendations_get"];
         put?: never;
@@ -1425,11 +1425,6 @@ export interface components {
              */
             cta_label: string;
             /**
-             * Cta Path
-             * @description Navigation route or application path
-             */
-            cta_path: string;
-            /**
              * Description
              * @description Summary description of the product offer
              */
@@ -1457,7 +1452,7 @@ export interface components {
             reasons: string[];
             /**
              * Score
-             * @description Calibrated propensity score (0.0 to 1.0)
+             * @description Rule-based relevance, for ordering only; not a probability
              */
             score: number;
             /**
