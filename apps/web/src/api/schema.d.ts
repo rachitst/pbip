@@ -460,6 +460,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/events/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Batch ingest client-side and server-side telemetry events
+         * @description Store up to 100 events for the authenticated customer; committed before the response.
+         */
+        post: operations["ingest_events_batch_api_v1_events_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fraud/alerts": {
         parameters: {
             query?: never;
@@ -1100,6 +1120,45 @@ export interface components {
             transaction_type: string;
         };
         /**
+         * EventBatchRequest
+         * @description Batch payload containing up to 100 telemetry events.
+         */
+        EventBatchRequest: {
+            /**
+             * Events
+             * @description Telemetry events to ingest (1 to 100 per batch)
+             */
+            events: components["schemas"]["TelemetryEventIn"][];
+        };
+        /**
+         * EventBatchResponse
+         * @description Result of batch event ingestion. The events are committed before this is returned.
+         */
+        EventBatchResponse: {
+            /**
+             * Accepted
+             * @description Events stored by this request
+             */
+            accepted: number;
+            /**
+             * Batch Id
+             * Format: uuid
+             * @description Unique batch tracking UUID
+             */
+            batch_id?: string;
+            /**
+             * Duplicates
+             * @description Events already stored (same event_id and timestamp), skipped
+             */
+            duplicates: number;
+            /**
+             * Received At
+             * Format: date-time
+             * @description UTC server timestamp of receipt
+             */
+            received_at: string;
+        };
+        /**
          * FinancialHealthComponents
          * @description Component-wise breakdown of the financial health score.
          */
@@ -1622,6 +1681,48 @@ export interface components {
          * @enum {string}
          */
         SupportedCurrency: "INR";
+        /**
+         * TelemetryEventIn
+         * @description One client-side or server-side telemetry event.
+         */
+        TelemetryEventIn: {
+            /**
+             * Event Id
+             * @description Client-generated id; resending the same event is a no-op
+             */
+            event_id?: string | null;
+            /**
+             * Event Timestamp
+             * Format: date-time
+             * @description UTC timestamp when the event occurred
+             */
+            event_timestamp: string;
+            /** @description Classification category of the event */
+            event_type: components["schemas"]["TelemetryEventType"];
+            /**
+             * Page Url
+             * @description Route path only, e.g. /accounts (no query string or fragment)
+             */
+            page_url?: string | null;
+            /**
+             * Properties
+             * @description Up to 20 numeric, boolean or identifier-like values (keys snake_case, strings up to 64 characters of letters, digits and _.:-); no free text
+             */
+            properties?: {
+                [key: string]: boolean | number | string;
+            };
+            /**
+             * Session Id
+             * @description Opaque browser session identifier
+             */
+            session_id: string;
+        };
+        /**
+         * TelemetryEventType
+         * @description Supported telemetry event types.
+         * @enum {string}
+         */
+        TelemetryEventType: "page_view" | "loan_calculator_used" | "transfer_initiated" | "account_viewed" | "product_clicked" | "search_performed";
         /** TokenResponse */
         TokenResponse: {
             /** Access Token */
@@ -2575,6 +2676,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CustomerProfileOut"];
+                };
+            };
+        };
+    };
+    ingest_events_batch_api_v1_events_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventBatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventBatchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

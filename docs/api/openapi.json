@@ -854,6 +854,63 @@
         "title": "EntryOut",
         "type": "object"
       },
+      "EventBatchRequest": {
+        "additionalProperties": false,
+        "description": "Batch payload containing up to 100 telemetry events.",
+        "properties": {
+          "events": {
+            "description": "Telemetry events to ingest (1 to 100 per batch)",
+            "items": {
+              "$ref": "#/components/schemas/TelemetryEventIn"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Events",
+            "type": "array"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "title": "EventBatchRequest",
+        "type": "object"
+      },
+      "EventBatchResponse": {
+        "description": "Result of batch event ingestion. The events are committed before this is returned.",
+        "properties": {
+          "accepted": {
+            "description": "Events stored by this request",
+            "minimum": 0.0,
+            "title": "Accepted",
+            "type": "integer"
+          },
+          "batch_id": {
+            "description": "Unique batch tracking UUID",
+            "format": "uuid",
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "duplicates": {
+            "description": "Events already stored (same event_id and timestamp), skipped",
+            "minimum": 0.0,
+            "title": "Duplicates",
+            "type": "integer"
+          },
+          "received_at": {
+            "description": "UTC server timestamp of receipt",
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "accepted",
+          "duplicates",
+          "received_at"
+        ],
+        "title": "EventBatchResponse",
+        "type": "object"
+      },
       "FinancialHealthComponents": {
         "description": "Component-wise breakdown of the financial health score.",
         "properties": {
@@ -1843,6 +1900,96 @@
           "INR"
         ],
         "title": "SupportedCurrency",
+        "type": "string"
+      },
+      "TelemetryEventIn": {
+        "additionalProperties": false,
+        "description": "One client-side or server-side telemetry event.",
+        "properties": {
+          "event_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Client-generated id; resending the same event is a no-op",
+            "title": "Event Id"
+          },
+          "event_timestamp": {
+            "description": "UTC timestamp when the event occurred",
+            "format": "date-time",
+            "title": "Event Timestamp",
+            "type": "string"
+          },
+          "event_type": {
+            "$ref": "#/components/schemas/TelemetryEventType",
+            "description": "Classification category of the event"
+          },
+          "page_url": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "pattern": "^/[A-Za-z0-9/_.-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Route path only, e.g. /accounts (no query string or fragment)",
+            "title": "Page Url"
+          },
+          "properties": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Up to 20 numeric, boolean or identifier-like values (keys snake_case, strings up to 64 characters of letters, digits and _.:-); no free text",
+            "title": "Properties",
+            "type": "object"
+          },
+          "session_id": {
+            "description": "Opaque browser session identifier",
+            "pattern": "^[A-Za-z0-9._-]{1,128}$",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_type",
+          "event_timestamp",
+          "session_id"
+        ],
+        "title": "TelemetryEventIn",
+        "type": "object"
+      },
+      "TelemetryEventType": {
+        "description": "Supported telemetry event types.",
+        "enum": [
+          "page_view",
+          "loan_calculator_used",
+          "transfer_initiated",
+          "account_viewed",
+          "product_clicked",
+          "search_performed"
+        ],
+        "title": "TelemetryEventType",
         "type": "string"
       },
       "TokenResponse": {
@@ -3533,6 +3680,53 @@
         "summary": "Get my customer profile",
         "tags": [
           "customers"
+        ]
+      }
+    },
+    "/api/v1/events/batch": {
+      "post": {
+        "description": "Store up to 100 events for the authenticated customer; committed before the response.",
+        "operationId": "ingest_events_batch_api_v1_events_batch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventBatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Batch ingest client-side and server-side telemetry events",
+        "tags": [
+          "events"
         ]
       }
     },

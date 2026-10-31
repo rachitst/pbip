@@ -15,6 +15,7 @@ from pbip_api.modules.auth.admin_router import router as admin_router
 from pbip_api.modules.auth.router import router as auth_router
 from pbip_api.modules.compliance.router import router as compliance_router
 from pbip_api.modules.customers.router import router as customers_router
+from pbip_api.modules.events.router import router as events_router
 from pbip_api.modules.fraud.router import router as fraud_router
 from pbip_api.modules.health.router import ReadinessCache
 from pbip_api.modules.health.router import router as health_router
@@ -31,6 +32,7 @@ ROUTERS = (
     accounts_router,
     analytics_router,
     recommendations_router,
+    events_router,
     payees_router,
     payments_router,
     fraud_router,
