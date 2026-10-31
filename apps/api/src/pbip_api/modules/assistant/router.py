@@ -34,7 +34,22 @@ _SSE_DOC: dict[int | str, dict[str, Any]] = {
         "description": "text/event-stream: tool_call, tool_result, token..., then done (or error)."
         " Frame payloads are documented by AssistantStreamFrames.",
         "model": AssistantStreamFrames,
-        "content": {"text/event-stream": {"schema": {"type": "string"}}},
+        "content": {
+            "text/event-stream": {
+                # One SSE frame: `event:` name and a single JSON `data:` line.
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "event": {
+                            "type": "string",
+                            "enum": ["tool_call", "tool_result", "token", "done", "error"],
+                        },
+                        "data": {"type": "string", "description": "JSON payload"},
+                    },
+                    "required": ["event", "data"],
+                }
+            }
+        },
     }
 }
 
