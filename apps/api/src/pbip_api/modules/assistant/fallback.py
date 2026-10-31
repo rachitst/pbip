@@ -37,16 +37,22 @@ _TRANSACTIONS = re.compile(r"\b(transactions?|recent|history|statement|last \d+)
 _SPEND = re.compile(r"\b(spend|spent|spending|expenses?|expenditure|cost me)\b", _I)
 _BALANCE = re.compile(r"\b(balance|accounts?|how much (money )?(do i have|is in|have i got))\b", _I)
 _LAST_MONTH = re.compile(r"\b(last|previous|past) month\b", _I)
-_COUNT = re.compile(r"\b(?:last|latest|recent|past)?\s*(\d{1,3})\s*(?:transactions?|txns?)?\b", _I)
-_ACCOUNT_NO = re.compile(r"\baccount\s*(?:no\.?|number|#)?\s*(\d{1,2})\b", _I)
+# Whitespace runs and digit groups are BOUNDED ({0,3}, {1,12}): unbounded \s* / nested quantifiers
+# on customer text are polynomial-time regexes (CodeQL py/polynomial-redos).
+_COUNT = re.compile(
+    r"\b(?:last|latest|recent|past)?\s{0,3}(\d{1,3})\s{0,3}(?:transactions?|txns?)?\b", _I
+)
+_ACCOUNT_NO = re.compile(r"\baccount(?:\s{1,3}(?:no\.?|number|#))?\s{0,3}(\d{1,2})\b", _I)
 _ORDINALS = {"first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5}
 _ORDINAL = re.compile(r"\b(first|second|third|fourth|fifth)\s+account\b", _I)
 _AMOUNT = re.compile(
-    r"(?:₹|\brs\.?|\binr)?\s*(\d+(?:[.,]\d+)*)\s*(lakh|lakhs|lac|l|crore|crores|cr|k|thousand)?\b",
+    r"(?:₹|\brs\.?|\binr)?\s{0,3}(\d{1,12}(?:[.,]\d{1,3}){0,4})\s{0,3}"
+    r"(lakh|lakhs|lac|l|crore|crores|cr|k|thousand)?\b",
     _I,
 )
-_YEARS = re.compile(r"\b(\d{1,2})\s*(?:years?|yrs?)\b", _I)
-_MONTHS = re.compile(r"\b(\d{1,3})\s*(?:months?|mths?)\b", _I)
+_YEARS = re.compile(r"\b(\d{1,2})\s{0,3}(?:years?|yrs?)\b", _I)
+_MONTHS = re.compile(r"\b(\d{1,3})\s{0,3}(?:months?|mths?)\b", _I)
+_TENURE_AFTER = re.compile(r"\s{0,3}(years?|yrs?|months?|mths?)\b", _I)
 _SCALE = {
     "lakh": 1_00_000,
     "lakhs": 1_00_000,
@@ -119,7 +125,7 @@ def parse_rupees(message: str) -> int | None:
 
 
 def _is_tenure(message: str, end: int) -> bool:
-    return bool(re.match(r"\s*(years?|yrs?|months?|mths?)\b", message[end:], _I))
+    return bool(_TENURE_AFTER.match(message, end))
 
 
 def _loan(message: str) -> Route:
