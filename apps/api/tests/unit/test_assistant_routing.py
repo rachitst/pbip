@@ -2,6 +2,7 @@
 
 import json
 import re
+import time
 from typing import Any
 
 import httpx
@@ -274,3 +275,22 @@ def test_untrusted_text_is_stripped_and_capped() -> None:
     long = clean_untrusted_text("x" * 100)
     assert len(long) == 40 and long.endswith("…")
     assert clean_untrusted_text(None) == ""
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "account" + " " * 400 + "x",
+        "9" * 30 + ",9" * 200 + "!",
+        "9," * 240 + "x",
+        " " * 499 + "x",
+        "loan " + "1 " * 240,
+    ],
+)
+def test_fallback_regexes_stay_fast_on_adversarial_input(message: str) -> None:
+    """Regression for CodeQL py/polynomial-redos: worst-case inputs at the 500-char cap."""
+    started = time.perf_counter()
+    for _ in range(20):
+        fallback.route(message)
+        fallback.parse_rupees(message)
+    assert time.perf_counter() - started < 0.5
