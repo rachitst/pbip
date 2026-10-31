@@ -56,11 +56,13 @@ class Settings(BaseSettings):
     # onto the database through it. 0 disables caching.
     health_ready_cache_seconds: float = Field(default=1.0, ge=0, le=30)
 
-    # OpenTelemetry distributed tracing (TASK-085 spike)
+    # OpenTelemetry tracing (TASK-085 spike, ADR 0017). Off by default. "none" creates spans
+    # (trace ids in logs) without exporting; "console" prints spans to stdout (development);
+    # "memory" keeps every span in memory and is for tests only (refused when deployed).
     otel_enabled: bool = False
-    otel_service_name: str = "pbip-api"
+    otel_service_name: str = Field(default="pbip-api", min_length=1, max_length=64)
     otel_sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
-    otel_exporter: Literal["memory", "console", "none"] = "memory"
+    otel_exporter: Literal["none", "console", "memory"] = "none"
 
     # Banking limits (INTEGER MINOR UNITS)
     internal_bank_code: str = "PBIP0001"
@@ -97,6 +99,8 @@ class Settings(BaseSettings):
             problems.append("COOKIE_SECURE must be true")
         if "*" in self.cors_origin_list:
             problems.append("CORS_ORIGINS must not contain a wildcard")
+        if self.otel_enabled and self.otel_exporter == "memory":
+            problems.append("OTEL_EXPORTER=memory keeps every span in memory (tests only)")
         if problems:
             raise ValueError(
                 "Unsafe configuration for " + self.app_env + ": " + "; ".join(problems)

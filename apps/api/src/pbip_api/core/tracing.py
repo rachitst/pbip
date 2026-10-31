@@ -1,51 +1,48 @@
-"""OpenTelemetry distributed tracing configuration, instrumentation, and utilities (TASK-085).
+"""OpenTelemetry tracing for the API (TASK-085 spike, ADR 0017).
 
-Provides centralized setup for OpenTelemetry span tracking across FastAPI request lifecycles
-and SQLAlchemy database operations, injecting trace_id and span_id into structlog logging context.
+Off unless ``OTEL_ENABLED=true``. When on, FastAPI requests become SERVER spans and SQLAlchemy
+statements on the shared engine become child CLIENT spans; ``core/logging.py`` adds the active
+``trace_id``/``span_id`` to every log line. There is no network exporter yet (the production
+collector is a roadmap item in ADR 0017), so turning tracing on never adds a network dependency.
+
+Span data follows the access-log policy (``core/middleware.py``): no query strings, headers or
+bodies. SQL statements carry bind placeholders only, and are never rewritten (no sqlcommenter).
 """
 
-import contextlib
 from typing import Any
 
 import structlog
 from fastapi import FastAPI
+from opentelemetry import trace
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import (
+    BatchSpanProcessor,
+    ConsoleSpanExporter,
+    SimpleSpanProcessor,
+)
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from opentelemetry.sdk.trace.sampling import ALWAYS_OFF, ALWAYS_ON, Sampler, TraceIdRatioBased
+from opentelemetry.trace import Span
 from sqlalchemy import Engine
 
+from pbip_api import __version__
 from pbip_api.core.config import Settings, get_settings
-
-try:
-    from opentelemetry import trace
-    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-    from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-    from opentelemetry.sdk.resources import Resource
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import (
-        BatchSpanProcessor,
-        ConsoleSpanExporter,
-        SimpleSpanProcessor,
-    )
-    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-    from opentelemetry.sdk.trace.sampling import (
-        ALWAYS_OFF,
-        ALWAYS_ON,
-        TraceIdRatioBased,
-    )
-
-    _HAS_OTEL = True
-except ImportError:  # pragma: no cover
-    _HAS_OTEL = False
 
 _logger = structlog.get_logger(__name__)
 
-_in_memory_exporter: Any = None
-_tracer_provider: Any = None
-_instrumented_engines: set[int] = set()
-_instrumented_apps: set[int] = set()
+# Comma-separated regexes matched against the request URL. Health probes run every few seconds
+# (compose healthchecks, nginx) and /metrics is scraped by Prometheus: tracing them is noise.
+_EXCLUDED_URLS = "/api/health/,/metrics"
+
+# One provider per process: the OpenTelemetry API allows the global provider to be set once.
+_tracer_provider: TracerProvider | None = None
+_in_memory_exporter: InMemorySpanExporter | None = None
 
 
-def _build_sampler(sample_rate: float) -> Any:
-    if not _HAS_OTEL:
-        return None
+def _build_sampler(sample_rate: float) -> Sampler:
     if sample_rate >= 1.0:
         return ALWAYS_ON
     if sample_rate <= 0.0:
@@ -53,120 +50,99 @@ def _build_sampler(sample_rate: float) -> Any:
     return TraceIdRatioBased(sample_rate)
 
 
-def setup_tracing(
-    settings: Settings | None = None,
-) -> tuple[Any, Any]:
-    """Configure the OpenTelemetry TracerProvider and exporter based on settings."""
+def setup_tracing(settings: Settings | None = None) -> TracerProvider | None:
+    """Create and register the process-wide TracerProvider; idempotent, no-op when disabled."""
     global _tracer_provider, _in_memory_exporter
-
-    if not _HAS_OTEL:
-        return None, None
 
     settings = settings or get_settings()
     if not settings.otel_enabled:
-        return None, None
+        return None
+    if _tracer_provider is not None:
+        return _tracer_provider
 
     resource = Resource.create(
         {
             "service.name": settings.otel_service_name,
-            "service.version": "0.1.0",
+            "service.version": __version__,
             "deployment.environment": settings.app_env,
         }
     )
-    sampler = _build_sampler(settings.otel_sample_rate)
-    provider = TracerProvider(resource=resource, sampler=sampler)
-
-    exporter: Any = None
+    # shutdown_on_exit (the default) flushes the batch processor at interpreter exit.
+    provider = TracerProvider(resource=resource, sampler=_build_sampler(settings.otel_sample_rate))
     if settings.otel_exporter == "memory":
-        exporter = InMemorySpanExporter()
-        _in_memory_exporter = exporter
-        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        # Test/evaluation only: keeps every span in memory (refused in staging/production).
+        _in_memory_exporter = InMemorySpanExporter()
+        provider.add_span_processor(SimpleSpanProcessor(_in_memory_exporter))
     elif settings.otel_exporter == "console":
         provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
-    elif settings.otel_exporter == "none":
-        pass
+    # "none": spans are created (so trace ids reach the logs) but not exported.
 
     trace.set_tracer_provider(provider)
     _tracer_provider = provider
-    return provider, exporter
+    _logger.info(
+        "tracing_enabled",
+        exporter=settings.otel_exporter,
+        sample_rate=settings.otel_sample_rate,
+    )
+    return provider
+
+
+def _strip_query_string(span: Span, _scope: dict[str, Any]) -> None:
+    """Server request hook: drop the query string the ASGI instrumentation records.
+
+    Query values can hold identifiers or tokens; the access log omits them, so spans do too.
+    """
+    if not span.is_recording():
+        return
+    attributes = getattr(span, "attributes", None) or {}
+    for key in ("http.url", "url.full", "http.target"):
+        value = attributes.get(key)
+        if isinstance(value, str) and "?" in value:
+            span.set_attribute(key, value.split("?", 1)[0])
+    if "url.query" in attributes:
+        span.set_attribute("url.query", "")
 
 
 def instrument_app(app: FastAPI, settings: Settings | None = None) -> None:
-    """Instrument a FastAPI application for distributed trace context propagation."""
-    global _instrumented_apps
-
-    if not _HAS_OTEL:
-        return
-
+    """Wrap a FastAPI app so each request is a SERVER span (W3C traceparent is honoured)."""
     settings = settings or get_settings()
-    if not settings.otel_enabled:
+    if not settings.otel_enabled or _tracer_provider is None:
         return
-
-    app_id = id(app)
-    if app_id in _instrumented_apps:
-        return
-
     FastAPIInstrumentor.instrument_app(
         app,
         tracer_provider=_tracer_provider,
-        excluded_urls="metrics",
+        excluded_urls=_EXCLUDED_URLS,
         exclude_spans=["send", "receive"],
+        server_request_hook=_strip_query_string,
     )
-    _instrumented_apps.add(app_id)
 
 
 def instrument_engine(engine: Engine, settings: Settings | None = None) -> None:
-    """Instrument a SQLAlchemy engine to create child spans for SQL statements."""
-    global _instrumented_engines
+    """Add CLIENT spans for SQL on this engine.
 
-    if not _HAS_OTEL:
-        return
-
+    ``skip_dep_check``: the instrumentation declares support for SQLAlchemy < 2.1 and PBIP runs
+    2.1.x; the engine-event hooks it uses are unchanged in 2.1 (covered by the integration test
+    against PostgreSQL). Revisit when a release declares 2.1 support (ADR 0017).
+    """
     settings = settings or get_settings()
     if not settings.otel_enabled:
         return
-
-    engine_id = id(engine)
-    if engine_id in _instrumented_engines:
-        return
-
     SQLAlchemyInstrumentor().instrument(
         engine=engine,
         tracer_provider=_tracer_provider,
         skip_dep_check=True,
-        enable_commenter=True,
+        enable_commenter=False,
     )
-    _instrumented_engines.add(engine_id)
 
 
-def get_in_memory_exporter() -> Any:
-    """Retrieve the active InMemorySpanExporter (primarily used in tests and evaluations)."""
+def get_in_memory_exporter() -> InMemorySpanExporter | None:
+    """The in-memory exporter, when configured (tests and the overhead evaluation)."""
     return _in_memory_exporter
 
 
 def get_active_trace_context() -> tuple[str | None, str | None]:
-    """Return active (trace_id, span_id) hex strings if currently within a valid span."""
-    if not _HAS_OTEL:
-        return None, None
-    span = trace.get_current_span()
-    ctx = span.get_span_context()
-    if ctx and ctx.is_valid:
-        return f"{ctx.trace_id:032x}", f"{ctx.span_id:016x}"
+    """Return the active (trace_id, span_id) as hex strings, or (None, None) outside a span."""
+    context = trace.get_current_span().get_span_context()
+    if context.is_valid:
+        return f"{context.trace_id:032x}", f"{context.span_id:016x}"
     return None, None
-
-
-def uninstrument_tracing() -> None:
-    """Uninstrument components and reset global tracing state (used for test isolation)."""
-    global _tracer_provider, _in_memory_exporter, _instrumented_engines, _instrumented_apps
-
-    if _HAS_OTEL:
-        with contextlib.suppress(Exception):
-            if SQLAlchemyInstrumentor().is_instrumented_by_opentelemetry:
-                SQLAlchemyInstrumentor().uninstrument()
-        with contextlib.suppress(Exception):
-            trace._TRACER_PROVIDER = None
-            trace._TRACER_PROVIDER_SET_ONCE._done = False
-        _in_memory_exporter = None
-        _tracer_provider = None
-        _instrumented_engines.clear()
-        _instrumented_apps.clear()
