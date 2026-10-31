@@ -11,18 +11,33 @@ import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 
 type Tone = "success" | "warning" | "danger" | "neutral";
 
-/** The notification types the API produces (modules/notifications/service.py: transfer outcomes
- * only). A notification carries no transaction id and there is no transaction detail page, so a
- * transfer notification opens Accounts, where each account's transactions are listed. */
-const NOTIFICATION_TYPES: Record<string, { label: string; tone: Tone; to: string }> = {
-  TRANSFER_POSTED: { label: "Transfer", tone: "success", to: "/accounts" },
-  TRANSFER_UNDER_REVIEW: { label: "Under review", tone: "warning", to: "/accounts" },
-  TRANSFER_DECLINED: { label: "Not completed", tone: "danger", to: "/accounts" },
+/** The notification types the API produces (modules/notifications/service.py): transfer outcomes
+ * and security events (password changed, two-step verification on, new device). */
+const NOTIFICATION_TYPES: Record<string, { label: string; tone: Tone }> = {
+  TRANSFER_POSTED: { label: "Transfer", tone: "success" },
+  TRANSFER_UNDER_REVIEW: { label: "Under review", tone: "warning" },
+  TRANSFER_DECLINED: { label: "Not completed", tone: "danger" },
+  PASSWORD_CHANGED: { label: "Security", tone: "warning" },
+  MFA_ENABLED: { label: "Security", tone: "warning" },
+  DEVICE_REGISTERED: { label: "Security", tone: "warning" },
 };
 
-/** A type the API adds later is shown neutrally and only marked read: no destination is guessed. */
-export function notificationKind(type: string): { label: string; tone: Tone; to: string | null } {
-  return NOTIFICATION_TYPES[type] ?? { label: "Notification", tone: "neutral", to: null };
+/** A type the API adds later is shown neutrally. */
+export function notificationKind(type: string): { label: string; tone: Tone } {
+  return NOTIFICATION_TYPES[type] ?? { label: "Notification", tone: "neutral" };
+}
+
+/** Where a notification leads, from its link target: a transfer opens its account's transactions
+ * with that transaction highlighted, a security event opens Profile & security. Without a link
+ * target (an unknown type) it is only marked read: no destination is guessed. */
+export function notificationDestination(item: NotificationOut): string | null {
+  if (item.resource_type === "security") return "/profile";
+  if (item.resource_type === "transaction") {
+    if (!item.account_id || !item.resource_id) return "/accounts"; // sent before links existed
+    const params = new URLSearchParams({ account: item.account_id, transaction: item.resource_id });
+    return `/accounts?${params.toString()}`;
+  }
+  return null;
 }
 
 export function badgeText(unread: number): string {
@@ -97,7 +112,7 @@ export function NotificationBell() {
     if (!item.read) {
       markReadMutation.mutate(item.id);
     }
-    const destination = notificationKind(item.type).to;
+    const destination = notificationDestination(item);
     // Navigating moves focus to the new page's heading; otherwise focus returns to the bell.
     close(destination === null);
     if (destination !== null) void navigate(destination);

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useSearchParams } from "react-router";
 import type { SyntheticEvent } from "react";
 import { api } from "../api/client";
 import type { AccountOut, OpenAccountType, TransferOut } from "../api/client";
@@ -18,7 +19,18 @@ import { AccountTransactions } from "./AccountTransactions";
 export function Accounts() {
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts });
   const payees = useQuery({ queryKey: ["payees"], queryFn: api.payees });
-  const [openedId, setOpenedId] = useState<string | null>(null);
+  // A notification link (?account=&transaction=) opens that account and highlights the transaction;
+  // a new link replaces whatever the customer had opened (state is reset during render, not in an
+  // effect, so there is no flash of the old state).
+  const [params] = useSearchParams();
+  const linkedAccount = params.get("account");
+  const linkedTransaction = params.get("transaction");
+  const [openedId, setOpenedId] = useState<string | null>(linkedAccount);
+  const [link, setLink] = useState(params.toString());
+  if (link !== params.toString()) {
+    setLink(params.toString());
+    setOpenedId(linkedAccount);
+  }
 
   return (
     <div className="page">
@@ -39,6 +51,7 @@ export function Accounts() {
             key={account.id}
             account={account}
             expanded={openedId === account.id}
+            highlightTransactionId={account.id === linkedAccount ? linkedTransaction : null}
             onToggle={() => {
               setOpenedId(openedId === account.id ? null : account.id);
             }}
@@ -59,10 +72,11 @@ export function Accounts() {
 interface AccountRowProps {
   account: AccountOut;
   expanded: boolean;
+  highlightTransactionId: string | null;
   onToggle: () => void;
 }
 
-function AccountRow({ account, expanded, onToggle }: AccountRowProps) {
+function AccountRow({ account, expanded, highlightTransactionId, onToggle }: AccountRowProps) {
   const panelId = `transactions-${account.id}`;
   return (
     <li className="account">
@@ -95,7 +109,11 @@ function AccountRow({ account, expanded, onToggle }: AccountRowProps) {
       </div>
       {expanded && (
         <div id={panelId}>
-          <AccountTransactions accountId={account.id} currency={account.currency} />
+          <AccountTransactions
+            accountId={account.id}
+            currency={account.currency}
+            highlightTransactionId={highlightTransactionId}
+          />
         </div>
       )}
     </li>

@@ -309,6 +309,7 @@ class PaymentsService:
             {
                 "user_id": str(user_id),
                 "transaction_id": str(transaction.id),
+                "account_id": str(transaction.debit_account_id),
                 "amount_minor": transaction.amount,
                 "currency": transaction.currency,
             },

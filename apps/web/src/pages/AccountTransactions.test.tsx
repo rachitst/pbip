@@ -82,4 +82,20 @@ describe("account transactions (keyset pagination)", () => {
     await user.click(await screen.findByRole("button", { name: "Transactions" }));
     expect(await screen.findByText("No transactions yet.")).toBeInTheDocument();
   });
+
+  it("opens the linked account and marks the transaction a notification pointed to", async () => {
+    window.history.replaceState(null, "", "/accounts?account=acc-1&transaction=t-2");
+    renderApp();
+    // no click needed: the account named in the link is opened
+    const table = await screen.findByRole("table", { name: /Transactions, newest first/ });
+    const marked = within(table)
+      .getAllByRole("row")
+      .filter((row) => row.getAttribute("aria-current") === "true");
+    expect(marked).toHaveLength(1);
+    expect(marked[0]).toHaveClass("entry--highlight");
+    expect(screen.getByRole("button", { name: "Hide transactions" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+  });
 });

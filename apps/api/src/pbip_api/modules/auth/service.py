@@ -55,6 +55,7 @@ from pbip_api.modules.auth.models import (
 )
 from pbip_api.modules.compliance.service import AuditService
 from pbip_api.modules.customers.models import Customer
+from pbip_api.modules.notifications import service as notifications
 
 _logger = structlog.get_logger(__name__)
 _TOTP_STEP_SECONDS = 30
@@ -420,6 +421,7 @@ class AuthService:
             request_id=meta.request_id,
             details={},
         )
+        notifications.enqueue_security(self.session, notifications.PASSWORD_CHANGED, user.id)
         self.session.commit()
 
     def refresh(self, raw_token: str, meta: RequestMeta) -> SessionTokens:
@@ -527,6 +529,7 @@ class AuthService:
         self.audit.record(
             user.id, "MFA_ENABLED", "user", str(user.id), ip=meta.ip, request_id=meta.request_id
         )
+        notifications.enqueue_security(self.session, notifications.MFA_ENABLED, user.id)
         self.session.commit()
         return codes
 
