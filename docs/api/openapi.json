@@ -329,6 +329,63 @@
         "title": "AssistantMessageOut",
         "type": "object"
       },
+      "AssistantStreamFrames": {
+        "description": "Documentation of the SSE stream: each frame's ``event:`` names one of these fields and its\n``data:`` line is that field's JSON. ``done`` carries the full ChatResponse.",
+        "properties": {
+          "done": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StreamError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "token": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StreamToken"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tool_call": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StreamToolCall"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tool_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StreamToolResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "AssistantStreamFrames",
+        "type": "object"
+      },
       "AuditLogOut": {
         "properties": {
           "action": {
@@ -2772,6 +2829,79 @@
         "title": "StepUpRequest",
         "type": "object"
       },
+      "StreamError": {
+        "description": "``event: error`` - the stream failed; generic text only.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "StreamError",
+        "type": "object"
+      },
+      "StreamToken": {
+        "description": "``event: token`` - the next chunk of the reply.",
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "StreamToken",
+        "type": "object"
+      },
+      "StreamToolCall": {
+        "description": "``event: tool_call`` - the router chose a tool; it is about to run.",
+        "properties": {
+          "engine": {
+            "enum": [
+              "llm",
+              "rules"
+            ],
+            "title": "Engine",
+            "type": "string"
+          },
+          "tool": {
+            "$ref": "#/components/schemas/ToolName"
+          }
+        },
+        "required": [
+          "tool",
+          "engine"
+        ],
+        "title": "StreamToolCall",
+        "type": "object"
+      },
+      "StreamToolResult": {
+        "description": "``event: tool_result`` - ok, input (answered with guidance) or error.",
+        "properties": {
+          "outcome": {
+            "enum": [
+              "ok",
+              "input",
+              "error"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "tool": {
+            "$ref": "#/components/schemas/ToolName"
+          }
+        },
+        "required": [
+          "tool",
+          "outcome"
+        ],
+        "title": "StreamToolResult",
+        "type": "object"
+      },
       "SupportedCurrency": {
         "description": "Single-currency bank (blueprint section 7): the clearing account and every rail are INR.",
         "enum": [
@@ -4107,13 +4237,18 @@
         "responses": {
           "200": {
             "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantStreamFrames"
+                }
+              },
               "text/event-stream": {
                 "schema": {
                   "type": "string"
                 }
               }
             },
-            "description": "text/event-stream: tool_call, tool_result, token..., then done (or error)"
+            "description": "text/event-stream: tool_call, tool_result, token..., then done (or error). Frame payloads are documented by AssistantStreamFrames."
           },
           "422": {
             "content": {

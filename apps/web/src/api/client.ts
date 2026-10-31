@@ -23,6 +23,13 @@ export type CategoryShiftItem = components["schemas"]["CategoryShiftItem"];
 export type FinancialHealthScoreResponse = components["schemas"]["FinancialHealthScoreResponse"];
 export type FinancialHealthComponents = components["schemas"]["FinancialHealthComponents"];
 export type HealthScoreComponent = components["schemas"]["HealthScoreComponent"];
+export type ChatResponse = components["schemas"]["ChatResponse"];
+export type AssistantHistory = components["schemas"]["AssistantHistory"];
+export type AssistantMessageOut = components["schemas"]["AssistantMessageOut"];
+export type StreamToolCall = components["schemas"]["StreamToolCall"];
+export type StreamToolResult = components["schemas"]["StreamToolResult"];
+export type StreamToken = components["schemas"]["StreamToken"];
+export type StreamError = components["schemas"]["StreamError"];
 
 export class ApiError extends Error {
   constructor(
@@ -99,6 +106,32 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}, retry = 
     !isProblem(response);
   if (!response.ok && !isTransferState) throw await toError(response);
   return (response.status === 204 ? undefined : await response.json()) as T;
+}
+
+/** POST that returns the raw Response for streaming (SSE). Same auth and one refresh retry as
+ * apiFetch; a non-2xx answer is thrown as ApiError so callers handle 401/422/429 uniformly. */
+export async function apiStream(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+  retry = true,
+): Promise<Response> {
+  const headers = new Headers({ "Content-Type": "application/json", Accept: "text/event-stream" });
+  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+  const response = await fetch(path, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+    credentials: "include",
+    signal,
+  });
+  if (response.status === 401 && retry && accessToken !== null) {
+    if (await refreshSession()) return apiStream(path, body, signal, false);
+    accessToken = null;
+    onSessionLost?.();
+  }
+  if (!response.ok) throw await toError(response);
+  return response;
 }
 
 export const api = {
@@ -198,4 +231,6 @@ export const api = {
       `/api/v1/analytics/health-score?${params.toString()}`,
     );
   },
+  assistantHistory: (limit = 50) =>
+    apiFetch<AssistantHistory>(`/api/v1/assistant/messages?limit=${String(limit)}`),
 };

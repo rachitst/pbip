@@ -35,3 +35,40 @@ class AssistantMessageOut(BaseModel):
 
 class AssistantHistory(BaseModel):
     items: list[AssistantMessageOut]
+
+
+class StreamToolCall(BaseModel):
+    """``event: tool_call`` - the router chose a tool; it is about to run."""
+
+    tool: ToolName
+    engine: Literal["llm", "rules"]
+
+
+class StreamToolResult(BaseModel):
+    """``event: tool_result`` - ok, input (answered with guidance) or error."""
+
+    tool: ToolName
+    outcome: Literal["ok", "input", "error"]
+
+
+class StreamToken(BaseModel):
+    """``event: token`` - the next chunk of the reply."""
+
+    text: str
+
+
+class StreamError(BaseModel):
+    """``event: error`` - the stream failed; generic text only."""
+
+    detail: str
+
+
+class AssistantStreamFrames(BaseModel):
+    """Documentation of the SSE stream: each frame's ``event:`` names one of these fields and its
+    ``data:`` line is that field's JSON. ``done`` carries the full ChatResponse."""
+
+    tool_call: StreamToolCall | None = None
+    tool_result: StreamToolResult | None = None
+    token: StreamToken | None = None
+    done: ChatResponse | None = None
+    error: StreamError | None = None

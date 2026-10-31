@@ -5,6 +5,7 @@ import type { RouteObject } from "react-router";
 import type { UserOut } from "../api/client";
 import { homeArea, isCustomer, isStaff, useMe } from "../auth/session";
 import type { Area } from "../auth/session";
+import { AssistantDrawer } from "../assistant/AssistantDrawer";
 import { CustomerSessionBar } from "./CustomerSessionBar";
 import { ThemeToggle } from "./theme";
 import { errorMessage } from "../lib/errors";
@@ -77,9 +78,12 @@ function AreaLayout({ area, children }: { area: Area; children: ReactNode }) {
   }
   if (area === "customer") {
     return (
-      <AppShell session={<CustomerSessionBar />} nav={customerNav(me)}>
-        {children}
-      </AppShell>
+      <>
+        <AppShell session={<CustomerSessionBar />} nav={customerNav(me)}>
+          {children}
+        </AppShell>
+        <AssistantDrawer />
+      </>
     );
   }
   return (
