@@ -3032,7 +3032,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/event-stream": string;
+                    "text/event-stream": {
+                        /** @description JSON payload */
+                        data: string;
+                        /** @enum {string} */
+                        event: "tool_call" | "tool_result" | "token" | "done" | "error";
+                    };
                 };
             };
             /** @description Validation Error */

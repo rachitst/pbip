@@ -27,7 +27,22 @@ router = APIRouter(prefix="/api/v1/assistant", tags=["assistant"])
 _SSE_DOC: dict[int | str, dict[str, Any]] = {
     200: {
         "description": "text/event-stream: tool_call, tool_result, token..., then done (or error)",
-        "content": {"text/event-stream": {"schema": {"type": "string"}}},
+        "content": {
+            "text/event-stream": {
+                # One SSE frame: `event:` name and a single JSON `data:` line.
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "event": {
+                            "type": "string",
+                            "enum": ["tool_call", "tool_result", "token", "done", "error"],
+                        },
+                        "data": {"type": "string", "description": "JSON payload"},
+                    },
+                    "required": ["event", "data"],
+                }
+            }
+        },
     }
 }
 
