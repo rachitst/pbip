@@ -51,3 +51,19 @@ def test_known_emi_values() -> None:
     assert emi_math.emi(1_20_000_00, 0, 12) == 10_000_00  # interest-free
     with pytest.raises(ValueError, match="positive"):
         emi_math.emi(0, 1_000, 12)
+
+
+@pytest.mark.parametrize(
+    ("principal", "rate", "months"),
+    [(187_463, 2_561, 479), (175_775, 2_992, 419), (132_216, 2_718, 452)],
+)
+def test_no_instalment_exceeds_the_emi_when_interest_rounds_above_it(
+    principal: int, rate: int, months: int
+) -> None:
+    """Regression: the floored EMI fell a paisa below the month's interest; every regular month
+    then charged EMI + 1 with no principal and the last instalment repaid the whole loan."""
+    plan = emi_math.schedule(principal, rate, months)
+    assert all(i.payment_minor == plan.emi_minor for i in plan.instalments[:-1])
+    assert sum(i.principal_minor for i in plan.instalments) == principal
+    assert plan.instalments[-1].balance_after_minor == 0
+    assert plan.instalments[-1].payment_minor < principal + 2 * plan.emi_minor
