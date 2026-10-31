@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     rate_limit_register_per_hour: int = 10
     rate_limit_password_change_per_minute: int = 5
     rate_limit_events_per_minute: int = 120
+    rate_limit_assistant_per_minute: int = Field(default=20, ge=1, le=600)
     allow_self_registration: bool = True
     # The readiness probe is public; caching its DB+Redis result bounds the load anyone can push
     # onto the database through it. 0 disables caching.
@@ -64,6 +65,16 @@ class Settings(BaseSettings):
     otel_service_name: str = Field(default="pbip-api", min_length=1, max_length=64)
     otel_sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
     otel_exporter: Literal["none", "console", "memory"] = "none"
+
+    # AI assistant (Blueprint section 10). The LLM endpoint is fixed configuration: never a
+    # model-chosen or user-supplied URL (SSRF). Scheme, host and port only - no path.
+    ollama_base_url: str = Field(
+        default="http://localhost:11434", pattern=r"^https?://[A-Za-z0-9.\-]+(:[0-9]{1,5})?/?$"
+    )
+    ollama_model: str = Field(default="qwen2.5:3b-instruct", min_length=1, max_length=100)
+    # Past this the deterministic rules answer instead, so a slow model never stalls the chat.
+    ollama_timeout_seconds: float = Field(default=4.0, gt=0, le=120)
+    assistant_llm_enabled: bool = True
 
     # Banking limits (INTEGER MINOR UNITS)
     internal_bank_code: str = "PBIP0001"

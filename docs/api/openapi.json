@@ -734,6 +734,81 @@
         "title": "ChainStatusOut",
         "type": "object"
       },
+      "ChatRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "ChatRequest",
+        "type": "object"
+      },
+      "ChatResponse": {
+        "properties": {
+          "engine": {
+            "description": "llm: Ollama chose the tool; rules: the deterministic fallback did",
+            "enum": [
+              "llm",
+              "rules"
+            ],
+            "title": "Engine",
+            "type": "string"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where in the app to see or act on this",
+            "title": "Link"
+          },
+          "outcome": {
+            "enum": [
+              "answered",
+              "refused",
+              "help",
+              "unavailable"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "reply": {
+            "description": "Written by the server from the tool's structured result",
+            "title": "Reply",
+            "type": "string"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolName"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The approved tool that ran, if any"
+          }
+        },
+        "required": [
+          "reply",
+          "outcome",
+          "tool",
+          "engine"
+        ],
+        "title": "ChatResponse",
+        "type": "object"
+      },
       "ChurnRiskLevel": {
         "description": "Categorical classification of customer churn risk.",
         "enum": [
@@ -2811,6 +2886,17 @@
         "title": "TokenResponse",
         "type": "object"
       },
+      "ToolName": {
+        "enum": [
+          "get_account_summary",
+          "get_recent_transactions",
+          "get_spend",
+          "get_balance_forecast",
+          "get_loan_affordability"
+        ],
+        "title": "ToolName",
+        "type": "string"
+      },
       "TransferOut": {
         "properties": {
           "amount_minor": {
@@ -3899,6 +3985,53 @@
         "summary": "Month-over-month spending trends and daily burn rate",
         "tags": [
           "analytics"
+        ]
+      }
+    },
+    "/api/v1/assistant/chat": {
+      "post": {
+        "description": "Identity comes from the access token; tools only read the caller's own data.",
+        "operationId": "chat_api_v1_assistant_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ask the read-only banking assistant about your own accounts",
+        "tags": [
+          "assistant"
         ]
       }
     },
