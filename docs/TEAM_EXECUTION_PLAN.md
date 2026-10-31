@@ -104,9 +104,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 | TASK-028 | Threat Model Specification & OWASP Mapping v1 | Abbas | Sun 25 Oct | Sun 25 Oct | - | Par | Low | #51 |
 | TASK-014 | Bill Payments Core Models, Validation & Service | Sujal | Mon 26 Oct | Mon 26 Oct | 005 | Par | Low | #37 |
 | TASK-022 | Web Notifications Tray & Alert Badges | Kalpak | Mon 26 Oct | Mon 26 Oct | 018, 019 | Seq | Low | #45 |
-| TASK-024 | Fraud Feature Engineering Offline/Online Parity Suite | Pranay | Mon 26 Oct | Mon 26 Oct | 023 | Seq | High | #47 |
+| TASK-024 | Fraud Feature Engineering Offline/Online Parity Suite | Rachit | Mon 26 Oct | Mon 26 Oct | 023 | Seq | High | #47 |
 | TASK-017 | Advanced Keyset Transaction Filtering & Search API | Sujal | Mon 26 Oct | Mon 26 Oct | 008 | Par | Low | #40 |
-| TASK-025 | Fraud Rules Engine Registry & Extensibility Architecture | Pranay | Mon 26 Oct | Mon 26 Oct | 024 | Seq | Low | #48 |
+| TASK-025 | Fraud Rules Engine Registry & Extensibility Architecture | Rachit | Mon 26 Oct | Mon 26 Oct | 024 | Seq | Low | #48 |
 | TASK-026 | Transactional Outbox Relay Worker | Sujal | Mon 26 Oct | Tue 27 Oct | 018 | Seq | Low | #49 |
 | TASK-020 | Web Bill Payment & Registered Payee Management UI | Kalpak | Tue 27 Oct | Tue 27 Oct | 014, 019 | Seq | Low | #43 |
 | TASK-027 | Low-Level Design (LLD) & Data Model Specification | Rachit | Tue 27 Oct | Wed 28 Oct | 014, 015 | Seq | Low | #50 |
@@ -810,8 +810,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-024 - Fraud Feature Engineering Offline/Online Parity Suite
 
 - **Issue:** #47 | **Sprint:** 2 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
-- **Owner:** Pranay (`pranaysanap`)
-- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
+- **Owner:** Rachit (`rachitst`), taken over from Pranay on Sun 1 Nov to unblock the fraud and AI chain
+- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Sun 1 Nov (`pbip_ml/fraud/features.py`: five features, an online per-transfer path and an independent vectorised pandas offline path; exact parity on two generated datasets (zero tolerance); a perturbed window is caught (760 rows differ)) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-023 (#46, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-023
 - **Goal:** Feature extraction pipeline with automated tests proving identical values offline and online.
@@ -824,10 +824,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Proves mathematical parity between offline training features and online inference features
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #47`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Computes transaction-level features: ratio_to_avg_amount, payee_age_seconds, velocity_10m
-  - [ ] Computes account-level features: failure_count_24h, distinct_devices_7d
-  - [ ] Automated test suite computes features from batch DataFrame and single transaction context
-  - [ ] Proves mathematical parity between offline training features and online inference features
+  - [x] Computes transaction-level features: ratio_to_avg_amount, payee_age_seconds, velocity_10m
+  - [x] Computes account-level features: failure_count_24h, distinct_devices_7d
+  - [x] Automated test suite computes features from batch DataFrame and single transaction context
+  - [x] Proves mathematical parity between offline training features and online inference features
 - **Definition of done (evidence):** Parity tests pass in pytest with zero tolerance deviation on numerical features.
 - **Required checks:**
   - Automated: pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable
@@ -840,9 +840,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-025 - Fraud Rules Engine Registry & Extensibility Architecture
 
 - **Issue:** #48 | **Sprint:** 2 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
-- **Owner:** Pranay (`pranaysanap`)
-- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (2.7 days of slack)
-- **Depends on:** TASK-024 (#47, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Owner:** Rachit (`rachitst`), taken over from Pranay on Sun 1 Nov to unblock the fraud and AI chain
+- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Sun 1 Nov (`pbip_ml/fraud/rules.py`: Rule protocol, registry with duplicate guard, NEW_PAYEE_LARGE_AMOUNT, VELOCITY_BURST, RAPID_ATO_TRANSFER, AMOUNT_SPIKE; reasons cite exact values; p95 0.0075 ms over 5,000 evaluations on the laptop; wired into the API scorer by TASK-033) | **Status:** Done | **Risk:** Low
+- **Depends on:** TASK-024 (#47, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-024
 - **Goal:** Pluggable, weighted rules registry executing deterministic fraud policies with human reasons.
 - **Implementation steps:**
@@ -854,10 +854,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Execution finishes in < 15ms p95
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #48`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Implements Rule interface with evaluate(context) -> RuleResult(triggered, weight, reason)
-  - [ ] Built-in rules: NEW_PAYEE_LARGE_AMOUNT, VELOCITY_BURST, RAPID_ATO_TRANSFER
-  - [ ] Produces formatted explanation strings citing exact parameters (e.g. 'Payee added 3m ago')
-  - [ ] Execution finishes in < 15ms p95
+  - [x] Implements Rule interface with evaluate(context) -> RuleResult(triggered, weight, reason)
+  - [x] Built-in rules: NEW_PAYEE_LARGE_AMOUNT, VELOCITY_BURST, RAPID_ATO_TRANSFER
+  - [x] Produces formatted explanation strings citing exact parameters (e.g. 'Payee added 3m ago')
+  - [x] Execution finishes in < 15ms p95
 - **Definition of done (evidence):** Unit tests verify every rule trigger condition, edge cases, and reasoning strings.
 - **Required checks:**
   - Automated: pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable; pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths
@@ -954,7 +954,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Issue:** #52 | **Sprint:** 3 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Pranay (`pranaysanap`)
 - **Start:** Mon 26 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
-- **Depends on:** TASK-023 (#46, Pranay), TASK-024 (#47, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Depends on:** TASK-023 (#46, Pranay), TASK-024 (#47, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-023, TASK-024
 - **Goal:** Supervised gradient boosting model trained with time-based split predicting P(fraud).
 - **Implementation steps:**
@@ -984,7 +984,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Issue:** #53 | **Sprint:** 3 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Krishna (`LetRock1`)
 - **Start:** Mon 26 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (2.0 days of slack)
-- **Depends on:** TASK-024 (#47, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Depends on:** TASK-024 (#47, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-024
 - **Goal:** Unsupervised anomaly detection model scoring behavioral deviations from customer norms.
 - **Implementation steps:**
@@ -1014,7 +1014,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Issue:** #54 | **Sprint:** 3 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Pranay (`pranaysanap`)
 - **Start:** Tue 27 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
-- **Depends on:** TASK-025 (#48, Pranay), TASK-029 (#52, Pranay), TASK-030 (#53, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Depends on:** TASK-025 (#48, Rachit), TASK-029 (#52, Pranay), TASK-030 (#53, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-025, TASK-029, TASK-030
 - **Goal:** Combiner algorithm integrating rule triggers, supervised probability, and anomaly scores.
 - **Implementation steps:**
@@ -2094,7 +2094,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Issue:** #91 | **Sprint:** 5 | **Priority:** could | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Pranay (`pranaysanap`)
 - **Start:** Sun 01 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (1.8 days of slack)
-- **Depends on:** TASK-024 (#47, Pranay), TASK-029 (#52, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Depends on:** TASK-024 (#47, Rachit), TASK-029 (#52, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-024, TASK-029
 - **Goal:** Background monitoring script calculating feature drift and PSI metrics against baseline distributions.
 - **Implementation steps:**
@@ -3218,7 +3218,7 @@ decision in ADR-0015.
 | TASK-023 | Rachit | TASK-071 | Abbas | Mon 26 Oct | Mon 26 Oct |
 | TASK-023 | Rachit | TASK-072 | Abbas | Mon 26 Oct | Mon 26 Oct |
 | TASK-018 | Abbas | TASK-026 | Sujal | Sun 25 Oct | Mon 26 Oct |
-| TASK-024 | Pranay | TASK-030 | Krishna | Mon 26 Oct | Mon 26 Oct |
+| TASK-024 | Rachit | TASK-030 | Krishna | Mon 26 Oct | Mon 26 Oct |
 | TASK-014 | Sujal | TASK-020 | Kalpak | Mon 26 Oct | Tue 27 Oct |
 | TASK-023 | Rachit | TASK-042 | Rachit | Mon 26 Oct | Tue 27 Oct |
 | TASK-014 | Sujal | TASK-027 | Rachit | Mon 26 Oct | Tue 27 Oct |
