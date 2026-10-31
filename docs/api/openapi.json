@@ -361,6 +361,104 @@
         "title": "AuditLogOut",
         "type": "object"
       },
+      "BalanceForecastPoint": {
+        "description": "One predicted day. Integer paise; the interval says how sure the model is.",
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "lower_80_minor": {
+            "title": "Lower 80 Minor",
+            "type": "integer"
+          },
+          "lower_95_minor": {
+            "title": "Lower 95 Minor",
+            "type": "integer"
+          },
+          "predicted_minor": {
+            "description": "Predicted, not exact: the model's central estimate",
+            "title": "Predicted Minor",
+            "type": "integer"
+          },
+          "upper_80_minor": {
+            "title": "Upper 80 Minor",
+            "type": "integer"
+          },
+          "upper_95_minor": {
+            "title": "Upper 95 Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "predicted_minor",
+          "lower_80_minor",
+          "upper_80_minor",
+          "lower_95_minor",
+          "upper_95_minor"
+        ],
+        "title": "BalanceForecastPoint",
+        "type": "object"
+      },
+      "BalanceForecastResponse": {
+        "description": "A projection of the end-of-day balance. Predicted, not exact.",
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "history_days": {
+            "description": "Days of balance history the forecast used",
+            "title": "History Days",
+            "type": "integer"
+          },
+          "horizon_days": {
+            "title": "Horizon Days",
+            "type": "integer"
+          },
+          "label": {
+            "const": "Predicted, not exact",
+            "default": "Predicted, not exact",
+            "description": "Always shown with the numbers",
+            "title": "Label",
+            "type": "string"
+          },
+          "method": {
+            "description": "auto_arima, seasonal_naive or naive (by history length)",
+            "title": "Method",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/BalanceForecastPoint"
+            },
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "account_id",
+          "currency",
+          "method",
+          "model_version",
+          "history_days",
+          "horizon_days",
+          "points"
+        ],
+        "title": "BalanceForecastResponse",
+        "type": "object"
+      },
       "BillPaymentOut": {
         "properties": {
           "account_id": {
@@ -3171,6 +3269,71 @@
         "summary": "Clear a user's lockout and login rate-limit counters (ADMIN with MFA)",
         "tags": [
           "admin"
+        ]
+      }
+    },
+    "/api/v1/analytics/forecast": {
+      "get": {
+        "description": "Daily balance projection of an owned account. Predicted, not exact.",
+        "operationId": "get_balance_forecast_api_v1_analytics_forecast_get",
+        "parameters": [
+          {
+            "description": "Target account identifier",
+            "in": "query",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "description": "Target account identifier",
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Days ahead to project",
+            "in": "query",
+            "name": "horizon_days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "description": "Days ahead to project",
+              "maximum": 90,
+              "minimum": 7,
+              "title": "Horizon Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalanceForecastResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Projected end-of-day balance with 80% and 95% intervals (Predicted, not exact)",
+        "tags": [
+          "analytics"
         ]
       }
     },

@@ -1,5 +1,6 @@
 """Pydantic schemas for analytics: spending breakdown and trends."""
 
+from datetime import date as date_type
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
@@ -219,3 +220,36 @@ class SegmentationJobResponse(BaseModel):
     )
     total_customers_assigned: int = Field(..., ge=0, description="Rows written")
     skipped_reason: str | None = Field(None, description="Why nothing was clustered, if so")
+
+
+PREDICTED_LABEL: Literal["Predicted, not exact"] = "Predicted, not exact"
+
+
+class BalanceForecastPoint(BaseModel):
+    """One predicted day. Integer paise; the interval says how sure the model is."""
+
+    model_config = ConfigDict(frozen=True)
+
+    date: date_type
+    predicted_minor: int = Field(description="Predicted, not exact: the model's central estimate")
+    lower_80_minor: int
+    upper_80_minor: int
+    lower_95_minor: int
+    upper_95_minor: int
+
+
+class BalanceForecastResponse(BaseModel):
+    """A projection of the end-of-day balance. Predicted, not exact."""
+
+    model_config = ConfigDict(frozen=True)
+
+    label: Literal["Predicted, not exact"] = Field(
+        default=PREDICTED_LABEL, description="Always shown with the numbers"
+    )
+    account_id: UUID
+    currency: str
+    method: str = Field(description="auto_arima, seasonal_naive or naive (by history length)")
+    model_version: str
+    history_days: int = Field(description="Days of balance history the forecast used")
+    horizon_days: int
+    points: list[BalanceForecastPoint]

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from pbip_api.core.db import get_session
 from pbip_api.modules.analytics import service
 from pbip_api.modules.analytics.schemas import (
+    BalanceForecastResponse,
     CustomerSegmentResponse,
     FinancialHealthScoreResponse,
     SpendingBreakdownResponse,
@@ -101,3 +102,26 @@ def get_customer_segment(
 ) -> CustomerSegmentResponse:
     """Segment, confidence and the RFM features it was derived from; the principal's own only."""
     return service.get_customer_segment(session=session, customer_id=customer.id)
+
+
+@router.get(
+    "/forecast",
+    response_model=BalanceForecastResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Projected end-of-day balance with 80% and 95% intervals (Predicted, not exact)",
+)
+def get_balance_forecast(
+    account_id: UUID = Query(..., description="Target account identifier"),
+    horizon_days: int = Query(30, ge=7, le=90, description="Days ahead to project"),
+    customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> BalanceForecastResponse:
+    """Daily balance projection of an owned account. Predicted, not exact."""
+    return service.get_balance_forecast(
+        session=session,
+        customer_id=customer.id,
+        account_id=account_id,
+        horizon_days=horizon_days,
+        now=datetime.fromtimestamp(clock(), tz=UTC),
+    )
