@@ -597,9 +597,12 @@ a {
   outline: 2px solid var(--danger);
 }
 .audit-log__details {
-  max-width: 14rem;
+  max-width: 12rem;
 }
+/* position: relative keeps the toggle's sr-only text inside the scrolling table region; without
+   it the absolutely positioned span escaped the region and widened the page at phone width. */
 .audit-log__toggle {
+  position: relative;
   display: block;
   max-width: 100%;
   color: var(--brand);

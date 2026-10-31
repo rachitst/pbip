@@ -426,6 +426,8 @@ describe("TASK-048 visual review changes", () => {
     expect(list.getByText("risk_score")).toBeInTheDocument();
     expect(list.getByText("45")).toBeInTheDocument();
     expect(list.getByText("CUSTOMER")).toBeInTheDocument();
+    // the table shows only the resource type; the full id is in the expanded row
+    expect(list.getByText("user:00000000-0000-0000-0000-000000000002")).toBeInTheDocument();
 
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "false");

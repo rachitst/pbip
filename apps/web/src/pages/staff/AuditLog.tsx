@@ -213,6 +213,12 @@ export function AuditLog() {
               {items.map((entry) => {
                 const isTampered = brokenSeq !== null && brokenSeq === entry.seq;
                 const fields = detailFields(entry.details);
+                const resource = entry.resource_id
+                  ? `${entry.resource_type}:${entry.resource_id}`
+                  : null;
+                const panelFields: [string, string][] = resource
+                  ? [["resource", resource], ...fields]
+                  : fields;
                 const ipValue = resolveIp(entry);
                 const isOpen = expanded.has(entry.seq);
                 const panelId = `audit-details-${entry.seq}`;
@@ -223,7 +229,7 @@ export function AuditLog() {
                       data-seq={entry.seq}
                       className={isTampered ? "audit-log__row--tampered" : undefined}
                     >
-                      <td className="audit-log__nowrap">
+                      <td>
                         #{entry.seq}
                         {isTampered && (
                           <span className="badge badge--danger audit-log__badge">TAMPERED</span>
@@ -242,10 +248,7 @@ export function AuditLog() {
                       <td>
                         <span className="badge badge--neutral">{entry.action}</span>
                       </td>
-                      <td>
-                        {entry.resource_type}
-                        {entry.resource_id ? `:${entry.resource_id.slice(0, 8)}…` : ""}
-                      </td>
+                      <td title={resource ?? undefined}>{entry.resource_type}</td>
                       <td className="audit-log__nowrap">
                         {ipValue === "—" ? (
                           <span className="muted" title="No IP address recorded for this event">
@@ -256,7 +259,7 @@ export function AuditLog() {
                         )}
                       </td>
                       <td className="audit-log__details">
-                        {fields.length === 0 ? (
+                        {panelFields.length === 0 ? (
                           <span className="muted">—</span>
                         ) : (
                           <button
@@ -264,13 +267,15 @@ export function AuditLog() {
                             className="audit-log__toggle"
                             aria-expanded={isOpen}
                             aria-controls={panelId}
-                            title={detailsSummary(entry.details)}
+                            title={
+                              fields.length > 0 ? detailsSummary(entry.details) : (resource ?? "")
+                            }
                             onClick={() => {
                               toggle(entry.seq);
                             }}
                           >
                             <span className="audit-log__summary">
-                              {detailsSummary(entry.details)}
+                              {fields.length > 0 ? detailsSummary(entry.details) : "Resource id"}
                             </span>
                             <span className="sr-only"> (details of entry #{entry.seq})</span>
                           </button>
@@ -281,7 +286,7 @@ export function AuditLog() {
                       <tr id={panelId} className="audit-log__panel">
                         <td colSpan={7}>
                           <dl className="details">
-                            {fields.map(([key, value]) => (
+                            {panelFields.map(([key, value]) => (
                               <div key={key} className="details__row">
                                 <dt>{key}</dt>
                                 <dd>{value}</dd>
