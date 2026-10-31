@@ -528,6 +528,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/events/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Batch ingest client-side and server-side telemetry events
+         * @description Store up to 100 events for the authenticated customer; committed before the response.
+         */
+        post: operations["ingest_events_batch_api_v1_events_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fraud/alerts": {
         parameters: {
             query?: never;
@@ -573,6 +593,26 @@ export interface paths {
         put?: never;
         /** RELEASE (false positive, posts the held transfer) or REJECT (confirmed fraud) */
         post: operations["decide_alert_api_v1_fraud_alerts__alert_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/insights/customers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Customers ordered by churn risk, with churn signals and the top eligible product
+         * @description One page of customers ordered by churn risk (RM or admin with an MFA-verified session).
+         */
+        get: operations["get_prioritized_customer_insights_api_v1_insights_customers_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -677,6 +717,26 @@ export interface paths {
         put?: never;
         /** Confirmation-of-payee style name check; verified payees can receive transfers */
         post: operations["verify_payee_api_v1_payees__payee_id__verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Personalized banking product recommendations with explainable reasons
+         * @description Top 3 eligible products for the authenticated customer, with reasons from their data.
+         */
+        get: operations["get_recommendations_api_v1_recommendations_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -878,6 +938,8 @@ export interface components {
             };
             /** Hash */
             hash: string;
+            /** Ip */
+            ip?: string | null;
             /** Request Id */
             request_id: string | null;
             /** Resource Id */
@@ -1038,6 +1100,94 @@ export interface components {
             first_invalid_seq: number | null;
             /** Valid */
             valid: boolean;
+        };
+        /**
+         * ChurnRiskLevel
+         * @description Categorical classification of customer churn risk.
+         * @enum {string}
+         */
+        ChurnRiskLevel: "LOW" | "MEDIUM" | "HIGH";
+        /**
+         * CustomerInsightItem
+         * @description What an RM needs to prioritise outreach: no email, address, birth date or account number.
+         */
+        CustomerInsightItem: {
+            /**
+             * Balance Decline Rate
+             * @description Share of the balance lost over the last 30 days
+             */
+            balance_decline_rate: number;
+            /** @description Categorical churn risk rating: LOW, MEDIUM, or HIGH */
+            churn_risk_level: components["schemas"]["ChurnRiskLevel"];
+            /**
+             * Churn Risk Score
+             * @description Rule-based: 55% balance decline + 45% inactivity
+             */
+            churn_risk_score: number;
+            /**
+             * Customer Id
+             * Format: uuid
+             * @description Unique customer identifier
+             */
+            customer_id: string;
+            /**
+             * Full Name
+             * @description Customer full name
+             */
+            full_name: string;
+            /**
+             * High Value
+             * @description Balance of INR 1,00,000 or more, or the HIGH_NET_WORTH segment
+             * @default false
+             */
+            high_value: boolean;
+            /**
+             * Inactivity Days
+             * @description Elapsed days since the last customer activity or transaction
+             */
+            inactivity_days: number;
+            /**
+             * Segment
+             * @description Behavioral segment (e.g. HIGH_NET_WORTH)
+             */
+            segment: string;
+            /**
+             * Top Product Score
+             * @description Rule-based relevance (not a probability)
+             */
+            top_product_score?: number | null;
+            /**
+             * Top Recommended Product
+             * @description Top eligible product from the recommendation rules
+             */
+            top_recommended_product?: string | null;
+            /**
+             * Total Balance Minor
+             * @description Current spendable balance across all accounts in minor units
+             */
+            total_balance_minor: number;
+        };
+        /**
+         * CustomerInsightsListResponse
+         * @description Paginated collection of prioritized customer insights for Relationship Managers.
+         */
+        CustomerInsightsListResponse: {
+            /**
+             * Evaluated At
+             * Format: date-time
+             * @description Server evaluation timestamp in UTC
+             */
+            evaluated_at: string;
+            /**
+             * Items
+             * @description Prioritized list of customer insight profiles
+             */
+            items?: components["schemas"]["CustomerInsightItem"][];
+            /**
+             * Total
+             * @description Total matching customers count
+             */
+            total: number;
         };
         /**
          * CustomerProfileOut
@@ -1222,6 +1372,45 @@ export interface components {
             transaction_status: string;
             /** Transaction Type */
             transaction_type: string;
+        };
+        /**
+         * EventBatchRequest
+         * @description Batch payload containing up to 100 telemetry events.
+         */
+        EventBatchRequest: {
+            /**
+             * Events
+             * @description Telemetry events to ingest (1 to 100 per batch)
+             */
+            events: components["schemas"]["TelemetryEventIn"][];
+        };
+        /**
+         * EventBatchResponse
+         * @description Result of batch event ingestion. The events are committed before this is returned.
+         */
+        EventBatchResponse: {
+            /**
+             * Accepted
+             * @description Events stored by this request
+             */
+            accepted: number;
+            /**
+             * Batch Id
+             * Format: uuid
+             * @description Unique batch tracking UUID
+             */
+            batch_id?: string;
+            /**
+             * Duplicates
+             * @description Events already stored (same event_id and timestamp), skipped
+             */
+            duplicates: number;
+            /**
+             * Received At
+             * Format: date-time
+             * @description UTC server timestamp of receipt
+             */
+            received_at: string;
         };
         /**
          * FinancialHealthComponents
@@ -1420,6 +1609,11 @@ export interface components {
         };
         /** NotificationOut */
         NotificationOut: {
+            /**
+             * Account Id
+             * @description The account the transaction was sent from, for transfers
+             */
+            account_id?: string | null;
             /** Body */
             body: string;
             /**
@@ -1434,6 +1628,16 @@ export interface components {
             id: string;
             /** Read */
             read: boolean;
+            /**
+             * Resource Id
+             * @description The transaction, for transfers
+             */
+            resource_id?: string | null;
+            /**
+             * Resource Type
+             * @description What the notification is about, when it links somewhere
+             */
+            resource_type?: ("transaction" | "security") | null;
             /** Title */
             title: string;
             /** Type */
@@ -1566,6 +1770,53 @@ export interface components {
             name_match: "MATCH" | "NO_MATCH" | "NOT_CHECKED";
             payee: components["schemas"]["PayeeOut"];
         };
+        /**
+         * ProductRecommendationItem
+         * @description A single personalized product recommendation with explainable reasons.
+         */
+        ProductRecommendationItem: {
+            /**
+             * Cta Label
+             * @description Call to action button label
+             */
+            cta_label: string;
+            /**
+             * Description
+             * @description Summary description of the product offer
+             */
+            description: string;
+            /**
+             * Model Version
+             * @description Recommendation model version identifier
+             */
+            model_version: string;
+            /**
+             * Product Id
+             * Format: uuid
+             * @description Unique product catalog identifier
+             */
+            product_id: string;
+            /**
+             * Product Type
+             * @description Product category: SAVINGS, LOAN, INVESTMENT, or INSURANCE
+             */
+            product_type: string;
+            /**
+             * Reasons
+             * @description Human-readable justification reasons
+             */
+            reasons: string[];
+            /**
+             * Score
+             * @description Rule-based relevance, for ordering only; not a probability
+             */
+            score: number;
+            /**
+             * Title
+             * @description Human-readable product title
+             */
+            title: string;
+        };
         /** ReadyResponse */
         ReadyResponse: {
             /** Checks */
@@ -1577,6 +1828,34 @@ export interface components {
              * @enum {string}
              */
             status: "ok" | "degraded";
+        };
+        /**
+         * RecommendationsResponse
+         * @description Customer personalized product recommendations payload.
+         */
+        RecommendationsResponse: {
+            /**
+             * Customer Id
+             * Format: uuid
+             * @description Target customer identifier
+             */
+            customer_id: string;
+            /**
+             * Evaluated At
+             * Format: date-time
+             * @description UTC timestamp of the recommendation run
+             */
+            evaluated_at: string;
+            /**
+             * Model Version
+             * @description Recommendation engine version
+             */
+            model_version: string;
+            /**
+             * Recommendations
+             * @description Top recommended banking products
+             */
+            recommendations?: components["schemas"]["ProductRecommendationItem"][];
         };
         /** RecoveryCodesOut */
         RecoveryCodesOut: {
@@ -1699,6 +1978,48 @@ export interface components {
          * @enum {string}
          */
         SupportedCurrency: "INR";
+        /**
+         * TelemetryEventIn
+         * @description One client-side or server-side telemetry event.
+         */
+        TelemetryEventIn: {
+            /**
+             * Event Id
+             * @description Client-generated id; resending the same event is a no-op
+             */
+            event_id?: string | null;
+            /**
+             * Event Timestamp
+             * Format: date-time
+             * @description UTC timestamp when the event occurred
+             */
+            event_timestamp: string;
+            /** @description Classification category of the event */
+            event_type: components["schemas"]["TelemetryEventType"];
+            /**
+             * Page Url
+             * @description Route path only, e.g. /accounts (no query string or fragment)
+             */
+            page_url?: string | null;
+            /**
+             * Properties
+             * @description Up to 20 numeric, boolean or identifier-like values (keys snake_case, strings up to 64 characters of letters, digits and _.:-); no free text
+             */
+            properties?: {
+                [key: string]: boolean | number | string;
+            };
+            /**
+             * Session Id
+             * @description Opaque browser session identifier
+             */
+            session_id: string;
+        };
+        /**
+         * TelemetryEventType
+         * @description Supported telemetry event types.
+         * @enum {string}
+         */
+        TelemetryEventType: "page_view" | "loan_calculator_used" | "transfer_initiated" | "account_viewed" | "product_clicked" | "search_performed";
         /** TokenResponse */
         TokenResponse: {
             /** Access Token */
@@ -2786,6 +3107,39 @@ export interface operations {
             };
         };
     };
+    ingest_events_batch_api_v1_events_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventBatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventBatchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_alerts_api_v1_fraud_alerts_get: {
         parameters: {
             query?: {
@@ -2871,6 +3225,44 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_prioritized_customer_insights_api_v1_insights_customers_get: {
+        parameters: {
+            query?: {
+                /** @description Minimum churn risk score filter (0.0 to 1.0) */
+                min_churn_risk?: number | null;
+                /** @description Behavioral segment filter */
+                segment?: string | null;
+                /** @description Page size */
+                limit?: number;
+                /** @description Page offset */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerInsightsListResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -3105,6 +3497,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_recommendations_api_v1_recommendations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendationsResponse"];
                 };
             };
         };

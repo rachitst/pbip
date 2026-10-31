@@ -293,7 +293,8 @@ class PaymentsService:
         used = self.session.execute(
             select(func.coalesce(func.sum(Transaction.amount), 0)).where(
                 Transaction.initiated_by_user_id == user_id,
-                Transaction.type == TransactionType.TRANSFER,
+                # bill payments count too: the daily limit caps all money a customer sends
+                Transaction.type.in_((TransactionType.TRANSFER, TransactionType.BILL_PAYMENT)),
                 Transaction.status.in_(_PENDING_OR_DONE),
                 Transaction.created_at >= start_of_day,
                 Transaction.id != transaction.id,
@@ -309,6 +310,7 @@ class PaymentsService:
             {
                 "user_id": str(user_id),
                 "transaction_id": str(transaction.id),
+                "account_id": str(transaction.debit_account_id),
                 "amount_minor": transaction.amount,
                 "currency": transaction.currency,
             },

@@ -13,14 +13,20 @@ from datetime import timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, text
+from pbip_ml.fraud.contract import FraudDecision, FraudScorer, TransactionContext
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from pbip_api.core.config import Settings
 from pbip_api.core.db import utcnow
 from pbip_api.core.errors import ConflictError, NotFoundError, UnprocessableError
-from pbip_api.core.metrics import IDEMPOTENT_REPLAYS_TOTAL
+from pbip_api.core.geoip import CountryResolver, NoCountryResolver
+from pbip_api.core.metrics import (
+    FRAUD_DECISIONS_TOTAL,
+    FRAUD_INFERENCE_SECONDS,
+    IDEMPOTENT_REPLAYS_TOTAL,
+)
 from pbip_api.modules.accounts.models import Account
 from pbip_api.modules.accounts.policy import get_owned_account
 from pbip_api.modules.auth.service import RequestMeta
@@ -28,16 +34,24 @@ from pbip_api.modules.bills.models import Biller, BillerStatus, BillPayment, Bil
 from pbip_api.modules.bills.policy import get_owned_bill_payment
 from pbip_api.modules.compliance.service import AuditService
 from pbip_api.modules.customers.models import Customer
+from pbip_api.modules.fraud import service as fraud_service
 from pbip_api.modules.ledger import service as ledger
 from pbip_api.modules.ledger.models import (
     EntryDirection,
     IdempotencyKey,
     Transaction,
     TransactionEntry,
+    TransactionStatus,
     TransactionType,
 )
 from pbip_api.modules.notifications import service as notifications
-from pbip_api.modules.payments.service import IdempotencyKeyReuseError
+from pbip_api.modules.payments.service import IdempotencyKeyReuseError, LimitExceededError
+
+_COUNTS_TOWARDS_LIMIT = (
+    TransactionStatus.POSTED,
+    TransactionStatus.PENDING_REVIEW,
+    TransactionStatus.PENDING_STEP_UP,
+)
 
 
 class BillerInactiveError(UnprocessableError):
@@ -61,9 +75,17 @@ class BillPaymentResult:
 
 
 class BillsService:
-    def __init__(self, session: Session, settings: Settings) -> None:
+    def __init__(
+        self,
+        session: Session,
+        settings: Settings,
+        scorer: FraudScorer,
+        countries: CountryResolver | None = None,
+    ) -> None:
         self.session = session
         self.settings = settings
+        self.scorer = scorer
+        self.countries = countries or NoCountryResolver()
         self.audit = AuditService(session)
 
     # ------------------------------------------------------------------ queries
@@ -119,6 +141,8 @@ class BillsService:
         idempotency_key: str,
         meta: RequestMeta,
     ) -> BillPaymentResult:
+        if command.amount_minor > self.settings.max_transfer_minor:
+            raise LimitExceededError("amount exceeds the per-payment limit")
         self._lock_user(user_id)
         request_hash = self._request_hash(user_id, command)
         idem_id, replay = self._begin_idempotent(user_id, idempotency_key, request_hash)
@@ -142,7 +166,32 @@ class BillsService:
             initiated_by_user_id=user_id,
             reference=reference,
         )
-        ledger.post_transaction(self.session, transaction, ledger.transfer_legs(transaction))
+        # Same fraud contract as transfers. Bill payments are not held for review: anything but
+        # ALLOW declines the payment (fail safe) and opens an alert for an analyst.
+        result = self.scorer.score(
+            TransactionContext(
+                transaction_id=transaction.id,
+                customer_id=customer.id,
+                account_id=source.id,
+                amount_minor=command.amount_minor,
+                currency=command.currency,
+                occurred_at=utcnow(),
+                payee_id=None,
+                ip_country=self.countries.country(meta.ip),
+            )
+        )
+        FRAUD_INFERENCE_SECONDS.observe(result.latency_ms / 1000)
+        FRAUD_DECISIONS_TOTAL.labels(result.decision.value).inc()
+        event = fraud_service.record_event(self.session, transaction.id, customer.id, result)
+        if result.decision == FraudDecision.ALLOW:
+            self._enforce_daily_limit(user_id, transaction)
+            ledger.post_transaction(self.session, transaction, ledger.transfer_legs(transaction))
+            status = BillPaymentStatus.POSTED
+        else:
+            transaction.status = TransactionStatus.DECLINED
+            transaction.decline_reason = "FRAUD_BLOCK"
+            fraud_service.open_alert(self.session, event)
+            status = BillPaymentStatus.DECLINED
 
         payment = BillPayment(
             customer_id=customer.id,
@@ -152,7 +201,7 @@ class BillsService:
             consumer_reference=command.consumer_reference,
             amount=command.amount_minor,
             currency=command.currency,
-            status=BillPaymentStatus.POSTED,
+            status=status,
         )
         self.session.add(payment)
         self.session.flush()
@@ -256,6 +305,21 @@ class BillsService:
             raise BillerInactiveError("biller is not currently accepting payments")
         return biller
 
+    def _enforce_daily_limit(self, user_id: UUID, transaction: Transaction) -> None:
+        """Transfers and bill payments share one daily limit (all money the customer sends)."""
+        start_of_day = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        used = self.session.execute(
+            select(func.coalesce(func.sum(Transaction.amount), 0)).where(
+                Transaction.initiated_by_user_id == user_id,
+                Transaction.type.in_((TransactionType.TRANSFER, TransactionType.BILL_PAYMENT)),
+                Transaction.status.in_(_COUNTS_TOWARDS_LIMIT),
+                Transaction.created_at >= start_of_day,
+                Transaction.id != transaction.id,
+            )
+        ).scalar_one()
+        if used + transaction.amount > self.settings.daily_transfer_limit_minor:
+            raise LimitExceededError("daily payment limit exceeded")
+
     def _lock_user(self, user_id: UUID) -> None:
         """Serialise one user's money movements. ALWAYS the first lock taken in a request
         (before idempotency, account and transaction locks) so lock order is globally consistent."""
@@ -270,12 +334,14 @@ class BillsService:
         biller: Biller,
         payment: BillPayment,
     ) -> None:
+        posted = payment.status == BillPaymentStatus.POSTED
         notifications.enqueue(
             self.session,
-            notifications.BILL_PAYMENT_POSTED,
+            notifications.BILL_PAYMENT_POSTED if posted else notifications.BILL_PAYMENT_DECLINED,
             {
                 "user_id": str(user_id),
                 "transaction_id": str(transaction.id),
+                "account_id": str(payment.account_id),
                 "bill_payment_id": str(payment.id),
                 "biller_name": biller.name,
                 "amount_minor": payment.amount,
@@ -310,7 +376,12 @@ class BillsService:
         new_balance_minor: int,
         created: bool = False,
     ) -> BillPaymentResult:
-        status_code = 201 if created else 200
+        if not created:
+            status_code = 200
+        elif payment.status == BillPaymentStatus.DECLINED:
+            status_code = 403  # same as a declined transfer: a plain JSON body, not problem+json
+        else:
+            status_code = 201
         body = {
             "id": str(payment.id),
             "customer_id": str(payment.customer_id),
@@ -326,6 +397,10 @@ class BillsService:
             "reference": reference,
             "new_balance_minor": new_balance_minor,
             "created_at": (payment.created_at or utcnow()).isoformat(),
-            "message": f"Bill payment to {biller.name} completed",
+            "message": (
+                f"Bill payment to {biller.name} completed"
+                if payment.status == BillPaymentStatus.POSTED
+                else f"Bill payment to {biller.name} could not be completed"
+            ),
         }
         return BillPaymentResult(status_code, body)

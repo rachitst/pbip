@@ -9,10 +9,13 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.metrics import IDEMPOTENT_REPLAYS_TOTAL
 from pbip_api.modules.accounts.models import Account
 from pbip_api.modules.bills.models import Biller, BillerCategory, BillerStatus, BillPayment
 from pbip_api.modules.compliance.models import AuditLog
+from pbip_api.modules.fraud.dependencies import get_fraud_scorer
+from pbip_api.modules.fraud.models import FraudAlert, FraudEvent
 from pbip_api.modules.ledger import service as ledger
 from pbip_api.modules.ledger.models import (
     EntryDirection,
@@ -23,6 +26,9 @@ from pbip_api.modules.ledger.models import (
 )
 from pbip_api.modules.notifications import service as notifications
 from pbip_api.modules.notifications.models import Notification, OutboxEvent
+from pbip_api.modules.notifications.service import relay_outbox
+from pbip_ml.fraud.contract import FraudDecision
+from pbip_ml.fraud.testing import FixedDecisionScorer
 from pbip_test_support import Actor
 from sqlalchemy import Engine, case, func, select
 from sqlalchemy.orm import Session
@@ -458,3 +464,94 @@ def test_concurrent_competing_bill_payments_never_overdraw_and_keep_ledger_balan
     ).scalar_one()
     assert int(debits) == int(credits)
     _ = migrated_engine
+
+
+# ---------------------------------------------------------------- maintainer review (TASK-014)
+def _pay(client: TestClient, actor: Actor, amount: int) -> Any:
+    return client.post(
+        "/api/v1/bills/pay",
+        headers={**actor.headers, **new_key()},
+        json={
+            "from_account_id": str(actor.account_id),
+            "biller_id": str(MSEB_BILLER_ID),
+            "consumer_reference": "CA-11112222",
+            "amount_minor": amount,
+            "currency": "INR",
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "decision", [FraudDecision.REVIEW, FraudDecision.STEP_UP, FraudDecision.BLOCK]
+)
+def test_a_non_allow_fraud_decision_declines_the_bill_payment_and_opens_an_alert(
+    app: FastAPI,
+    client: TestClient,
+    db: Session,
+    make_customer: Callable[..., Actor],
+    decision: FraudDecision,
+) -> None:
+    alice = make_customer(funds=500_000)
+    app.dependency_overrides[get_fraud_scorer] = lambda: FixedDecisionScorer(decision)
+    resp = _pay(client, alice, 125_000)
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["status"] == "DECLINED"
+    db.expire_all()
+    assert db.get_one(Account, alice.account_id).ledger_balance == 500_000  # nothing moved
+    txn = db.get_one(Transaction, uuid.UUID(resp.json()["transaction_id"]))
+    assert (txn.status, txn.decline_reason) == (TransactionStatus.DECLINED, "FRAUD_BLOCK")
+    assert db.execute(select(func.count()).select_from(FraudAlert)).scalar_one() == 1
+    assert (
+        db.execute(
+            select(func.count())
+            .select_from(TransactionEntry)
+            .where(TransactionEntry.transaction_id == txn.id)
+        ).scalar_one()
+        == 0
+    )
+
+
+def test_every_bill_payment_is_scored_and_the_event_kept(
+    client: TestClient, db: Session, make_customer: Callable[..., Actor]
+) -> None:
+    alice = make_customer(funds=500_000)
+    resp = _pay(client, alice, 25_000)
+    assert resp.status_code == 201, resp.text
+    event = db.execute(
+        select(FraudEvent).where(
+            FraudEvent.transaction_id == uuid.UUID(resp.json()["transaction_id"])
+        )
+    ).scalar_one()
+    assert event.decision == "ALLOW"
+
+
+def test_bill_payments_respect_the_per_payment_and_shared_daily_limits(
+    app: FastAPI,
+    client: TestClient,
+    settings: Settings,
+    make_customer: Callable[..., Actor],
+) -> None:
+    alice = make_customer(funds=5_000_000)
+    tight = settings.model_copy(
+        update={"max_transfer_minor": 300_000, "daily_transfer_limit_minor": 400_000}
+    )
+    app.dependency_overrides[get_settings] = lambda: tight
+    assert _pay(client, alice, 300_001).status_code == 422  # above the per-payment limit
+    assert _pay(client, alice, 250_000).status_code == 201
+    over = _pay(client, alice, 200_000)  # 2,50,000 + 2,00,000 > the 4,00,000 daily limit
+    assert over.status_code == 422
+    assert "daily" in over.json()["title"]
+
+
+def test_bill_notification_links_its_transaction_and_account(
+    client: TestClient, db: Session, make_customer: Callable[..., Actor]
+) -> None:
+    alice = make_customer(funds=500_000)
+    resp = _pay(client, alice, 25_000)
+    assert resp.status_code == 201
+    relay_outbox(db)
+    db.commit()
+    (item,) = client.get("/api/v1/notifications", headers=alice.headers).json()["items"]
+    assert (item["type"], item["resource_type"]) == ("BILL_PAYMENT_POSTED", "transaction")
+    assert item["resource_id"] == resp.json()["transaction_id"]
+    assert item["account_id"] == str(alice.account_id)

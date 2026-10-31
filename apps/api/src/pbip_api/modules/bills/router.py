@@ -5,10 +5,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import JSONResponse
+from pbip_ml.fraud.contract import FraudScorer
 from sqlalchemy.orm import Session
 
 from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.db import get_session
+from pbip_api.core.geoip import CountryResolver
 from pbip_api.modules.auth.dependencies import (
     Principal,
     get_current_principal,
@@ -20,6 +22,7 @@ from pbip_api.modules.bills.schemas import BillerOut, BillPaymentOut, PayBillReq
 from pbip_api.modules.bills.service import BillPaymentResult, BillsService, PayBillCommand
 from pbip_api.modules.customers.dependencies import get_current_customer
 from pbip_api.modules.customers.models import Customer
+from pbip_api.modules.fraud.dependencies import get_country_resolver, get_fraud_scorer
 
 router = APIRouter(prefix="/api/v1/bills", tags=["bills"])
 
@@ -38,8 +41,10 @@ IdempotencyKeyHeader = Annotated[
 def get_bills_service(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
+    scorer: FraudScorer = Depends(get_fraud_scorer),
+    countries: CountryResolver = Depends(get_country_resolver),
 ) -> BillsService:
-    return BillsService(session, settings)
+    return BillsService(session, settings, scorer, countries)
 
 
 def _respond(result: BillPaymentResult) -> JSONResponse:
