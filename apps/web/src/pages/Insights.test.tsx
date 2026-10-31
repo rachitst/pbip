@@ -5,7 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
 import { AuthProvider } from "../auth/AuthContext";
 import { customerMe } from "../test-utils";
-import { TOOLTIP_STYLE, categoryTooltip } from "./insightsChart";
+import { TOOLTIP_STYLE, categoryTooltip, donutSlices } from "./insightsChart";
+// The route loads this page (and Recharts) lazily. Importing it here makes the first navigation
+// resolve from the module cache instead of racing a cold transform against findBy's timeout.
+import "./Insights";
 
 function urlOf(input: Parameters<typeof fetch>[0]): string {
   if (typeof input === "string") return input;
@@ -244,7 +247,7 @@ describe("Customer Financial Analytics UI (TASK-049)", () => {
 
     // Overall score
     expect(screen.getByText("75")).toBeInTheDocument();
-    expect(screen.getByText("GOOD")).toBeInTheDocument();
+    expect(screen.getByText("Good")).toBeInTheDocument(); // the rating label, not the API code
     expect(
       screen.getByText(/Computed from 6 observed months of banking history/),
     ).toBeInTheDocument();
@@ -617,7 +620,7 @@ describe("TASK-049 review fixes", () => {
   });
 
   it("the category tooltip shows the amount and its share (acceptance criterion 1)", () => {
-    const format = categoryTooltip(mockSpendingData.categories, "INR");
+    const format = categoryTooltip(donutSlices(mockSpendingData.categories), "INR");
     expect(format(75_000, "Groceries")).toEqual(["INR 750.00 (60.0%)", "Groceries"]);
     expect(format(1_000, "Unknown")).toEqual(["INR 10.00", "Unknown"]);
   });
@@ -678,5 +681,127 @@ describe("TASK-049 review fixes", () => {
     expect(
       await screen.findByText(/Computed from 1 observed month of banking history/),
     ).toBeVisible();
+  });
+});
+
+const NINE_CATEGORIES = [
+  ["housing", 1_850_000],
+  ["transfers", 1_250_000],
+  ["groceries", 606_000],
+  ["utilities", 337_900],
+  ["shopping", 312_000],
+  ["dining", 249_000],
+  ["transport", 145_000],
+  ["healthcare", 78_000],
+  ["entertainment", 64_900],
+].map(([category, amount]) => ({
+  category: String(category),
+  amount_minor: Number(amount),
+  percentage: (Number(amount) / 4_892_800) * 100,
+  transaction_count: category === "groceries" ? 2 : 1,
+}));
+
+describe("TASK-049 visual review changes", () => {
+  const fetchMock = vi.fn<typeof fetch>();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("draws the four largest categories plus Other, each in its own palette colour", () => {
+    const slices = donutSlices(NINE_CATEGORIES);
+    expect(slices.map((slice) => slice.name)).toEqual([
+      "Housing",
+      "Transfers",
+      "Groceries",
+      "Utilities",
+      "Other",
+    ]);
+    expect(new Set(slices.map((slice) => slice.fill)).size).toBe(5);
+    const other = slices[4];
+    expect(other?.value).toBe(312_000 + 249_000 + 145_000 + 78_000 + 64_900);
+    expect(other?.categories).toEqual([
+      "shopping",
+      "dining",
+      "transport",
+      "healthcare",
+      "entertainment",
+    ]);
+    // five or fewer categories: one slice each, no "Other"
+    expect(donutSlices(NINE_CATEGORIES.slice(0, 5)).map((slice) => slice.name)).not.toContain(
+      "Other",
+    );
+  });
+
+  it("shows plain labels, never API codes, and every category in the list and table", async () => {
+    const health = {
+      ...mockHealthData,
+      components: {
+        ...mockHealthData.components,
+        buffer_months: {
+          ...mockHealthData.components.buffer_months,
+          assessment: "INSUFFICIENT_DATA",
+        },
+      },
+    };
+    fetchMock.mockImplementation((input) => {
+      const url = urlOf(input);
+      if (url.includes("/analytics/spending")) {
+        return Promise.resolve(
+          json(200, {
+            ...mockSpendingData,
+            total_spend_minor: 4_892_800,
+            categories: NINE_CATEGORIES,
+          }),
+        );
+      }
+      if (url.endsWith("/accounts")) return Promise.resolve(json(200, [mockAccount, mockAccount2]));
+      return mockApi({ health })(input);
+    });
+    renderInsightsApp("/insights");
+    await screen.findByRole("heading", { name: "Spending by Category" });
+
+    const legend = screen.getByRole("list", { name: "Spending by category" });
+    expect(within(legend).getAllByRole("listitem")).toHaveLength(9);
+    expect(within(legend).getByText("Entertainment")).toBeInTheDocument();
+    expect(within(legend).getByText("2 payments")).toBeInTheDocument();
+    expect(within(legend).getAllByText("1 payment")).toHaveLength(8);
+    const table = screen.getByRole("table", { name: "Category spending breakdown table" });
+    expect(within(table).getAllByRole("row")).toHaveLength(10);
+
+    expect(screen.getAllByText("Moderate", { selector: ".badge" }).length).toBeGreaterThan(0);
+    expect(screen.getByText("Not enough data yet", { selector: ".badge" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Current (checking) (••••••••9599)" }),
+    ).toBeInTheDocument();
+    const main = screen.getByRole("main").textContent;
+    for (const code of ["MODERATE", "GOOD", "INSUFFICIENT", "SAVINGS", "txs", "Volatility CV"]) {
+      expect(main).not.toContain(code);
+    }
+    expect(main).toContain("Spending variability");
+  });
+
+  it("has no filler description and shows the score once", async () => {
+    fetchMock.mockImplementation(mockApi());
+    renderInsightsApp("/insights");
+    await screen.findByRole("heading", { name: "Financial Health Score" });
+    expect(screen.queryByText(/Personal financial analytics/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/75\/100/)).not.toBeInTheDocument();
+    expect(screen.getAllByText("75")).toHaveLength(1);
+  });
+
+  it("colours each score bar by its assessment with the theme tokens", async () => {
+    fetchMock.mockImplementation(mockApi());
+    renderInsightsApp("/insights");
+    const savings = await screen.findByRole("progressbar", { name: "Savings score" });
+    expect(savings).toHaveClass("meter", "meter--warning"); // MODERATE
+    expect(screen.getByRole("progressbar", { name: "Cash buffer score" })).toHaveClass(
+      "meter--success", // ADEQUATE
+    );
   });
 });

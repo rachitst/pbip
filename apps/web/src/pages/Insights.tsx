@@ -16,31 +16,21 @@ import type {
   AccountOut,
   CategoryShiftItem,
   FinancialHealthScoreResponse,
+  HealthScoreComponent,
   SpendingBreakdownResponse,
   SpendingTrendsResponse,
 } from "../api/client";
+import { ASSESSMENTS, RATINGS, categoryLabel, paymentCount } from "../lib/analytics";
 import { errorMessage } from "../lib/errors";
+import { accountTypeLabel } from "../lib/format";
 import { formatMinor } from "../lib/money";
 import { Alert } from "../ui/Alert";
 import { Amount } from "../ui/Amount";
 import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
-import { TOOLTIP_STYLE, categoryTooltip, formatShare } from "./insightsChart";
+import { TOOLTIP_STYLE, categoryTooltip, donutSlices, formatShare } from "./insightsChart";
 
-const CHART_COLORS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-];
-
-const RATING_TONES: Record<string, "success" | "info" | "warning" | "danger"> = {
-  EXCELLENT: "success",
-  GOOD: "info",
-  FAIR: "warning",
-  NEEDS_ATTENTION: "danger",
-};
+const TITLE = "Spending & Financial Health";
 
 export function Insights() {
   const accountsQuery = useQuery({ queryKey: ["accounts"], queryFn: api.accounts });
@@ -79,7 +69,7 @@ export function Insights() {
   if (accountsQuery.isPending) {
     return (
       <div className="page">
-        <PageHeader title="Spending & Financial Health" />
+        <PageHeader title={TITLE} />
         <LoadingState label="Loading your accounts..." />
       </div>
     );
@@ -88,7 +78,7 @@ export function Insights() {
   if (accountsQuery.isError) {
     return (
       <div className="page">
-        <PageHeader title="Spending & Financial Health" />
+        <PageHeader title={TITLE} />
         <ErrorState
           message={errorMessage(accountsQuery.error, "Could not load accounts.")}
           onRetry={() => {
@@ -102,7 +92,7 @@ export function Insights() {
   if (accounts.length === 0) {
     return (
       <div className="page">
-        <PageHeader title="Spending & Financial Health" />
+        <PageHeader title={TITLE} />
         <EmptyState message="You have no accounts yet." />
       </div>
     );
@@ -121,15 +111,11 @@ export function Insights() {
   return (
     <div className="page">
       <PageHeader
-        title="Spending & Financial Health"
-        description="Personal financial analytics, category breakdown, and financial health score."
+        title={TITLE}
         actions={
           accounts.length > 1 ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <label
-                htmlFor="account-selector"
-                style={{ margin: 0, fontSize: "var(--text-sm)", color: "var(--muted)" }}
-              >
+            <div className="insights-account">
+              <label htmlFor="account-selector" className="insights-account__label">
                 Account:
               </label>
               <select
@@ -138,18 +124,10 @@ export function Insights() {
                 onChange={(e) => {
                   setSelectedAccountId(e.target.value);
                 }}
-                style={{
-                  minHeight: "var(--control-height)",
-                  padding: "0 var(--space-3)",
-                  background: "var(--surface)",
-                  color: "var(--text)",
-                  border: "1px solid var(--border-strong)",
-                  borderRadius: "var(--radius)",
-                }}
               >
                 {accounts.map((acc: AccountOut) => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.account_type} ({acc.account_number_masked})
+                    {accountTypeLabel(acc.account_type)} ({acc.account_number_masked})
                   </option>
                 ))}
               </select>
@@ -168,7 +146,7 @@ export function Insights() {
       )}
 
       {!isPending && !isError && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
+        <div className="insights">
           <FinancialHealthSection health={healthQuery.data} />
           <CategorySpendingSection spending={spendingQuery.data} />
           <SpendingTrendsSection trends={trendsQuery.data} />
@@ -182,60 +160,26 @@ export function Insights() {
 // Financial Health Score Section
 // -----------------------------------------------------------------------------
 
-interface HealthSectionProps {
-  health: FinancialHealthScoreResponse;
-}
-
-function FinancialHealthSection({ health }: HealthSectionProps) {
-  const tone = RATING_TONES[health.rating] ?? "info";
+function FinancialHealthSection({ health }: { health: FinancialHealthScoreResponse }) {
+  const rating = RATINGS[health.rating];
   const recommendations = health.recommendations ?? [];
 
   return (
-    <section
-      aria-labelledby="health-score-heading"
-      style={{
-        padding: "var(--space-5)",
-        background: "var(--surface)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-lg)",
-      }}
-    >
-      <div
-        className="row"
-        style={{ flexWrap: "wrap", gap: "var(--space-3)", marginBottom: "var(--space-4)" }}
-      >
+    <section aria-labelledby="health-score-heading" className="insights-section">
+      <div className="insights-section__header">
         <div>
-          <h2 id="health-score-heading" style={{ margin: 0 }}>
-            Financial Health Score
-          </h2>
-          <p className="muted" style={{ margin: "var(--space-1) 0 0" }}>
-            Overall financial health score: {health.overall_score}/100 ({health.rating}). Computed
-            from {health.months_observed} observed{" "}
+          <h2 id="health-score-heading">Financial Health Score</h2>
+          <p className="muted insights-section__summary">
+            Computed from {health.months_observed} observed{" "}
             {health.months_observed === 1 ? "month" : "months"} of banking history.
           </p>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-          <span
-            style={{
-              fontSize: "var(--text-2xl)",
-              fontWeight: "var(--weight-strong)",
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
+        <div className="insights-score">
+          <span className="insights-score__value">
             {health.overall_score}
-            <span
-              style={{ fontSize: "var(--text-base)", color: "var(--muted)", fontWeight: "normal" }}
-            >
-              {" "}
-              / 100
-            </span>
+            <span className="insights-score__max"> / 100</span>
           </span>
-          <span
-            className={`badge badge--${tone}`}
-            style={{ fontSize: "var(--text-sm)", padding: "0 var(--space-3)" }}
-          >
-            {health.rating}
-          </span>
+          <span className={`badge badge--${rating.tone}`}>{rating.label}</span>
         </div>
       </div>
 
@@ -247,74 +191,39 @@ function FinancialHealthSection({ health }: HealthSectionProps) {
         </Alert>
       )}
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-          gap: "var(--space-4)",
-          marginTop: "var(--space-4)",
-        }}
-      >
-        <HealthComponentCard
+      <div className="insights-components">
+        <HealthComponent
           name="Savings"
           component={health.components.savings_rate}
           metricLabel="Savings Rate"
           ariaLabel="Savings score"
         />
-
-        <HealthComponentCard
+        <HealthComponent
           name="Buffer"
           component={health.components.buffer_months}
           metricLabel="Cash Buffer"
           ariaLabel="Cash buffer score"
         />
-
-        <HealthComponentCard
+        <HealthComponent
           name="Debt"
           component={health.components.emi_to_income}
           metricLabel="Loan / EMI Ratio"
           ariaLabel="Debt repayments score"
         />
-
-        <HealthComponentCard
+        <HealthComponent
           name="Expense Volatility"
           component={health.components.expense_volatility}
-          metricLabel="Volatility CV"
+          metricLabel="Spending variability"
           ariaLabel="Expense volatility score"
         />
       </div>
 
       {recommendations.length > 0 && (
-        <div
-          style={{
-            marginTop: "var(--space-5)",
-            borderTop: "1px solid var(--border)",
-            paddingTop: "var(--space-4)",
-          }}
-        >
-          <h3
-            style={{
-              fontSize: "var(--text-sm)",
-              color: "var(--muted)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              margin: "0 0 var(--space-2)",
-            }}
-          >
-            Actionable Financial Insights
-          </h3>
-          <ul
-            style={{
-              margin: 0,
-              paddingLeft: "var(--space-4)",
-              color: "var(--text)",
-              fontSize: "var(--text-sm)",
-            }}
-          >
+        <div className="insights-recommendations">
+          <h3 className="insights-eyebrow">Actionable Financial Insights</h3>
+          <ul>
             {recommendations.map((rec, i) => (
-              <li key={i} style={{ marginBottom: "var(--space-1)" }}>
-                {rec}
-              </li>
+              <li key={i}>{rec}</li>
             ))}
           </ul>
         </div>
@@ -323,64 +232,34 @@ function FinancialHealthSection({ health }: HealthSectionProps) {
   );
 }
 
-interface ComponentCardProps {
+interface HealthComponentProps {
   name: string;
-  component: FinancialHealthScoreResponse["components"]["savings_rate"];
+  component: HealthScoreComponent;
   metricLabel: string;
   ariaLabel: string;
 }
 
-function HealthComponentCard({ name, component, metricLabel, ariaLabel }: ComponentCardProps) {
+function HealthComponent({ name, component, metricLabel, ariaLabel }: HealthComponentProps) {
+  const assessment = ASSESSMENTS[component.assessment];
   return (
-    <div
-      style={{
-        padding: "var(--space-3) var(--space-4)",
-        background: "var(--surface-sunken)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius)",
-        display: "flex",
-        flexDirection: "column",
-        gap: "var(--space-2)",
-      }}
-    >
+    <div className="insights-component">
       <div className="row">
-        <span style={{ fontWeight: "var(--weight-strong)", fontSize: "var(--text-sm)" }}>
-          {name}
-        </span>
-        <span
-          style={{
-            fontVariantNumeric: "tabular-nums",
-            fontSize: "var(--text-sm)",
-            fontWeight: "var(--weight-medium)",
-          }}
-        >
+        <span className="insights-component__name">{name}</span>
+        <span className="insights-num">
           {component.score} / {component.max_score} pts
         </span>
       </div>
-
-      <div style={{ width: "100%", margin: "var(--space-1) 0" }}>
-        <progress
-          value={component.score}
-          max={component.max_score}
-          aria-label={ariaLabel}
-          style={{
-            width: "100%",
-            height: "8px",
-            borderRadius: "var(--radius-sm)",
-            accentColor: "var(--brand)",
-            display: "block",
-          }}
-        />
-      </div>
-
-      <div className="row" style={{ fontSize: "var(--text-xs)", color: "var(--muted)" }}>
+      <progress
+        className={`meter meter--${assessment.tone}`}
+        value={component.score}
+        max={component.max_score}
+        aria-label={ariaLabel}
+      />
+      <div className="insights-component__metric">
         <span>
-          {metricLabel}:{" "}
-          <strong style={{ color: "var(--text)" }}>{component.formatted_value}</strong>
+          {metricLabel}: <strong>{component.formatted_value}</strong>
         </span>
-        <span className="badge badge--neutral" style={{ fontSize: "var(--text-xs)" }}>
-          {component.assessment.replace(/_/g, " ")}
-        </span>
+        <span className={`badge badge--${assessment.tone}`}>{assessment.label}</span>
       </div>
     </div>
   );
@@ -390,53 +269,27 @@ function HealthComponentCard({ name, component, metricLabel, ariaLabel }: Compon
 // Category Spending Donut Chart Section
 // -----------------------------------------------------------------------------
 
-interface CategorySectionProps {
-  spending: SpendingBreakdownResponse;
-}
-
-function CategorySpendingSection({ spending }: CategorySectionProps) {
+function CategorySpendingSection({ spending }: { spending: SpendingBreakdownResponse }) {
   const categories = spending.categories ?? [];
   const hasCategories = categories.length > 0 && spending.total_spend_minor > 0;
-
-  const chartData = categories.map((cat, idx) => ({
-    name: cat.category,
-    value: cat.amount_minor,
-    percentage: cat.percentage,
-    transaction_count: cat.transaction_count,
-    fill: CHART_COLORS[idx % CHART_COLORS.length],
-  }));
+  const slices = donutSlices(categories);
+  const swatch = (category: string) =>
+    slices.find((slice) => slice.categories.includes(category))?.colorIndex ?? slices.length;
 
   const summaryText = hasCategories
     ? `Total spending of ${formatMinor(spending.total_spend_minor, spending.currency)} across ${categories.length} categories in ${spending.period}.`
     : `No spending recorded for ${spending.period}.`;
 
   return (
-    <section
-      aria-labelledby="category-spending-heading"
-      style={{
-        padding: "var(--space-5)",
-        background: "var(--surface)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-lg)",
-      }}
-    >
-      <div
-        className="row"
-        style={{ flexWrap: "wrap", gap: "var(--space-3)", marginBottom: "var(--space-4)" }}
-      >
+    <section aria-labelledby="category-spending-heading" className="insights-section">
+      <div className="insights-section__header">
         <div>
-          <h2 id="category-spending-heading" style={{ margin: 0 }}>
-            Spending by Category
-          </h2>
-          <p className="muted" style={{ margin: "var(--space-1) 0 0" }}>
-            {summaryText}
-          </p>
+          <h2 id="category-spending-heading">Spending by Category</h2>
+          <p className="muted insights-section__summary">{summaryText}</p>
         </div>
-        <div style={{ textAlign: "right" }}>
-          <span className="muted" style={{ fontSize: "var(--text-xs)" }}>
-            Period: {spending.period}
-          </span>
-          <div style={{ fontSize: "var(--text-lg)", fontWeight: "var(--weight-strong)" }}>
+        <div className="insights-total">
+          <span className="muted insights-total__period">Period: {spending.period}</span>
+          <div className="insights-total__value">
             <Amount minor={spending.total_spend_minor} currency={spending.currency} />
           </div>
         </div>
@@ -446,19 +299,11 @@ function CategorySpendingSection({ spending }: CategorySectionProps) {
         <EmptyState message="No categorized debit transactions recorded for this period." />
       ) : (
         <>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-              gap: "var(--space-5)",
-              alignItems: "center",
-              margin: "var(--space-4) 0",
-            }}
-          >
+          <div className="insights-breakdown">
             <div
               role="region"
               aria-label="Category spending distribution donut chart"
-              style={{ width: "100%", height: "260px", minWidth: 0 }}
+              className="insights-chart insights-chart--donut"
             >
               <ResponsiveContainer
                 width="100%"
@@ -469,11 +314,11 @@ function CategorySpendingSection({ spending }: CategorySectionProps) {
                 <PieChart title={`Spending by category, ${spending.period}`} desc={summaryText}>
                   <Tooltip
                     {...TOOLTIP_STYLE}
-                    formatter={categoryTooltip(categories, spending.currency)}
+                    formatter={categoryTooltip(slices, spending.currency)}
                   />
                   <Pie
                     rootTabIndex={-1}
-                    data={chartData}
+                    data={slices}
                     dataKey="value"
                     nameKey="name"
                     innerRadius={60}
@@ -485,71 +330,35 @@ function CategorySpendingSection({ spending }: CategorySectionProps) {
               </ResponsiveContainer>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-              {categories.map((cat, idx) => {
-                const color = CHART_COLORS[idx % CHART_COLORS.length];
-                return (
-                  <div
-                    key={cat.category}
-                    className="row"
-                    style={{
-                      padding: "var(--space-2) var(--space-3)",
-                      background: "var(--surface-sunken)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "var(--radius)",
-                      fontSize: "var(--text-sm)",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-                      <span
-                        aria-hidden="true"
-                        style={{
-                          width: "12px",
-                          height: "12px",
-                          borderRadius: "50%",
-                          backgroundColor: color,
-                          flexShrink: 0,
-                          border: "1px solid var(--border-strong)",
-                        }}
-                      />
-                      <span style={{ fontWeight: "var(--weight-medium)" }}>{cat.category}</span>
-                      <span className="muted" style={{ fontSize: "var(--text-xs)" }}>
-                        ({cat.transaction_count} txs)
-                      </span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-                      <span
-                        style={{
-                          fontWeight: "var(--weight-strong)",
-                          fontVariantNumeric: "tabular-nums",
-                        }}
-                      >
-                        <Amount minor={cat.amount_minor} currency={spending.currency} />
-                      </span>
-                      <span
-                        className="badge badge--neutral"
-                        style={{ fontVariantNumeric: "tabular-nums" }}
-                      >
-                        {formatShare(cat.percentage)}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <ul className="insights-legend" aria-label="Spending by category">
+              {categories.map((cat) => (
+                <li key={cat.category} className="insights-legend__item">
+                  <span className="insights-legend__name">
+                    <span
+                      aria-hidden="true"
+                      className={`insights-swatch insights-swatch--${swatch(cat.category)}`}
+                    />
+                    <span className="insights-legend__label">{categoryLabel(cat.category)}</span>
+                    <span className="muted insights-legend__count">
+                      {paymentCount(cat.transaction_count)}
+                    </span>
+                  </span>
+                  <span className="insights-legend__figures">
+                    <strong>
+                      <Amount minor={cat.amount_minor} currency={spending.currency} />
+                    </strong>
+                    <span className="badge badge--neutral insights-num">
+                      {formatShare(cat.percentage)}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
 
-          <details style={{ marginTop: "var(--space-4)", fontSize: "var(--text-sm)" }}>
-            <summary
-              style={{
-                cursor: "pointer",
-                color: "var(--brand)",
-                fontWeight: "var(--weight-medium)",
-              }}
-            >
-              View accessible category table
-            </summary>
-            <div className="entries" style={{ marginTop: "var(--space-2)" }}>
+          <details className="insights-fallback">
+            <summary>View accessible category table</summary>
+            <div className="entries">
               <table aria-label="Category spending breakdown table">
                 <thead>
                   <tr>
@@ -568,7 +377,7 @@ function CategorySpendingSection({ spending }: CategorySectionProps) {
                 <tbody>
                   {categories.map((cat) => (
                     <tr key={cat.category}>
-                      <td>{cat.category}</td>
+                      <td>{categoryLabel(cat.category)}</td>
                       <td className="right">{cat.transaction_count}</td>
                       <td className="right">
                         <Amount minor={cat.amount_minor} currency={spending.currency} />
@@ -590,11 +399,36 @@ function CategorySpendingSection({ spending }: CategorySectionProps) {
 // Month-over-Month Spending Trends Section
 // -----------------------------------------------------------------------------
 
-interface TrendsSectionProps {
-  trends: SpendingTrendsResponse;
+function deltaBadge(
+  hasComparisonData: boolean,
+  momChange: number | null | undefined,
+  hasPrevious: boolean,
+): { label: string; tone: "success" | "danger" | "neutral"; symbol: string } {
+  if (hasComparisonData && momChange !== null && momChange !== undefined) {
+    if (momChange > 0) {
+      return {
+        label: `Increased by ${Math.abs(momChange).toFixed(1)}%`,
+        tone: "danger",
+        symbol: "▲",
+      };
+    }
+    if (momChange < 0) {
+      return {
+        label: `Decreased by ${Math.abs(momChange).toFixed(1)}%`,
+        tone: "success",
+        symbol: "▼",
+      };
+    }
+    return { label: "Unchanged (0.0%)", tone: "neutral", symbol: "●" };
+  }
+  return {
+    label: hasPrevious ? "No spending recorded" : "No previous month data",
+    tone: "neutral",
+    symbol: "●",
+  };
 }
 
-function SpendingTrendsSection({ trends }: TrendsSectionProps) {
+function SpendingTrendsSection({ trends }: { trends: SpendingTrendsResponse }) {
   const current = trends.current_month;
   const previous = trends.previous_month;
 
@@ -603,131 +437,46 @@ function SpendingTrendsSection({ trends }: TrendsSectionProps) {
 
   const barData = [
     ...(previous
-      ? [
-          {
-            period: previous.period,
-            label: `Previous (${previous.period})`,
-            spend: previous.total_spend_minor,
-            fill: "var(--chart-2)",
-          },
-        ]
+      ? [{ period: previous.period, spend: previous.total_spend_minor, fill: "var(--chart-2)" }]
       : []),
-    {
-      period: current.period,
-      label: `Current (${current.period})`,
-      spend: current.total_spend_minor,
-      fill: "var(--chart-1)",
-    },
+    { period: current.period, spend: current.total_spend_minor, fill: "var(--chart-1)" },
   ];
 
-  const momChange = trends.mom_spend_change_percentage;
-  const absChangeMinor = previous ? current.total_spend_minor - previous.total_spend_minor : null;
-
-  let deltaLabel: string;
-  let deltaTone: "success" | "danger" | "neutral" = "neutral";
-  let deltaSymbol = "●";
-
-  if (
-    hasComparisonData &&
-    momChange !== null &&
-    momChange !== undefined &&
-    absChangeMinor !== null
-  ) {
-    if (momChange > 0) {
-      deltaLabel = `Increased by ${Math.abs(momChange).toFixed(1)}%`;
-      deltaTone = "danger";
-      deltaSymbol = "▲";
-    } else if (momChange < 0) {
-      deltaLabel = `Decreased by ${Math.abs(momChange).toFixed(1)}%`;
-      deltaTone = "success";
-      deltaSymbol = "▼";
-    } else {
-      deltaLabel = "Unchanged (0.0%)";
-      deltaTone = "neutral";
-      deltaSymbol = "●";
-    }
-  } else if (!previous) {
-    deltaLabel = "No previous month data";
-  } else {
-    deltaLabel = "No spending recorded";
-  }
-
+  const delta = deltaBadge(
+    hasComparisonData,
+    trends.mom_spend_change_percentage,
+    Boolean(previous),
+  );
   const burnRateChange = trends.burn_rate_change_percentage;
   // Without a previous month every category would show as an "increase" from nothing.
   const topIncreasing = previous ? (trends.top_categories_increasing ?? []) : [];
   const topDecreasing = previous ? (trends.top_categories_decreasing ?? []) : [];
 
   return (
-    <section
-      aria-labelledby="spending-trends-heading"
-      style={{
-        padding: "var(--space-5)",
-        background: "var(--surface)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-lg)",
-      }}
-    >
-      <div
-        className="row"
-        style={{ flexWrap: "wrap", gap: "var(--space-3)", marginBottom: "var(--space-4)" }}
-      >
+    <section aria-labelledby="spending-trends-heading" className="insights-section">
+      <div className="insights-section__header">
         <div>
-          <h2 id="spending-trends-heading" style={{ margin: 0 }}>
-            Month-over-Month Trends
-          </h2>
-          <p className="muted" style={{ margin: "var(--space-1) 0 0" }}>
+          <h2 id="spending-trends-heading">Month-over-Month Trends</h2>
+          <p className="muted insights-section__summary">
             Monthly comparison between {previous ? previous.period : "prior cycle"} and{" "}
             {current.period}.
           </p>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-          <span
-            className={`badge badge--${deltaTone}`}
-            style={{ fontSize: "var(--text-sm)", padding: "0 var(--space-3)" }}
-          >
-            {deltaSymbol} {deltaLabel}
-          </span>
-        </div>
+        <span className={`badge badge--${delta.tone}`}>
+          {delta.symbol} {delta.label}
+        </span>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: "var(--space-3)",
-          margin: "var(--space-4) 0",
-        }}
-      >
-        <div
-          style={{
-            padding: "var(--space-3) var(--space-4)",
-            background: "var(--surface-sunken)",
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius)",
-          }}
-        >
-          <span className="muted" style={{ fontSize: "var(--text-xs)" }}>
-            Daily Burn Rate
-          </span>
-          <div
-            style={{
-              fontSize: "var(--text-lg)",
-              fontWeight: "var(--weight-strong)",
-              marginTop: "var(--space-1)",
-            }}
-          >
+      <div className="insights-figures">
+        <div className="insights-figure">
+          <span className="muted insights-figure__label">Daily Burn Rate</span>
+          <div className="insights-figure__value">
             <Amount minor={trends.daily_burn_rate_minor} currency={trends.currency} />
-            <span
-              style={{ fontSize: "var(--text-xs)", color: "var(--muted)", fontWeight: "normal" }}
-            >
-              {" "}
-              / day
-            </span>
+            <span className="muted insights-figure__unit"> / day</span>
           </div>
           {burnRateChange !== null && burnRateChange !== undefined && (
             <span
-              className={burnRateChange > 0 ? "error" : burnRateChange < 0 ? "ok" : "muted"}
-              style={{ fontSize: "var(--text-xs)" }}
+              className={`insights-figure__note ${burnRateChange > 0 ? "error" : burnRateChange < 0 ? "ok" : "muted"}`}
             >
               {burnRateChange > 0 ? "▲ +" : burnRateChange < 0 ? "▼ " : "● "}
               {burnRateChange.toFixed(1)}% vs previous
@@ -735,56 +484,28 @@ function SpendingTrendsSection({ trends }: TrendsSectionProps) {
           )}
         </div>
 
-        <div
-          style={{
-            padding: "var(--space-3) var(--space-4)",
-            background: "var(--surface-sunken)",
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius)",
-          }}
-        >
-          <span className="muted" style={{ fontSize: "var(--text-xs)" }}>
-            Current Period ({current.period})
-          </span>
-          <div
-            style={{
-              fontSize: "var(--text-lg)",
-              fontWeight: "var(--weight-strong)",
-              marginTop: "var(--space-1)",
-            }}
-          >
+        <div className="insights-figure">
+          <span className="muted insights-figure__label">Current Period ({current.period})</span>
+          <div className="insights-figure__value">
             <Amount minor={current.total_spend_minor} currency={trends.currency} />
           </div>
-          <span className="muted" style={{ fontSize: "var(--text-xs)" }}>
+          <span className="muted insights-figure__note">
             {current.transaction_count} debit transactions
           </span>
         </div>
 
-        <div
-          style={{
-            padding: "var(--space-3) var(--space-4)",
-            background: "var(--surface-sunken)",
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius)",
-          }}
-        >
-          <span className="muted" style={{ fontSize: "var(--text-xs)" }}>
+        <div className="insights-figure">
+          <span className="muted insights-figure__label">
             Previous Period ({previous ? previous.period : "N/A"})
           </span>
-          <div
-            style={{
-              fontSize: "var(--text-lg)",
-              fontWeight: "var(--weight-strong)",
-              marginTop: "var(--space-1)",
-            }}
-          >
+          <div className="insights-figure__value">
             {previous ? (
               <Amount minor={previous.total_spend_minor} currency={trends.currency} />
             ) : (
               <span className="muted">—</span>
             )}
           </div>
-          <span className="muted" style={{ fontSize: "var(--text-xs)" }}>
+          <span className="muted insights-figure__note">
             {previous ? `${previous.transaction_count} debit transactions` : "No historical spend"}
           </span>
         </div>
@@ -794,7 +515,7 @@ function SpendingTrendsSection({ trends }: TrendsSectionProps) {
         <div
           role="region"
           aria-label="Month-over-month spending comparison bar chart"
-          style={{ width: "100%", height: "240px", margin: "var(--space-4) 0", minWidth: 0 }}
+          className="insights-chart insights-chart--bars"
         >
           <ResponsiveContainer
             width="100%"
@@ -828,17 +549,9 @@ function SpendingTrendsSection({ trends }: TrendsSectionProps) {
       )}
 
       {(topIncreasing.length > 0 || topDecreasing.length > 0) && (
-        <div style={{ marginTop: "var(--space-4)" }}>
-          <h3 style={{ fontSize: "var(--text-base)", margin: "0 0 var(--space-3)" }}>
-            Notable Category Shifts
-          </h3>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-              gap: "var(--space-4)",
-            }}
-          >
+        <div className="insights-shifts">
+          <h3>Notable Category Shifts</h3>
+          <div className="insights-shifts__grid">
             {topIncreasing.length > 0 && (
               <CategoryShiftBlock
                 title="Top Spending Increases"
@@ -859,13 +572,9 @@ function SpendingTrendsSection({ trends }: TrendsSectionProps) {
         </div>
       )}
 
-      <details style={{ marginTop: "var(--space-4)", fontSize: "var(--text-sm)" }}>
-        <summary
-          style={{ cursor: "pointer", color: "var(--brand)", fontWeight: "var(--weight-medium)" }}
-        >
-          View accessible monthly comparison table
-        </summary>
-        <div className="entries" style={{ marginTop: "var(--space-2)" }}>
+      <details className="insights-fallback">
+        <summary>View accessible monthly comparison table</summary>
+        <div className="entries">
           <table aria-label="Month-over-month comparison table">
             <thead>
               <tr>
@@ -884,11 +593,7 @@ function SpendingTrendsSection({ trends }: TrendsSectionProps) {
             <tbody>
               {!hasComparisonData ? (
                 <tr>
-                  <td
-                    colSpan={4}
-                    className="muted"
-                    style={{ textAlign: "center", padding: "var(--space-4)" }}
-                  >
+                  <td colSpan={4} className="muted insights-table-empty">
                     {!previous
                       ? "No prior month data available for comparison."
                       : "No spending recorded across comparison periods."}
@@ -939,55 +644,30 @@ function CategoryShiftBlock({ title, items, currency, type }: CategoryShiftBlock
   const isIncrease = type === "increase";
 
   return (
-    <div
-      style={{
-        padding: "var(--space-3)",
-        background: "var(--surface-sunken)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius)",
-      }}
-    >
-      <h4
-        style={{ margin: "0 0 var(--space-2)", fontSize: "var(--text-sm)", color: "var(--muted)" }}
-      >
-        {title}
-      </h4>
-      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+    <div className="insights-shift">
+      <h4 className="insights-shift__title">{title}</h4>
+      <ul className="insights-shift__list">
         {items.map((item) => {
           const changePct = item.change_percentage;
           return (
-            <div
-              key={item.category}
-              className="row"
-              style={{
-                fontSize: "var(--text-sm)",
-                borderBottom: "1px solid var(--border)",
-                paddingBottom: "var(--space-1)",
-              }}
-            >
-              <span>{item.category}</span>
-              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-                <span
-                  className={isIncrease ? "error" : "ok"}
-                  style={{ fontVariantNumeric: "tabular-nums" }}
-                >
+            <li key={item.category} className="row">
+              <span>{categoryLabel(item.category)}</span>
+              <span className="insights-legend__figures">
+                <span className={`insights-num ${isIncrease ? "error" : "ok"}`}>
                   {isIncrease ? "▲ +" : "▼ "}
                   <Amount minor={Math.abs(item.change_minor)} currency={currency} />
                 </span>
                 {changePct !== null && changePct !== undefined && (
-                  <span
-                    className="badge badge--neutral"
-                    style={{ fontVariantNumeric: "tabular-nums", fontSize: "var(--text-xs)" }}
-                  >
+                  <span className="badge badge--neutral insights-num">
                     {changePct > 0 ? "+" : ""}
                     {changePct.toFixed(1)}%
                   </span>
                 )}
-              </div>
-            </div>
+              </span>
+            </li>
           );
         })}
-      </div>
+      </ul>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import type { SyntheticEvent } from "react";
 import { api } from "../api/client";
 import type { AccountOut, OpenAccountType, TransferOut } from "../api/client";
 import { errorMessage } from "../lib/errors";
+import { accountTypeLabel } from "../lib/format";
 import { formatMinor, parseToMinor } from "../lib/money";
 import { transferStatus } from "../lib/status";
 import { Alert } from "../ui/Alert";
@@ -13,12 +14,6 @@ import { MoneyInput } from "../ui/MoneyInput";
 import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 import { AccountTransactions } from "./AccountTransactions";
-
-const ACCOUNT_LABELS: Record<string, string> = {
-  SAVINGS: "Savings",
-  CURRENT: "Current (checking)",
-  CHECKING: "Current (checking)",
-};
 
 export function Accounts() {
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts });
@@ -73,7 +68,7 @@ function AccountRow({ account, expanded, onToggle }: AccountRowProps) {
     <li className="account">
       <div className="row account-header">
         <div>
-          <strong>{ACCOUNT_LABELS[account.account_type] ?? account.account_type}</strong>
+          <strong>{accountTypeLabel(account.account_type)}</strong>
           <div className="muted">{account.account_number_masked}</div>
         </div>
         <div className="right account-balances">
