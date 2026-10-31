@@ -26,7 +26,7 @@ pytestmark = [pytest.mark.integration, pytest.mark.security]
 def test_events_batch_happy_path(
     client: TestClient,
     make_customer: Callable[..., Actor],
-    session: Session,
+    db: Session,
 ) -> None:
     """Customer submits batch of telemetry events and they are persisted in partitioned storage."""
     alice = make_customer()
@@ -77,7 +77,7 @@ def test_events_batch_happy_path(
         .where(ClickstreamEvent.customer_id == alice.customer_id)
         .order_by(ClickstreamEvent.created_at.desc())
     )
-    saved_events = list(session.scalars(stmt).all())
+    saved_events = list(db.scalars(stmt).all())
     assert len(saved_events) >= 3
 
     types = {e.event_type for e in saved_events}
@@ -155,7 +155,7 @@ def test_events_batch_auth_and_staff_forbidden(
 def test_events_partition_routing_across_months(
     client: TestClient,
     make_customer: Callable[..., Actor],
-    session: Session,
+    db: Session,
 ) -> None:
     """Events across different calendar months route cleanly to their monthly partitions."""
     alice = make_customer()
@@ -188,5 +188,5 @@ def test_events_partition_routing_across_months(
         .where(ClickstreamEvent.customer_id == alice.customer_id)
         .where(ClickstreamEvent.session_id.in_(["sess-oct", "sess-nov"]))
     )
-    events = list(session.scalars(stmt).all())
+    events = list(db.scalars(stmt).all())
     assert len(events) == 2

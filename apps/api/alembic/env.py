@@ -34,7 +34,7 @@ def include_object(
     reflected: bool,
     compare_to: object,
 ) -> bool:
-    return not (type_ == "table" and reflected and name and name.startswith("clickstream_events_"))
+    return not (reflected and name and name.startswith("clickstream_events_"))
 
 
 def _database_url() -> str:
