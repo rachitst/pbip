@@ -28,15 +28,17 @@ request) and document the architecture.
    refuses to replace the global provider). `shutdown_on_exit` flushes it at interpreter exit.
 3. **FastAPI** (`instrument_app`, called by `create_app`): each request is a SERVER span named
    by method and route template; incoming W3C `traceparent` is honoured. `/api/health/*` and
-   `/metrics` are excluded (compose healthchecks and Prometheus scrapes would flood traces).
+   `/metrics` are excluded by path-anchored patterns (compose healthchecks and Prometheus scrapes
+   would flood traces); any other path containing those strings is still traced.
    The ASGI `send`/`receive` sub-spans are disabled.
 4. **SQLAlchemy** (`instrument_engine`, called by `core/db.get_engine` when enabled): each statement
    on the shared engine is a CLIENT child span (`db.system=postgresql`, statement with bind
    placeholders, never values). **sqlcommenter is off**: it would append a unique `traceparent`
    comment to every statement, which defeats psycopg's prepared-statement reuse and changes every
    query the database logs.
-   * The instrumentation declares support for SQLAlchemy < 2.1; PBIP runs 2.1.x, so it is
-     installed with `skip_dep_check=True`. The engine events it uses work on 2.1 (proved by
+   * The instrumentation declares support for SQLAlchemy < 2.1 (still true of the latest release,
+     0.66b2, checked on PyPI 2026-10-31); PBIP runs 2.1.x, so it is installed with
+     `skip_dep_check=True`. The engine events it uses work on 2.1 (proved by
      `tests/integration/test_tracing.py` against PostgreSQL). `greenlet` is a direct dependency
      because SQLAlchemy 2.1 made it optional and the instrumented connect path needs it (without
      it those tests fail with `ModuleNotFoundError: greenlet`).
