@@ -805,3 +805,45 @@ describe("TASK-049 visual review changes", () => {
     );
   });
 });
+
+describe("TASK-049 polish", () => {
+  const fetchMock = vi.fn<typeof fetch>();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("names the component Spending variability and marks the categories grouped into Other", async () => {
+    fetchMock.mockImplementation((input) => {
+      if (urlOf(input).includes("/analytics/spending")) {
+        return Promise.resolve(
+          json(200, {
+            ...mockSpendingData,
+            total_spend_minor: 4_892_800,
+            categories: NINE_CATEGORIES,
+          }),
+        );
+      }
+      return mockApi()(input);
+    });
+    renderInsightsApp("/insights");
+    await screen.findByRole("heading", { name: "Spending by Category" });
+    expect(screen.getByRole("progressbar", { name: "Spending variability score" })).toBeVisible();
+    expect(screen.queryByText("Expense Volatility")).not.toBeInTheDocument();
+
+    const legend = screen.getByRole("list", { name: "Spending by category" });
+    const grouped = within(legend)
+      .getAllByRole("listitem")
+      .filter((item) => item.textContent.includes("in Other"))
+      .map(
+        (item) =>
+          within(item).getByText(/^[A-Z]/, { selector: ".insights-legend__label" }).textContent,
+      );
+    expect(grouped).toEqual(["Shopping", "Dining", "Transport", "Healthcare", "Entertainment"]);
+  });
+});
