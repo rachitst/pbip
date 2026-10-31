@@ -10,6 +10,14 @@ export type DeviceOut = components["schemas"]["DeviceOut"];
 export type EntriesPage = components["schemas"]["EntriesPage"];
 export type EntryOut = components["schemas"]["EntryOut"];
 export type OpenAccountType = components["schemas"]["OpenAccountType"];
+export type SpendingBreakdownResponse = components["schemas"]["SpendingBreakdownResponse"];
+export type CategorySpendingItem = components["schemas"]["CategorySpendingItem"];
+export type SpendingTrendsResponse = components["schemas"]["SpendingTrendsResponse"];
+export type MonthlySpendingSummary = components["schemas"]["MonthlySpendingSummary"];
+export type CategoryShiftItem = components["schemas"]["CategoryShiftItem"];
+export type FinancialHealthScoreResponse = components["schemas"]["FinancialHealthScoreResponse"];
+export type FinancialHealthComponents = components["schemas"]["FinancialHealthComponents"];
+export type HealthScoreComponent = components["schemas"]["HealthScoreComponent"];
 
 export class ApiError extends Error {
   constructor(
@@ -145,4 +153,22 @@ export const api = {
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(body),
     }),
+  spendingBreakdown: (accountId: string, year?: number, month?: number) => {
+    const params = new URLSearchParams({ account_id: accountId });
+    if (year !== undefined) params.set("year", String(year));
+    if (month !== undefined) params.set("month", String(month));
+    return apiFetch<SpendingBreakdownResponse>(`/api/v1/analytics/spending?${params.toString()}`);
+  },
+  spendingTrends: (accountId: string, year?: number, month?: number) => {
+    const params = new URLSearchParams({ account_id: accountId });
+    if (year !== undefined) params.set("year", String(year));
+    if (month !== undefined) params.set("month", String(month));
+    return apiFetch<SpendingTrendsResponse>(`/api/v1/analytics/trends?${params.toString()}`);
+  },
+  financialHealthScore: (accountId: string) => {
+    const params = new URLSearchParams({ account_id: accountId });
+    return apiFetch<FinancialHealthScoreResponse>(
+      `/api/v1/analytics/health-score?${params.toString()}`,
+    );
+  },
 };

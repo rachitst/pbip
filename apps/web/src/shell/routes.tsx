@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import type { ReactNode } from "react";
 import { Navigate, Outlet } from "react-router";
 import type { RouteObject } from "react-router";
@@ -17,11 +18,15 @@ import { AppShell, SignOutButton } from "./AppShell";
 import type { NavItem } from "./AppShell";
 import { MeContext, useCurrentUser } from "./MeContext";
 
+// Recharts is large: load the Insights page (and the chart library) only when it is opened.
+const Insights = lazy(() => import("../pages/Insights"));
+
 const HOME_PATH: Record<Area, string> = { customer: "/accounts", staff: "/staff", none: "/" };
 
 function customerNav(me: UserOut): NavItem[] {
   const items: NavItem[] = [
     { to: "/accounts", label: "Accounts" },
+    { to: "/insights", label: "Spending & health" },
     { to: "/profile", label: "Profile & security" },
   ];
   if (isStaff(me)) items.push({ to: "/staff", label: "Staff workspace" });
@@ -149,6 +154,14 @@ export const routes: RouteObject[] = [
         children: [
           { index: true, element: <Navigate to="/accounts" replace /> },
           { path: "accounts", element: <Accounts /> },
+          {
+            path: "insights",
+            element: (
+              <Suspense fallback={<LoadingState label="Loading spending & financial health..." />}>
+                <Insights />
+              </Suspense>
+            ),
+          },
           { path: "profile", element: <Profile /> },
         ],
       },
