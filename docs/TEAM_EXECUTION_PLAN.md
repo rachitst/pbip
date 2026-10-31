@@ -517,7 +517,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #37 | **Sprint:** 2 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Core Banking & Ledger
 - **Owner:** Sujal (`SUJALGPM`)
-- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (7.2 days of slack)
+- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Sun 1 Nov (#233; reviewed and fixed before merge: fraud scoring on bill payments, daily limit shared with transfers, migration renumbered; a fraud-flagged bill payment is declined, not held) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-005 (#16, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Parallel: can start immediately
 - **Goal:** Backend service for managing registered utility billers and paying utility bills via the ledger.
@@ -530,10 +530,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Idempotent replays return original receipt with Idempotent-Replayed header
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #37`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Models for Billers and BillPayments with foreign keys and status constraints
-  - [ ] POST /api/v1/bills/pay requires Idempotency-Key header and validates customer balance
-  - [ ] Posts double-entry ledger entries debiting customer account and crediting clearing account
-  - [ ] Idempotent replays return original receipt with Idempotent-Replayed header
+  - [x] Models for Billers and BillPayments with foreign keys and status constraints
+  - [x] POST /api/v1/bills/pay requires Idempotency-Key header and validates customer balance
+  - [x] Posts double-entry ledger entries debiting customer account and crediting clearing account
+  - [x] Idempotent replays return original receipt with Idempotent-Replayed header
 - **Definition of done (evidence):** Alembic migration included, unit and integration tests passing, OpenAPI contract updated.
 - **Required checks:**
   - Automated: pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths
@@ -3228,9 +3228,9 @@ decision in ADR-0015.
 | TASK-041 | Krishna | TASK-046 | Rachit | Sun 25 Oct | Wed 28 Oct |
 | TASK-015 | Sujal | TASK-043 | Krishna | Mon 26 Oct | Wed 28 Oct |
 | TASK-040 | Krishna | TASK-057 | Rachit | Sun 25 Oct | Wed 28 Oct |
-| TASK-042 | Krishna | TASK-057 | Rachit | Wed 28 Oct | Wed 28 Oct |
+| TASK-042 | Rachit | TASK-057 | Rachit | Wed 28 Oct | Wed 28 Oct |
 | TASK-046 | Rachit | TASK-057 | Rachit | Wed 28 Oct | Wed 28 Oct |
-| TASK-042 | Krishna | TASK-050 | Kalpak | Wed 28 Oct | Thu 29 Oct |
+| TASK-042 | Rachit | TASK-050 | Kalpak | Wed 28 Oct | Thu 29 Oct |
 | TASK-043 | Krishna | TASK-050 | Kalpak | Wed 28 Oct | Thu 29 Oct |
 | TASK-033 | Pranay | TASK-037 | Kalpak | Thu 29 Oct | Thu 29 Oct |
 | TASK-033 | Pranay | TASK-078 | Rachit | Thu 29 Oct | Thu 29 Oct |
