@@ -305,6 +305,17 @@
             "title": "Hash",
             "type": "string"
           },
+          "ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip"
+          },
           "request_id": {
             "anyOf": [
               {

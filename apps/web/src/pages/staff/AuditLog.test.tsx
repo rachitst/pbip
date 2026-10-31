@@ -1,0 +1,288 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AuditLogOut, ChainStatusOut, UserOut } from "../../api/client";
+import { MeContext } from "../../shell/MeContext";
+import { json, urlOf } from "../../test-utils";
+import { AuditLog } from "./AuditLog";
+
+const complianceOfficerMe: UserOut = {
+  id: "user-co",
+  email: "compliance@demo.pbip",
+  roles: ["COMPLIANCE_OFFICER"],
+  mfa_enabled: true,
+  mfa_verified_session: true,
+  created_at: "2026-01-01T00:00:00Z",
+};
+
+const adminMe: UserOut = {
+  id: "user-admin",
+  email: "admin@demo.pbip",
+  roles: ["ADMIN"],
+  mfa_enabled: true,
+  mfa_verified_session: true,
+  created_at: "2026-01-01T00:00:00Z",
+};
+
+const nonComplianceStaffMe: UserOut = {
+  id: "user-fa",
+  email: "analyst@demo.pbip",
+  roles: ["FRAUD_ANALYST"],
+  mfa_enabled: true,
+  mfa_verified_session: true,
+  created_at: "2026-01-01T00:00:00Z",
+};
+
+const mockLogs: AuditLogOut[] = [
+  {
+    seq: 102,
+    actor_user_id: "00000000-0000-0000-0000-000000000001",
+    action: "USER_LOCKED",
+    resource_type: "user",
+    resource_id: "00000000-0000-0000-0000-000000000002",
+    request_id: "req-102",
+    ip: "192.168.1.10",
+    details: { reason: "excessive_logins" },
+    created_at: "2026-02-01T12:00:00Z",
+    hash: "a".repeat(64),
+  },
+  {
+    seq: 101,
+    actor_user_id: null,
+    action: "SYSTEM_BOOT",
+    resource_type: "system",
+    resource_id: null,
+    request_id: null,
+    ip: "10.0.0.1",
+    details: { version: "1.0.0" },
+    created_at: "2026-02-01T10:00:00Z",
+    hash: "b".repeat(64),
+  },
+  {
+    seq: 100,
+    actor_user_id: "00000000-0000-0000-0000-000000000003",
+    action: "GENESIS",
+    resource_type: "system",
+    resource_id: null,
+    request_id: null,
+    ip: null,
+    details: {},
+    created_at: "2026-02-01T08:00:00Z",
+    hash: "c".repeat(64),
+  },
+];
+
+function renderWithClient(ui: React.ReactElement, user: UserOut = complianceOfficerMe) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MeContext.Provider value={user}>{ui}</MeContext.Provider>
+    </QueryClientProvider>,
+  );
+}
+
+describe("Compliance Audit Log UI (TASK-048)", () => {
+  const fetchMock = vi.fn<typeof fetch>();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("1. Loading state renders cleanly", () => {
+    fetchMock.mockImplementation(() => new Promise(() => {}));
+    renderWithClient(<AuditLog />);
+    expect(screen.getByText("Loading audit logs...")).toBeInTheDocument();
+  });
+
+  it("2. Handles empty state when no audit log entries exist", async () => {
+    fetchMock.mockImplementation((input) => {
+      const url = new URL(urlOf(input), "http://localhost");
+      if (url.pathname === "/api/v1/compliance/audit-logs") {
+        return Promise.resolve(json(200, []));
+      }
+      return Promise.resolve(json(404, { code: "not_found", title: "not found" }));
+    });
+
+    renderWithClient(<AuditLog />);
+    expect(await screen.findByText("No audit log entries recorded yet.")).toBeInTheDocument();
+  });
+
+  it("3. Displays chronological audit log entries with user, action, IP address, and timestamp", async () => {
+    fetchMock.mockImplementation((input) => {
+      const url = new URL(urlOf(input), "http://localhost");
+      if (url.pathname === "/api/v1/compliance/audit-logs") {
+        return Promise.resolve(json(200, mockLogs));
+      }
+      return Promise.resolve(json(404, { code: "not_found", title: "not found" }));
+    });
+
+    renderWithClient(<AuditLog />);
+    const table = await screen.findByRole("table");
+    expect(table).toBeInTheDocument();
+
+    expect(within(table).getByText("#102")).toBeInTheDocument();
+    expect(within(table).getByText("USER_LOCKED")).toBeInTheDocument();
+    expect(within(table).getByText("192.168.1.10")).toBeInTheDocument();
+
+    expect(within(table).getByText("#101")).toBeInTheDocument();
+    expect(within(table).getByText("SYSTEM_BOOT")).toBeInTheDocument();
+    expect(within(table).getByText("10.0.0.1")).toBeInTheDocument();
+    expect(within(table).getByText("System")).toBeInTheDocument();
+
+    expect(within(table).getByText("#100")).toBeInTheDocument();
+    expect(within(table).getByText("GENESIS")).toBeInTheDocument();
+    const row100 = table.querySelector('tr[data-seq="100"]');
+    expect(row100).not.toBeNull();
+    if (row100) {
+      expect(
+        within(row100 as HTMLElement).getByTitle("No IP address recorded for this event"),
+      ).toBeInTheDocument();
+    }
+  });
+
+  it("4. Verifies hash chain successfully when intact", async () => {
+    const validResult: ChainStatusOut = {
+      valid: true,
+      checked: 102,
+      first_invalid_seq: null,
+    };
+
+    fetchMock.mockImplementation((input) => {
+      const url = new URL(urlOf(input), "http://localhost");
+      if (url.pathname === "/api/v1/compliance/audit-logs") {
+        return Promise.resolve(json(200, mockLogs));
+      }
+      if (url.pathname === "/api/v1/compliance/audit-logs/verify") {
+        return Promise.resolve(json(200, validResult));
+      }
+      return Promise.resolve(json(404, { code: "not_found", title: "not found" }));
+    });
+
+    const user = userEvent.setup();
+    renderWithClient(<AuditLog />);
+    await screen.findByRole("table");
+
+    const verifyBtn = screen.getByRole("button", { name: "Verify Hash Chain" });
+    await user.click(verifyBtn);
+
+    expect(
+      await screen.findByText(
+        /Hash chain intact\. Verified 102 audit log entries with no tampering detected\./,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("5. Visually highlights data tampering and broken chain when verification fails", async () => {
+    const brokenResult: ChainStatusOut = {
+      valid: false,
+      checked: 50,
+      first_invalid_seq: 102,
+    };
+
+    fetchMock.mockImplementation((input) => {
+      const url = new URL(urlOf(input), "http://localhost");
+      if (url.pathname === "/api/v1/compliance/audit-logs") {
+        return Promise.resolve(json(200, mockLogs));
+      }
+      if (url.pathname === "/api/v1/compliance/audit-logs/verify") {
+        return Promise.resolve(json(200, brokenResult));
+      }
+      return Promise.resolve(json(404, { code: "not_found", title: "not found" }));
+    });
+
+    const user = userEvent.setup();
+    renderWithClient(<AuditLog />);
+    await screen.findByRole("table");
+
+    const verifyBtn = screen.getByRole("button", { name: "Verify Hash Chain" });
+    await user.click(verifyBtn);
+
+    expect(
+      await screen.findByText(/Hash chain broken! Data tampering detected at sequence #102\./),
+    ).toBeInTheDocument();
+
+    expect(screen.getByText("TAMPERED")).toBeInTheDocument();
+  });
+
+  it("6. Handles verification request failure and provides a working retry button", async () => {
+    let failVerify = true;
+    fetchMock.mockImplementation((input) => {
+      const url = new URL(urlOf(input), "http://localhost");
+      if (url.pathname === "/api/v1/compliance/audit-logs") {
+        return Promise.resolve(json(200, mockLogs));
+      }
+      if (url.pathname === "/api/v1/compliance/audit-logs/verify") {
+        if (failVerify) {
+          return Promise.resolve(
+            json(500, { code: "internal_error", title: "Service unavailable" }),
+          );
+        }
+        return Promise.resolve(json(200, { valid: true, checked: 3, first_invalid_seq: null }));
+      }
+      return Promise.resolve(json(404, { code: "not_found", title: "not found" }));
+    });
+
+    const user = userEvent.setup();
+    renderWithClient(<AuditLog />);
+    await screen.findByRole("table");
+
+    await user.click(screen.getByRole("button", { name: "Verify Hash Chain" }));
+
+    expect(await screen.findByText(/Verification request failed/)).toBeInTheDocument();
+
+    failVerify = false;
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByText(/Hash chain intact/)).toBeInTheDocument();
+  });
+
+  it("7. Supports keyboard accessibility on the Verify Hash Chain button", async () => {
+    fetchMock.mockImplementation((input) => {
+      const url = new URL(urlOf(input), "http://localhost");
+      if (url.pathname === "/api/v1/compliance/audit-logs") {
+        return Promise.resolve(json(200, mockLogs));
+      }
+      if (url.pathname === "/api/v1/compliance/audit-logs/verify") {
+        return Promise.resolve(json(200, { valid: true, checked: 102, first_invalid_seq: null }));
+      }
+      return Promise.resolve(json(404, { code: "not_found", title: "not found" }));
+    });
+
+    const user = userEvent.setup();
+    renderWithClient(<AuditLog />);
+    await screen.findByRole("table");
+
+    const verifyBtn = screen.getByRole("button", { name: "Verify Hash Chain" });
+    verifyBtn.focus();
+    expect(verifyBtn).toHaveFocus();
+
+    await user.keyboard("{Enter}");
+    expect(await screen.findByText(/Hash chain intact/)).toBeInTheDocument();
+  });
+
+  it("8. Allows ADMIN role and enforces access restriction for unauthorized staff roles", () => {
+    const { unmount } = renderWithClient(<AuditLog />, adminMe);
+    expect(screen.getByRole("heading", { name: "Compliance audit log" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Verify Hash Chain" })).toBeInTheDocument();
+    unmount();
+
+    renderWithClient(<AuditLog />, nonComplianceStaffMe);
+    expect(
+      screen.getByText(
+        /Access restricted: The compliance audit log requires the Compliance Officer or Administrator role\./,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Verify Hash Chain" })).not.toBeInTheDocument();
+  });
+});
