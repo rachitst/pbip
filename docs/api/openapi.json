@@ -843,6 +843,55 @@
         "title": "EntryOut",
         "type": "object"
       },
+      "EventBatchRequest": {
+        "description": "Batch payload containing up to 100 telemetry events.",
+        "properties": {
+          "events": {
+            "description": "List of telemetry events to ingest (1 to 100 items per batch)",
+            "items": {
+              "$ref": "#/components/schemas/TelemetryEventIn"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Events",
+            "type": "array"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "title": "EventBatchRequest",
+        "type": "object"
+      },
+      "EventBatchResponse": {
+        "description": "Result of batch event ingestion.",
+        "properties": {
+          "accepted": {
+            "description": "Count of accepted events in batch",
+            "minimum": 0.0,
+            "title": "Accepted",
+            "type": "integer"
+          },
+          "batch_id": {
+            "description": "Unique batch tracking UUID",
+            "format": "uuid",
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "received_at": {
+            "description": "UTC server timestamp of receipt",
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "accepted",
+          "received_at"
+        ],
+        "title": "EventBatchResponse",
+        "type": "object"
+      },
       "FinancialHealthComponents": {
         "description": "Component-wise breakdown of the financial health score.",
         "properties": {
@@ -1731,6 +1780,80 @@
           "INR"
         ],
         "title": "SupportedCurrency",
+        "type": "string"
+      },
+      "TelemetryEventIn": {
+        "description": "Individual client-side or server-side telemetry event payload.",
+        "properties": {
+          "event_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional client-generated event UUID",
+            "title": "Event Id"
+          },
+          "event_timestamp": {
+            "description": "UTC timestamp when the event occurred",
+            "format": "date-time",
+            "title": "Event Timestamp",
+            "type": "string"
+          },
+          "event_type": {
+            "$ref": "#/components/schemas/TelemetryEventType",
+            "description": "Classification category of the event"
+          },
+          "page_url": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Application route or URL path",
+            "title": "Page Url"
+          },
+          "properties": {
+            "additionalProperties": true,
+            "description": "Arbitrary event metadata properties",
+            "title": "Properties",
+            "type": "object"
+          },
+          "session_id": {
+            "description": "User session token or browser identifier",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_type",
+          "event_timestamp",
+          "session_id"
+        ],
+        "title": "TelemetryEventIn",
+        "type": "object"
+      },
+      "TelemetryEventType": {
+        "description": "Supported telemetry event types.",
+        "enum": [
+          "page_view",
+          "loan_calculator_used",
+          "transfer_initiated",
+          "account_viewed",
+          "product_clicked",
+          "search_performed"
+        ],
+        "title": "TelemetryEventType",
         "type": "string"
       },
       "TokenResponse": {
@@ -3421,6 +3544,53 @@
         "summary": "Get my customer profile",
         "tags": [
           "customers"
+        ]
+      }
+    },
+    "/api/v1/events/batch": {
+      "post": {
+        "description": "Ingest up to 100 telemetry events with high-throughput database persistence.",
+        "operationId": "ingest_events_batch_api_v1_events_batch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventBatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Batch ingest client-side and server-side telemetry events",
+        "tags": [
+          "events"
         ]
       }
     },

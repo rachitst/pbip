@@ -18,12 +18,23 @@ from pbip_api.modules.analytics import models as _analytics  # noqa: E402, F401
 from pbip_api.modules.auth import models as _auth  # noqa: E402, F401
 from pbip_api.modules.compliance import models as _compliance  # noqa: E402, F401
 from pbip_api.modules.customers import models as _customers  # noqa: E402, F401
+from pbip_api.modules.events import models as _events  # noqa: E402, F401
 from pbip_api.modules.fraud import models as _fraud  # noqa: E402, F401
 from pbip_api.modules.ledger import models as _ledger  # noqa: E402, F401
 from pbip_api.modules.notifications import models as _notifications  # noqa: E402, F401
 from pbip_api.modules.payees import models as _payees  # noqa: E402, F401
 
 target_metadata = Base.metadata
+
+
+def include_object(
+    object: object,
+    name: str | None,
+    type_: str,
+    reflected: bool,
+    compare_to: object,
+) -> bool:
+    return not (type_ == "table" and reflected and name and name.startswith("clickstream_events_"))
 
 
 def _database_url() -> str:
@@ -36,6 +47,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         compare_type=True,
+        include_object=include_object,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -44,7 +56,12 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     engine = create_engine(_database_url(), poolclass=pool.NullPool)
     with engine.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            include_object=include_object,
+        )
         with context.begin_transaction():
             context.run_migrations()
 
