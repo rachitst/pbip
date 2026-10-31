@@ -57,7 +57,20 @@ fresh interpreters (off, `none`, `memory`) and sends sequential `GET /api/v1/acc
 (authentication, policy check, SQL). The earlier timing assertion in the unit suite was removed:
 wall-clock assertions are non-deterministic (AGENTS.md section 10) and it measured a toy app on SQLite.
 
-Results: see "Measured overhead" below (filled from a real run; not a CI gate).
+Measured 2026-10-31 on a 2-CPU Linux laptop (Python 3.12.15, PostgreSQL 16 and Redis in Docker),
+three runs of 500 requests after 50 warm-up requests each. Times in ms; deltas against tracing off.
+Not a CI gate.
+
+| Run | off median / p95 | `none` median / p95 | `memory` median / p95 | delta `none` median / p95 | delta `memory` median / p95 |
+|---|---|---|---|---|---|
+| 1 | 9.6 / 16.9 | 10.9 / 16.1 | 11.1 / 16.3 | +1.3 / -0.8 | +1.5 / -0.6 |
+| 2 | 9.7 / 15.8 | 11.3 / 16.0 | 12.6 / 19.2 | +1.6 / +0.2 | +2.9 / +3.4 |
+| 3 | 11.2 / 17.2 | 12.4 / 18.2 | 12.8 / 19.0 | +1.2 / +1.0 | +1.6 / +1.8 |
+
+Tracing adds about 1.2-1.6 ms at the median with no exporter, and 1.5-2.9 ms when spans are also
+exported in memory, so it stays under the 5 ms target. The p95 deltas are within run-to-run noise
+on this machine (between -0.8 and +3.4 ms). These are local numbers: the exporter cost of OTLP over
+the network is not measured, and load and staging measurements are tracked in #101 (TASK-078) and #198.
 
 ## Not covered by this spike
 * **Celery workers** are not traced: `setup_tracing` runs only in `create_app`. A worker with

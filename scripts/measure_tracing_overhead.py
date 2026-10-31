@@ -74,6 +74,35 @@ def _measure(email: str, password: str, warmup: int, requests: int) -> list[floa
     return samples
 
 
+def compute_deltas(
+    results: dict[str, dict[str, float | int]],
+) -> dict[str, dict[str, float]]:
+    """Median and p95 of every traced mode minus tracing ``off`` (ms)."""
+    base = results["off"]
+    return {
+        mode: {
+            key: round(float(summary[f"{key}_ms"]) - float(base[f"{key}_ms"]), 1)
+            for key in ("median", "p95")
+        }
+        for mode, summary in results.items()
+        if mode != "off"
+    }
+
+
+def format_lines(
+    results: dict[str, dict[str, float | int]], deltas: dict[str, dict[str, float]]
+) -> str:
+    lines = [
+        f"{mode:7s} n={r['n']} median={r['median_ms']} ms p95={r['p95_ms']} ms p99={r['p99_ms']} ms"
+        for mode, r in results.items()
+    ]
+    lines += [
+        f"delta {mode:7s} median={d['median']:+.1f} ms p95={d['p95']:+.1f} ms"
+        for mode, d in deltas.items()
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--requests", type=int, default=500)
@@ -113,15 +142,7 @@ def main() -> int:
         )
         results[mode] = summarise(json.loads(child.stdout.strip().splitlines()[-1]))
 
-    base = results["off"]
-    deltas = {
-        mode: {
-            "median": round(float(r["median"]) - float(base["median"]), 3),
-            "p95": round(float(r["p95"]) - float(base["p95"]), 3),
-        }
-        for mode, r in results.items()
-        if mode != "off"
-    }
+    deltas = compute_deltas(results)
     report = {
         "measured_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "environment": {
@@ -133,13 +154,7 @@ def main() -> int:
         "modes": results,
         "delta_ms": deltas,
     }
-    for mode, r in results.items():
-        sys.stdout.write(
-            f"{mode:7s} n={r['n']} median={r['median']:.2f} ms p95={r['p95']:.2f} ms "
-            f"p99={r['p99']:.2f} ms\n"
-        )
-    for mode, d in deltas.items():
-        sys.stdout.write(f"delta {mode:7s} median={d['median']:+.2f} ms p95={d['p95']:+.2f} ms\n")
+    sys.stdout.write(format_lines(results, deltas))
     if args.json:
         args.json.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return 0
