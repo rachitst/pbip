@@ -15,6 +15,16 @@ if (typeof HTMLDialogElement !== "undefined" && !("showModal" in HTMLDialogEleme
   });
 }
 
+// jsdom has no ResizeObserver. This shim allows chart components (e.g. Recharts ResponsiveContainer)
+// to render without throwing in tests.
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
 // The router reads the real URL: start every test at "/" so no test depends on another's path.
 beforeEach(() => {
   window.history.replaceState(null, "", "/");

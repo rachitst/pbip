@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import type { ReactNode } from "react";
 import { Navigate, Outlet } from "react-router";
 import type { RouteObject } from "react-router";
@@ -11,6 +12,8 @@ import { Accounts } from "../pages/Accounts";
 import { NotFound } from "../pages/NotFound";
 import { Profile } from "../pages/Profile";
 import { StaffHome } from "../pages/staff/StaffHome";
+
+const Insights = lazy(() => import("../pages/Insights"));
 import { Alert } from "../ui/Alert";
 import { ErrorState, LoadingState } from "../ui/States";
 import { AppShell, SignOutButton } from "./AppShell";
@@ -22,6 +25,7 @@ const HOME_PATH: Record<Area, string> = { customer: "/accounts", staff: "/staff"
 function customerNav(me: UserOut): NavItem[] {
   const items: NavItem[] = [
     { to: "/accounts", label: "Accounts" },
+    { to: "/insights", label: "Spending & health" },
     { to: "/profile", label: "Profile & security" },
   ];
   if (isStaff(me)) items.push({ to: "/staff", label: "Staff workspace" });
@@ -149,6 +153,14 @@ export const routes: RouteObject[] = [
         children: [
           { index: true, element: <Navigate to="/accounts" replace /> },
           { path: "accounts", element: <Accounts /> },
+          {
+            path: "insights",
+            element: (
+              <Suspense fallback={<LoadingState label="Loading spending & financial health..." />}>
+                <Insights />
+              </Suspense>
+            ),
+          },
           { path: "profile", element: <Profile /> },
         ],
       },
