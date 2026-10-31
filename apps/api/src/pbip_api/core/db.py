@@ -63,12 +63,17 @@ def in_check(column: str, enum_cls: type[StrEnum], name: str) -> CheckConstraint
 @lru_cache
 def get_engine() -> Engine:
     settings = get_settings()
-    return create_engine(
+    engine = create_engine(
         settings.database_url,
         pool_pre_ping=True,
         pool_size=10,
         connect_args={"connect_timeout": settings.database_connect_timeout_seconds},
     )
+    if settings.otel_enabled:
+        from pbip_api.core.tracing import instrument_engine
+
+        instrument_engine(engine, settings)
+    return engine
 
 
 def get_session(engine: Engine = Depends(get_engine)) -> Iterator[Session]:

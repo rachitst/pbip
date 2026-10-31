@@ -2583,7 +2583,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Expected end result / acceptance criteria:**
   - [ ] Injects trace_id and span_id into structlog logging context
   - [ ] Evaluates overhead on request latency (< 5ms)
-  - [ ] Documents tracing architecture in docs/adr/0009-opentelemetry.md
+  - [ ] Documents tracing architecture in docs/adr/0009-opentelemetry.md *(accepted clarification: delivered as `docs/adr/0017-opentelemetry.md`, because 0009 is the synthetic-dataset ADR and ADR numbers are unique)*
 - **Definition of done (evidence):** ADR committed, sample trace verified in test output.
 - **Required checks:**
   - Automated: CI job or `scripts/dev.py` command exercised in tests; works from a fresh clone
