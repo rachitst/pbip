@@ -42,6 +42,23 @@ def clear_rate_limits(redis_client: Redis, names: Iterable[str], ips: Iterable[s
         return None
 
 
+def consume(redis_client: Redis, name: str, subject: str, limit: int, window_seconds: int) -> None:
+    """Count one call for ``subject`` (an IP, or ``user:<id>``); raise once over ``limit``."""
+    key = rate_limit_key(name, subject)
+    try:
+        count = int(redis_client.incr(key))
+        if count == 1:
+            redis_client.expire(key, window_seconds)
+    except RedisError as exc:
+        _logger.warning("rate_limit_unavailable", name=name, error_type=type(exc).__name__)
+        return
+    if count > limit:
+        raise RateLimitedError(
+            "too many requests, try again later",
+            headers={"Retry-After": str(window_seconds)},
+        )
+
+
 def rate_limit(
     name: str, limit: Callable[[Settings], int], window_seconds: int
 ) -> Callable[..., None]:
@@ -52,19 +69,7 @@ def rate_limit(
         redis_client: Redis = Depends(get_redis),
         settings: Settings = Depends(get_settings),
     ) -> None:
-        key = rate_limit_key(name, client_ip(request))
-        try:
-            count = int(redis_client.incr(key))
-            if count == 1:
-                redis_client.expire(key, window_seconds)
-        except RedisError as exc:
-            _logger.warning("rate_limit_unavailable", name=name, error_type=type(exc).__name__)
-            return
-        if count > limit(settings):
-            raise RateLimitedError(
-                "too many requests, try again later",
-                headers={"Retry-After": str(window_seconds)},
-            )
+        consume(redis_client, name, client_ip(request), limit(settings), window_seconds)
 
     dependency.__name__ = f"rate_limit_{name}"
     return dependency

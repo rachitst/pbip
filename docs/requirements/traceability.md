@@ -72,7 +72,7 @@ Last reviewed against `main` on 2026-10-30 (local verification run recorded in
 |---|---|---|---|
 | Responsive web application | Partial | 019 (Done) and the Todo UI tasks | Most journeys have no UI |
 | Backend API services, database | Verified | | 38 operations, migrations 0001-0005 |
-| AI assistant | Missing | 057-061, 067, 076, 105 | |
+| AI assistant | Partial | 057-061, 067, 076, 105 | Chat and streaming APIs with adversarial suite; no UI yet |
 | Fraud monitoring dashboard, reporting dashboard | Missing | 036, 049, 066, 099, 100, 101 | |
 | API documentation | Verified | | OpenAPI drift-checked in CI |
 | Automated tests, >= 70% coverage | Verified (backend) | 087 #110 | Backend 96% in CI and 95.99% in a local run against PostgreSQL ([local verification](../testing/local-verification-2026-10-30.md)); frontend threshold not traced here |
@@ -102,7 +102,7 @@ Last reviewed against `main` on 2026-10-30 (local verification run recorded in
 
 ## Most important gaps (by project impact)
 
-1. **AI assistant (UC-08)**: success criterion and deliverable; nothing implemented.
+1. **AI assistant (UC-08)**: success criterion and deliverable; chat and streaming APIs built and hardened (TASK-057–060, 067); UI still open.
 2. **Recommendations (UC-06, 07, 12)**: success criterion "recommendations generated using
    behavioural data" is unmet; loans and wealth modules are empty.
 3. **Dashboards**: spending/health UI (TASK-049), fraud operations (TASK-036), security, compliance

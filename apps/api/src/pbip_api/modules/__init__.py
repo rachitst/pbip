@@ -18,6 +18,7 @@ importing its repository or models.
 # ADD NEW MODULES' models HERE.
 from pbip_api.modules.accounts import models as _accounts  # noqa: F401
 from pbip_api.modules.analytics import models as _analytics  # noqa: F401
+from pbip_api.modules.assistant import models as _assistant  # noqa: F401
 from pbip_api.modules.auth import models as _auth  # noqa: F401
 from pbip_api.modules.bills import models as _bills  # noqa: F401
 from pbip_api.modules.compliance import models as _compliance  # noqa: F401
