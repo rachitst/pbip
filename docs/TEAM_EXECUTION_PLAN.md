@@ -753,7 +753,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #45 | **Sprint:** 2 | **Priority:** must | **Size:** S (0.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Kalpak (`Patil-Kalpak`)
-- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (8.8 days of slack)
+- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (partially delivered in #224 on Sat 31 Oct: polled unread badge, transfer notifications, mark read; security/statement notifications and per-transaction navigation need API support first, see #45) | **Status:** In Progress | **Risk:** Medium (two criteria depend on backend work not yet planned)
 - **Depends on:** TASK-018 (#41, Abbas), TASK-019 (#42, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-018, TASK-019
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; the bell sits in the shell's top bar and links to routed pages.
