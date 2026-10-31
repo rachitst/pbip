@@ -10,6 +10,9 @@ export type DeviceOut = components["schemas"]["DeviceOut"];
 export type EntriesPage = components["schemas"]["EntriesPage"];
 export type EntryOut = components["schemas"]["EntryOut"];
 export type OpenAccountType = components["schemas"]["OpenAccountType"];
+export type NotificationOut = components["schemas"]["NotificationOut"];
+export type NotificationsPage = components["schemas"]["NotificationsPage"];
+export type BulkMarkReadResponse = components["schemas"]["BulkMarkReadResponse"];
 export type AuditLogOut = components["schemas"]["AuditLogOut"];
 export type ChainStatusOut = components["schemas"]["ChainStatusOut"];
 export type SpendingBreakdownResponse = components["schemas"]["SpendingBreakdownResponse"];
@@ -154,6 +157,22 @@ export const api = {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(body),
+    }),
+  notifications: (options?: { unread_only?: boolean; limit?: number; offset?: number }) => {
+    const params = new URLSearchParams();
+    if (options?.unread_only !== undefined) params.set("unread_only", String(options.unread_only));
+    if (options?.limit !== undefined) params.set("limit", String(options.limit));
+    if (options?.offset !== undefined) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return apiFetch<NotificationsPage>(`/api/v1/notifications${qs ? `?${qs}` : ""}`);
+  },
+  markNotificationRead: (notificationId: string) =>
+    apiFetch<undefined>(`/api/v1/notifications/${encodeURIComponent(notificationId)}/read`, {
+      method: "POST",
+    }),
+  markAllNotificationsRead: () =>
+    apiFetch<BulkMarkReadResponse>("/api/v1/notifications/mark-all-read", {
+      method: "POST",
     }),
   auditLogs: (limit = 50, beforeSeq?: number) => {
     const params = new URLSearchParams({ limit: String(limit) });
