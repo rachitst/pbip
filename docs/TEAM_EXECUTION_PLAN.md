@@ -2569,9 +2569,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #108 | **Sprint:** 6 | **Priority:** could | **Size:** S (0.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (8.7 days of slack)
+- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Sat 31 Oct (merged in #205 with maintainer review fixes on the same PR; CI blockers on main fixed in #207; overhead +1.2-1.6 ms median measured locally against PostgreSQL, recorded in ADR 0017) | **Status:** Done | **Risk:** Low
 - **Depends on:** none
-- **Mode:** Parallel: can start immediately
+- **Mode:** Done
 - **Goal:** Spike evaluation integrating OpenTelemetry span tracking across FastAPI and database calls.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -2581,9 +2581,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Documents tracing architecture in docs/adr/0009-opentelemetry.md
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #108`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Injects trace_id and span_id into structlog logging context
-  - [ ] Evaluates overhead on request latency (< 5ms)
-  - [ ] Documents tracing architecture in docs/adr/0009-opentelemetry.md *(accepted clarification: delivered as `docs/adr/0017-opentelemetry.md`, because 0009 is the synthetic-dataset ADR and ADR numbers are unique)*
+  - [x] Injects trace_id and span_id into structlog logging context
+  - [x] Evaluates overhead on request latency (< 5ms)
+  - [x] Documents tracing architecture in docs/adr/0009-opentelemetry.md *(accepted clarification: delivered as `docs/adr/0017-opentelemetry.md`, because 0009 is the synthetic-dataset ADR and ADR numbers are unique)*
 - **Definition of done (evidence):** ADR committed, sample trace verified in test output.
 - **Required checks:**
   - Automated: CI job or `scripts/dev.py` command exercised in tests; works from a fresh clone
