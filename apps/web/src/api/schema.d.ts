@@ -531,6 +531,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/insights/customers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Customers ordered by churn risk, with churn signals and the top eligible product
+         * @description One page of customers ordered by churn risk (RM or admin with an MFA-verified session).
+         */
+        get: operations["get_prioritized_customer_insights_api_v1_insights_customers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/notifications": {
         parameters: {
             query?: never;
@@ -934,6 +954,94 @@ export interface components {
             first_invalid_seq: number | null;
             /** Valid */
             valid: boolean;
+        };
+        /**
+         * ChurnRiskLevel
+         * @description Categorical classification of customer churn risk.
+         * @enum {string}
+         */
+        ChurnRiskLevel: "LOW" | "MEDIUM" | "HIGH";
+        /**
+         * CustomerInsightItem
+         * @description What an RM needs to prioritise outreach: no email, address, birth date or account number.
+         */
+        CustomerInsightItem: {
+            /**
+             * Balance Decline Rate
+             * @description Share of the balance lost over the last 30 days
+             */
+            balance_decline_rate: number;
+            /** @description Categorical churn risk rating: LOW, MEDIUM, or HIGH */
+            churn_risk_level: components["schemas"]["ChurnRiskLevel"];
+            /**
+             * Churn Risk Score
+             * @description Rule-based: 55% balance decline + 45% inactivity
+             */
+            churn_risk_score: number;
+            /**
+             * Customer Id
+             * Format: uuid
+             * @description Unique customer identifier
+             */
+            customer_id: string;
+            /**
+             * Full Name
+             * @description Customer full name
+             */
+            full_name: string;
+            /**
+             * High Value
+             * @description Balance of INR 1,00,000 or more, or the HIGH_NET_WORTH segment
+             * @default false
+             */
+            high_value: boolean;
+            /**
+             * Inactivity Days
+             * @description Elapsed days since the last customer activity or transaction
+             */
+            inactivity_days: number;
+            /**
+             * Segment
+             * @description Behavioral segment (e.g. HIGH_NET_WORTH)
+             */
+            segment: string;
+            /**
+             * Top Product Score
+             * @description Rule-based relevance (not a probability)
+             */
+            top_product_score?: number | null;
+            /**
+             * Top Recommended Product
+             * @description Top eligible product from the recommendation rules
+             */
+            top_recommended_product?: string | null;
+            /**
+             * Total Balance Minor
+             * @description Current spendable balance across all accounts in minor units
+             */
+            total_balance_minor: number;
+        };
+        /**
+         * CustomerInsightsListResponse
+         * @description Paginated collection of prioritized customer insights for Relationship Managers.
+         */
+        CustomerInsightsListResponse: {
+            /**
+             * Evaluated At
+             * Format: date-time
+             * @description Server evaluation timestamp in UTC
+             */
+            evaluated_at: string;
+            /**
+             * Items
+             * @description Prioritized list of customer insight profiles
+             */
+            items?: components["schemas"]["CustomerInsightItem"][];
+            /**
+             * Total
+             * @description Total matching customers count
+             */
+            total: number;
         };
         /**
          * CustomerProfileOut
@@ -2798,6 +2906,44 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_prioritized_customer_insights_api_v1_insights_customers_get: {
+        parameters: {
+            query?: {
+                /** @description Minimum churn risk score filter (0.0 to 1.0) */
+                min_churn_risk?: number | null;
+                /** @description Behavioral segment filter */
+                segment?: string | null;
+                /** @description Page size */
+                limit?: number;
+                /** @description Page offset */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerInsightsListResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

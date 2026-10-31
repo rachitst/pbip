@@ -22,19 +22,20 @@ _require_rm_or_admin = require_roles(
     "/customers",
     response_model=CustomerInsightsListResponse,
     status_code=status.HTTP_200_OK,
-    summary="Prioritized customer behavioral insights, churn signals, and propensity ranking",
+    summary="Customers ordered by churn risk, with churn signals and the top eligible product",
 )
 def get_prioritized_customer_insights(
     min_churn_risk: float | None = Query(
         None, ge=0.0, le=1.0, description="Minimum churn risk score filter (0.0 to 1.0)"
     ),
     segment: str | None = Query(None, max_length=50, description="Behavioral segment filter"),
-    limit: int = Query(50, ge=1, le=100, description="Page item limit"),
-    offset: int = Query(0, ge=0, description="Page item offset"),
+    # Each row on the page runs the recommendation rules, so pages are small.
+    limit: int = Query(20, ge=1, le=25, description="Page size"),
+    offset: int = Query(0, ge=0, le=100_000, description="Page offset"),
     principal: Principal = Depends(_require_rm_or_admin),
     session: Session = Depends(get_session),
 ) -> CustomerInsightsListResponse:
-    """Return prioritized high-propensity customers with churn indicators for RM staff."""
+    """One page of customers ordered by churn risk (RM or admin with an MFA-verified session)."""
     return service.get_customer_insights(
         session=session,
         min_churn_risk=min_churn_risk,

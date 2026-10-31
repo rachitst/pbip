@@ -16,13 +16,12 @@ class ChurnRiskLevel(StrEnum):
 
 
 class CustomerInsightItem(BaseModel):
-    """Behavioral profile, churn signals, and product propensity for a single customer."""
+    """What an RM needs to prioritise outreach: no email, address, birth date or account number."""
 
     model_config = ConfigDict(frozen=True)
 
     customer_id: UUID = Field(..., description="Unique customer identifier")
     full_name: str = Field(..., description="Customer full name")
-    email: str = Field(..., description="Customer email address")
     segment: str = Field(..., description="Behavioral segment (e.g. HIGH_NET_WORTH)")
     total_balance_minor: int = Field(
         ..., description="Current spendable balance across all accounts in minor units"
@@ -31,22 +30,22 @@ class CustomerInsightItem(BaseModel):
         ..., ge=0, description="Elapsed days since the last customer activity or transaction"
     )
     balance_decline_rate: float = Field(
-        ..., ge=0.0, le=1.0, description="Normalized balance decline rate over the last 30-60 days"
+        ..., ge=0.0, le=1.0, description="Share of the balance lost over the last 30 days"
     )
     churn_risk_score: float = Field(
-        ..., ge=0.0, le=1.0, description="Calculated churn risk score (0.0 to 1.0)"
+        ..., ge=0.0, le=1.0, description="Rule-based: 55% balance decline + 45% inactivity"
     )
     churn_risk_level: ChurnRiskLevel = Field(
         ..., description="Categorical churn risk rating: LOW, MEDIUM, or HIGH"
     )
     top_recommended_product: str | None = Field(
-        default=None, description="Title of top propensity banking product"
+        default=None, description="Top eligible product from the recommendation rules"
     )
-    top_propensity_score: float | None = Field(
-        default=None, ge=0.0, le=1.0, description="Propensity score of the top recommended product"
+    top_product_score: float | None = Field(
+        default=None, ge=0.0, le=1.0, description="Rule-based relevance (not a probability)"
     )
-    high_value_transactor: bool = Field(
-        default=False, description="Flag indicating if customer conducts high-value transactions"
+    high_value: bool = Field(
+        default=False, description="Balance of INR 1,00,000 or more, or the HIGH_NET_WORTH segment"
     )
 
 
