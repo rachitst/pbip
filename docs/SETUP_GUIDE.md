@@ -377,6 +377,24 @@ With the API running (`make dev-api` or `make up`): `make perf` / `.\dev.ps1 per
 `k6` if installed, otherwise the `grafana/k6` Docker image. Thresholds, options and the recorded
 baseline are in `infra/k6/README.md`.
 
+### AI assistant: Ollama on the host
+The assistant calls a local LLM through Ollama; it never needs a cloud key. If Ollama is not
+running, the assistant answers from a deterministic keyword router instead, so a demo never fails.
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh      # Windows/macOS: install from ollama.com
+ollama pull qwen2.5:3b-instruct                    # ~2 GB; fits an 8 GB laptop
+curl -s http://localhost:11434/api/tags            # the model is listed
+```
+
+* `make dev-api` reads `OLLAMA_BASE_URL=http://localhost:11434` and `OLLAMA_MODEL` from `.env`.
+* The compose `api` container reaches the host through `host.docker.internal`
+  (`extra_hosts: host-gateway` in `docker-compose.yml`; Docker Desktop provides it already) and uses
+  `OLLAMA_CONTAINER_URL`, default `http://host.docker.internal:11434`.
+* On Linux, Ollama listens on 127.0.0.1 by default. For the container to reach it, run it on the
+  Docker bridge too: `sudo systemctl edit ollama` → `Environment="OLLAMA_HOST=0.0.0.0:11434"`, then
+  `sudo systemctl restart ollama`; keep port 11434 closed to other machines with your firewall.
+
 ### MLflow only (ML work without the whole stack)
 ```bash
 make ml-up            # or .\dev.ps1 ml-up     -> docker compose --profile ml up -d --wait mlflow
