@@ -12,13 +12,14 @@ import { Accounts } from "../pages/Accounts";
 import { NotFound } from "../pages/NotFound";
 import { Profile } from "../pages/Profile";
 import { StaffHome } from "../pages/staff/StaffHome";
-
-const Insights = lazy(() => import("../pages/Insights"));
 import { Alert } from "../ui/Alert";
 import { ErrorState, LoadingState } from "../ui/States";
 import { AppShell, SignOutButton } from "./AppShell";
 import type { NavItem } from "./AppShell";
 import { MeContext, useCurrentUser } from "./MeContext";
+
+// Recharts is large: load the Insights page (and the chart library) only when it is opened.
+const Insights = lazy(() => import("../pages/Insights"));
 
 const HOME_PATH: Record<Area, string> = { customer: "/accounts", staff: "/staff", none: "/" };
 

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
 import { AuthProvider } from "../auth/AuthContext";
 import { customerMe } from "../test-utils";
+import { TOOLTIP_STYLE, categoryTooltip } from "./insightsChart";
 
 function urlOf(input: Parameters<typeof fetch>[0]): string {
   if (typeof input === "string") return input;
@@ -457,6 +458,16 @@ describe("Customer Financial Analytics UI (TASK-049)", () => {
 
     await userEvent.selectOptions(selector, "acc-2");
     expect(selector).toHaveValue("acc-2");
+    // the analytics are fetched again, for the selected account
+    await waitFor(() => {
+      for (const endpoint of ["spending", "trends", "health-score"]) {
+        expect(
+          fetchMock.mock.calls.some(([input]) =>
+            urlOf(input).includes(`/analytics/${endpoint}?account_id=acc-2`),
+          ),
+        ).toBe(true);
+      }
+    });
   });
 
   it("10. Displays clean empty state when no prior month data exists (single-month history)", async () => {
@@ -575,5 +586,97 @@ describe("Customer Financial Analytics UI (TASK-049)", () => {
     expect(
       within(table).getByText("No spending recorded across comparison periods."),
     ).toBeInTheDocument();
+  });
+});
+
+function mockApi(overrides: { trends?: unknown; health?: unknown } = {}) {
+  return (input: Parameters<typeof fetch>[0]) => {
+    const url = urlOf(input);
+    if (url.endsWith("/auth/refresh")) return Promise.resolve(json(200, { access_token: "tok" }));
+    if (url.endsWith("/auth/me")) return Promise.resolve(json(200, customerMe));
+    if (url.endsWith("/accounts")) return Promise.resolve(json(200, [mockAccount]));
+    if (url.includes("/analytics/spending")) return Promise.resolve(json(200, mockSpendingData));
+    if (url.includes("/analytics/trends"))
+      return Promise.resolve(json(200, overrides.trends ?? mockTrendsData));
+    if (url.includes("/analytics/health-score"))
+      return Promise.resolve(json(200, overrides.health ?? mockHealthData));
+    return Promise.resolve(json(404, { detail: "not found" }));
+  };
+}
+
+describe("TASK-049 review fixes", () => {
+  const fetchMock = vi.fn<typeof fetch>();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("the category tooltip shows the amount and its share (acceptance criterion 1)", () => {
+    const format = categoryTooltip(mockSpendingData.categories, "INR");
+    expect(format(75_000, "Groceries")).toEqual(["INR 750.00 (60.0%)", "Groceries"]);
+    expect(format(1_000, "Unknown")).toEqual(["INR 10.00", "Unknown"]);
+  });
+
+  it("tooltips use theme tokens, not Recharts' fixed white box", () => {
+    const values = Object.values(TOOLTIP_STYLE).flatMap((style) =>
+      Object.entries(style).map(([, value]: [string, unknown]) => String(value)),
+    );
+    expect(values.length).toBeGreaterThan(0);
+    for (const value of values) expect(value).toMatch(/var\(--[a-z-]+\)/);
+  });
+
+  it("each chart is a named focus stop with a description, and the pie adds no nameless one", async () => {
+    // jsdom has no layout: report a real size so the charts draw their SVG
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(private readonly callback: ResizeObserverCallback) {}
+        observe(target: Element) {
+          const contentRect = { width: 400, height: 260 } as DOMRectReadOnly;
+          this.callback([{ target, contentRect } as ResizeObserverEntry], this);
+        }
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    fetchMock.mockImplementation(mockApi());
+    renderInsightsApp("/insights");
+    const pie = await screen.findByRole("application", { name: "Spending by category, 2026-10" });
+    expect(pie.querySelector("desc")?.textContent).toMatch(/Total spending of INR 1,250.00/);
+    expect(screen.getByRole("application", { name: "Month-over-month spending" })).toBeVisible();
+    const region = screen.getByRole("region", {
+      name: "Category spending distribution donut chart",
+    });
+    const stops = Array.from(region.querySelectorAll("[tabindex]")).filter(
+      (el) => el.getAttribute("tabindex") !== "-1",
+    );
+    expect(stops).toEqual([pie]);
+  });
+
+  it("does not list category increases when there is no previous month to compare with", async () => {
+    fetchMock.mockImplementation(
+      mockApi({
+        trends: { ...mockTrendsData, previous_month: null, mom_spend_change_percentage: null },
+      }),
+    );
+    renderInsightsApp("/insights");
+    await screen.findByRole("heading", { name: "Month-over-Month Trends" });
+    expect(
+      screen.queryByRole("heading", { name: "Notable Category Shifts" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Top Spending Increases")).not.toBeInTheDocument();
+  });
+
+  it("says 'month' for a single observed month", async () => {
+    fetchMock.mockImplementation(mockApi({ health: { ...mockHealthData, months_observed: 1 } }));
+    renderInsightsApp("/insights");
+    expect(
+      await screen.findByText(/Computed from 1 observed month of banking history/),
+    ).toBeVisible();
   });
 });

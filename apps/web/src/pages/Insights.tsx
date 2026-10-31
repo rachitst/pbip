@@ -25,6 +25,7 @@ import { Alert } from "../ui/Alert";
 import { Amount } from "../ui/Amount";
 import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
+import { TOOLTIP_STYLE, categoryTooltip, formatShare } from "./insightsChart";
 
 const CHART_COLORS = [
   "var(--chart-1)",
@@ -209,7 +210,8 @@ function FinancialHealthSection({ health }: HealthSectionProps) {
           </h2>
           <p className="muted" style={{ margin: "var(--space-1) 0 0" }}>
             Overall financial health score: {health.overall_score}/100 ({health.rating}). Computed
-            from {health.months_observed} observed months of banking history.
+            from {health.months_observed} observed{" "}
+            {health.months_observed === 1 ? "month" : "months"} of banking history.
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
@@ -464,14 +466,13 @@ function CategorySpendingSection({ spending }: CategorySectionProps) {
                 minWidth={0}
                 initialDimension={{ width: 320, height: 260 }}
               >
-                <PieChart>
+                <PieChart title={`Spending by category, ${spending.period}`} desc={summaryText}>
                   <Tooltip
-                    formatter={(val, name) => [
-                      formatMinor(Number(val), spending.currency),
-                      String(name),
-                    ]}
+                    {...TOOLTIP_STYLE}
+                    formatter={categoryTooltip(categories, spending.currency)}
                   />
                   <Pie
+                    rootTabIndex={-1}
                     data={chartData}
                     dataKey="value"
                     nameKey="name"
@@ -529,7 +530,7 @@ function CategorySpendingSection({ spending }: CategorySectionProps) {
                         className="badge badge--neutral"
                         style={{ fontVariantNumeric: "tabular-nums" }}
                       >
-                        {cat.percentage.toFixed(1)}%
+                        {formatShare(cat.percentage)}
                       </span>
                     </div>
                   </div>
@@ -548,7 +549,7 @@ function CategorySpendingSection({ spending }: CategorySectionProps) {
             >
               View accessible category table
             </summary>
-            <div className="entries table-scroll-container" style={{ marginTop: "var(--space-2)" }}>
+            <div className="entries" style={{ marginTop: "var(--space-2)" }}>
               <table aria-label="Category spending breakdown table">
                 <thead>
                   <tr>
@@ -572,7 +573,7 @@ function CategorySpendingSection({ spending }: CategorySectionProps) {
                       <td className="right">
                         <Amount minor={cat.amount_minor} currency={spending.currency} />
                       </td>
-                      <td className="right">{cat.percentage.toFixed(1)}%</td>
+                      <td className="right">{formatShare(cat.percentage)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -652,8 +653,9 @@ function SpendingTrendsSection({ trends }: TrendsSectionProps) {
   }
 
   const burnRateChange = trends.burn_rate_change_percentage;
-  const topIncreasing = trends.top_categories_increasing ?? [];
-  const topDecreasing = trends.top_categories_decreasing ?? [];
+  // Without a previous month every category would show as an "increase" from nothing.
+  const topIncreasing = previous ? (trends.top_categories_increasing ?? []) : [];
+  const topDecreasing = previous ? (trends.top_categories_decreasing ?? []) : [];
 
   return (
     <section
@@ -800,7 +802,12 @@ function SpendingTrendsSection({ trends }: TrendsSectionProps) {
             minWidth={0}
             initialDimension={{ width: 500, height: 240 }}
           >
-            <BarChart data={barData} margin={{ top: 10, right: 20, left: 10, bottom: 20 }}>
+            <BarChart
+              data={barData}
+              margin={{ top: 10, right: 20, left: 10, bottom: 20 }}
+              title="Month-over-month spending"
+              desc={`Spending in ${barData.map((row) => `${row.period}: ${formatMinor(row.spend, trends.currency)}`).join(", ")}.`}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey="period" stroke="var(--muted)" fontSize={12} />
               <YAxis
@@ -809,6 +816,7 @@ function SpendingTrendsSection({ trends }: TrendsSectionProps) {
                 tickFormatter={(val: number) => `${Math.round(val / 100)}`}
               />
               <Tooltip
+                {...TOOLTIP_STYLE}
                 formatter={(val) => [formatMinor(Number(val), trends.currency), "Total Spend"]}
               />
               <Bar dataKey="spend" radius={[4, 4, 0, 0]} isAnimationActive={false} />
@@ -857,7 +865,7 @@ function SpendingTrendsSection({ trends }: TrendsSectionProps) {
         >
           View accessible monthly comparison table
         </summary>
-        <div className="entries table-scroll-container" style={{ marginTop: "var(--space-2)" }}>
+        <div className="entries" style={{ marginTop: "var(--space-2)" }}>
           <table aria-label="Month-over-month comparison table">
             <thead>
               <tr>
