@@ -33,6 +33,7 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("get", "/api/v1/analytics/segment"),
         ("get", "/api/v1/recommendations"),
         ("post", "/api/v1/events/batch"),
+        ("get", "/api/v1/insights/customers"),
         ("get", f"/api/v1/admin/users/{uuid.uuid4()}/lockout"),
         ("post", f"/api/v1/admin/users/{uuid.uuid4()}/unlock"),
     ]:
@@ -45,6 +46,7 @@ def test_customer_cannot_use_staff_endpoints(
     alice = make_customer()
     assert client.get("/api/v1/fraud/alerts", headers=alice.headers).status_code == 403
     assert client.get("/api/v1/compliance/audit-logs", headers=alice.headers).status_code == 403
+    assert client.get("/api/v1/insights/customers", headers=alice.headers).status_code == 403
     assert (
         client.post(
             "/api/v1/admin/users",
