@@ -1550,6 +1550,70 @@
         "title": "PayeeVerificationOut",
         "type": "object"
       },
+      "ProductRecommendationItem": {
+        "description": "A single personalized product recommendation with explainable reasons.",
+        "properties": {
+          "cta_label": {
+            "description": "Call to action button label",
+            "title": "Cta Label",
+            "type": "string"
+          },
+          "description": {
+            "description": "Summary description of the product offer",
+            "title": "Description",
+            "type": "string"
+          },
+          "model_version": {
+            "description": "Recommendation model version identifier",
+            "title": "Model Version",
+            "type": "string"
+          },
+          "product_id": {
+            "description": "Unique product catalog identifier",
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "product_type": {
+            "description": "Product category: SAVINGS, LOAN, INVESTMENT, or INSURANCE",
+            "title": "Product Type",
+            "type": "string"
+          },
+          "reasons": {
+            "description": "Human-readable justification reasons",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Reasons",
+            "type": "array"
+          },
+          "score": {
+            "description": "Rule-based relevance, for ordering only; not a probability",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "number"
+          },
+          "title": {
+            "description": "Human-readable product title",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "product_id",
+          "product_type",
+          "title",
+          "description",
+          "score",
+          "reasons",
+          "model_version",
+          "cta_label"
+        ],
+        "title": "ProductRecommendationItem",
+        "type": "object"
+      },
       "ReadyResponse": {
         "properties": {
           "checks": {
@@ -1577,6 +1641,43 @@
           "checks"
         ],
         "title": "ReadyResponse",
+        "type": "object"
+      },
+      "RecommendationsResponse": {
+        "description": "Customer personalized product recommendations payload.",
+        "properties": {
+          "customer_id": {
+            "description": "Target customer identifier",
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "evaluated_at": {
+            "description": "UTC timestamp of the recommendation run",
+            "format": "date-time",
+            "title": "Evaluated At",
+            "type": "string"
+          },
+          "model_version": {
+            "description": "Recommendation engine version",
+            "title": "Model Version",
+            "type": "string"
+          },
+          "recommendations": {
+            "description": "Top recommended banking products",
+            "items": {
+              "$ref": "#/components/schemas/ProductRecommendationItem"
+            },
+            "title": "Recommendations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "customer_id",
+          "model_version",
+          "evaluated_at"
+        ],
+        "title": "RecommendationsResponse",
         "type": "object"
       },
       "RecoveryCodesOut": {
@@ -4155,6 +4256,33 @@
         "summary": "Confirmation-of-payee style name check; verified payees can receive transfers",
         "tags": [
           "payees"
+        ]
+      }
+    },
+    "/api/v1/recommendations": {
+      "get": {
+        "description": "Top 3 eligible products for the authenticated customer, with reasons from their data.",
+        "operationId": "get_recommendations_api_v1_recommendations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendationsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Personalized banking product recommendations with explainable reasons",
+        "tags": [
+          "recommendations"
         ]
       }
     },
