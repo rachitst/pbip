@@ -531,6 +531,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/insights/customers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Prioritized customer behavioral insights, churn signals, and propensity ranking
+         * @description Return prioritized high-propensity customers with churn indicators for RM staff.
+         */
+        get: operations["get_prioritized_customer_insights_api_v1_insights_customers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/notifications": {
         parameters: {
             query?: never;
@@ -932,6 +952,99 @@ export interface components {
             first_invalid_seq: number | null;
             /** Valid */
             valid: boolean;
+        };
+        /**
+         * ChurnRiskLevel
+         * @description Categorical classification of customer churn risk.
+         * @enum {string}
+         */
+        ChurnRiskLevel: "LOW" | "MEDIUM" | "HIGH";
+        /**
+         * CustomerInsightItem
+         * @description Behavioral profile, churn signals, and product propensity for a single customer.
+         */
+        CustomerInsightItem: {
+            /**
+             * Balance Decline Rate
+             * @description Normalized balance decline rate over the last 30-60 days
+             */
+            balance_decline_rate: number;
+            /** @description Categorical churn risk rating: LOW, MEDIUM, or HIGH */
+            churn_risk_level: components["schemas"]["ChurnRiskLevel"];
+            /**
+             * Churn Risk Score
+             * @description Calculated churn risk score (0.0 to 1.0)
+             */
+            churn_risk_score: number;
+            /**
+             * Customer Id
+             * Format: uuid
+             * @description Unique customer identifier
+             */
+            customer_id: string;
+            /**
+             * Email
+             * @description Customer email address
+             */
+            email: string;
+            /**
+             * Full Name
+             * @description Customer full name
+             */
+            full_name: string;
+            /**
+             * High Value Transactor
+             * @description Flag indicating if customer conducts high-value transactions
+             * @default false
+             */
+            high_value_transactor: boolean;
+            /**
+             * Inactivity Days
+             * @description Elapsed days since the last customer activity or transaction
+             */
+            inactivity_days: number;
+            /**
+             * Segment
+             * @description Behavioral segment (e.g. HIGH_NET_WORTH)
+             */
+            segment: string;
+            /**
+             * Top Propensity Score
+             * @description Propensity score of the top recommended product
+             */
+            top_propensity_score?: number | null;
+            /**
+             * Top Recommended Product
+             * @description Title of top propensity banking product
+             */
+            top_recommended_product?: string | null;
+            /**
+             * Total Balance Minor
+             * @description Current spendable balance across all accounts in minor units
+             */
+            total_balance_minor: number;
+        };
+        /**
+         * CustomerInsightsListResponse
+         * @description Paginated collection of prioritized customer insights for Relationship Managers.
+         */
+        CustomerInsightsListResponse: {
+            /**
+             * Evaluated At
+             * Format: date-time
+             * @description Server evaluation timestamp in UTC
+             */
+            evaluated_at: string;
+            /**
+             * Items
+             * @description Prioritized list of customer insight profiles
+             */
+            items?: components["schemas"]["CustomerInsightItem"][];
+            /**
+             * Total
+             * @description Total matching customers count
+             */
+            total: number;
         };
         /**
          * CustomerProfileOut
@@ -2796,6 +2909,44 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_prioritized_customer_insights_api_v1_insights_customers_get: {
+        parameters: {
+            query?: {
+                /** @description Minimum churn risk score filter (0.0 to 1.0) */
+                min_churn_risk?: number | null;
+                /** @description Behavioral segment filter */
+                segment?: string | null;
+                /** @description Page item limit */
+                limit?: number;
+                /** @description Page item offset */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerInsightsListResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
