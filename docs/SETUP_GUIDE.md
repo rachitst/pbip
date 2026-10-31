@@ -394,6 +394,11 @@ curl -s http://localhost:11434/api/tags            # the model is listed
 * On Linux, Ollama listens on 127.0.0.1 by default. For the container to reach it, run it on the
   Docker bridge too: `sudo systemctl edit ollama` → `Environment="OLLAMA_HOST=0.0.0.0:11434"`, then
   `sudo systemctl restart ollama`; keep port 11434 closed to other machines with your firewall.
+* `OLLAMA_TIMEOUT_SECONDS` (default 4): past this the keyword router answers instead. On a CPU-only
+  laptop a 3B model can take far longer than that per message (25-60 s measured on 2 CPUs), so the
+  assistant will show `engine: rules` unless you raise it or have a GPU. `ASSISTANT_LLM_ENABLED=false`
+  skips the model entirely. Pre-warm before a demo: `ollama run qwen2.5:3b-instruct ""`.
+* Try it: `POST /api/v1/assistant/chat` with `{"message": "what's my balance?"}` in Swagger (`/docs`).
 
 ### MLflow only (ML work without the whole stack)
 ```bash

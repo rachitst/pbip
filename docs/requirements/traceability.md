@@ -30,7 +30,7 @@ Last reviewed against `main` on 2026-10-30 (local verification run recorded in
 | UC-05 Manage payees: add, edit, delete, verify | Partial | API add, list, get, delete, verify (`modules/payees/`, BOLA matrix); UI lists payees in the send-money form only | 020 #43 (Todo), **094 #177 (new)** | No edit endpoint (TASK-094); no add/verify/delete UI (TASK-020) |
 | UC-06 Loan recommendation | Partial | `modules/loans/`: catalogue, EMI schedule (integer paise, Hypothesis properties), explainable eligibility from ledger income and repayments (DTI <= 50%, recent lockout refuses); `test_loans.py`, `test_loan_emi.py` | 045 #68, 046 #69 (Done); 047 #70, 051 #74 (Todo); 054 #77 (In Progress) | Loan suggestions on the dashboard, applications and tracking |
 | UC-07 Investment recommendation (risk tolerance, savings, income, funds) | Missing | `modules/wealth/`, `modules/recommendations/` empty | 054 #77, 063 #86, 064 #87, 065 #88 (Todo), **097 #180 (new)** | Risk tolerance had no task (TASK-097) |
-| UC-08 AI assistant | Missing | `modules/assistant/` empty | 057 #80, 058 #81, 059 #82, 060 #83, 061 #84, 067 #90, 076 #99 (Todo), **105 #188 (new)** | FAQ/support, product discovery and investment suggestions had no tool (TASK-105) |
+| UC-08 AI assistant | Partial (API verified) | `POST /api/v1/assistant/chat` and `/chat/stream` (SSE): five read-only tools (balance, transactions, spend, forecast, loan affordability), Ollama router with rules fallback, refusals, input sanitiser and output filter, redacted history, audit, adversarial suite (`test_assistant.py`, `test_assistant_adversarial.py`) | 057 #80, 059 #82, 060 #83, 067 #90 (Done), 058 #81 (latency criterion open), 061 #84, 076 #99 (Todo), **105 #188 (new)** | FAQ/support, product discovery and investment suggestions had no tool (TASK-105) |
 | UC-09 Fraud detection triggers | Partial | `pbip_ml/fraud/features.py` (TASK-024: offline/online parity-tested features) and `pbip_ml/fraud/rules.py` (TASK-025: weighted rule registry incl. RAPID_ATO_TRANSFER), not yet serving; `fraud/baseline.py` (`baseline-rules-0.2`): LARGE_AMOUNT, VELOCITY_BURST, AMOUNT_SPIKE, NEW_PAYEE, NEW_PAYEE_LARGE_AMOUNT, **NEW_COUNTRY** (DB-IP Lite country, ADR-0014; approximate, signal only); score and reasons persisted; `test_transfers.py`, `test_geoip.py`. Labelled data for training: data-gen v2 injects F1-F6 with a label file (`pbip_datagen/fraud.py`, TASK-023) | 023 #46, 025 #48, 029-034 #52-57 (Todo), 095 #178 (In Progress) | No rule for login failures or new device/network (TASK-095); location accuracy unevaluated (no labelled data) |
 | UC-10 Fraud alert management: alert, customer notified, analyst review | Partial | Alerts API with MFA-gated decision; customer `TRANSFER_UNDER_REVIEW` / declined / posted notifications via outbox; `test_transfers.py`, `test_notifications.py` | 036 #59, 022 #45 (Todo) | No analyst UI (TASK-036); no notification tray (TASK-022) |
 | UC-11 Behaviour analytics: page visits, clickstream, session, product interests, spend and income | Partial | Spend patterns (`/analytics/spending`, `/trends`), RFM segmentation job (weekly Celery beat run, TASK-052); nightly 02:00 materialisation; both run by a real Celery worker locally; `test_analytics.py`, `test_segmentation.py` | 040 #63, 044 #67, 052 #75 (Done); 055 #78, 056 #79 (Todo) | No clickstream/session capture (TASK-055); no product-interest data |
@@ -72,7 +72,7 @@ Last reviewed against `main` on 2026-10-30 (local verification run recorded in
 |---|---|---|---|
 | Responsive web application | Partial | 019 (Done) and the Todo UI tasks | Most journeys have no UI |
 | Backend API services, database | Verified | | 38 operations, migrations 0001-0005 |
-| AI assistant | Missing | 057-061, 067, 076, 105 | |
+| AI assistant | Partial | 057-061, 067, 076, 105 | Chat and streaming APIs with adversarial suite; no UI yet |
 | Fraud monitoring dashboard, reporting dashboard | Missing | 036, 049, 066, 099, 100, 101 | |
 | API documentation | Verified | | OpenAPI drift-checked in CI |
 | Automated tests, >= 70% coverage | Verified (backend) | 087 #110 | Backend 96% in CI and 95.99% in a local run against PostgreSQL ([local verification](../testing/local-verification-2026-10-30.md)); frontend threshold not traced here |
@@ -102,7 +102,7 @@ Last reviewed against `main` on 2026-10-30 (local verification run recorded in
 
 ## Most important gaps (by project impact)
 
-1. **AI assistant (UC-08)**: success criterion and deliverable; nothing implemented.
+1. **AI assistant (UC-08)**: success criterion and deliverable; chat and streaming APIs built and hardened (TASK-057–060, 067); UI still open.
 2. **Recommendations (UC-06, 07, 12)**: success criterion "recommendations generated using
    behavioural data" is unmet; loans and wealth modules are empty.
 3. **Dashboards**: spending/health UI (TASK-049), fraud operations (TASK-036), security, compliance

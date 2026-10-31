@@ -9,10 +9,10 @@ resolution-markers = [
     "python_full_version == '3.14.*' and sys_platform == 'emscripten'",
     "python_full_version == '3.14.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version == '3.13.*' and sys_platform == 'win32'",
-    "python_full_version < '3.13' and sys_platform == 'win32'",
     "python_full_version == '3.13.*' and sys_platform == 'emscripten'",
-    "python_full_version < '3.13' and sys_platform == 'emscripten'",
     "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version < '3.13' and sys_platform == 'win32'",
+    "python_full_version < '3.13' and sys_platform == 'emscripten'",
     "python_full_version < '3.13' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
@@ -2953,6 +2953,7 @@ dependencies = [
     { name = "cryptography" },
     { name = "fastapi" },
     { name = "greenlet" },
+    { name = "httpx" },
     { name = "maxminddb" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-instrumentation-fastapi" },
@@ -2979,6 +2980,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=44" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "greenlet", specifier = ">=3.5.6" },
+    { name = "httpx", specifier = ">=0.28" },
     { name = "maxminddb", specifier = ">=3.2" },
     { name = "opentelemetry-api", specifier = ">=1.45.1" },
     { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0.66b1" },

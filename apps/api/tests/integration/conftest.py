@@ -82,6 +82,7 @@ def settings() -> Settings:
         argon2_parallelism=1,
         jwt_secret=SecretStr("t" * 48),
         field_encryption_key=SecretStr(Fernet.generate_key().decode()),
+        assistant_llm_enabled=False,  # no network in tests; assistant tests inject a fake model
     )
 
 

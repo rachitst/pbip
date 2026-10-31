@@ -11,6 +11,7 @@ from pbip_api.core.logging import configure_logging
 from pbip_api.core.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
 from pbip_api.modules.accounts.router import router as accounts_router
 from pbip_api.modules.analytics.router import router as analytics_router
+from pbip_api.modules.assistant.router import router as assistant_router
 from pbip_api.modules.auth.admin_router import router as admin_router
 from pbip_api.modules.auth.router import router as auth_router
 from pbip_api.modules.bills.router import router as bills_router
@@ -38,6 +39,7 @@ ROUTERS = (
     events_router,
     insights_router,
     loans_router,
+    assistant_router,
     payees_router,
     payments_router,
     bills_router,
