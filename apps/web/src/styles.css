@@ -1024,6 +1024,14 @@ a {
   text-align: center;
 }
 
+/* The transaction a notification linked to (marked with aria-current too, not by colour alone). */
+.entries tr.entry--highlight td {
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+}
+.entries tr.entry--highlight td:first-child {
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+
 @media (max-width: 640px) {
   .app-header {
     flex-wrap: wrap;

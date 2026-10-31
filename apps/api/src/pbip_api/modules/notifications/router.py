@@ -38,6 +38,9 @@ def list_my_notifications(
                 body=n.body,
                 read=n.read_at is not None,
                 created_at=n.created_at,
+                resource_type=n.resource_type,
+                resource_id=n.resource_id,
+                account_id=n.account_id,
             )
             for n in items
         ],

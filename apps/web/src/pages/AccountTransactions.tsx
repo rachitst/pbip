@@ -15,11 +15,13 @@ const PAGE_SIZE = 10;
 interface Props {
   accountId: string;
   currency: string;
+  /** Set when the page was opened from a notification: that transaction's row is marked. */
+  highlightTransactionId?: string | null;
 }
 
 /** Ledger entries, newest first. "Load older" follows the server's keyset cursor, so new
  * postings never shift or duplicate rows already on screen (unlike offset pagination). */
-export function AccountTransactions({ accountId, currency }: Props) {
+export function AccountTransactions({ accountId, currency, highlightTransactionId }: Props) {
   const entries = useInfiniteQuery({
     queryKey: ["entries", accountId],
     queryFn: ({ pageParam }) => api.accountEntries(accountId, pageParam, PAGE_SIZE),
@@ -60,7 +62,13 @@ export function AccountTransactions({ accountId, currency }: Props) {
         </thead>
         <tbody>
           {items.map((entry) => (
-            <tr key={entry.entry_seq}>
+            <tr
+              key={entry.entry_seq}
+              className={
+                entry.transaction_id === highlightTransactionId ? "entry--highlight" : undefined
+              }
+              aria-current={entry.transaction_id === highlightTransactionId ? "true" : undefined}
+            >
               <td>{formatDateTime(entry.created_at)}</td>
               <td>
                 {entry.reference ?? entry.transaction_type}

@@ -1463,6 +1463,11 @@ export interface components {
         };
         /** NotificationOut */
         NotificationOut: {
+            /**
+             * Account Id
+             * @description The account the transaction was sent from, for transfers
+             */
+            account_id?: string | null;
             /** Body */
             body: string;
             /**
@@ -1477,6 +1482,16 @@ export interface components {
             id: string;
             /** Read */
             read: boolean;
+            /**
+             * Resource Id
+             * @description The transaction, for transfers
+             */
+            resource_id?: string | null;
+            /**
+             * Resource Type
+             * @description What the notification is about, when it links somewhere
+             */
+            resource_type?: ("transaction" | "security") | null;
             /** Title */
             title: string;
             /** Type */

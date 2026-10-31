@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
-import { NotificationBell, badgeText } from "./NotificationBell";
+import { NotificationBell, badgeText, notificationDestination } from "./NotificationBell";
 
 function urlOf(input: Parameters<typeof fetch>[0]): string {
   if (typeof input === "string") return input;
@@ -25,6 +25,9 @@ const mockTransferPosted = {
   body: "Your transfer of INR 500.00 was completed.",
   read: false,
   created_at: "2026-10-31T10:00:00Z",
+  resource_type: "transaction" as const,
+  resource_id: "txn-1",
+  account_id: "acc-1",
 };
 
 // The API produces only transfer outcomes (modules/notifications/service.py).
@@ -35,6 +38,9 @@ const mockUnderReview = {
   body: "Your transfer of INR 25,000.00 is being reviewed for your safety.",
   read: false,
   created_at: "2026-10-31T09:30:00Z",
+  resource_type: "transaction" as const,
+  resource_id: "txn-2",
+  account_id: "acc-1",
 };
 
 const mockDeclined = {
@@ -44,6 +50,10 @@ const mockDeclined = {
   body: "Your transfer of INR 90,000.00 could not be completed.",
   read: true,
   created_at: "2026-10-30T08:00:00Z",
+  // sent before notifications carried link targets: opens Accounts without a highlight
+  resource_type: "transaction" as const,
+  resource_id: null,
+  account_id: null,
 };
 
 const mockNotificationsPage = {
@@ -401,7 +411,15 @@ describe("Customer Real-Time Notifications (TASK-022)", () => {
 
     it("marks an unknown notification type read without guessing a destination", async () => {
       const marked: string[] = [];
-      const unknown = { ...mockTransferPosted, id: "notif-9", type: "SOMETHING_NEW", title: "New" };
+      const unknown = {
+        ...mockTransferPosted,
+        id: "notif-9",
+        type: "SOMETHING_NEW",
+        title: "New",
+        resource_type: null,
+        resource_id: null,
+        account_id: null,
+      };
       fetchMock.mockImplementation((input, init) => {
         const url = urlOf(input);
         if (url.endsWith("/read") && init?.method === "POST") {
@@ -494,5 +512,63 @@ describe("TASK-022 review fixes", () => {
     expect(block).not.toMatch(/rgba?\(/);
     expect(block).not.toMatch(/--shadow-lg/); // not a token
     expect(block).not.toMatch(/font-size:\s*[0-9.]+(rem|px)/); // sizes come from --text-*
+  });
+});
+
+describe("notification link targets (#45)", () => {
+  const fetchMock = vi.fn<typeof fetch>();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("builds the destination from the link target", () => {
+    expect(notificationDestination(mockTransferPosted)).toBe(
+      "/accounts?account=acc-1&transaction=txn-1",
+    );
+    expect(notificationDestination(mockDeclined)).toBe("/accounts");
+    expect(
+      notificationDestination({
+        ...mockTransferPosted,
+        type: "PASSWORD_CHANGED",
+        resource_type: "security",
+        resource_id: null,
+        account_id: null,
+      }),
+    ).toBe("/profile");
+    expect(
+      notificationDestination({ ...mockTransferPosted, type: "NEW", resource_type: null }),
+    ).toBeNull();
+  });
+
+  it("opens Profile & security for a security notification", async () => {
+    const security = {
+      ...mockTransferPosted,
+      id: "notif-7",
+      type: "DEVICE_REGISTERED",
+      title: "New device registered",
+      body: "A new device was registered on your account.",
+      resource_type: "security" as const,
+      resource_id: null,
+      account_id: null,
+    };
+    fetchMock.mockImplementation((input, init) => {
+      const url = urlOf(input);
+      if (url.endsWith("/read") && init?.method === "POST") {
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      return Promise.resolve(json(200, { ...mockNotificationsPage, items: [security] }));
+    });
+    renderNotificationBell();
+    await userEvent.click(await screen.findByRole("button", { name: /Notifications/ }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Security")).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole("button", { name: /New device registered/ }));
+    expect(await screen.findByTestId("profile-page")).toBeInTheDocument();
   });
 });
