@@ -4,8 +4,10 @@ The reducing-balance formula EMI = P r (1+r)^n / ((1+r)^n - 1) is evaluated with
 ``Fraction`` arithmetic and rounded DOWN to whole paise: rounding up would overpay a fraction of a
 paisa each month and, on small long loans, finish the loan early with zero instalments (found by
 the Hypothesis property test). Each month's interest is the exact balance x r rounded half up;
-principal = EMI - interest. The final instalment carries every rounding difference, so the principal
-repaid always sums to exactly the amount borrowed and the balance ends at zero.
+principal = EMI - interest. On long, high-rate loans the rounded-down EMI can be a paisa below that
+month's rounded interest; the excess is not charged that month (no instalment exceeds the EMI) but
+carried to the final instalment. The final instalment carries every rounding difference, so the
+principal repaid always sums to exactly the amount borrowed and the balance ends at zero.
 """
 
 from dataclasses import dataclass
@@ -52,12 +54,17 @@ def schedule(principal_minor: int, annual_rate_bps: int, tenure_months: int) -> 
     payment = emi(principal_minor, annual_rate_bps, tenure_months)
     r = monthly_rate(annual_rate_bps)
     balance = principal_minor
+    deferred = 0  # interest above the EMI, carried to the final instalment
     rows: list[Instalment] = []
     for month in range(1, tenure_months + 1):
-        interest = _round_half_up(balance * r)
-        # the final month absorbs the rounding of every earlier month
-        last = month == tenure_months
-        principal = balance if last else min(max(payment - interest, 0), balance)
+        due = _round_half_up(balance * r)
+        if month == tenure_months:
+            # the final month absorbs the rounding of every earlier month
+            interest, principal = due + deferred, balance
+        else:
+            interest = min(due, payment)
+            deferred += due - interest
+            principal = min(payment - interest, balance)
         balance -= principal
         rows.append(Instalment(month, principal + interest, principal, interest, balance))
     total_interest = sum(row.interest_minor for row in rows)
