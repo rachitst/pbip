@@ -22,6 +22,7 @@ from pbip_api.modules.health.router import router as health_router
 from pbip_api.modules.notifications.router import router as notifications_router
 from pbip_api.modules.payees.router import router as payees_router
 from pbip_api.modules.payments.router import router as payments_router
+from pbip_api.modules.recommendations.router import router as recommendations_router
 
 ROUTERS = (
     health_router,
@@ -30,6 +31,7 @@ ROUTERS = (
     customers_router,
     accounts_router,
     analytics_router,
+    recommendations_router,
     events_router,
     payees_router,
     payments_router,
