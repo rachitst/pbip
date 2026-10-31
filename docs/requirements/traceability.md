@@ -41,9 +41,9 @@ Last reviewed against `main` on 2026-10-30 (local verification run recorded in
 
 | Item | Status | Owning tasks | Gap |
 |---|---|---|---|
-| Financial health indicators | Partial (API verified) | 041 #64 (Done), 049 #72 (Todo) | No UI |
+| Financial health indicators | Partial (API verified) | 041 #64 (Done), 042 #65 (Done: `GET /api/v1/analytics/forecast`, balance forecast with 80/95% intervals labelled "Predicted, not exact", `test_forecast.py`), 049 #72 (Todo) | No UI for the health score or the forecast |
 | Account details, transaction search, statements, settings | Partial | 005, 008 (Done); 017 #40, 016 #39, 074 #97 (Todo) | Search/filter (TASK-017) and statements missing; profile, devices, password change verified (`Profile.tsx`, `test_customers.py`, E2E) |
-| Bill payments, scheduled transfers | Missing | 014 #37, 015 #38, 020 #43, 021 #44 (Todo) | |
+| Bill payments, scheduled transfers | Partial (API verified) | 014 #37 (Done: `POST /api/v1/bills/pay`, idempotent double-entry posting, fraud scoring, daily limit shared with transfers, `test_bills.py`); 015 #38, 020 #43, 021 #44 (Todo) | No bill-pay UI; scheduled transfers missing; a fraud-flagged bill payment is declined rather than held for review |
 | Loans: catalogue, eligibility, EMI calculator, applications, tracking | Partial | catalogue, EMI calculator, eligibility: 045, 046 (Done) | applications and tracking: 047, 051 (Todo) |
 | Wealth: fixed deposits, mutual funds, stocks and bonds | Missing | 063, 064, 065 (Todo) | |
 | Wealth: insurance products | Missing | **096 #179 (new)** | No task covered insurance |
