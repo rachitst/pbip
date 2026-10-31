@@ -1,15 +1,23 @@
 version: 2
+# Weekly. Minor and patch version updates are grouped per ecosystem; majors come one PR each so they
+# can be judged separately. `applies-to: version-updates` keeps SECURITY updates out of the groups:
+# each security fix arrives as its own PR and can be merged without waiting for the weekly batch.
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
     labels: [type:chore, area:infra]
+    groups:
+      actions-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
   - package-ecosystem: pip
     directory: /
     schedule: { interval: weekly }
     labels: [type:chore, area:api]
     groups:
       python-minor-patch:
+        applies-to: version-updates
         update-types: [minor, patch]
   - package-ecosystem: npm
     directory: /apps/web
@@ -17,12 +25,29 @@ updates:
     labels: [type:chore, area:web]
     groups:
       web-minor-patch:
+        applies-to: version-updates
         update-types: [minor, patch]
+    ignore:
+      # @types/node follows the Node runtime (22 LTS); both move together, deliberately.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker
     directory: /apps/api
     schedule: { interval: weekly }
     labels: [type:chore, area:infra]
+    groups:
+      api-image-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
   - package-ecosystem: docker
     directory: /apps/web
     schedule: { interval: weekly }
     labels: [type:chore, area:infra]
+    groups:
+      web-image-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+    ignore:
+      # Node LTS lines only (even majors); odd majors are short-lived "current" releases.
+      - dependency-name: "node"
+        versions: ["23.x", "25.x", "27.x", "29.x"]
