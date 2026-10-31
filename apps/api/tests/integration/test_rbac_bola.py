@@ -34,6 +34,7 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("get", f"/api/v1/analytics/spending?account_id={uuid.uuid4()}"),
         ("get", f"/api/v1/analytics/trends?account_id={uuid.uuid4()}"),
         ("get", f"/api/v1/analytics/health-score?account_id={uuid.uuid4()}"),
+        ("get", f"/api/v1/analytics/forecast?account_id={uuid.uuid4()}"),
         ("get", "/api/v1/analytics/segment"),
         ("get", "/api/v1/recommendations"),
         ("post", "/api/v1/events/batch"),
@@ -97,6 +98,12 @@ def test_staff_have_no_customer_profile(
         == 403
     )
     assert client.get("/api/v1/analytics/segment", headers=analyst.headers).status_code == 403
+    assert (
+        client.get(
+            f"/api/v1/analytics/forecast?account_id={uuid.uuid4()}", headers=analyst.headers
+        ).status_code
+        == 403
+    )
     assert client.get("/api/v1/recommendations", headers=analyst.headers).status_code == 403
     assert (
         client.post(
@@ -237,6 +244,12 @@ def test_bola_customer_b_cannot_touch_customer_a_objects(
         ),
         "analytics spending for victim account": client.get(
             f"/api/v1/analytics/spending?account_id={ids['account']}", headers=h
+        ),
+        "analytics forecast for victim account": client.get(
+            f"/api/v1/analytics/forecast?account_id={ids['account']}", headers=h
+        ),
+        "analytics forecast non-existent account": client.get(
+            f"/api/v1/analytics/forecast?account_id={uuid.uuid4()}", headers=h
         ),
         "analytics trends for victim account": client.get(
             f"/api/v1/analytics/trends?account_id={ids['account']}", headers=h
