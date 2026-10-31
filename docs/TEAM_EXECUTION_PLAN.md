@@ -175,9 +175,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 | TASK-073 | WebAuthn / Passkeys Authentication Spike | Abbas | Mon 26 Oct | Mon 26 Oct | - | Par | Low | #96 |
 | TASK-071 | Advanced Fraud Scenario F7-F8 Injection (Structuring & Dormancy) | Abbas | Mon 26 Oct | Mon 26 Oct | 023 | Seq | Low | #94 |
 | TASK-072 | Graph-Based Circular Transfer & Mule Ring Detection Spike (F11) | Abbas | Mon 26 Oct | Tue 27 Oct | 023 | Seq | Low | #95 |
-| TASK-057 | AI Assistant Approved Tool Registry & Authorization Wrapper | Abbas | Wed 28 Oct | Thu 29 Oct | 005, 040, 042, 046 | Seq | Low | #80 |
+| TASK-057 | AI Assistant Approved Tool Registry & Authorization Wrapper | Rachit | Wed 28 Oct | Thu 29 Oct | 005, 040, 042, 046 | Seq | Low | #80 |
 | TASK-054 | Personalized Product Recommendation Engine & Propensity Scorer | Krishna | Thu 29 Oct | Fri 30 Oct | 041, 044 | Seq | Low | #77 |
-| TASK-058 | AI Assistant Contextual Intent Router & LLM Adapter | Abbas | Thu 29 Oct | Fri 30 Oct | 057 | Seq | Low | #81 |
+| TASK-058 | AI Assistant Contextual Intent Router & LLM Adapter | Rachit | Thu 29 Oct | Fri 30 Oct | 057 | Seq | Low | #81 |
 | TASK-059 | AI Assistant Prompt Injection Sanitizer & PII Redactor | Abbas | Fri 30 Oct | Fri 30 Oct | 058 | Seq | Low | #82 |
 | TASK-063 | Wealth Management Products Catalogue API | Sujal | Fri 30 Oct | Sat 31 Oct | - | Par | Low | #86 |
 | TASK-055 | Clickstream Event Ingestion & Monthly Partitioned Storage | Krishna | Fri 30 Oct | Sat 31 Oct | - | Par | Low | #78 |
@@ -1303,7 +1303,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   - Manual: exercise the endpoint through Swagger (`/docs`, local) with a seeded user and a second user (BOLA)
   - Security: AGENTS.md section 5 checklist: `get_current_principal`, role + object authorization, bounded Pydantic input, RFC 7807 errors without echo, audit in the same transaction
   - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
-- **Hands off to:** Abbas (`Abbaskazi`), Kalpak (`Patil-Kalpak`) for TASK-049, TASK-057
+- **Hands off to:** Kalpak (`Patil-Kalpak`) for TASK-049; Rachit (`rachitst`) for TASK-057
 - **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
 
 ### TASK-041 - Customer Financial Health Score Calculation Engine
@@ -1361,7 +1361,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   - Manual: inspect outputs/plots for sanity; re-run with the same seed and compare
   - Security: no `pbip_api` imports (import-linter); no customer PII in training artefacts
   - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
-- **Hands off to:** Abbas (`Abbaskazi`), Kalpak (`Patil-Kalpak`) for TASK-050, TASK-057
+- **Hands off to:** Kalpak (`Patil-Kalpak`) for TASK-050; Rachit (`rachitst`) for TASK-057
 - **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
 
 ### TASK-043 - End-of-Month Balance Projection Pipeline
@@ -1474,7 +1474,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   - Manual: exercise the endpoint through Swagger (`/docs`, local) with a seeded user and a second user (BOLA)
   - Security: AGENTS.md section 5 checklist: `get_current_principal`, role + object authorization, bounded Pydantic input, RFC 7807 errors without echo, audit in the same transaction
   - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
-- **Hands off to:** Abbas (`Abbaskazi`) for TASK-057
+- **Hands off to:** Rachit (`rachitst`) for TASK-057
 - **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
 
 ### TASK-047 - Loan Application & Ledger Disbursal Workflow
@@ -1774,8 +1774,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-057 - AI Assistant Approved Tool Registry & Authorization Wrapper
 
 - **Issue:** #80 | **Sprint:** 5 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** AI Assistant & Security
-- **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Wed 28 Oct | **Target deadline:** Thu 29 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (1.6 days of slack)
+- **Owner:** Rachit (`rachitst`), taken over from Abbas on Sun 1 Nov to unblock the fraud and AI chain
+- **Start:** Wed 28 Oct | **Target deadline:** Thu 29 Oct | **Actual completion:** Sun 1 Nov (five read-only tools; accounts chosen by position among the caller's own; bounded arguments enforced by the JSON-schema grammar and Pydantic; tools run in a READ ONLY transaction; ADR-0018) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-005 (#16, Sujal), TASK-040 (#63, Krishna), TASK-042 (#65, Rachit), TASK-046 (#69, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-040, TASK-042, TASK-046
 - **Goal:** Hardened tool registry exposing read-only banking functions with server-injected customer ID.
@@ -1788,10 +1788,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Tool arguments strictly validated with bounded enums and numeric limits
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #80`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Approved tools: get_account_summary, get_recent_transactions, get_spend, get_balance_forecast, get_loan_affordability
-  - [ ] customer_id is NOT a parameter in any tool schema; injected server-side from JWT claims
-  - [ ] All tools are strictly read-only: assistant cannot execute payments or mutate state
-  - [ ] Tool arguments strictly validated with bounded enums and numeric limits
+  - [x] Approved tools: get_account_summary, get_recent_transactions, get_spend, get_balance_forecast, get_loan_affordability
+  - [x] customer_id is NOT a parameter in any tool schema; injected server-side from JWT claims
+  - [x] All tools are strictly read-only: assistant cannot execute payments or mutate state
+  - [x] Tool arguments strictly validated with bounded enums and numeric limits
 - **Definition of done (evidence):** Unit tests verify tool schemas and enforce server-side principal injection.
 - **Required checks:**
   - Automated: pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths; security tests for every authorization and negative path; prove no secrets/PII reach logs (redaction test)
@@ -1805,7 +1805,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Issue:** #81 | **Sprint:** 5 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** AI Assistant & Security
 - **Owner:** Abbas (`Abbaskazi`)
 - **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (1.6 days of slack)
-- **Depends on:** TASK-057 (#80, Abbas). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Depends on:** TASK-057 (#80, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-057
 - **Goal:** LLM orchestrator connecting user messages to approved tools via Ollama with deterministic fallback.
 - **Implementation steps:**
@@ -1834,7 +1834,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Issue:** #82 | **Sprint:** 5 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** AI Assistant & Security
 - **Owner:** Abbas (`Abbaskazi`)
 - **Start:** Fri 30 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (1.6 days of slack)
-- **Depends on:** TASK-058 (#81, Abbas). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Depends on:** TASK-058 (#81, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-058
 - **Goal:** Defense-in-depth pipeline stripping control tokens, delimiting untrusted data, and masking account PII.
 - **Implementation steps:**
@@ -1863,7 +1863,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Issue:** #83 | **Sprint:** 5 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** AI Assistant & Security
 - **Owner:** Abbas (`Abbaskazi`)
 - **Start:** Fri 30 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (1.6 days of slack)
-- **Depends on:** TASK-058 (#81, Abbas), TASK-059 (#82, Abbas). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Depends on:** TASK-058 (#81, Rachit), TASK-059 (#82, Abbas). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-058, TASK-059
 - **Goal:** FastAPI streaming endpoint (POST /api/v1/assistant/chat) delivering token chunks via SSE.
 - **Implementation steps:**
@@ -2311,7 +2311,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Issue:** #99 | **Sprint:** 5 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Abbas (`Abbaskazi`)
 - **Start:** Sat 31 Oct | **Target deadline:** Sun 01 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (2.8 days of slack)
-- **Depends on:** TASK-057 (#80, Abbas), TASK-059 (#82, Abbas), TASK-067 (#90, Abbas). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Depends on:** TASK-057 (#80, Rachit), TASK-059 (#82, Abbas), TASK-067 (#90, Abbas). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-057, TASK-059, TASK-067
 - **Goal:** Formal documentation of assistant security architecture, threat model, and defense-in-depth layers.
 - **Implementation steps:**
@@ -3132,7 +3132,7 @@ decision in ADR-0015.
 - **Issue:** #188 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** AI Assistant & Security
 - **Owner:** Unassigned
 - **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
-- **Depends on:** TASK-057 (#80, Abbas), TASK-054 (#77, Krishna), TASK-097 (#?, ?). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Depends on:** TASK-057 (#80, Rachit), TASK-054 (#77, Krishna), TASK-097 (#?, ?). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **Goal:** Assistant tools for the UC-08 examples not covered by TASK-057: FAQ and support, product discovery, 'suggest investment options'.
 - **Implementation steps:**
@@ -3227,9 +3227,9 @@ decision in ADR-0015.
 | TASK-030 | Krishna | TASK-031 | Pranay | Tue 27 Oct | Tue 27 Oct |
 | TASK-041 | Krishna | TASK-046 | Rachit | Sun 25 Oct | Wed 28 Oct |
 | TASK-015 | Sujal | TASK-043 | Krishna | Mon 26 Oct | Wed 28 Oct |
-| TASK-040 | Krishna | TASK-057 | Abbas | Sun 25 Oct | Wed 28 Oct |
-| TASK-042 | Rachit | TASK-057 | Abbas | Wed 28 Oct | Wed 28 Oct |
-| TASK-046 | Rachit | TASK-057 | Abbas | Wed 28 Oct | Wed 28 Oct |
+| TASK-040 | Krishna | TASK-057 | Rachit | Sun 25 Oct | Wed 28 Oct |
+| TASK-042 | Rachit | TASK-057 | Rachit | Wed 28 Oct | Wed 28 Oct |
+| TASK-046 | Rachit | TASK-057 | Rachit | Wed 28 Oct | Wed 28 Oct |
 | TASK-042 | Rachit | TASK-050 | Kalpak | Wed 28 Oct | Thu 29 Oct |
 | TASK-043 | Krishna | TASK-050 | Kalpak | Wed 28 Oct | Thu 29 Oct |
 | TASK-033 | Pranay | TASK-037 | Kalpak | Thu 29 Oct | Thu 29 Oct |

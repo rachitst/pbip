@@ -13,6 +13,8 @@ x-api-env: &api-env
   # host.docker.internal (mapped to the host gateway on the api service below).
   OLLAMA_BASE_URL: ${OLLAMA_CONTAINER_URL:-http://host.docker.internal:11434}
   OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b-instruct}
+  OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-4}
+  ASSISTANT_LLM_ENABLED: ${ASSISTANT_LLM_ENABLED:-true}
 
 x-api-build: &api-build
   context: .

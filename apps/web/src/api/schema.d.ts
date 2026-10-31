@@ -241,6 +241,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/assistant/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask the read-only banking assistant about your own accounts
+         * @description Identity comes from the access token; tools only read the caller's own data.
+         */
+        post: operations["chat_api_v1_assistant_chat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -1231,6 +1251,37 @@ export interface components {
             first_invalid_seq: number | null;
             /** Valid */
             valid: boolean;
+        };
+        /** ChatRequest */
+        ChatRequest: {
+            /** Message */
+            message: string;
+        };
+        /** ChatResponse */
+        ChatResponse: {
+            /**
+             * Engine
+             * @description llm: Ollama chose the tool; rules: the deterministic fallback did
+             * @enum {string}
+             */
+            engine: "llm" | "rules";
+            /**
+             * Link
+             * @description Where in the app to see or act on this
+             */
+            link?: string | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "answered" | "refused" | "help" | "unavailable";
+            /**
+             * Reply
+             * @description Written by the server from the tool's structured result
+             */
+            reply: string;
+            /** @description The approved tool that ran, if any */
+            tool: components["schemas"]["ToolName"] | null;
         };
         /**
          * ChurnRiskLevel
@@ -2315,6 +2366,11 @@ export interface components {
              */
             token_type: string;
         };
+        /**
+         * ToolName
+         * @enum {string}
+         */
+        ToolName: "get_account_summary" | "get_recent_transactions" | "get_spend" | "get_balance_forecast" | "get_loan_affordability";
         /** TransferOut */
         TransferOut: {
             /** Amount Minor */
@@ -2853,6 +2909,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpendingTrendsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    chat_api_v1_assistant_chat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatResponse"];
                 };
             };
             /** @description Validation Error */
