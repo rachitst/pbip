@@ -310,7 +310,7 @@ before go-live (open item in §10).
 **Status: Implemented (API).** `POST /api/v1/assistant/chat`, its SSE twin `/chat/stream` and the redacted
 history `GET /api/v1/assistant/messages` are built (TASK-057 tool registry, TASK-058 router and Ollama adapter,
 TASK-059 sanitiser and output filter, TASK-060 streaming and conversation store; ADR-0018). The adversarial suite
-(TASK-067) runs in CI. The chat UI (TASK-061) is not built yet.
+(TASK-067) runs in CI; the chat drawer (TASK-061) is built. Full write-up: [ai-assistant-security.md](ai-assistant-security.md).
 
 **Target architecture (Blueprint §10):**
 
@@ -381,7 +381,7 @@ are the origin of the UK rule. "Analogous" means PBIP mirrors the control object
 |---|---|---|
 | TLS termination (and WAF) in the production deployment | MUST | TASK-075 (Sprint 5), TASK-082 (Sprint 6) |
 | Schemathesis contract fuzzing in CI | MUST | TASK-070 (Sprint 5) |
-| AI assistant: chat UI (TASK-061) and the security architecture document (TASK-076); API and adversarial suite done | MUST | TASK-061, TASK-076 |
+| AI assistant: meet the 2.5 s LLM latency target (needs a GPU or a smaller model; TASK-058) | SHOULD | TASK-058 |
 | ML fraud scorer with rules-only fallback (§7.1, AGENTS.md §8) | MUST | TASK-029–031, TASK-033 (Sprint 3) |
 | Structuring (F7) and dormant-account (F8) detection | SHOULD | TASK-071 (Sprint 5) |
 | F4 impossible-travel rule (needs a location source: ADR, then populate `ip_country`/geo in `TransactionContext`) | MUST (Blueprint §8) | #143 |
