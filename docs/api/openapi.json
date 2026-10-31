@@ -361,6 +361,152 @@
         "title": "AuditLogOut",
         "type": "object"
       },
+      "BillPaymentOut": {
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "amount_minor": {
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "biller_code": {
+            "title": "Biller Code",
+            "type": "string"
+          },
+          "biller_id": {
+            "format": "uuid",
+            "title": "Biller Id",
+            "type": "string"
+          },
+          "biller_name": {
+            "title": "Biller Name",
+            "type": "string"
+          },
+          "consumer_reference": {
+            "title": "Consumer Reference",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "new_balance_minor": {
+            "title": "New Balance Minor",
+            "type": "integer"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "POSTED",
+              "DECLINED",
+              "REVERSED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "transaction_id": {
+            "format": "uuid",
+            "title": "Transaction Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "customer_id",
+          "account_id",
+          "biller_id",
+          "biller_name",
+          "biller_code",
+          "transaction_id",
+          "consumer_reference",
+          "amount_minor",
+          "currency",
+          "status",
+          "reference",
+          "new_balance_minor",
+          "created_at",
+          "message"
+        ],
+        "title": "BillPaymentOut",
+        "type": "object"
+      },
+      "BillerCategory": {
+        "enum": [
+          "ELECTRICITY",
+          "WATER",
+          "TELECOM",
+          "GAS",
+          "BROADBAND",
+          "INSURANCE"
+        ],
+        "title": "BillerCategory",
+        "type": "string"
+      },
+      "BillerOut": {
+        "properties": {
+          "biller_code": {
+            "title": "Biller Code",
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/BillerCategory"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BillerStatus"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "category",
+          "biller_code",
+          "status"
+        ],
+        "title": "BillerOut",
+        "type": "object"
+      },
+      "BillerStatus": {
+        "enum": [
+          "ACTIVE",
+          "INACTIVE"
+        ],
+        "title": "BillerStatus",
+        "type": "string"
+      },
       "BulkMarkReadResponse": {
         "properties": {
           "updated_count": {
@@ -1599,6 +1745,50 @@
           "new_password"
         ],
         "title": "PasswordChangeRequest",
+        "type": "object"
+      },
+      "PayBillRequest": {
+        "properties": {
+          "amount_minor": {
+            "description": "Integer minor units, e.g. paise",
+            "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "biller_id": {
+            "format": "uuid",
+            "title": "Biller Id",
+            "type": "string"
+          },
+          "consumer_reference": {
+            "description": "Customer consumer/subscriber number with the utility biller",
+            "maxLength": 64,
+            "minLength": 2,
+            "title": "Consumer Reference",
+            "type": "string"
+          },
+          "currency": {
+            "default": "INR",
+            "maxLength": 3,
+            "minLength": 3,
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency",
+            "type": "string"
+          },
+          "from_account_id": {
+            "format": "uuid",
+            "title": "From Account Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_account_id",
+          "biller_id",
+          "consumer_reference",
+          "amount_minor"
+        ],
+        "title": "PayBillRequest",
         "type": "object"
       },
       "PayeeCreate": {
@@ -3592,6 +3782,224 @@
         "summary": "Self-register a retail customer (disabled in production by configuration)",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/api/v1/bills/billers": {
+      "get": {
+        "operationId": "list_billers_api_v1_bills_billers_get",
+        "parameters": [
+          {
+            "description": "Filter to active billers only",
+            "in": "query",
+            "name": "active_only",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "Filter to active billers only",
+              "title": "Active Only",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BillerOut"
+                  },
+                  "title": "Response List Billers Api V1 Bills Billers Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List registered utility billers",
+        "tags": [
+          "bills"
+        ]
+      }
+    },
+    "/api/v1/bills/pay": {
+      "post": {
+        "operationId": "pay_bill_api_v1_bills_pay_post",
+        "parameters": [
+          {
+            "description": "Unique per logical request; retrying with the same key never duplicates.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Unique per logical request; retrying with the same key never duplicates.",
+              "maxLength": 128,
+              "minLength": 8,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PayBillRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillPaymentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Pay a utility bill (idempotent)",
+        "tags": [
+          "bills"
+        ]
+      }
+    },
+    "/api/v1/bills/payments": {
+      "get": {
+        "operationId": "list_my_bill_payments_api_v1_bills_payments_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BillPaymentOut"
+                  },
+                  "title": "Response List My Bill Payments Api V1 Bills Payments Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List my bill payments",
+        "tags": [
+          "bills"
+        ]
+      }
+    },
+    "/api/v1/bills/payments/{payment_id}": {
+      "get": {
+        "operationId": "get_my_bill_payment_api_v1_bills_payments__payment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "payment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Payment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillPaymentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get one of my bill payments",
+        "tags": [
+          "bills"
         ]
       }
     },

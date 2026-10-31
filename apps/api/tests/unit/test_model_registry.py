@@ -17,7 +17,8 @@ def test_importing_a_single_module_registers_all_tables(module: str) -> None:
         f"import {module}; from pbip_api.core.db import Base; "
         "from sqlalchemy.orm import configure_mappers; configure_mappers(); "
         "Base.metadata.sorted_tables; "
-        "assert 'payees' in Base.metadata.tables and 'users' in Base.metadata.tables"
+        "assert 'payees' in Base.metadata.tables and 'users' in Base.metadata.tables "
+        "and 'billers' in Base.metadata.tables and 'bill_payments' in Base.metadata.tables"
     )
     result = subprocess.run(  # noqa: S603
         [sys.executable, "-c", code], capture_output=True, text=True, check=False
