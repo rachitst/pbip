@@ -18,13 +18,14 @@ class Recommendation(BaseModel):
 
     product_id: UUID
     product_type: ProductType
-    score: float = Field(ge=0, le=1)
+    score: float = Field(
+        ge=0, le=1, description="Rule-based relevance, for ordering only; not a probability"
+    )
     reasons: list[str] = Field(min_length=1)
     model_version: str
     title: str = Field(default="", description="Product title / name")
     description: str = Field(default="", description="Product description")
-    cta_label: str = Field(default="Apply Now", description="Call to action button text")
-    cta_path: str = Field(default="/apply", description="Application modal navigation path")
+    cta_label: str = Field(default="Learn more", description="Call to action button text")
 
 
 class CustomerRecommendationContext(BaseModel):
@@ -77,5 +78,5 @@ class BankingProduct(BaseModel):
     min_health_score: int = 0
     min_discretionary_ratio: float = 0.0
     target_segments: list[str] = Field(default_factory=list)
-    cta_label: str = "Apply Now"
-    cta_path: str = "/apply"
+    # No cta_path: PBIP has no product application pages yet, so none is linked.
+    cta_label: str = "Learn more"
