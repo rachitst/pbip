@@ -26,8 +26,6 @@ def upgrade() -> None:
             session_id VARCHAR(128) NOT NULL,
             page_url VARCHAR(1024),
             properties JSONB NOT NULL DEFAULT '{}'::jsonb,
-            ip_address VARCHAR(64),
-            user_agent VARCHAR(512),
             created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
             CONSTRAINT pk_clickstream_events PRIMARY KEY (id, event_timestamp)
         ) PARTITION BY RANGE (event_timestamp);

@@ -1,4 +1,9 @@
-"""Service layer for clickstream and telemetry ingestion (TASK-055)."""
+"""Service layer for clickstream and telemetry ingestion (TASK-055).
+
+Events are inserted and committed inside the request, before the 202 response: nothing is queued in
+memory, so a failure surfaces as an error the client can retry instead of being lost silently.
+Retries are safe: an event resent with the same ``event_id`` and timestamp is skipped.
+"""
 
 from datetime import datetime
 from uuid import UUID, uuid4
@@ -13,18 +18,11 @@ from pbip_api.modules.events.schemas import EventBatchRequest, EventBatchRespons
 def ingest_event_batch(
     session: Session,
     request: EventBatchRequest,
-    customer_id: UUID | None,
-    ip_address: str | None = None,
-    user_agent: str | None = None,
+    customer_id: UUID,
     now: datetime | None = None,
 ) -> EventBatchResponse:
-    """Validate, sanitize, and bulk persist telemetry events."""
+    """Persist a validated batch for the authenticated customer (never a client-sent id)."""
     receipt_time = now or utcnow()
-    batch_id = uuid4()
-
-    sanitized_user_agent = user_agent[:512] if user_agent else None
-    sanitized_ip = ip_address[:64] if ip_address else None
-
     records = [
         {
             "id": event.event_id or uuid4(),
@@ -34,18 +32,15 @@ def ingest_event_batch(
             "session_id": event.session_id,
             "page_url": event.page_url,
             "properties": event.properties,
-            "ip_address": sanitized_ip,
-            "user_agent": sanitized_user_agent,
             "created_at": receipt_time,
         }
         for event in request.events
     ]
-
-    count = repository.insert_events_batch(session=session, records=records)
+    inserted = repository.insert_events_batch(session=session, records=records)
     session.commit()
-
     return EventBatchResponse(
-        accepted=count,
-        batch_id=batch_id,
+        accepted=inserted,
+        duplicates=len(records) - inserted,
+        batch_id=uuid4(),
         received_at=receipt_time,
     )

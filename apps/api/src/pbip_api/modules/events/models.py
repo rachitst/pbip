@@ -22,7 +22,11 @@ class ClickstreamEvent(Base):
     """Telemetry and clickstream events partitioned monthly by event_timestamp.
 
     Stores client-side and server-side user interaction telemetry (page views,
-    calculator usage, flow initiations) for behavioral analytics and ML features.
+    calculator usage, flow initiations) for behavioral analytics and ML features. No IP address or
+    user agent is kept: the analytics do not need them and they are personal data.
+
+    Monthly partitions are created ahead by ``ensure_monthly_partitions`` (daily Celery beat job);
+    the DEFAULT partition only catches events outside every monthly range.
     """
 
     __tablename__ = "clickstream_events"
@@ -47,6 +51,4 @@ class ClickstreamEvent(Base):
     properties: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=sa.text("'{}'::jsonb")
     )
-    ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = created_at_col()

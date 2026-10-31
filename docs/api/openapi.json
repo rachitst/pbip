@@ -855,10 +855,11 @@
         "type": "object"
       },
       "EventBatchRequest": {
+        "additionalProperties": false,
         "description": "Batch payload containing up to 100 telemetry events.",
         "properties": {
           "events": {
-            "description": "List of telemetry events to ingest (1 to 100 items per batch)",
+            "description": "Telemetry events to ingest (1 to 100 per batch)",
             "items": {
               "$ref": "#/components/schemas/TelemetryEventIn"
             },
@@ -875,10 +876,10 @@
         "type": "object"
       },
       "EventBatchResponse": {
-        "description": "Result of batch event ingestion.",
+        "description": "Result of batch event ingestion. The events are committed before this is returned.",
         "properties": {
           "accepted": {
-            "description": "Count of accepted events in batch",
+            "description": "Events stored by this request",
             "minimum": 0.0,
             "title": "Accepted",
             "type": "integer"
@@ -889,6 +890,12 @@
             "title": "Batch Id",
             "type": "string"
           },
+          "duplicates": {
+            "description": "Events already stored (same event_id and timestamp), skipped",
+            "minimum": 0.0,
+            "title": "Duplicates",
+            "type": "integer"
+          },
           "received_at": {
             "description": "UTC server timestamp of receipt",
             "format": "date-time",
@@ -898,6 +905,7 @@
         },
         "required": [
           "accepted",
+          "duplicates",
           "received_at"
         ],
         "title": "EventBatchResponse",
@@ -1794,7 +1802,8 @@
         "type": "string"
       },
       "TelemetryEventIn": {
-        "description": "Individual client-side or server-side telemetry event payload.",
+        "additionalProperties": false,
+        "description": "One client-side or server-side telemetry event.",
         "properties": {
           "event_id": {
             "anyOf": [
@@ -1806,7 +1815,7 @@
                 "type": "null"
               }
             ],
-            "description": "Optional client-generated event UUID",
+            "description": "Client-generated id; resending the same event is a no-op",
             "title": "Event Id"
           },
           "event_timestamp": {
@@ -1822,26 +1831,41 @@
           "page_url": {
             "anyOf": [
               {
-                "maxLength": 1024,
+                "maxLength": 256,
+                "pattern": "^/[A-Za-z0-9/_.-]*$",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Application route or URL path",
+            "description": "Route path only, e.g. /accounts (no query string or fragment)",
             "title": "Page Url"
           },
           "properties": {
-            "additionalProperties": true,
-            "description": "Arbitrary event metadata properties",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Up to 20 numeric, boolean or identifier-like values (keys snake_case, strings up to 64 characters of letters, digits and _.:-); no free text",
             "title": "Properties",
             "type": "object"
           },
           "session_id": {
-            "description": "User session token or browser identifier",
-            "maxLength": 128,
-            "minLength": 1,
+            "description": "Opaque browser session identifier",
+            "pattern": "^[A-Za-z0-9._-]{1,128}$",
             "title": "Session Id",
             "type": "string"
           }
@@ -3560,7 +3584,7 @@
     },
     "/api/v1/events/batch": {
       "post": {
-        "description": "Ingest up to 100 telemetry events with high-throughput database persistence.",
+        "description": "Store up to 100 events for the authenticated customer; committed before the response.",
         "operationId": "ingest_events_batch_api_v1_events_batch_post",
         "requestBody": {
           "content": {

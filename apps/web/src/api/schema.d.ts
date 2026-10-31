@@ -471,7 +471,7 @@ export interface paths {
         put?: never;
         /**
          * Batch ingest client-side and server-side telemetry events
-         * @description Ingest up to 100 telemetry events with high-throughput database persistence.
+         * @description Store up to 100 events for the authenticated customer; committed before the response.
          */
         post: operations["ingest_events_batch_api_v1_events_batch_post"];
         delete?: never;
@@ -1106,18 +1106,18 @@ export interface components {
         EventBatchRequest: {
             /**
              * Events
-             * @description List of telemetry events to ingest (1 to 100 items per batch)
+             * @description Telemetry events to ingest (1 to 100 per batch)
              */
             events: components["schemas"]["TelemetryEventIn"][];
         };
         /**
          * EventBatchResponse
-         * @description Result of batch event ingestion.
+         * @description Result of batch event ingestion. The events are committed before this is returned.
          */
         EventBatchResponse: {
             /**
              * Accepted
-             * @description Count of accepted events in batch
+             * @description Events stored by this request
              */
             accepted: number;
             /**
@@ -1126,6 +1126,11 @@ export interface components {
              * @description Unique batch tracking UUID
              */
             batch_id?: string;
+            /**
+             * Duplicates
+             * @description Events already stored (same event_id and timestamp), skipped
+             */
+            duplicates: number;
             /**
              * Received At
              * Format: date-time
@@ -1583,12 +1588,12 @@ export interface components {
         SupportedCurrency: "INR";
         /**
          * TelemetryEventIn
-         * @description Individual client-side or server-side telemetry event payload.
+         * @description One client-side or server-side telemetry event.
          */
         TelemetryEventIn: {
             /**
              * Event Id
-             * @description Optional client-generated event UUID
+             * @description Client-generated id; resending the same event is a no-op
              */
             event_id?: string | null;
             /**
@@ -1601,19 +1606,19 @@ export interface components {
             event_type: components["schemas"]["TelemetryEventType"];
             /**
              * Page Url
-             * @description Application route or URL path
+             * @description Route path only, e.g. /accounts (no query string or fragment)
              */
             page_url?: string | null;
             /**
              * Properties
-             * @description Arbitrary event metadata properties
+             * @description Up to 20 numeric, boolean or identifier-like values (keys snake_case, strings up to 64 characters of letters, digits and _.:-); no free text
              */
             properties?: {
-                [key: string]: unknown;
+                [key: string]: boolean | number | string;
             };
             /**
              * Session Id
-             * @description User session token or browser identifier
+             * @description Opaque browser session identifier
              */
             session_id: string;
         };
