@@ -19,6 +19,7 @@ from pbip_api.modules.events.router import router as events_router
 from pbip_api.modules.fraud.router import router as fraud_router
 from pbip_api.modules.health.router import ReadinessCache
 from pbip_api.modules.health.router import router as health_router
+from pbip_api.modules.insights.router import router as insights_router
 from pbip_api.modules.notifications.router import router as notifications_router
 from pbip_api.modules.payees.router import router as payees_router
 from pbip_api.modules.payments.router import router as payments_router
@@ -33,6 +34,7 @@ ROUTERS = (
     analytics_router,
     recommendations_router,
     events_router,
+    insights_router,
     payees_router,
     payments_router,
     fraud_router,
