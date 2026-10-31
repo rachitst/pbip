@@ -3,7 +3,8 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { NotificationBell } from "./NotificationBell";
+import { readFileSync } from "node:fs";
+import { NotificationBell, badgeText } from "./NotificationBell";
 
 function urlOf(input: Parameters<typeof fetch>[0]): string {
   if (typeof input === "string") return input;
@@ -26,26 +27,27 @@ const mockTransferPosted = {
   created_at: "2026-10-31T10:00:00Z",
 };
 
-const mockSecurityAlert = {
+// The API produces only transfer outcomes (modules/notifications/service.py).
+const mockUnderReview = {
   id: "notif-2",
-  type: "SECURITY_ALERT",
-  title: "New device detected",
-  body: "A new browser session was registered on your account.",
+  type: "TRANSFER_UNDER_REVIEW",
+  title: "Transfer under review",
+  body: "Your transfer of INR 25,000.00 is being reviewed for your safety.",
   read: false,
   created_at: "2026-10-31T09:30:00Z",
 };
 
-const mockStatement = {
+const mockDeclined = {
   id: "notif-3",
-  type: "STATEMENT_AVAILABLE",
-  title: "Statement ready",
-  body: "Your monthly statement for September 2026 is ready.",
+  type: "TRANSFER_DECLINED",
+  title: "Transfer not completed",
+  body: "Your transfer of INR 90,000.00 could not be completed.",
   read: true,
   created_at: "2026-10-30T08:00:00Z",
 };
 
 const mockNotificationsPage = {
-  items: [mockTransferPosted, mockSecurityAlert, mockStatement],
+  items: [mockTransferPosted, mockUnderReview, mockDeclined],
   total: 3,
   unread_count: 2,
   limit: 20,
@@ -102,7 +104,7 @@ describe("Customer Real-Time Notifications (TASK-022)", () => {
         if (url.includes("/api/v1/notifications")) {
           return Promise.resolve(
             json(200, {
-              items: [mockStatement],
+              items: [mockDeclined],
               total: 1,
               unread_count: 0,
               limit: 20,
@@ -232,7 +234,7 @@ describe("Customer Real-Time Notifications (TASK-022)", () => {
       expect(bell).toHaveFocus();
     });
 
-    it("displays transfer notifications, security alerts, and statements with tags", async () => {
+    it("labels each transfer outcome the API produces", async () => {
       fetchMock.mockImplementation((input) => {
         const url = urlOf(input);
         if (url.includes("/api/v1/notifications")) {
@@ -255,16 +257,13 @@ describe("Customer Real-Time Notifications (TASK-022)", () => {
       ).toBeInTheDocument();
       expect(within(dialog).getByText("Transfer")).toBeInTheDocument();
 
-      // Security alert
-      expect(within(dialog).getByText("New device detected")).toBeInTheDocument();
-      expect(
-        within(dialog).getByText("A new browser session was registered on your account."),
-      ).toBeInTheDocument();
-      expect(within(dialog).getByText("Security Alert")).toBeInTheDocument();
+      // Held for review: a transfer outcome, not a "security alert"
+      expect(within(dialog).getByText("Transfer under review")).toBeInTheDocument();
+      expect(within(dialog).getByText("Under review")).toBeInTheDocument();
 
-      // Statement
-      expect(within(dialog).getByText("Statement ready")).toBeInTheDocument();
-      expect(within(dialog).getByText("Statement")).toBeInTheDocument();
+      // Declined
+      expect(within(dialog).getByText("Transfer not completed")).toBeInTheDocument();
+      expect(within(dialog).getByText("Not completed")).toBeInTheDocument();
     });
 
     it("shows loading state when notifications query is pending", async () => {
@@ -393,34 +392,42 @@ describe("Customer Real-Time Notifications (TASK-022)", () => {
       const bell = await screen.findByRole("button", { name: /Notifications/ });
       await userEvent.click(bell);
 
-      const statementItem = screen.getByRole("button", { name: /Statement ready/ });
-      await userEvent.click(statementItem);
+      const declinedItem = screen.getByRole("button", { name: /Transfer not completed/ });
+      await userEvent.click(declinedItem);
 
       expect(markReadCalled).toBe(false);
       expect(await screen.findByTestId("accounts-page")).toBeInTheDocument();
     });
 
-    it("navigates to /profile when clicking a security alert notification", async () => {
+    it("marks an unknown notification type read without guessing a destination", async () => {
+      const marked: string[] = [];
+      const unknown = { ...mockTransferPosted, id: "notif-9", type: "SOMETHING_NEW", title: "New" };
       fetchMock.mockImplementation((input, init) => {
         const url = urlOf(input);
         if (url.endsWith("/read") && init?.method === "POST") {
+          marked.push(url);
           return Promise.resolve(new Response(null, { status: 204 }));
         }
         if (url.includes("/api/v1/notifications")) {
-          return Promise.resolve(json(200, mockNotificationsPage));
+          return Promise.resolve(json(200, { ...mockNotificationsPage, items: [unknown] }));
         }
         return Promise.resolve(json(404, { detail: "not found" }));
       });
 
       renderNotificationBell();
-
       const bell = await screen.findByRole("button", { name: /Notifications/ });
       await userEvent.click(bell);
+      const dialog = screen.getByRole("dialog");
+      expect(within(dialog).getByText("Notification")).toBeInTheDocument(); // neutral label
+      await userEvent.click(within(dialog).getByRole("button", { name: /New/ }));
 
-      const securityItem = screen.getByRole("button", { name: /New device detected/ });
-      await userEvent.click(securityItem);
-
-      expect(await screen.findByTestId("profile-page")).toBeInTheDocument();
+      await waitFor(() => {
+        expect(marked).toEqual(["/api/v1/notifications/notif-9/read"]);
+      });
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("accounts-page")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("profile-page")).not.toBeInTheDocument();
+      expect(bell).toHaveFocus();
     });
 
     it("bulk marks all notifications as read when clicking 'Mark all as read'", async () => {
@@ -448,5 +455,44 @@ describe("Customer Real-Time Notifications (TASK-022)", () => {
 
       expect(markAllCalled).toBe(true);
     });
+  });
+});
+
+describe("TASK-022 review fixes", () => {
+  const fetchMock = vi.fn<typeof fetch>();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("caps the visible count at 99+", () => {
+    expect(badgeText(7)).toBe("7");
+    expect(badgeText(99)).toBe("99");
+    expect(badgeText(100)).toBe("99+");
+  });
+
+  it("keeps notification items valid: only phrasing content inside each button", async () => {
+    fetchMock.mockResolvedValue(json(200, mockNotificationsPage));
+    renderNotificationBell();
+    await userEvent.click(await screen.findByRole("button", { name: /Notifications/ }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getAllByRole("listitem")).toHaveLength(3);
+    expect(dialog.querySelectorAll(".notification-item p, .notification-item div")).toHaveLength(0);
+  });
+
+  it("styles the bell and tray with theme tokens only", () => {
+    const css = readFileSync("src/styles.css", "utf8"); // vitest runs from apps/web
+    const start = css.indexOf("/* ---- Notifications");
+    const block = css.slice(start, css.indexOf("/* ---- ", start + 10));
+    expect(block.length).toBeGreaterThan(0);
+    expect(block).not.toMatch(/#[0-9a-f]{3,8}\b/i); // no hard-coded colours
+    expect(block).not.toMatch(/rgba?\(/);
+    expect(block).not.toMatch(/--shadow-lg/); // not a token
+    expect(block).not.toMatch(/font-size:\s*[0-9.]+(rem|px)/); // sizes come from --text-*
   });
 });
