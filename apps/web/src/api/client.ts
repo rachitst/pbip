@@ -13,6 +13,16 @@ export type OpenAccountType = components["schemas"]["OpenAccountType"];
 export type NotificationOut = components["schemas"]["NotificationOut"];
 export type NotificationsPage = components["schemas"]["NotificationsPage"];
 export type BulkMarkReadResponse = components["schemas"]["BulkMarkReadResponse"];
+export type AuditLogOut = components["schemas"]["AuditLogOut"];
+export type ChainStatusOut = components["schemas"]["ChainStatusOut"];
+export type SpendingBreakdownResponse = components["schemas"]["SpendingBreakdownResponse"];
+export type CategorySpendingItem = components["schemas"]["CategorySpendingItem"];
+export type SpendingTrendsResponse = components["schemas"]["SpendingTrendsResponse"];
+export type MonthlySpendingSummary = components["schemas"]["MonthlySpendingSummary"];
+export type CategoryShiftItem = components["schemas"]["CategoryShiftItem"];
+export type FinancialHealthScoreResponse = components["schemas"]["FinancialHealthScoreResponse"];
+export type FinancialHealthComponents = components["schemas"]["FinancialHealthComponents"];
+export type HealthScoreComponent = components["schemas"]["HealthScoreComponent"];
 
 export class ApiError extends Error {
   constructor(
@@ -164,4 +174,28 @@ export const api = {
     apiFetch<BulkMarkReadResponse>("/api/v1/notifications/mark-all-read", {
       method: "POST",
     }),
+  auditLogs: (limit = 50, beforeSeq?: number) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (beforeSeq !== undefined) params.set("before_seq", String(beforeSeq));
+    return apiFetch<AuditLogOut[]>(`/api/v1/compliance/audit-logs?${params.toString()}`);
+  },
+  verifyAuditChain: () => apiFetch<ChainStatusOut>("/api/v1/compliance/audit-logs/verify"),
+  spendingBreakdown: (accountId: string, year?: number, month?: number) => {
+    const params = new URLSearchParams({ account_id: accountId });
+    if (year !== undefined) params.set("year", String(year));
+    if (month !== undefined) params.set("month", String(month));
+    return apiFetch<SpendingBreakdownResponse>(`/api/v1/analytics/spending?${params.toString()}`);
+  },
+  spendingTrends: (accountId: string, year?: number, month?: number) => {
+    const params = new URLSearchParams({ account_id: accountId });
+    if (year !== undefined) params.set("year", String(year));
+    if (month !== undefined) params.set("month", String(month));
+    return apiFetch<SpendingTrendsResponse>(`/api/v1/analytics/trends?${params.toString()}`);
+  },
+  financialHealthScore: (accountId: string) => {
+    const params = new URLSearchParams({ account_id: accountId });
+    return apiFetch<FinancialHealthScoreResponse>(
+      `/api/v1/analytics/health-score?${params.toString()}`,
+    );
+  },
 };
