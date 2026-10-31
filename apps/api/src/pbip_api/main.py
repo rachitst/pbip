@@ -41,6 +41,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.log_level)
 
+    if settings.otel_enabled:
+        from pbip_api.core.tracing import instrument_app, setup_tracing
+
+        setup_tracing(settings)
+
     docs = settings.docs_enabled
     app = FastAPI(
         title="PBIP API",
@@ -69,6 +74,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.add_middleware(SecurityHeadersMiddleware, hsts=settings.cookie_secure)
     app.add_middleware(RequestContextMiddleware)
+
+    if settings.otel_enabled:
+        instrument_app(app, settings)
 
     app.state.readiness_cache = ReadinessCache(settings.health_ready_cache_seconds)
     register_error_handlers(app)
