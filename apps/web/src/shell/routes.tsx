@@ -14,8 +14,10 @@ import { NotFound } from "../pages/NotFound";
 import { Profile } from "../pages/Profile";
 import { AuditLog } from "../pages/staff/AuditLog";
 import { FraudAlert } from "../pages/staff/FraudAlert";
+import { FraudDemoLab } from "../pages/staff/FraudDemoLab";
 import { FraudQueue } from "../pages/staff/FraudQueue";
 import { canReviewFraud } from "../pages/staff/fraudFormat";
+import { isProductionEnv } from "../pages/staff/fraudLabConfig";
 import { StaffHome } from "../pages/staff/StaffHome";
 import { Alert } from "../ui/Alert";
 import { ErrorState, LoadingState } from "../ui/States";
@@ -42,6 +44,9 @@ function customerNav(me: UserOut): NavItem[] {
 function staffNav(me: UserOut): NavItem[] {
   const items: NavItem[] = [{ to: "/staff", label: "Overview", end: true }];
   if (canReviewFraud(me)) items.push({ to: "/staff/fraud", label: "Fraud alerts" });
+  if (canReviewFraud(me) && !isProductionEnv()) {
+    items.push({ to: "/staff/fraud-lab", label: "Attack simulator" });
+  }
   if (me.roles.includes("COMPLIANCE_OFFICER") || me.roles.includes("ADMIN")) {
     items.push({ to: "/staff/audit-log", label: "Audit log" });
   }
@@ -185,6 +190,7 @@ export const routes: RouteObject[] = [
           { path: "audit-log", element: <AuditLog /> },
           { path: "fraud", element: <FraudQueue /> },
           { path: "fraud/:alertId", element: <FraudAlert /> },
+          { path: "fraud-lab", element: <FraudDemoLab /> },
         ],
       },
       { path: "*", element: <OutsideArea /> },
