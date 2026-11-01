@@ -26,7 +26,7 @@ infra-up: ## Start only PostgreSQL + Redis in Docker
 infra-down: ## Stop PostgreSQL + Redis
 	@$(PYTHON) scripts/dev.py infra-down
 
-up: ## Build and start the full PBIP stack (web on :8080)
+up: ## Build and start the full PBIP stack (web on https://localhost:8443)
 	@$(PYTHON) scripts/dev.py up
 
 up-all: ## Full stack + monitoring (Prometheus, Grafana) + MLflow

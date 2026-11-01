@@ -7,10 +7,12 @@ tags, and that a failed start leaves the previous release recorded and recoverab
 
 import os
 import shutil
+import stat
 import subprocess
 from pathlib import Path
 
 import pytest
+from cryptography import x509
 
 pytestmark = pytest.mark.unit
 
@@ -131,3 +133,47 @@ def test_rollback_without_a_previous_release_fails_clearly(host: Path) -> None:
 def test_usage_error_for_unknown_commands(host: Path) -> None:
     assert _run(host, "restart").returncode == 64
     assert _run(host).returncode == 64
+
+
+needs_openssl = pytest.mark.skipif(shutil.which("openssl") is None, reason="needs the openssl CLI")
+
+
+@needs_bash
+@needs_openssl
+def test_deploy_creates_tls_material_once_and_never_overwrites_it(host: Path) -> None:
+    """NFR-02: nginx and PostgreSQL refuse to start without certificates (runbook 1.4)."""
+    (host / ".env").write_text("PUBLIC_HOSTNAME=staging.example.test\n", encoding="utf-8")
+    assert _run(host, "deploy", PREFIX, "v0.1.0").returncode == 0
+    certs = host / "certs"
+    db_crt, web_crt, web_key = (
+        certs / "db" / "server.crt",
+        certs / "web" / "tls.crt",
+        certs / "web" / "tls.key",
+    )
+    assert stat.S_IMODE(certs.stat().st_mode) == 0o700
+    assert stat.S_IMODE((certs / "db" / "server.key").stat().st_mode) == 0o600
+    assert (
+        stat.S_IMODE(web_key.stat().st_mode) == 0o644
+    )  # nginx-unprivileged reads it via a bind mount
+    names = (
+        x509.load_pem_x509_certificate(web_crt.read_bytes())
+        .extensions.get_extension_for_class(x509.SubjectAlternativeName)
+        .value.get_values_for_type(x509.DNSName)
+    )
+    assert names == ["staging.example.test"]
+    before = db_crt.read_bytes(), web_crt.read_bytes()
+
+    assert _run(host, "deploy", PREFIX, "v0.2.0").returncode == 0
+    assert (
+        db_crt.read_bytes(),
+        web_crt.read_bytes(),
+    ) == before  # certbot's certificate is never replaced
+
+
+@needs_bash
+@needs_openssl
+def test_deploy_without_a_host_env_uses_a_localhost_placeholder(host: Path) -> None:
+    assert not (host / ".env").exists()
+    result = _run(host, "deploy", PREFIX, "v0.1.0")
+    assert result.returncode == 0, result.stderr
+    assert "placeholder web certificate for localhost" in result.stdout

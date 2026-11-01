@@ -3,12 +3,18 @@ name: pbip
 x-api-env: &api-env
   APP_ENV: ${APP_ENV:-local}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
-  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+  # TLS to PostgreSQL, chain and host name verified against the local dev CA (scripts/dev_certs.py).
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=verify-full&sslrootcert=/etc/pbip-ca/ca.crt
   REDIS_URL: redis://redis:6379/0
   JWT_SECRET: ${JWT_SECRET}
   FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY}
-  CORS_ORIGINS: ${CORS_ORIGINS}
-  COOKIE_SECURE: ${COOKIE_SECURE:-false}
+  # The stack's own HTTPS origin is always trusted: the CSRF guard on refresh/logout rejects any Origin not in
+  # this list, so without it session restore on https://localhost:8443 fails with 403 (existing .env files
+  # list only the old http://localhost:8080).
+  CORS_ORIGINS: ${CORS_ORIGINS},https://localhost:8443
+  # The compose stack is served over HTTPS only (web :8443), so the refresh cookie is always Secure
+  # and the API sends HSTS. `make dev-api` (Vite on http://localhost:5173) still reads .env.
+  COOKIE_SECURE: "true"
   # AI assistant (blueprint section 8): Ollama runs on the HOST; containers reach it via
   # host.docker.internal (mapped to the host gateway on the api service below).
   OLLAMA_BASE_URL: ${OLLAMA_CONTAINER_URL:-http://host.docker.internal:11434}
@@ -19,6 +25,8 @@ x-api-env: &api-env
   # Fraud scoring (ADR-0019): the demo uses the hybrid; ./models/fraud comes from `make fraud-model`.
   FRAUD_SCORER: ${FRAUD_SCORER:-hybrid}
   FRAUD_MODEL_DIR: /models/fraud
+
+x-dev-ca: &dev-ca ./infra/certs/ca.crt:/etc/pbip-ca/ca.crt:ro
 
 x-api-build: &api-build
   context: .
@@ -31,9 +39,14 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+    # TLS required for every TCP client (infra/postgres/tls-entrypoint.sh); certs: scripts/dev_certs.py
+    entrypoint: ["/usr/local/bin/pbip-tls-entrypoint.sh"]
+    command: ["postgres"]
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infra/postgres/init-test-db.sh:/docker-entrypoint-initdb.d/10-init-test-db.sh:ro
+      - ./infra/postgres/tls-entrypoint.sh:/usr/local/bin/pbip-tls-entrypoint.sh:ro
+      - ./infra/certs/db:/etc/pbip-db-certs:ro
     ports: ["127.0.0.1:5432:5432"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
@@ -56,6 +69,7 @@ services:
     build: *api-build
     environment: *api-env
     command: ["alembic", "-c", "/app/apps/api/alembic.ini", "upgrade", "head"]
+    volumes: [*dev-ca]
     depends_on:
       db: { condition: service_healthy }
     restart: "no"
@@ -69,13 +83,14 @@ services:
     ports: ["127.0.0.1:8000:8000"]
     extra_hosts: ["host.docker.internal:host-gateway"]  # Linux; Docker Desktop provides it already
     # Read-only: the API must never be able to rewrite the models it loads (threat model T34).
-    volumes: ["./models/fraud:/models/fraud:ro"]
+    volumes: ["./models/fraud:/models/fraud:ro", *dev-ca]
     restart: unless-stopped
 
   worker:
     build: *api-build
     environment: *api-env
     command: ["celery", "-A", "pbip_api.worker.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    volumes: [*dev-ca]
     depends_on:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
@@ -87,6 +102,7 @@ services:
     build: *api-build
     environment: *api-env
     command: ["celery", "-A", "pbip_api.worker.celery_app", "beat", "--loglevel=INFO", "--schedule=/tmp/celerybeat-schedule"]
+    volumes: [*dev-ca]
     depends_on:
       redis: { condition: service_healthy }
     restart: unless-stopped
@@ -98,7 +114,11 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
     depends_on: [api]
-    ports: ["8080:8080"]
+    # HTTPS on :8443 with the local dev CA (scripts/dev_certs.py); :8080 only redirects to it.
+    environment:
+      PUBLIC_HTTPS_PORT: "8443"
+    volumes: ["./infra/certs/web:/etc/nginx/certs:ro"]
+    ports: ["8080:8080", "8443:8443"]
     restart: unless-stopped
 
   # ---- optional profiles: `docker compose --profile ml up -d`, `--profile monitoring up -d` ----
@@ -150,7 +170,8 @@ services:
     profiles: [monitoring]
     image: quay.io/prometheuscommunity/postgres-exporter:v0.17.1
     environment:
-      DATA_SOURCE_NAME: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+      DATA_SOURCE_NAME: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=verify-full&sslrootcert=/etc/pbip-ca/ca.crt
+    volumes: [*dev-ca]
 
   loki:
     profiles: [monitoring]
