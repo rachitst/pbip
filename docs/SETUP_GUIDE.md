@@ -358,7 +358,7 @@ make up
 # Windows
 .\dev.ps1 up
 ```
-Access the application through the reverse proxy at: **http://localhost:8080**
+Access the application through the reverse proxy at: **https://localhost:8443** (HTTP on 8080 redirects; the certificate comes from the local dev CA created by `scripts/dev_certs.py`, so the browser warns until you accept it)
 
 ### Extended Stack with Observability & MLflow
 To also start Prometheus, Grafana, Loki, and MLflow tracking server:
@@ -471,7 +471,7 @@ make smoke              # or .\dev.ps1 smoke
 |---|---|---|---|---|
 | **API Dev** | `8000` | HTTP | FastAPI uvicorn reload server | `http://localhost:8000/api/health/live`, `http://localhost:8000/api/health/ready` |
 | **Web Dev** | `5173` | HTTP | Vite development server | `http://localhost:5173/` |
-| **Nginx Ingress** | `8080` | HTTP | Docker compose unified web gateway | `http://localhost:8080/api/health/live`, `http://localhost:8080/api/health/ready` |
+| **Nginx Ingress** | `8443` (`8080` redirects) | HTTPS | Docker compose unified web gateway | `curl --cacert infra/certs/ca.crt https://localhost:8443/api/health/ready` |
 | **PostgreSQL** | `5432` | TCP | Relational DB & Ledger storage | Docker healthcheck |
 | **Redis** | `6379` | TCP | Token cache, locks, rate limits | `redis-cli ping` |
 | **Grafana** | `3000` | HTTP | System dashboards & logs | `http://localhost:3000/api/health` |
@@ -627,7 +627,7 @@ tries `::1` first, but compose publishes Postgres and Redis on `127.0.0.1` only,
 URLs (current `.env.example` already uses it), then restart `dev-api` / `dev-worker`.
 
 ### Q: A port is already in use (`bind: address already in use`)
-PBIP uses 5432 (PostgreSQL), 6379 (Redis), 8000 (API), 5173 (Vite), 8080 (web/nginx), 3000 (Grafana),
+PBIP uses 5432 (PostgreSQL), 6379 (Redis), 8000 (API), 5173 (Vite), 8080/8443 (web/nginx), 3000 (Grafana),
 9090 (Prometheus) and 5000 (MLflow). `make doctor` reports which ones are taken. Find the owner:
 ```bash
 # Linux / macOS
