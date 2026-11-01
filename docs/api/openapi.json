@@ -1010,6 +1010,54 @@
         "title": "ChurnRiskLevel",
         "type": "string"
       },
+      "CustomerInsightDetail": {
+        "description": "One customer for the RM flyout: churn signals, health, recent volume and eligible products.\n\nSame data minimisation as the list: no email, phone, address, birth date or account number.",
+        "properties": {
+          "customer_since": {
+            "format": "date-time",
+            "title": "Customer Since",
+            "type": "string"
+          },
+          "evaluated_at": {
+            "format": "date-time",
+            "title": "Evaluated At",
+            "type": "string"
+          },
+          "health": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HealthSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when the customer has no account yet"
+          },
+          "insight": {
+            "$ref": "#/components/schemas/CustomerInsightItem"
+          },
+          "recommendations": {
+            "description": "Every eligible product, best first",
+            "items": {
+              "$ref": "#/components/schemas/RecommendedProduct"
+            },
+            "title": "Recommendations",
+            "type": "array"
+          },
+          "transaction_volume": {
+            "$ref": "#/components/schemas/TransactionVolumeOut"
+          }
+        },
+        "required": [
+          "insight",
+          "customer_since",
+          "transaction_volume",
+          "evaluated_at"
+        ],
+        "title": "CustomerInsightDetail",
+        "type": "object"
+      },
       "CustomerInsightItem": {
         "description": "What an RM needs to prioritise outreach: no email, address, birth date or account number.",
         "properties": {
@@ -1053,6 +1101,32 @@
             "minimum": 0.0,
             "title": "Inactivity Days",
             "type": "integer"
+          },
+          "loan_product": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Best eligible loan or credit product, if any is eligible",
+            "title": "Loan Product"
+          },
+          "loan_propensity_score": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Rule-based relevance of that loan product (not a probability)",
+            "title": "Loan Propensity Score"
           },
           "segment": {
             "description": "Behavioral segment (e.g. HIGH_NET_WORTH)",
@@ -2157,6 +2231,39 @@
         "title": "HealthScoreComponent",
         "type": "object"
       },
+      "HealthSummary": {
+        "description": "Financial health score of the customer's primary account (the one recommendations use).",
+        "properties": {
+          "insufficient_data": {
+            "description": "Fewer than three months of history",
+            "title": "Insufficient Data",
+            "type": "boolean"
+          },
+          "overall_score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Overall Score",
+            "type": "integer"
+          },
+          "rating": {
+            "enum": [
+              "EXCELLENT",
+              "GOOD",
+              "FAIR",
+              "NEEDS_ATTENTION"
+            ],
+            "title": "Rating",
+            "type": "string"
+          }
+        },
+        "required": [
+          "overall_score",
+          "rating",
+          "insufficient_data"
+        ],
+        "title": "HealthSummary",
+        "type": "object"
+      },
       "HighRiskCustomer": {
         "properties": {
           "alert_id": {
@@ -2244,6 +2351,115 @@
         ],
         "title": "InstalmentOut",
         "type": "object"
+      },
+      "InteractionChannel": {
+        "enum": [
+          "CALL",
+          "MEETING",
+          "EMAIL",
+          "NOTE"
+        ],
+        "title": "InteractionChannel",
+        "type": "string"
+      },
+      "InteractionCreate": {
+        "additionalProperties": false,
+        "description": "A call, meeting, email or note an RM records against a customer.",
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/InteractionChannel"
+          },
+          "note": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Note",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/InteractionOutcome"
+          }
+        },
+        "required": [
+          "channel",
+          "outcome",
+          "note"
+        ],
+        "title": "InteractionCreate",
+        "type": "object"
+      },
+      "InteractionListResponse": {
+        "description": "The newest interactions first; ``total`` counts all of them for this customer.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InteractionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "InteractionListResponse",
+        "type": "object"
+      },
+      "InteractionOut": {
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/InteractionChannel"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "logged_by": {
+            "description": "Email of the staff member who recorded it",
+            "title": "Logged By",
+            "type": "string"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/InteractionOutcome"
+          }
+        },
+        "required": [
+          "id",
+          "channel",
+          "outcome",
+          "note",
+          "logged_by",
+          "created_at"
+        ],
+        "title": "InteractionOut",
+        "type": "object"
+      },
+      "InteractionOutcome": {
+        "enum": [
+          "INTERESTED",
+          "NOT_INTERESTED",
+          "FOLLOW_UP",
+          "NO_ANSWER",
+          "INFORMATION_SENT",
+          "ACCOUNT_REVIEW"
+        ],
+        "title": "InteractionOutcome",
+        "type": "string"
       },
       "LiveResponse": {
         "properties": {
@@ -3163,6 +3379,42 @@
         "title": "RecommendationsResponse",
         "type": "object"
       },
+      "RecommendedProduct": {
+        "description": "An eligible product with the rule-based reasons computed from the customer's own data.",
+        "properties": {
+          "product_type": {
+            "description": "SAVINGS, LOAN, INVESTMENT or INSURANCE",
+            "title": "Product Type",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "score": {
+            "description": "Rule-based relevance (not a probability)",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "number"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "product_type",
+          "score",
+          "reasons"
+        ],
+        "title": "RecommendedProduct",
+        "type": "object"
+      },
       "RecoveryCodesOut": {
         "properties": {
           "recovery_codes": {
@@ -3735,6 +3987,41 @@
         ],
         "title": "ToolName",
         "type": "string"
+      },
+      "TransactionVolumeOut": {
+        "description": "Posted money movements with other parties; own-account moves and reversals excluded.",
+        "properties": {
+          "inflow_minor": {
+            "description": "Money received, minor units",
+            "minimum": 0.0,
+            "title": "Inflow Minor",
+            "type": "integer"
+          },
+          "outflow_minor": {
+            "description": "Money paid out, minor units",
+            "minimum": 0.0,
+            "title": "Outflow Minor",
+            "type": "integer"
+          },
+          "transaction_count": {
+            "minimum": 0.0,
+            "title": "Transaction Count",
+            "type": "integer"
+          },
+          "window_days": {
+            "exclusiveMinimum": 0.0,
+            "title": "Window Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window_days",
+          "transaction_count",
+          "inflow_minor",
+          "outflow_minor"
+        ],
+        "title": "TransactionVolumeOut",
+        "type": "object"
       },
       "TransferOut": {
         "properties": {
@@ -6199,6 +6486,26 @@
             }
           },
           {
+            "description": "Minimum loan propensity (rule-based relevance of the best loan product)",
+            "in": "query",
+            "name": "min_loan_propensity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Minimum loan propensity (rule-based relevance of the best loan product)",
+              "title": "Min Loan Propensity"
+            }
+          },
+          {
             "description": "Page size",
             "in": "query",
             "name": "limit",
@@ -6255,6 +6562,182 @@
           }
         ],
         "summary": "Customers ordered by churn risk, with churn signals and the top eligible product",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
+    "/api/v1/insights/customers/{customer_id}": {
+      "get": {
+        "description": "Detail behind the RM flyout (RM or admin with an MFA-verified session).",
+        "operationId": "get_customer_insight_detail_api_v1_insights_customers__customer_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Customer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerInsightDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such customer"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "One customer's churn signals, health score, 30-day volume and eligible products",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
+    "/api/v1/insights/customers/{customer_id}/interactions": {
+      "get": {
+        "operationId": "list_customer_interactions_api_v1_insights_customers__customer_id__interactions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Customer Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "How many",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "description": "How many",
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InteractionListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such customer"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Calls, meetings, emails and notes logged for a customer, newest first",
+        "tags": [
+          "insights"
+        ]
+      },
+      "post": {
+        "operationId": "log_customer_interaction_api_v1_insights_customers__customer_id__interactions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Customer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InteractionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InteractionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such customer"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Log a call, meeting, email or note about a customer (audited)",
         "tags": [
           "insights"
         ]

@@ -20,6 +20,15 @@ export type AlertDetail = components["schemas"]["AlertDetail"];
 export type FraudStats = components["schemas"]["FraudStats"];
 export type SecurityMonitoring = components["schemas"]["SecurityMonitoring"];
 export type SpendingBreakdownResponse = components["schemas"]["SpendingBreakdownResponse"];
+export type CustomerInsightsListResponse = components["schemas"]["CustomerInsightsListResponse"];
+export type CustomerInsightItem = components["schemas"]["CustomerInsightItem"];
+export type ChurnRiskLevel = components["schemas"]["ChurnRiskLevel"];
+export type CustomerInsightDetail = components["schemas"]["CustomerInsightDetail"];
+export type InteractionChannel = components["schemas"]["InteractionChannel"];
+export type InteractionOutcome = components["schemas"]["InteractionOutcome"];
+export type InteractionCreate = components["schemas"]["InteractionCreate"];
+export type InteractionOut = components["schemas"]["InteractionOut"];
+export type InteractionListResponse = components["schemas"]["InteractionListResponse"];
 export type CategorySpendingItem = components["schemas"]["CategorySpendingItem"];
 export type SpendingTrendsResponse = components["schemas"]["SpendingTrendsResponse"];
 export type MonthlySpendingSummary = components["schemas"]["MonthlySpendingSummary"];
@@ -261,6 +270,37 @@ export const api = {
       `/api/v1/analytics/health-score?${params.toString()}`,
     );
   },
+  customerInsights: (filters: {
+    segment?: string;
+    min_churn_risk?: number;
+    min_loan_propensity?: number;
+    limit: number;
+    offset: number;
+  }) => {
+    const params = new URLSearchParams({
+      limit: String(filters.limit),
+      offset: String(filters.offset),
+    });
+    if (filters.segment) params.set("segment", filters.segment);
+    if (filters.min_churn_risk !== undefined)
+      params.set("min_churn_risk", String(filters.min_churn_risk));
+    if (filters.min_loan_propensity !== undefined)
+      params.set("min_loan_propensity", String(filters.min_loan_propensity));
+    return apiFetch<CustomerInsightsListResponse>(
+      `/api/v1/insights/customers?${params.toString()}`,
+    );
+  },
+  customerInsightDetail: (customerId: string) =>
+    apiFetch<CustomerInsightDetail>(`/api/v1/insights/customers/${encodeURIComponent(customerId)}`),
+  customerInteractions: (customerId: string, limit = 20) =>
+    apiFetch<InteractionListResponse>(
+      `/api/v1/insights/customers/${encodeURIComponent(customerId)}/interactions?limit=${String(limit)}`,
+    ),
+  logInteraction: (customerId: string, body: InteractionCreate) =>
+    apiFetch<InteractionOut>(
+      `/api/v1/insights/customers/${encodeURIComponent(customerId)}/interactions`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
   assistantHistory: (limit = 50) =>
     apiFetch<AssistantHistory>(`/api/v1/assistant/messages?limit=${String(limit)}`),
 };
