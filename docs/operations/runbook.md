@@ -63,9 +63,9 @@ runs only when the repository variable `DEPLOY_ENABLED` is `true` and uses the s
   Where the monitoring stack is deployed (`make up-all` locally; not part of the prod compose file), Alloy ships all
   container stdout to Loki and Grafana's Explore can query by container. Logs are redacted (`core/logging.py`): never
   expect to find tokens, passwords, emails or account numbers in them, and never add them.
-- Metrics: `/metrics` on the API container (not proxied by nginx: `infra/nginx/default.conf.template` returns 404). Prometheus
-  rules in `infra/prometheus/alerts.yml`: `ApiHighErrorRate`, `ApiSlowP95`, `FraudScoringSlow`, `LoginFailureSpike`,
-  `CeleryBacklog`. Grafana dashboard `infra/grafana/dashboards/pbip-overview.json` ("PBIP - Overview").
+- Metrics: `/metrics` on the API container (not proxied by nginx, which returns 404 for it). Monitoring stack:
+  `docker compose --profile monitoring up -d` (`make up-all`); see §1.5 for dashboards, alerts, availability and
+  error tracking.
 - Audit trail: `GET /api/v1/compliance/audit-logs` and `GET /api/v1/compliance/audit-logs/verify` (compliance officer
   or admin, MFA session) — the verify endpoint recomputes the hash chain.
 
@@ -118,6 +118,45 @@ command-line clients pass `--cacert infra/certs/ca.crt` (curl) or `SSL_CERT_FILE
 smoke` does this). Do not import the dev CA into your browser: with HSTS, the browser would then refuse plain HTTP to
 `localhost` for two years. `bash scripts/verify_tls.sh` proves the redirect, HSTS, TLS ≥ 1.2, that PostgreSQL rejects
 plain TCP and that every application connection to it is encrypted; CI runs it in the e2e job.
+
+
+### 1.5 Monitoring, alerts, availability and error tracking (TASK-069, TASK-103)
+
+Everything is provisioned from files in the repository and runs only with the `monitoring` compose profile (off by
+default: about 1 GB of RAM on the reference laptop). Self-hosted only; nothing is sent to a third party.
+
+| Component | Config | What it gives you |
+|---|---|---|
+| Prometheus (35-day retention, volume `prometheus`) | `infra/prometheus/prometheus.yml`, `alerts.yml` | Scrapes the API, Redis, PostgreSQL, Celery and the blackbox probes every 15 s; evaluates the alert and recording rules |
+| Grafana (folder "PBIP") | `infra/grafana/provisioning/`, `infra/grafana/dashboards/*.json` | Dashboards below; Prometheus and Loki datasources |
+| blackbox-exporter | `infra/prometheus/blackbox.yml` | Availability probes every 15 s: `web-ready` = `https://web:8443/api/health/ready` through nginx TLS (chain verified), `api-ready` and `api-live` directly on the API |
+| celery-exporter (worker runs with `-E`) | `docker-compose.yml` | Task outcomes, retries, runtimes, worker heartbeats |
+| postgres-exporter, redis-exporter | `docker-compose.yml` | Connections, transactions, deadlocks, cache hit ratio, sizes; Redis memory, queue length |
+| Loki + Alloy | `infra/loki/loki.yml`, `infra/alloy/config.alloy` | Every container's JSON logs, labelled `service` and `container`, searchable in Grafana Explore |
+
+**Dashboards.** *PBIP - API latency and errors* (`pbip-api`): rate, 4xx/5xx ratio, p50/p95/p99 per route template,
+unhandled errors and the error log panel. *PBIP - Fraud decisions* (`pbip-fraud`): ALLOW/STEP_UP/REVIEW/BLOCK per
+minute and mix, non-ALLOW share, scoring latency, transfer outcomes, idempotent replays. *PBIP - Celery jobs and
+PostgreSQL* (`pbip-platform`). *PBIP - Availability* (`pbip-availability`): last hour, 24 h and 30 days. *PBIP -
+Overview* (unchanged).
+
+**Alerts** (`infra/prometheus/alerts.yml`; state at http://localhost:9090/alerts). Page: `ApiHighErrorRate`,
+`CeleryNoWorker`, `ScrapeTargetDown`, `AvailabilityBelow99`, `HealthProbeFailing`. Ticket: `ApiSlowP95`,
+`ApiRouteSlowP95`, `FraudScoringSlow`, `FraudBlockRateHigh`, `LoginFailureSpike`, `CeleryBacklog`, `CeleryTaskFailures`,
+`UnhandledErrors`, `PostgresDeadlocks`, `PostgresConnectionsHigh`. **No notification channel is configured**: there is
+no Alertmanager, so alerts are visible in Prometheus and Grafana only. Choosing where pages go (email, chat) is an
+owner decision for the staging host (#198).
+
+**Availability figure (NFR "99% in the test environment").** `pbip:availability:ratio_30d{probe="web-ready"}` is the
+fraction of 15-second readiness probes that succeeded (`web-ready` is the user path) over the last 30 days. It counts only time when the monitoring
+stack itself was running, so stop it only deliberately. Report it monthly from the *Availability* dashboard.
+
+**Error tracking.** Every unhandled exception produces one `unhandled_exception` log event with `request_id`,
+`route` (template, never the raw path), `method`, `error_type` and `raised_at` (`file.py:line:function`), plus the
+metric `unhandled_errors_total{route,error_type}`. The exception message, arguments and request body are never
+logged, because they may contain personal data. The client sees only the generic 500 and the same `request_id`. To find
+one: Grafana → Explore → Loki → `{service="api"} | json | event="unhandled_exception" | request_id="<id>"`.
+The `UnhandledErrors` alert fires on the first occurrence.
 
 ---
 

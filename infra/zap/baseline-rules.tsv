@@ -1,0 +1,8 @@
+# OWASP ZAP baseline rule overrides (TASK-090). Format: <rule id><TAB><IGNORE|WARN|FAIL><TAB>(name and reason)
+# Every rule not listed keeps ZAP's default (WARN), and the DAST workflow fails on any WARN: a NEW finding
+# breaks the job. Each IGNORE is an accepted finding; the reasons are in docs/security/security-audit-2026-11.md.
+10116	IGNORE	(ZAP is Out of Date: the image is pinned on purpose; bumped by hand, not mid-scan)
+10027	IGNORE	(Suspicious Comments: matches the word "select" inside the minified React bundle; no source comments ship)
+10109	IGNORE	(Modern Web Application: informational; the SPA is expected)
+10015	IGNORE	(Re-examine Cache-control: index.html is no-cache on purpose so a deploy is picked up; it holds no personal data)
+10049	IGNORE	(Storable/cacheable content: content-hashed /assets are immutable by design; API responses are not involved)
