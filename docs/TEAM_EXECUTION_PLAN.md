@@ -130,10 +130,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 | TASK-032 | SHAP Explainability & Reason Code Generator | Rachit | Wed 28 Oct | Wed 28 Oct | 029, 031 | Seq | High | #55 |
 | TASK-033 | HybridFraudScorer Service Integration in Transfer Flow | Rachit | Wed 28 Oct | Thu 29 Oct | 031, 032 | Seq | High | #56 |
 | TASK-038 | MLflow Model Registry Champion/Challenger Promotion Workflow | Pranay | Thu 29 Oct | Fri 30 Oct | 011, 029 | Seq | Low | #61 |
-| TASK-037 | Step-Up MFA Challenge Modal & Customer Transfer Confirmation | Kalpak | Thu 29 Oct | Thu 29 Oct | 033, 019 | Seq | Low | #60 |
-| TASK-035 | Fraud Telemetry & Risk Analytics Endpoints | Krishna | Fri 30 Oct | Fri 30 Oct | 033 | Seq | High | #58 |
+| TASK-037 | Step-Up MFA Challenge Modal & Customer Transfer Confirmation | Rachit | Thu 29 Oct | Thu 29 Oct | 033, 019 | Seq | Low | #60 |
+| TASK-035 | Fraud Telemetry & Risk Analytics Endpoints | Rachit | Fri 30 Oct | Fri 30 Oct | 033 | Seq | High | #58 |
 | TASK-039 | Fraud Engine Model Evaluation & Performance Report | Rachit | Fri 30 Oct | Sat 31 Oct | 029, 030, 031 | Seq | Low | #62 |
-| TASK-036 | Staff Fraud Operations Queue & Alert Detail UI | Kalpak | Fri 30 Oct | Sun 01 Nov | 019, 033, 035 | Seq | High | #59 |
+| TASK-036 | Staff Fraud Operations Queue & Alert Detail UI | Rachit | Fri 30 Oct | Sun 01 Nov | 019, 033, 035 | Seq | High | #59 |
 
 - **Critical path:** 023 (Pranay) -> 024 (Pranay) -> 029 (Pranay) -> 031 (Pranay) -> 032 (Pranay) -> 033 (Pranay) -> 035 (Krishna) -> 036 (Kalpak), target Sun 01 Nov.
 - **In parallel:** Kalpak, Krishna, Pranay, Sujal.
@@ -1129,8 +1129,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-035 - Fraud Telemetry & Risk Analytics Endpoints
 
 - **Issue:** #58 | **Sprint:** 3 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
-- **Owner:** Krishna (`LetRock1`)
-- **Start:** Fri 30 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
+- **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov; was Krishna)
+- **Start:** Fri 30 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** Sun 1 Nov (`fraud/stats.py`, `GET /api/v1/fraud/stats`) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-033 (#56, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-033
 - **Goal:** Staff analytics endpoints providing fraud decision breakdown, hold rates, and rule triggers.
@@ -1143,10 +1143,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Responses cached in Redis with 60-second TTL to avoid database strain
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #58`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] GET /api/v1/fraud/stats returns decision counts (ALLOW, STEP_UP, REVIEW, BLOCK) over time
-  - [ ] Breakdown of most frequently triggered rules and high-risk payees
-  - [ ] Protected by require_roles([FRAUD_ANALYST, ADMIN], mfa=True)
-  - [ ] Responses cached in Redis with 60-second TTL to avoid database strain
+  - [x] GET /api/v1/fraud/stats returns decision counts (ALLOW, STEP_UP, REVIEW, BLOCK) over time (per UTC day, 1-90 day window, plus hold/block rates, model fallbacks, p95 latency)
+  - [x] Breakdown of most frequently triggered rules and high-risk payees (top 10 reason codes with source; destination accounts behind REVIEW/BLOCK, masked, counted across customers)
+  - [x] Protected by require_roles([FRAUD_ANALYST, ADMIN], mfa=True) (`test_stats_are_staff_only_and_need_mfa`, BOLA matrix)
+  - [x] Responses cached in Redis with 60-second TTL to avoid database strain (fail-open if Redis is down: `test_stats_are_cached_for_60_seconds_and_survive_redis_down`)
 - **Definition of done (evidence):** RBAC tests verify analyst authorization and MFA claim, response format verified.
 - **Required checks:**
   - Automated: pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths
@@ -1159,8 +1159,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-036 - Staff Fraud Operations Queue & Alert Detail UI
 
 - **Issue:** #59 | **Sprint:** 3 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Frontend Web Application
-- **Owner:** Kalpak (`Patil-Kalpak`)
-- **Start:** Fri 30 Oct | **Target deadline:** Sun 01 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
+- **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov; was Kalpak)
+- **Start:** Fri 30 Oct | **Target deadline:** Sun 01 Nov | **Actual completion:** Sun 1 Nov (`/staff/fraud`, `/staff/fraud/:alertId`) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-019 (#42, Kalpak), TASK-033 (#56, Pranay), TASK-035 (#58, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-033, TASK-035 (TASK-019 is done)
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; lives in the staff route tree (`/staff`), gated by role and an MFA-verified session (the API enforces access).
@@ -1174,10 +1174,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Strict role-based rendering ensuring customer accounts cannot view staff routes
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #59`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Alert queue listing pending transfers with risk scores and flagged reasons
-  - [ ] Detail view displaying customer profile, transaction context, and visual SHAP contribution bars
-  - [ ] Action buttons: RELEASE (captures hold, posts transfer) and REJECT (cancels transfer, releases hold)
-  - [ ] Strict role-based rendering ensuring customer accounts cannot view staff routes
+  - [x] Alert queue listing pending transfers with risk scores and flagged reasons (filters Open/All/Confirmed/Released; reasons are on the detail view)
+  - [x] Detail view displaying customer profile, transaction context, and visual SHAP contribution bars (reasons in plain language; API adds a staff-only customer summary)
+  - [x] Action buttons: RELEASE (captures hold, posts transfer) and REJECT (cancels transfer, releases hold) (confirm dialog with the effect, optional audit note)
+  - [x] Strict role-based rendering ensuring customer accounts cannot view staff routes (staff area guard; non-analyst staff get a notice and no API call)
 - **Definition of done (evidence):** Vitest tests mock analyst actions, optimistic update and error states handled.
 - **Required checks:**
   - Automated: Vitest + Testing Library covering loading, empty, error and success states; Playwright journey for critical flows; types only from `schema.d.ts`
@@ -1190,8 +1190,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-037 - Step-Up MFA Challenge Modal & Customer Transfer Confirmation
 
 - **Issue:** #60 | **Sprint:** 3 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Frontend Web Application
-- **Owner:** Kalpak (`Patil-Kalpak`)
-- **Start:** Thu 29 Oct | **Target deadline:** Thu 29 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (3.2 days of slack)
+- **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov; was Kalpak)
+- **Start:** Thu 29 Oct | **Target deadline:** Thu 29 Oct | **Actual completion:** Sun 1 Nov (`SendMoney` review/confirm + step-up modal; server-side escalation after 3 wrong codes) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-033 (#56, Pranay), TASK-019 (#42, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-033, TASK-019
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; applies the enter -> review -> submit -> outcome pattern to send money once TASK-033 is merged (not before).
@@ -1205,10 +1205,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: On 3 failed attempts, escalates transfer to PENDING_REVIEW and closes modal
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #60`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Detects STEP_UP response from transfer API and displays MFA prompt modal
-  - [ ] Submits TOTP code to POST /api/v1/transfers/{id}/step-up
-  - [ ] On valid code, completes transfer, displays receipt, and updates balances
-  - [ ] On 3 failed attempts, escalates transfer to PENDING_REVIEW and closes modal
+  - [x] Detects STEP_UP response from transfer API and displays MFA prompt modal
+  - [x] Submits TOTP code to POST /api/v1/transfers/{id}/step-up
+  - [x] On valid code, completes transfer, displays receipt, and updates balances
+  - [x] On 3 failed attempts, escalates transfer to PENDING_REVIEW and closes modal (the SERVER counts the wrong codes per transfer and escalates: hold + alert; `test_three_wrong_step_up_codes_hand_the_transfer_to_an_analyst`)
 - **Definition of done (evidence):** React component tests verify happy path, invalid TOTP code, and escalation flow.
 - **Required checks:**
   - Automated: Vitest + Testing Library covering loading, empty, error and success states; Playwright journey for critical flows; types only from `schema.d.ts`
@@ -3232,27 +3232,27 @@ decision in ADR-0015.
 | TASK-046 | Rachit | TASK-057 | Rachit | Wed 28 Oct | Wed 28 Oct |
 | TASK-042 | Rachit | TASK-050 | Kalpak | Wed 28 Oct | Thu 29 Oct |
 | TASK-043 | Krishna | TASK-050 | Kalpak | Wed 28 Oct | Thu 29 Oct |
-| TASK-033 | Rachit | TASK-037 | Kalpak | Thu 29 Oct | Thu 29 Oct |
+| TASK-033 | Rachit | TASK-037 | Rachit | Thu 29 Oct | Thu 29 Oct |
 | TASK-033 | Rachit | TASK-078 | Rachit | Thu 29 Oct | Thu 29 Oct |
 | TASK-045 | Rachit | TASK-051 | Kalpak | Wed 28 Oct | Thu 29 Oct |
 | TASK-047 | Sujal | TASK-051 | Kalpak | Thu 29 Oct | Thu 29 Oct |
 | TASK-033 | Rachit | TASK-035 | Krishna | Thu 29 Oct | Fri 30 Oct |
 | TASK-030 | Rachit | TASK-039 | Pranay | Tue 27 Oct | Fri 30 Oct |
-| TASK-033 | Rachit | TASK-036 | Kalpak | Thu 29 Oct | Fri 30 Oct |
-| TASK-035 | Krishna | TASK-036 | Kalpak | Fri 30 Oct | Fri 30 Oct |
-| TASK-035 | Krishna | TASK-069 | Rachit | Fri 30 Oct | Fri 30 Oct |
+| TASK-033 | Rachit | TASK-036 | Rachit | Thu 29 Oct | Fri 30 Oct |
+| TASK-035 | Rachit | TASK-036 | Rachit | Fri 30 Oct | Fri 30 Oct |
+| TASK-035 | Rachit | TASK-069 | Rachit | Fri 30 Oct | Fri 30 Oct |
 | TASK-019 | Kalpak | TASK-066 | Krishna | Mon 26 Oct | Sat 31 Oct |
 | TASK-060 | Rachit | TASK-061 | Rachit | Sat 31 Oct | Sun 01 Nov |
 | TASK-019 | Kalpak | TASK-077 | Rachit | Mon 26 Oct | Sun 01 Nov |
-| TASK-036 | Kalpak | TASK-077 | Rachit | Sun 01 Nov | Sun 01 Nov |
-| TASK-037 | Kalpak | TASK-077 | Rachit | Thu 29 Oct | Sun 01 Nov |
-| TASK-036 | Kalpak | TASK-081 | Abbas | Sun 01 Nov | Sun 01 Nov |
+| TASK-036 | Rachit | TASK-077 | Rachit | Sun 01 Nov | Sun 01 Nov |
+| TASK-037 | Rachit | TASK-077 | Rachit | Thu 29 Oct | Sun 01 Nov |
+| TASK-036 | Rachit | TASK-081 | Abbas | Sun 01 Nov | Sun 01 Nov |
 | TASK-080 | Pranay | TASK-081 | Abbas | Sat 31 Oct | Sun 01 Nov |
 | TASK-064 | Sujal | TASK-065 | Krishna | Sun 01 Nov | Mon 02 Nov |
 | TASK-019 | Kalpak | TASK-065 | Krishna | Mon 26 Oct | Mon 02 Nov |
 | TASK-054 | Krishna | TASK-062 | Kalpak | Fri 30 Oct | Mon 02 Nov |
 | TASK-019 | Kalpak | TASK-092 | Rachit | Mon 26 Oct | Mon 02 Nov |
-| TASK-036 | Kalpak | TASK-092 | Rachit | Sun 01 Nov | Mon 02 Nov |
+| TASK-036 | Rachit | TASK-092 | Rachit | Sun 01 Nov | Mon 02 Nov |
 | TASK-061 | Rachit | TASK-092 | Rachit | Mon 02 Nov | Mon 02 Nov |
 | TASK-029 | Rachit | TASK-088 | Krishna | Tue 27 Oct | Mon 02 Nov |
 | TASK-084 | Pranay | TASK-088 | Krishna | Sun 01 Nov | Mon 02 Nov |

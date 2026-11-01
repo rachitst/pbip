@@ -1,6 +1,6 @@
 # Fraud models: LightGBM classifier and Isolation Forest (TASK-029, TASK-030)
 
-**Status:** trained offline and evaluated. The hybrid scorer is wired into transfers and bill payments behind `FRAUD_SCORER=hybrid` (TASK-033, ADR-0019). The default is still `rules`: see "Served-path finding" below.
+**Status:** trained offline and evaluated. The hybrid scorer is wired into transfers and bill payments behind `FRAUD_SCORER=hybrid` (TASK-033, ADR-0019). Local and demo run `hybrid` since the #251 fix (generator v2.1); the code default for other deployments stays `rules`. Current numbers: `docs/ml/model-evaluation-report-v1.md` (v1.1). The tables below are the v2.0 (pre-#251) training run, kept for history.
 **Code:**
 - `ml/src/pbip_ml/fraud/training.py`: dataset, time split, models, metrics.
 - `ml/src/pbip_ml/fraud/train.py`: CLI and MLflow logging.
@@ -119,4 +119,6 @@ Example, a high-risk F5 transfer:
 ### Served-path finding: new payees (#251)
 In the labelled data, no legitimate debit goes to a payee less than 761 h (about 32 days) old, while 83% of fraud debits use a payee under 72 h old. The models learned "new payee = fraud". When served, a ₹10 transfer to a 48 h-old verified payee scored model probability 0.99 and risk 75 (REVIEW), with `MODEL_PAYEE_AGE_SECONDS` as the top reason.
 
-The offline metrics above do not show this, because the test split has the same blind spot. It is a data-generator gap, not a serving bug. Until #251 adds legitimate new-payee transfers and the models are retrained, the hybrid stays off by default.
+The offline metrics above do not show this, because the test split has the same blind spot. It was a data-generator gap, not a serving bug.
+
+**Fixed (generator v2.1).** Legitimate new payees, phone changes and forgotten passwords were added and the models retrained. Legitimate transfers to payees under 3 days old are now held at REVIEW 0.09% of the time (test), down from 100%. Recall at REVIEW is 0.835, down from 0.957, because the old number was inflated by the shortcut. Details are in the evaluation report v1.1, §3.3.

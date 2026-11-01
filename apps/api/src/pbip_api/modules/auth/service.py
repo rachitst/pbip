@@ -540,15 +540,22 @@ class AuthService:
         self.session.commit()
         return codes
 
-    def verify_step_up(self, user_id: UUID, code: str, meta: RequestMeta) -> None:
-        """Second-factor check for a sensitive action (e.g. a flagged transfer)."""
+    def verify_step_up(
+        self, user_id: UUID, code: str, meta: RequestMeta, *, subject: str | None = None
+    ) -> None:
+        """Second-factor check for a sensitive action (e.g. a flagged transfer).
+
+        ``subject`` (e.g. the transaction id) is recorded on a failure, so the caller can count
+        failed attempts per action.
+        """
         user = self._get_user(user_id)
         if not user.mfa_enabled:
             raise ConflictError("enable MFA to complete this verification")
         if self._is_locked(user):
             raise UnauthorizedError("invalid verification code")
         if not self._verify_totp(user, code):
-            self._event(SecurityEventType.STEP_UP_FAILURE, user.id, meta)
+            details = {"subject": subject} if subject else {}
+            self._event(SecurityEventType.STEP_UP_FAILURE, user.id, meta, **details)
             self._register_failure(user, meta, "bad_step_up_code")
             self.session.commit()
             raise UnprocessableError("invalid verification code")

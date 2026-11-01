@@ -673,6 +673,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fraud/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fraud telemetry: decisions over time, hold rate, top reasons, risky payees
+         * @description Aggregates only, cached in Redis for 60 seconds per window (TASK-035).
+         */
+        get: operations["get_stats_api_v1_fraud_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/insights/customers": {
         parameters: {
             query?: never;
@@ -961,6 +981,25 @@ export interface components {
             /** Roles */
             roles: string[];
         };
+        /**
+         * AlertCustomer
+         * @description What an analyst needs to judge the alert; no contact details or date of birth.
+         */
+        AlertCustomer: {
+            /**
+             * Customer Since
+             * Format: date-time
+             */
+            customer_since: string;
+            /** Full Name */
+            full_name: string;
+            /** Kyc Status */
+            kyc_status: string;
+            /** Risk Profile */
+            risk_profile: string | null;
+            /** Segment */
+            segment: string | null;
+        };
         /** AlertDetail */
         AlertDetail: {
             /** Amount Minor */
@@ -972,6 +1011,7 @@ export interface components {
             created_at: string;
             /** Currency */
             currency: string;
+            customer: components["schemas"]["AlertCustomer"] | null;
             /**
              * Customer Id
              * Format: uuid
@@ -996,6 +1036,8 @@ export interface components {
             reasons: {
                 [key: string]: unknown;
             }[];
+            /** Reference */
+            reference: string | null;
             /** Resolution Note */
             resolution_note: string | null;
             /** Resolved At */
@@ -1013,6 +1055,8 @@ export interface components {
             transaction_id: string;
             /** Transaction Status */
             transaction_status: string;
+            /** Transaction Type */
+            transaction_type: string;
         };
         /**
          * AlertStatus
@@ -1217,7 +1261,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "POSTED" | "DECLINED" | "REVERSED";
+            status: "POSTED" | "PENDING_REVIEW" | "DECLINED" | "REVERSED";
             /**
              * Transaction Id
              * Format: uuid
@@ -1531,6 +1575,22 @@ export interface components {
              */
             segment: "HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER";
         };
+        /** DayCounts */
+        DayCounts: {
+            /** Allow */
+            ALLOW: number;
+            /** Block */
+            BLOCK: number;
+            /** Review */
+            REVIEW: number;
+            /** Step Up */
+            STEP_UP: number;
+            /**
+             * Day
+             * @description UTC date, YYYY-MM-DD
+             */
+            day: string;
+        };
         /** DecisionRequest */
         DecisionRequest: {
             /**
@@ -1824,6 +1884,42 @@ export interface components {
              * @description Length of the trailing window used
              */
             window_months: number;
+        };
+        /** FraudStats */
+        FraudStats: {
+            /** Block Rate */
+            block_rate: number;
+            /** By Day */
+            by_day: components["schemas"]["DayCounts"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Hold Rate
+             * @description Share of scored transactions held for REVIEW
+             */
+            hold_rate: number;
+            /** Latency P95 Ms */
+            latency_p95_ms: number | null;
+            /**
+             * Model Fallbacks
+             * @description Decisions served by the rules because the model failed
+             */
+            model_fallbacks: number;
+            /** Risky Payees */
+            risky_payees: components["schemas"]["RiskyPayee"][];
+            /** Scored */
+            scored: number;
+            /** Top Rules */
+            top_rules: components["schemas"]["RuleCount"][];
+            /** Totals */
+            totals: {
+                [key: string]: number;
+            };
+            /** Window Days */
+            window_days: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -2261,6 +2357,34 @@ export interface components {
             full_name: string;
             /** Password */
             password: string;
+        };
+        /** RiskyPayee */
+        RiskyPayee: {
+            /**
+             * Account
+             * @description Masked: last four digits only
+             */
+            account: string;
+            /** Bank Code */
+            bank_code: string;
+            /**
+             * Customers
+             * @description Distinct customers who sent flagged money here
+             */
+            customers: number;
+            /** Flagged Transfers */
+            flagged_transfers: number;
+            /** Max Risk */
+            max_risk: number;
+        };
+        /** RuleCount */
+        RuleCount: {
+            /** Code */
+            code: string;
+            /** Count */
+            count: number;
+            /** Source */
+            source: string | null;
         };
         /**
          * SpendingBreakdownResponse
@@ -3806,6 +3930,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_stats_api_v1_fraud_stats_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FraudStats"];
+                };
             };
             /** @description Validation Error */
             422: {

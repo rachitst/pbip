@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.metrics import IDEMPOTENT_REPLAYS_TOTAL
 from pbip_api.modules.accounts.models import Account
+from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.bills.models import Biller, BillerCategory, BillerStatus, BillPayment
 from pbip_api.modules.compliance.models import AuditLog
 from pbip_api.modules.fraud.dependencies import get_fraud_scorer
@@ -481,18 +482,14 @@ def _pay(client: TestClient, actor: Actor, amount: int) -> Any:
     )
 
 
-@pytest.mark.parametrize(
-    "decision", [FraudDecision.REVIEW, FraudDecision.STEP_UP, FraudDecision.BLOCK]
-)
-def test_a_non_allow_fraud_decision_declines_the_bill_payment_and_opens_an_alert(
+def test_a_blocked_bill_payment_is_declined_and_opens_an_alert(
     app: FastAPI,
     client: TestClient,
     db: Session,
     make_customer: Callable[..., Actor],
-    decision: FraudDecision,
 ) -> None:
     alice = make_customer(funds=500_000)
-    app.dependency_overrides[get_fraud_scorer] = lambda: FixedDecisionScorer(decision)
+    app.dependency_overrides[get_fraud_scorer] = lambda: FixedDecisionScorer(FraudDecision.BLOCK)
     resp = _pay(client, alice, 125_000)
     assert resp.status_code == 403, resp.text
     assert resp.json()["status"] == "DECLINED"
@@ -509,6 +506,75 @@ def test_a_non_allow_fraud_decision_declines_the_bill_payment_and_opens_an_alert
         ).scalar_one()
         == 0
     )
+
+
+def _held(
+    app: FastAPI, client: TestClient, db: Session, alice: Actor, decision: FraudDecision
+) -> dict[str, Any]:
+    app.dependency_overrides[get_fraud_scorer] = lambda: FixedDecisionScorer(decision)
+    resp = _pay(client, alice, 125_000)
+    assert resp.status_code == 202, resp.text
+    body: dict[str, Any] = resp.json()
+    assert body["status"] == "PENDING_REVIEW"
+    assert "reasons" not in resp.text and "risk" not in resp.text  # hidden from the customer
+    db.expire_all()
+    account = db.get_one(Account, alice.account_id)
+    assert (account.ledger_balance, account.held_amount) == (500_000, 125_000)  # held, not moved
+    return body
+
+
+@pytest.mark.parametrize("decision", [FraudDecision.REVIEW, FraudDecision.STEP_UP])
+def test_a_flagged_bill_payment_is_held_for_review_like_a_transfer(
+    app: FastAPI,
+    client: TestClient,
+    db: Session,
+    make_customer: Callable[..., Actor],
+    decision: FraudDecision,
+) -> None:
+    alice = make_customer(funds=500_000)
+    body = _held(app, client, db, alice, decision)
+    txn = db.get_one(Transaction, uuid.UUID(body["transaction_id"]))
+    assert txn.status == TransactionStatus.PENDING_REVIEW
+    alert = db.execute(select(FraudAlert)).scalar_one()
+    assert alert.transaction_id == txn.id
+    types = db.execute(select(OutboxEvent.event_type)).scalars().all()
+    assert notifications.BILL_PAYMENT_UNDER_REVIEW in types
+
+
+@pytest.mark.parametrize(("action", "final"), [("RELEASE", "POSTED"), ("REJECT", "DECLINED")])
+def test_the_analysts_decision_settles_the_held_bill_payment(
+    app: FastAPI,
+    client: TestClient,
+    db: Session,
+    make_customer: Callable[..., Actor],
+    make_staff: Callable[..., Actor],
+    action: str,
+    final: str,
+) -> None:
+    alice = make_customer(funds=500_000)
+    body = _held(app, client, db, alice, FraudDecision.REVIEW)
+    analyst = make_staff(RoleName.FRAUD_ANALYST)
+    alert = client.get("/api/v1/fraud/alerts", headers=analyst.headers).json()[0]
+    decided = client.post(
+        f"/api/v1/fraud/alerts/{alert['id']}/decision",
+        headers=analyst.headers,
+        json={"action": action, "note": "checked with the customer"},
+    )
+    assert decided.status_code == 204, decided.text
+    fetched = client.get(f"/api/v1/bills/payments/{body['id']}", headers=alice.headers).json()
+    assert fetched["status"] == final
+    db.expire_all()
+    account = db.get_one(Account, alice.account_id)
+    expected = 500_000 - 125_000 if final == "POSTED" else 500_000
+    assert (account.ledger_balance, account.held_amount) == (expected, 0)
+    events = db.execute(select(OutboxEvent.event_type)).scalars().all()
+    wanted = (
+        notifications.BILL_PAYMENT_POSTED
+        if final == "POSTED"
+        else notifications.BILL_PAYMENT_DECLINED
+    )
+    assert wanted in events and notifications.TRANSFER_POSTED not in events
+    assert notifications.TRANSFER_DECLINED not in events
 
 
 def test_every_bill_payment_is_scored_and_the_event_kept(

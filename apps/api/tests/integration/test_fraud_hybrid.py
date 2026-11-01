@@ -290,7 +290,11 @@ def test_real_artifacts_load_once_and_score_within_the_latency_budget(
     use_engine(engine)
     alice, _bob, payee = pair
     latencies = []
-    for _ in range(25):
+    first = send(client, alice, payee, 1_000)  # #251: an ordinary transfer to a 2-day-old payee
+    first_event = event_for(db, first.json()["id"])
+    assert first.json()["status"] == "POSTED", first_event.features
+    assert first_event.risk_score < 30 and first_event.model_version == "hybrid-lgbm-iforest-1"
+    for _ in range(24):
         response = send(client, alice, payee, 1_000)  # small: the daily limit never bites
         event = event_for(db, response.json()["id"])
         assert event.model_version == "hybrid-lgbm-iforest-1", event.features.get("model_error")
@@ -312,3 +316,25 @@ def test_load_engine_serves_rules_only_without_valid_artifacts(
         (tampered / f.name).write_bytes(f.read_bytes())
     (tampered / "hybrid_params.json").write_text('{"model_version": "evil"}', encoding="utf-8")
     assert load_engine(settings.model_copy(update={"fraud_model_dir": str(tampered)})) is None
+
+
+def test_a_broken_model_stack_never_stops_the_api_from_starting(
+    settings: Settings, model_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression (E2E on #257): the API image lacked libgomp, LightGBM failed to import with an
+    OSError, and that crashed start-up instead of falling back to the rules."""
+    import builtins
+
+    real_import = builtins.__import__
+
+    def failing_import(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == "pbip_ml.fraud.inference":
+            raise OSError("libgomp.so.1: cannot open shared object file")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", failing_import)
+    configured = settings.model_copy(update={"fraud_model_dir": str(model_dir)})
+    assert load_engine(configured) is None
+    from pbip_api.main import create_app
+
+    assert create_app(configured).state.fraud_engine is None  # the app still builds

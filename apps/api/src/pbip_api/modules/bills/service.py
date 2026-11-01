@@ -168,8 +168,9 @@ class BillsService:
             initiated_by_user_id=user_id,
             reference=reference,
         )
-        # Same fraud contract as transfers. Bill payments are not held for review: anything but
-        # ALLOW declines the payment (fail safe) and opens an alert for an analyst.
+        # Same fraud contract and outcomes as transfers: REVIEW holds the funds and opens an alert
+        # for an analyst; STEP_UP does the same (bill payments have no step-up flow); BLOCK
+        # declines and opens an alert.
         result = self.scorer.score(
             TransactionContext(
                 transaction_id=transaction.id,
@@ -191,7 +192,13 @@ class BillsService:
             self._enforce_daily_limit(user_id, transaction)
             ledger.post_transaction(self.session, transaction, ledger.transfer_legs(transaction))
             status = BillPaymentStatus.POSTED
-        else:
+        elif result.decision in (FraudDecision.STEP_UP, FraudDecision.REVIEW):
+            self._enforce_daily_limit(user_id, transaction)
+            ledger.place_hold(self.session, transaction)
+            transaction.status = TransactionStatus.PENDING_REVIEW
+            fraud_service.open_alert(self.session, event)
+            status = BillPaymentStatus.PENDING_REVIEW
+        else:  # BLOCK
             transaction.status = TransactionStatus.DECLINED
             transaction.decline_reason = "FRAUD_BLOCK"
             fraud_service.open_alert(self.session, event)
@@ -338,20 +345,7 @@ class BillsService:
         biller: Biller,
         payment: BillPayment,
     ) -> None:
-        posted = payment.status == BillPaymentStatus.POSTED
-        notifications.enqueue(
-            self.session,
-            notifications.BILL_PAYMENT_POSTED if posted else notifications.BILL_PAYMENT_DECLINED,
-            {
-                "user_id": str(user_id),
-                "transaction_id": str(transaction.id),
-                "account_id": str(payment.account_id),
-                "bill_payment_id": str(payment.id),
-                "biller_name": biller.name,
-                "amount_minor": payment.amount,
-                "currency": payment.currency,
-            },
-        )
+        _enqueue_bill(self.session, user_id, transaction, biller, payment)
 
     def _resolve_ledger_context(self, payment: BillPayment, biller: Biller) -> tuple[str, int]:
         default_ref = f"BILL/{biller.biller_code}/{payment.consumer_reference}"[:140]
@@ -384,6 +378,8 @@ class BillsService:
             status_code = 200
         elif payment.status == BillPaymentStatus.DECLINED:
             status_code = 403  # same as a declined transfer: a plain JSON body, not problem+json
+        elif payment.status == BillPaymentStatus.PENDING_REVIEW:
+            status_code = 202  # accepted and held for review, like a transfer
         else:
             status_code = 201
         body = {
@@ -408,3 +404,49 @@ class BillsService:
             ),
         }
         return BillPaymentResult(status_code, body)
+
+
+_BILL_EVENTS = {
+    BillPaymentStatus.POSTED: notifications.BILL_PAYMENT_POSTED,
+    BillPaymentStatus.PENDING_REVIEW: notifications.BILL_PAYMENT_UNDER_REVIEW,
+    BillPaymentStatus.DECLINED: notifications.BILL_PAYMENT_DECLINED,
+}
+
+
+def _enqueue_bill(
+    session: Session, user_id: UUID, transaction: Transaction, biller: Biller, payment: BillPayment
+) -> None:
+    notifications.enqueue(
+        session,
+        _BILL_EVENTS.get(payment.status, notifications.BILL_PAYMENT_DECLINED),
+        {
+            "user_id": str(user_id),
+            "transaction_id": str(transaction.id),
+            "account_id": str(payment.account_id),
+            "bill_payment_id": str(payment.id),
+            "biller_name": biller.name,
+            "amount_minor": payment.amount,
+            "currency": payment.currency,
+        },
+    )
+
+
+def settle_reviewed_bill(session: Session, transaction: Transaction) -> bool:
+    """After an analyst resolved a held transaction: if it is a bill payment, mirror the outcome.
+
+    Called by ``PaymentsService.review_alert`` inside its transaction (the fraud router passes it
+    in, because this module already depends on payments). Returns True when the transaction was a
+    bill payment, so the caller sends the bill notification instead of a transfer one.
+    """
+    payment = session.execute(
+        select(BillPayment).where(BillPayment.transaction_id == transaction.id).with_for_update()
+    ).scalar_one_or_none()
+    if payment is None:
+        return False
+    if payment.status == BillPaymentStatus.PENDING_REVIEW:
+        posted = transaction.status == TransactionStatus.POSTED
+        payment.status = BillPaymentStatus.POSTED if posted else BillPaymentStatus.DECLINED
+    biller = session.get(Biller, payment.biller_id)
+    if biller is not None and transaction.initiated_by_user_id is not None:
+        _enqueue_bill(session, transaction.initiated_by_user_id, transaction, biller, payment)
+    return True
