@@ -634,6 +634,7 @@
           "status": {
             "enum": [
               "POSTED",
+              "PENDING_REVIEW",
               "DECLINED",
               "REVERSED"
             ],
