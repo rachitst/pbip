@@ -4,7 +4,7 @@
 |---|---|
 | Task | TASK-053 (#76) |
 | Scope | System boundaries, C4 context and container views, components, data stores, API and ML inference contracts, security, scalability, observability, production roadmap |
-| Verified against | `main` at `8c93ed3` (1 Nov 2026): code, compose files, workflows and tests, not earlier documents |
+| Verified against | `main` at `2e65b87` (1 Nov 2026): code, compose files, workflows and tests, not earlier documents |
 | Related | [Blueprint](../PROJECT_BLUEPRINT.md) (engineering rules), [ER diagram](er-diagram.md) (generated from the schema), [threat model](../security/threat-model.md), [AI assistant security](../security/ai-assistant-security.md), [runbook](../operations/runbook.md), [traceability](../requirements/traceability.md) |
 
 **Status labels used throughout.** Each capability is marked with one of three labels:
@@ -60,7 +60,7 @@ flowchart LR
 
     cust -->|"HTTPS: accounts, transfers, bills,<br/>insights, assistant"| pbip
     rm -->|"churn insights (API only)"| pbip
-    fa -->|"fraud alert queue and decisions (API only)"| pbip
+    fa -->|"fraud alert queue, decisions, telemetry"| pbip
     co -->|"audit log and hash-chain verification"| pbip
     adm -->|"staff users, lockouts (API only)"| pbip
     pbip -->|"HTTP JSON, tool choice only"| ollama
@@ -74,7 +74,7 @@ The use-case document lists six actors. Here is the support for each:
 |---|---|---|---|
 | Retail customer | `CUSTOMER` (plus a customer profile) | Web app and API | Partial (see [traceability](../requirements/traceability.md)) |
 | Relationship manager | `RELATIONSHIP_MANAGER` | `GET /api/v1/insights/customers` | Partial: no UI (TASK-066) |
-| Fraud analyst | `FRAUD_ANALYST` | Alert queue, detail and decision API | Partial: no UI (TASK-036) |
+| Fraud analyst | `FRAUD_ANALYST` | Alert queue and alert detail screens (`/staff/fraud`) with release/reject; telemetry API `GET /fraud/stats` | Implemented. The telemetry charts are part of the security dashboard (TASK-099, Planned) |
 | Compliance officer | `COMPLIANCE_OFFICER` | Audit-log API and web page with chain verification | Implemented (audit); alerts and exceptions Planned (TASK-100) |
 | Banking administrator | `ADMIN` | Create staff users, inspect and clear lockouts (API) | Partial: no configuration UI (no task) |
 | AI assistant | none; it acts as the customer | Read-only tools with the customer id injected server-side | Implemented (narrow scope; TASK-105 for FAQ, product discovery and investments) |
@@ -161,9 +161,9 @@ Across modules, code calls the other module's `service` or `policy` functions on
 | `accounts` | Open and list accounts; ledger history with keyset pagination | `/accounts*` | Implemented. Search and filter Planned (TASK-017) |
 | `ledger` | The only writer of balances, holds and entries (no router) | none | Implemented ([ADR-0002](../adr/0002-double-entry-ledger.md)) |
 | `payees` | Add, list, get, delete, confirmation-of-payee verify | `/payees*` | Partial: no edit (TASK-094), no UI (TASK-020) |
-| `payments` | Idempotent transfers, limits, fraud decision, TOTP step-up, analyst release/reject | `/transfers*` | Implemented (API). Review and step-up UI Planned (TASK-037) |
-| `bills` | Biller catalogue, idempotent bill payments sharing the daily limit | `/bills/*` | Implemented (API). UI Planned (TASK-020) |
-| `fraud` | Baseline rules, hybrid scorer adapter, event persistence, alert queue | `/fraud/alerts*` | Implemented (API). Analyst UI Planned (TASK-036) |
+| `payments` | Idempotent transfers, limits, fraud decision, TOTP step-up (3 wrong codes escalate to analyst review), analyst release/reject of transfers and held bill payments | `/transfers*` | Implemented (API and web) |
+| `bills` | Biller catalogue, idempotent bill payments sharing the daily limit; flagged payments held for analyst review | `/bills/*` | Implemented (API). UI Planned (TASK-020) |
+| `fraud` | Baseline rules, hybrid scorer adapter, event persistence, alert queue, telemetry (decisions over time, top reasons, masked risky payees; 60 s Redis cache) | `/fraud/alerts*`, `/fraud/stats` | Implemented (API and analyst web screens) |
 | `notifications` | Inbox, read state, outbox relay target | `/notifications*` | Implemented (API and web bell) |
 | `analytics` | Spending, trends, health score, balance forecast, segment; nightly and weekly jobs | `/analytics/*` | Implemented. Forecast UI Planned (TASK-050) |
 | `insights` | Relationship-manager churn signals | `/insights/customers` | Partial: no UI (TASK-066) |
@@ -199,13 +199,13 @@ source of API types.
 
 * login with the MFA code step;
 * accounts with balances, open account, expandable ledger history;
-* a send-money form (first account only, verified payees, no review step);
+* send money: source-account choice, verified payees, a review/confirm dialog, a TOTP step-up modal and the real outcome (posted, under review, declined without reasons);
 * insights (spending, trends, health score);
 * profile, devices and password change;
 * the notification bell;
 * the assistant drawer, streamed over SSE.
 
-**Staff screens:** a staff home page and the compliance audit log.
+**Staff screens:** a staff home page, the fraud alert queue and alert detail (plain-language reasons, SHAP bars, customer profile, release/reject), and the compliance audit log.
 
 Every other screen is Planned under the task named in section 4.1.
 
@@ -226,7 +226,7 @@ Every other screen is Planned under the task named in section 4.1.
 | PostgreSQL `public` | 26 tables: identity and sessions, customers and devices, accounts, ledger, holds, idempotency keys, payees, bills, fraud events and alerts, notifications and outbox, hash-chained audit log, security events, analytics aggregates, segments, clickstream (monthly range partitions), assistant messages | Full diagram: [er-diagram.md](er-diagram.md) (generated, CI-checked). Integer minor units for money. CHECK constraints for enums and ranges. Triggers keep `transaction_entries` immutable and balanced and `audit_logs` append-only |
 | PostgreSQL `synthetic` | Generation runs, synthetic customers, synthetic transactions | Training data only, never read on the request path ([ADR-0009](../adr/0009-synthetic-dataset-schema.md)) |
 | Redis | Celery broker and result backend (results expire after 1 h); fixed-window rate limits `rl:{name}:{subject}`; sorted-set velocity windows for transfers and login failures | Not a system of record. Rate limits fail open if Redis is down. Velocity falls back to PostgreSQL ([ADR-0020](../adr/0020-device-network-signals-and-velocity-counters.md)). Idempotency is in PostgreSQL, not Redis ([ADR-0003](../adr/0003-idempotency-in-postgresql.md)) |
-| Fraud model directory | `lightgbm.txt`, `isolation_forest.joblib`, `hybrid_params.json`, `manifest.json` (SHA-256 of each file) | Read once per process when `FRAUD_SCORER=hybrid`. A damaged or missing artefact means rules-only |
+| Fraud model directory | `lightgbm.txt`, `isolation_forest.joblib`, `hybrid_params.json`, `manifest.json` (SHA-256 of each file) | Built by `make fraud-model` into `models/fraud`; mounted read-only into `api` in the dev compose. Read once per process when `FRAUD_SCORER=hybrid`. A damaged or missing artefact means rules-only |
 | MLflow | SQLite backend store and proxied artefacts (dev compose, profile `ml`) | Training runs only. The API does **not** load models from the MLflow registry; registry promotion is Planned (TASK-038) |
 | GeoIP file | DB-IP Lite country `.mmdb` (CC BY 4.0) | Optional. Unset means no `NEW_COUNTRY` signal ([ADR-0014](../adr/0014-geoip-country-for-fraud-signals.md)) |
 
@@ -236,7 +236,7 @@ Sensitive columns (e.g. the TOTP secret) are encrypted with MultiFernet (`core/c
 ## 6. API contract
 
 * **Shape:**
-  * 56 operations, all under `/api/v1` except the health probes;
+  * 57 operations, all under `/api/v1` except the health probes;
   * the contract is `docs/api/openapi.json`, generated from the code;
   * CI fails if the file or the generated `apps/web/src/api/schema.d.ts` is stale (`scripts/export_openapi.py --check`);
   * breaking changes need `/api/v2`.
@@ -293,12 +293,12 @@ FraudScoreResult    risk_score 0-100, decision ALLOW|STEP_UP|REVIEW|BLOCK,
 | Decision | Effect |
 |---|---|
 | ALLOW | Posts the transfer |
-| STEP_UP | The transfer waits for a TOTP code. A user without MFA is escalated to REVIEW |
+| STEP_UP | The transfer waits for a TOTP code. A user without MFA, or 3 wrong codes for the same transfer, escalates it to REVIEW |
 | REVIEW | Places a hold and opens an alert |
 | BLOCK | Declines the transfer and opens an alert |
 
-On bill payments, any decision other than ALLOW declines the payment and opens an alert. There is no hold or step-up
-path for bills.
+On bill payments, STEP_UP and REVIEW both hold the funds and open an alert (bills have no step-up flow), the analyst's
+decision settles the payment, and BLOCK declines it.
 
 **After every decision:**
 
@@ -307,8 +307,8 @@ path for bills.
 
 | Serving mode | Model version | Status |
 |---|---|---|
-| `FRAUD_SCORER=rules` (default) | `baseline-rules-0.3` (`modules/fraud/baseline.py`) | Implemented. Rules: LARGE_AMOUNT, NEW_PAYEE, NEW_PAYEE_LARGE_AMOUNT, VELOCITY_BURST, AMOUNT_SPIKE, NEW_COUNTRY, RECENT_LOGIN_FAILURES, NEW_DEVICE_OR_NETWORK |
-| `FRAUD_SCORER=hybrid` + `FRAUD_MODEL_DIR` | `hybrid-lgbm-iforest-1` | Implemented behind the flag ([ADR-0019](../adr/0019-hybrid-fraud-scorer-serving.md)). It combines calibrated LightGBM, Isolation Forest and the rule registry, and adds the top-3 TreeSHAP reasons. The final score is `max(baseline, hybrid)`. Not the default until #251, because the synthetic data has no legitimate new payees |
+| `FRAUD_SCORER=rules` (code default) | `baseline-rules-0.3` (`modules/fraud/baseline.py`) | Implemented. Rules: LARGE_AMOUNT, NEW_PAYEE, NEW_PAYEE_LARGE_AMOUNT, VELOCITY_BURST, AMOUNT_SPIKE, NEW_COUNTRY, RECENT_LOGIN_FAILURES, NEW_DEVICE_OR_NETWORK |
+| `FRAUD_SCORER=hybrid` + `FRAUD_MODEL_DIR` | `hybrid-lgbm-iforest-1` | Implemented behind the flag ([ADR-0019](../adr/0019-hybrid-fraud-scorer-serving.md)). It combines calibrated LightGBM, Isolation Forest and the rule registry, and adds the top-3 TreeSHAP reasons. The final score is `max(baseline, hybrid)`. Since #251 the local and demo configuration (`.env.example`, dev compose) runs `hybrid`, with models built by `make fraud-model` and mounted read-only; the code default and the staging compose stay `rules` |
 | Fail-safe | `...+rules-only` with reason `MODEL_UNAVAILABLE` | Implemented. It applies when the model is missing, raises an error or exceeds `FRAUD_MODEL_BUDGET_MS` (default 50 ms). It never falls back to allow-all |
 
 Model metrics, latency and limits are recorded in the [evaluation report](../ml/model-evaluation-report-v1.md) and
@@ -383,8 +383,8 @@ sequenceDiagram
 
 `POST /api/v1/fraud/alerts/{id}/decision` with `RELEASE` or `REJECT` (FRAUD_ANALYST or ADMIN, with MFA):
 
-* RELEASE captures the hold and posts the transfer;
-* REJECT releases the hold and declines the transfer;
+* RELEASE captures the hold and posts the transfer (or settles the held bill payment);
+* REJECT releases the hold and declines it;
 * an already-resolved alert returns 409;
 * each decision is audited as `FRAUD_ALERT_RESOLVED`.
 
@@ -400,6 +400,7 @@ adversarial transcripts). Here is the summary, with the enforcing code:
 | Password storage | Argon2id: time 3, memory 64 MiB, parallelism 4; breached-password blocklist | Implemented |
 | MFA | TOTP (pyotp, ±1 step, replay-protected) and recovery codes. Mandatory for staff routes. Optional for customers, with a step-up fallback to analyst review | Implemented |
 | Sessions | 15 min access JWT, rotating refresh cookie with reuse detection | Implemented |
+| Step-up | TOTP for flagged transfers; each wrong code is a `STEP_UP_FAILURE` security event; 3 for one transfer hand it to an analyst | Implemented |
 | Lockout | 5 failures, then `60 s × 2^n` up to 1 h; admin unlock is audited | Implemented |
 | Authorization | Role checks, plus ownership policy functions (BOLA → 404); route-policy registry test | Implemented |
 | Input validation | Pydantic bounds, UUID path ids, positive integer amounts, free-text validation | Implemented |
@@ -435,7 +436,7 @@ adversarial transcripts). Here is the summary, with the enforcing code:
 | DB connections | Pool size 10 per API process | `replicas × 10` (+ workers) must stay under PostgreSQL `max_connections`. A pooler (PgBouncer) would be needed beyond a few replicas | TASK-079 |
 | Write hot spot | Per-user advisory lock serialises one customer's money movements | Intended (correctness first); throughput across customers is unaffected | none |
 | Single PostgreSQL primary | No replica or failover; backup and PITR procedures are in the runbook | Vertical scaling plus read replicas for analytics would be the next step | TASK-083 (#106) |
-| ML in-process | Each replica loads its own model copy; inference p95 23 ms at 1 thread on the reference laptop, slower at 4 threads | Memory grows per replica; the 50 ms budget falls back to rules under CPU contention | Evaluation report |
+| ML in-process | Each replica loads its own model copy; inference p95 22.7 ms at 1 thread and 147.8 ms at 4 threads on the reference laptop (evaluation report v1.1) | Memory grows per replica; the 50 ms budget falls back to rules under CPU contention | Evaluation report |
 | LLM | Ollama on CPU: 12-50 s for unclear questions; clear questions take < 0.1 s via the rules path | The LLM path does not meet the API latency target on CPU-only hardware | Documented (ADR-0018); no task |
 | Beat | Must be a single instance | Run exactly one `beat` | none |
 
@@ -483,7 +484,7 @@ Items without a task are recommendations that nobody has been assigned yet.
 | 3 | Run the monitoring stack in staging, add Alertmanager and receivers, error tracking and availability probes | Observability NFR; alerts currently go nowhere | TASK-069, TASK-103 |
 | 4 | Load and concurrency tests on business endpoints; pool tuning; multi-replica run | Performance and scalability NFR evidence | TASK-078, TASK-079, TASK-102 |
 | 5 | Backup automation and a restore drill; PITR | Recoverability | TASK-083 |
-| 6 | Model registry promotion (champion alias), drift monitoring, retraining, model cards; switch the default scorer to `hybrid` once #251 is fixed | Today the API reads a model directory and serves rules by default | TASK-038, TASK-068, TASK-084, TASK-088, #251 |
+| 6 | Model registry promotion (champion alias), drift monitoring, retraining, model cards; ship the model artefacts to staging and enable `hybrid` there | Today the API reads a local model directory; staging has none and serves rules | TASK-038, TASK-068, TASK-084, TASK-088 |
 | 7 | Secrets from a secret manager rather than a host `.env`; managed KMS for the field-encryption key | Key custody | no task |
 | 8 | Managed PostgreSQL with HA and read replicas for analytics; PgBouncer | Removes the single-primary limit | no task |
 | 9 | GPU-backed or hosted LLM runtime behind the same adapter, or keep rules-only in production | The CPU LLM path is 12-50 s | no task (ADR-0018) |
