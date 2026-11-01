@@ -170,11 +170,12 @@ jobs:
             echo "  BatchMode yes"
           } > ~/.ssh/config
           chmod 600 ~/.ssh/config
-      - name: Copy the compose file and deploy script
+      - name: Copy the compose file, deploy script and TLS helpers
         if: env.DRY_RUN != 'true'
         run: |
           ssh staging 'mkdir -p ~/pbip'
-          scp infra/deploy/docker-compose.prod.yml infra/deploy/deploy.sh staging:~/pbip/
+          scp infra/deploy/docker-compose.prod.yml infra/deploy/deploy.sh infra/deploy/certbot-deploy-hook.sh \
+            infra/postgres/tls-entrypoint.sh staging:~/pbip/
       - name: Deploy (pull, migrate, health-gated start)
         if: env.DRY_RUN != 'true'
         # The runner's values are meant to reach the host: quote them with %q into one remote command.
