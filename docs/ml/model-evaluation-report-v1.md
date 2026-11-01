@@ -6,6 +6,9 @@
 **MLflow run:** `5de0a9dc7c534ed29701cd7703d4fb6a`, experiment `pbip-fraud`. The v1.0 report (generator
 v2.0) used run `79157b22dc9a46d0b2dcfbb0ccde5cd9`; its headline numbers are kept in §3.3 for comparison.
 
+> **Generator v2.2 (TASK-071, F7/F8) was evaluated in §8.** The served model and §1-§7 stay on v2.1: the
+> v2.2 retrain passes the four #251 bars but fails the TASK-080 behaviour baseline, so it is not promoted.
+
 > **All data in this report is synthetic.** It comes from the seeded generator (`pbip_datagen`, TASK-023),
 > which plants six fraud scenarios (F1-F6) and, since v2.1, three kinds of legitimate first-time behaviour.
 > Scores show the models separate the planted patterns. They are **not** an estimate of performance on real
@@ -179,3 +182,59 @@ Protections in code:
 - the metric gate in `test_fraud_hybrid.py`;
 - the API test that a legitimate transfer to a 2-day-old payee is ALLOWed by the real models
   (`test_real_artifacts_load_once_and_score_within_the_latency_budget`).
+
+## 8. Generator v2.2 (TASK-071): F7 structuring and F8 dormant reactivation
+
+**Date:** 1 Nov 2026. **MLflow run:** `c5f98370f5904f88817d0a7d0721ec64`, experiment `pbip-fraud-task071`
+(kept apart from `pbip-fraud` because the model is not promoted). Same commands as §1 with this branch; the
+12-month rows used an extra export `--seed 4242 --customers 1500 --months 12 --out data/holdout12`, passed to
+`fraud_eval_report.py` as `--holdout`. Latency was not re-measured (same model shapes; machine shared).
+
+**What changed in the data.** v2.2 adds rows only: every v2.1 row and label is byte-identical
+(`test_v2_1_rows_are_unchanged`). The 6-month training export gains 31 F7 incidents (142 deposit rows) and no
+F8: F8 needs more than 180 days of dormancy inside the data, which 6 months cannot hold. "Before" below is the
+v2.1 model (run `5de0a9dc...`) scoring the same v2.2 rows. Its F1-F6 numbers equal §3, which confirms the
+F1-F6 rows did not change.
+
+| Measure (test / held-out) | Before: v2.1 model | After: v2.2 retrain |
+|---|---|---|
+| Recall at REVIEW, all fraud rows | 0.852 / 0.867 | 0.898 / 0.893 |
+| Recall at REVIEW, F1-F6 rows only (comparable with §3) | 0.835 / 0.832 | 0.887 / 0.866 |
+| Recall at REVIEW, F7 rows | 1.000 / 1.000 (13 / 70 rows) | 1.000 / 1.000 |
+| Recall at REVIEW, F8 rows (12-month held-out export, 17 rows) | 0.941 | 0.941 |
+| Rules only, recall at REVIEW (all / F1-F6 / F7) | 0.164 / 0.183 / 0.000 (test) | same rules |
+| False positives at REVIEW (all legitimate debits) | 4 / 8 | 7 / 11 |
+| Hybrid PR-AUC | 0.880 / 0.895 | 0.891 / 0.905 |
+
+**The four bars from §3.3, after retraining:**
+
+| Criterion | Bar | v2.2 result (test / held-out) | v2.1 result |
+|---|---|---|---|
+| Legitimate new-payee transfers held for REVIEW | ≤ 1% | 0.46% / 0.30% (pass) | 0.09% / 0.24% |
+| Legitimate new-payee transfers asked for STEP_UP | ≤ 10% | 7.9% / 8.1% (pass) | 7.6% / 8.0% |
+| All legitimate debits held at REVIEW | ≤ 0.1% | 0.07% / 0.04% (pass) | 0.04% / 0.03% |
+| Recall at REVIEW, hybrid vs the rules alone | hybrid clearly better | 0.898 vs 0.164 (F1-F6: 0.887 vs 0.183) (pass) | 0.835 vs 0.183 |
+
+**The TASK-080 behaviour baseline fails, so the v2.2 model is not promoted.**
+- The suite's own model (1,500 customers) scores the canonical APP scam **89**, against a baseline of 92
+  (tolerance 2). It is still BLOCK.
+- The full 3,000-customer model is worse: it scores the same APP scam **30 (STEP_UP)**. Its LightGBM
+  probability is 0.08; the v2.1 model gives 1.00 and 99 (BLOCK). The other canonical cases did not change
+  (velocity burst 30, takeover 60, routine grocery 0).
+- **Root cause: the F7 deposits are credits.** Training includes every transfer, but the API only ever
+  scores outgoing ones. The generator has no legitimate credits, so every credit is fraud (F6 inbound, now
+  F7). Credits get debit-shaped features: `ratio_to_avg_amount` compares a deposit near INR 1,00,000 with the
+  customer's small debits, so it is very high, and `payee_age_seconds` is -1. LightGBM separates these 142
+  rows easily, and the splits it adds move the debit side of the feature space. Two checks support this:
+  - Retraining the suite's model with the F7 rate set to 0 restores 92.
+  - Training the 3,000-customer model on debit rows only gives the APP scam 88 (BLOCK), recall 0.81 at
+    REVIEW on fraud debits, 0.02% legitimate debits at REVIEW, and 0.09% / 7.5% of legitimate new-payee
+    transfers at REVIEW / STEP_UP.
+- **No threshold or baseline was changed.** Recommendation (owner decision, follow-up): either train and
+  evaluate on DEBIT rows only (what the API scores), or add legitimate inbound transfers to the generator, so
+  that credits do not label themselves.
+- F7 recall of 1.000 is not evidence of structuring detection. A credit is fraud by construction here,
+  and no feature sums deposits over a window. Detecting structuring needs a windowed credit-sum feature in
+  both feature paths, with a parity test.
+- F8 is caught because a reactivation looks like F1/F3: a new device, a payee added minutes earlier and a
+  large amount. No feature measures days since the last activity.
