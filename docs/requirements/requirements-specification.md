@@ -134,7 +134,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 
 | ID | Requirement | Source | Status | Tasks | Gap |
 |---|---|---|---|---|---|
-| FR-58 | Security staff shall see high-risk customers, active alerts, login anomalies, fraud events and open investigations. | UC-13 | Planned | TASK-099 | Only the fraud alert queue (API and screen), the fraud statistics API and Grafana panels (fraud decisions, failed logins) exist |
+| FR-58 | Security staff shall see high-risk customers, active alerts, login anomalies, fraud events and open investigations. | UC-13 | Implemented | TASK-099 | `GET /api/v1/fraud/monitoring` and the `/staff/monitoring` page (fraud analysts and admins, with MFA); ids and aggregates only |
 | FR-59 | A compliance officer shall read the audit history and verify its integrity. | Section 5 "audit history" | Implemented | TASK-048 | |
 | FR-60 | Compliance shall see system-generated alerts, exception management and regulatory monitoring. | Section 5 | Planned | TASK-100 | |
 
