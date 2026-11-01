@@ -132,6 +132,23 @@ describe("routing, roles and the application shell (ADR-0016)", () => {
       expect(await screen.findByRole("heading", { name: "Staff workspace" })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "My banking" })).toHaveAttribute("href", "/accounts");
     });
+
+    it("renders Attack simulator link in staff navigation for fraud analyst in non-production, hides it in production", async () => {
+      process.env.APP_ENV = "local";
+      me = analystMe;
+      const { unmount } = renderApp();
+      expect(await screen.findByRole("link", { name: "Attack simulator" })).toHaveAttribute(
+        "href",
+        "/staff/fraud-lab",
+      );
+      unmount();
+
+      process.env.APP_ENV = "production";
+      renderApp();
+      await screen.findByRole("heading", { name: "Staff workspace" });
+      expect(screen.queryByRole("link", { name: "Attack simulator" })).not.toBeInTheDocument();
+      process.env.APP_ENV = "local";
+    });
   });
 
   describe("session handling", () => {

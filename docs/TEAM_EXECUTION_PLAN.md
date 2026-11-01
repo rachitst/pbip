@@ -2454,7 +2454,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #104 | **Sprint:** 6 | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Sun 01 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
+- **Start:** Sun 01 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (set when merged) | **Status:** In Review | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
 - **Depends on:** TASK-036 (#59, Kalpak), TASK-080 (#103, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-036, TASK-080
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; lives in the staff route tree.
@@ -2468,10 +2468,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Clearly isolated with demo-only guardrail disabled in production environments
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #104`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] UI cards for each scenario: Account Takeover, APP Scam, Mule Pass-Through, Velocity Burst
-  - [ ] Clicking 'Execute Attack' fires realistic sequence of API calls
-  - [ ] Live visual feedback shows transfer held, alert raised in staff queue, and reasons generated
-  - [ ] Clearly isolated with demo-only guardrail disabled in production environments
+  - [x] UI cards for each scenario: Account Takeover, APP Scam, Mule Pass-Through, Velocity Burst
+  - [x] Clicking 'Execute Attack' fires realistic sequence of API calls
+  - [x] Live visual feedback shows transfer held, alert raised in staff queue, and reasons generated
+  - [x] Clearly isolated with demo-only guardrail disabled in production environments
 - **Definition of done (evidence):** Component tests test attack scenario dispatch, disabled when APP_ENV=production.
 - **Required checks:**
   - Automated: Vitest + Testing Library covering loading, empty, error and success states; Playwright journey for critical flows; types only from `schema.d.ts`
