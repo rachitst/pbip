@@ -186,7 +186,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 | TASK-056 | Relationship Manager Behavioral Insights API | Krishna | Sat 31 Oct | Sat 31 Oct | 054, 055 | Seq | Low | #79 |
 | TASK-067 | AI Assistant Adversarial Security Test Suite | Rachit | Sat 31 Oct | Sat 31 Oct | 059, 060 | Seq | Low | #90 |
 | TASK-066 | Relationship Manager Insights Dashboard UI | Krishna | Sat 31 Oct | Sun 01 Nov | 056, 019 | Seq | Low | #89 |
-| TASK-076 | AI Assistant Security Architecture & Guardrails Specification | Abbas | Sat 31 Oct | Sun 01 Nov | 057, 059, 067 | Seq | Low | #99 |
+| TASK-076 | AI Assistant Security Architecture & Guardrails Specification | Rachit | Sat 31 Oct | Sun 01 Nov | 057, 059, 067 | Seq | Low | #99 |
 | TASK-064 | Fixed Deposit Booking & Double-Entry Ledger Lock | Sujal | Sat 31 Oct | Sun 01 Nov | 063, 005 | Seq | Low | #87 |
 | TASK-061 | AI Assistant Conversational Chat UI Drawer | Rachit | Sun 01 Nov | Mon 02 Nov | 060, 019 | Seq | Medium | #84 |
 | TASK-068 | Data Drift & Population Stability Index (PSI) Monitor | Pranay | Sun 01 Nov | Mon 02 Nov | 024, 029 | Seq | Low | #91 |
@@ -2309,8 +2309,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-076 - AI Assistant Security Architecture & Guardrails Specification
 
 - **Issue:** #99 | **Sprint:** 5 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Documentation & Governance
-- **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Sat 31 Oct | **Target deadline:** Sun 01 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (2.8 days of slack)
+- **Owner:** Rachit (`rachitst`), taken over from Abbas on Sun 1 Nov to unblock the fraud and AI chain
+- **Start:** Sat 31 Oct | **Target deadline:** Sun 01 Nov | **Actual completion:** Sun 1 Nov (`docs/security/ai-assistant-security.md`: the seven rules mapped to code and tests, OWASP LLM Top 10 (2025) matrix, recorded adversarial transcript and real-model measurements, residual risks) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-057 (#80, Rachit), TASK-059 (#82, Rachit), TASK-067 (#90, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-057, TASK-059, TASK-067
 - **Goal:** Formal documentation of assistant security architecture, threat model, and defense-in-depth layers.
@@ -2322,9 +2322,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Detailed transcript of adversarial testing results
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #99`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Documents 7 hard security rules (no SQL, server customer ID, bounded arguments, read-only tools)
-  - [ ] OWASP Top 10 for LLM Applications evaluation and mitigation matrix
-  - [ ] Detailed transcript of adversarial testing results
+  - [x] Documents 7 hard security rules (no SQL, server customer ID, bounded arguments, read-only tools)
+  - [x] OWASP Top 10 for LLM Applications evaluation and mitigation matrix
+  - [x] Detailed transcript of adversarial testing results
 - **Definition of done (evidence):** Committed to docs/security/ai-assistant-security.md, ready for viva audit.
 - **Required checks:**
   - Automated: security tests for every authorization and negative path; prove no secrets/PII reach logs (redaction test); document builds/renders, links valid, content matches the code and backlog
