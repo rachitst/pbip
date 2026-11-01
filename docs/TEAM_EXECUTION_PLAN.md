@@ -132,7 +132,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 | TASK-038 | MLflow Model Registry Champion/Challenger Promotion Workflow | Pranay | Thu 29 Oct | Fri 30 Oct | 011, 029 | Seq | Low | #61 |
 | TASK-037 | Step-Up MFA Challenge Modal & Customer Transfer Confirmation | Kalpak | Thu 29 Oct | Thu 29 Oct | 033, 019 | Seq | Low | #60 |
 | TASK-035 | Fraud Telemetry & Risk Analytics Endpoints | Krishna | Fri 30 Oct | Fri 30 Oct | 033 | Seq | High | #58 |
-| TASK-039 | Fraud Engine Model Evaluation & Performance Report | Pranay | Fri 30 Oct | Sat 31 Oct | 029, 030, 031 | Seq | Low | #62 |
+| TASK-039 | Fraud Engine Model Evaluation & Performance Report | Rachit | Fri 30 Oct | Sat 31 Oct | 029, 030, 031 | Seq | Low | #62 |
 | TASK-036 | Staff Fraud Operations Queue & Alert Detail UI | Kalpak | Fri 30 Oct | Sun 01 Nov | 019, 033, 035 | Seq | High | #59 |
 
 - **Critical path:** 023 (Pranay) -> 024 (Pranay) -> 029 (Pranay) -> 031 (Pranay) -> 032 (Pranay) -> 033 (Pranay) -> 035 (Krishna) -> 036 (Kalpak), target Sun 01 Nov.
@@ -209,7 +209,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 | TASK-083 | Disaster Recovery & Backup/Restore Automation Script | Rachit | Wed 28 Oct | Wed 28 Oct | 001 | Par | Low | #106 |
 | TASK-078 | k6 Concurrency & Load Stress Test Suite | Rachit | Thu 29 Oct | Fri 30 Oct | 012, 033 | Seq | Low | #101 |
 | TASK-079 | Database Index Optimization & Connection Pool Tuning | Rachit | Fri 30 Oct | Fri 30 Oct | 078 | Seq | Low | #102 |
-| TASK-080 | Fraud Scorer Behavior Regression Test Suite | Pranay | Sat 31 Oct | Sat 31 Oct | 031, 033 | Seq | Medium | #103 |
+| TASK-080 | Fraud Scorer Behavior Regression Test Suite | Rachit | Sat 31 Oct | Sat 31 Oct | 031, 033 | Seq | Medium | #103 |
 | TASK-084 | Final ML Model Retraining & Hyperparameter Optimization | Pranay | Sat 31 Oct | Sun 01 Nov | 029, 038 | Seq | Low | #107 |
 | TASK-077 | Playwright Critical Journey End-to-End Test Suite | Rachit | Sun 01 Nov | Mon 02 Nov | 019, 036, 037 | Seq | Medium | #100 |
 | TASK-081 | Fraud Attack Simulator Interactive Lab Page | Abbas | Sun 01 Nov | Mon 02 Nov | 036, 080 | Seq | High | #104 |
@@ -1250,8 +1250,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-039 - Fraud Engine Model Evaluation & Performance Report
 
 - **Issue:** #62 | **Sprint:** 3 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Documentation & Governance
-- **Owner:** Pranay (`pranaysanap`)
-- **Start:** Fri 30 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (3.7 days of slack)
+- **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov; was Pranay)
+- **Start:** Fri 30 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** Sun 1 Nov (`docs/ml/model-evaluation-report-v1.md`, MLflow run 79157b22) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-029 (#52, Rachit), TASK-030 (#53, Rachit), TASK-031 (#54, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-029, TASK-030, TASK-031
 - **Goal:** Formal evaluation report documenting model performance, PR-AUC, FPR, and synthetic limitations.
@@ -1264,10 +1264,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Honest discussion of synthetic data generator limitations and mitigation strategies
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #62`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Reports precision, recall, F1, PR-AUC, FPR, and confusion matrix on held-out test split
-  - [ ] Cost curve analysis demonstrating optimal threshold selection for retail bank operations
-  - [ ] Inference latency benchmarks under single-request and concurrent loads
-  - [ ] Honest discussion of synthetic data generator limitations and mitigation strategies
+  - [x] Reports precision, recall, F1, PR-AUC, FPR, and confusion matrix on held-out test split (time-split test and a held-out seed)
+  - [x] Cost curve analysis demonstrating optimal threshold selection for retail bank operations (three review-cost assumptions; no threshold changed on synthetic evidence, stated)
+  - [x] Inference latency benchmarks under single-request and concurrent loads (1/2/4 threads on the laptop; 4 threads exceed 100 ms p95, where the API budget falls back to rules)
+  - [x] Honest discussion of synthetic data generator limitations and mitigation strategies (incl. #251)
 - **Definition of done (evidence):** Committed to docs/ml/model-evaluation-report-v1.md with charts and tables.
 - **Required checks:**
   - Automated: pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable; document builds/renders, links valid, content matches the code and backlog
@@ -2423,8 +2423,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-080 - Fraud Scorer Behavior Regression Test Suite
 
 - **Issue:** #103 | **Sprint:** 6 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
-- **Owner:** Pranay (`pranaysanap`)
-- **Start:** Sat 31 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Medium (1.1 days of slack before downstream work is delayed)
+- **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov; was Pranay)
+- **Start:** Sat 31 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** Sun 1 Nov (`ml/tests/test_fraud_behaviour_regression.py` + recorded baseline) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-031 (#54, Rachit), TASK-033 (#56, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-031, TASK-033
 - **Goal:** Strict regression test suite verifying that known fraud scenarios never score below thresholds.
@@ -2437,10 +2437,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Build fails automatically in CI if any model modification lowers score on known fraud cases
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #103`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Known APP scam transfers consistently score >= 80 (REVIEW or BLOCK)
-  - [ ] Known routine grocery purchases consistently score <= 25 (ALLOW)
-  - [ ] Velocity burst attacks consistently trigger STEP_UP or higher
-  - [ ] Build fails automatically in CI if any model modification lowers score on known fraud cases
+  - [x] Known APP scam transfers consistently score >= 80 (REVIEW or BLOCK) (97, BLOCK)
+  - [x] Known routine grocery purchases consistently score <= 25 (ALLOW) (0)
+  - [x] Velocity burst attacks consistently trigger STEP_UP or higher (scored 0 before; fixed with a VELOCITY_BURST floor at STEP_UP, now 30)
+  - [x] Build fails automatically in CI if any model modification lowers score on known fraud cases (`data/fraud_behaviour_baseline.json`, tolerance 2 points for CPU float differences)
 - **Definition of done (evidence):** Regression suite added to ml/tests, passes 100% in CI gate.
 - **Required checks:**
   - Automated: pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable; the suite itself runs in CI or via a documented command and asserts its thresholds

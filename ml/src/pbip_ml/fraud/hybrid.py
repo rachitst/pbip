@@ -11,7 +11,8 @@ How a score is made (all parameters are fitted on the VALIDATION split and store
 4. Stacked probability ``sigmoid(b0 + b1*p + b2*a + b3*r/100)`` - a logistic regression fitted on
    validation: these are the "calibrated weights". Risk = round(100 * that probability).
 5. **Hard-rule overrides** raise the floor: RAPID_ATO_TRANSFER -> at least REVIEW,
-   NEW_PAYEE_LARGE_AMOUNT -> at least STEP_UP. Rules can raise a score, never lower it.
+   NEW_PAYEE_LARGE_AMOUNT and VELOCITY_BURST -> at least STEP_UP. Rules can raise a score, never
+   lower it.
 6. Risk -> action: ALLOW < 30 <= STEP_UP < 60 <= REVIEW < 85 <= BLOCK.
 
 **Fail-safe:** if the models are missing or fail, the score is the rule points alone (with a reason
@@ -40,7 +41,14 @@ from pbip_ml.fraud.training import MODEL_FEATURES, AnomalyModel
 STEP_UP_AT, REVIEW_AT, BLOCK_AT = 30, 60, 85
 ANOMALY_REASON_AT = 0.5
 TOP_SHAP = 3
-OVERRIDES: dict[str, int] = {"RAPID_ATO_TRANSFER": REVIEW_AT, "NEW_PAYEE_LARGE_AMOUNT": STEP_UP_AT}
+# Rule floors: these rules are bank policy, so a model trained on synthetic data can never score
+# them below their floor. VELOCITY_BURST joined in TASK-080: without it the stacked weights scored
+# a 6-transfers-in-10-minutes burst at risk 0 (measured), below the STEP_UP the rule demands.
+OVERRIDES: dict[str, int] = {
+    "RAPID_ATO_TRANSFER": REVIEW_AT,
+    "NEW_PAYEE_LARGE_AMOUNT": STEP_UP_AT,
+    "VELOCITY_BURST": STEP_UP_AT,
+}
 
 
 def decide(risk: int) -> FraudDecision:

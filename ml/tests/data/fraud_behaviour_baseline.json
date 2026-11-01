@@ -1,0 +1,15 @@
+{
+  "_note": "Recorded 2026-11-01 (TASK-080) with seed 42, 1500 customers x 6 months. Raise deliberately; never lower.",
+  "account_takeover": {
+    "decision": "REVIEW",
+    "risk_score": 60
+  },
+  "app_scam": {
+    "decision": "BLOCK",
+    "risk_score": 97
+  },
+  "velocity_burst": {
+    "decision": "STEP_UP",
+    "risk_score": 30
+  }
+}
