@@ -1213,6 +1213,40 @@
         "title": "CustomerSegmentResponse",
         "type": "object"
       },
+      "DayCounts": {
+        "properties": {
+          "ALLOW": {
+            "title": "Allow",
+            "type": "integer"
+          },
+          "BLOCK": {
+            "title": "Block",
+            "type": "integer"
+          },
+          "REVIEW": {
+            "title": "Review",
+            "type": "integer"
+          },
+          "STEP_UP": {
+            "title": "Step Up",
+            "type": "integer"
+          },
+          "day": {
+            "description": "UTC date, YYYY-MM-DD",
+            "title": "Day",
+            "type": "string"
+          }
+        },
+        "required": [
+          "day",
+          "ALLOW",
+          "STEP_UP",
+          "REVIEW",
+          "BLOCK"
+        ],
+        "title": "DayCounts",
+        "type": "object"
+      },
       "DecisionRequest": {
         "properties": {
           "action": {
@@ -1778,6 +1812,91 @@
           "components"
         ],
         "title": "FinancialHealthScoreResponse",
+        "type": "object"
+      },
+      "FraudStats": {
+        "properties": {
+          "block_rate": {
+            "title": "Block Rate",
+            "type": "number"
+          },
+          "by_day": {
+            "items": {
+              "$ref": "#/components/schemas/DayCounts"
+            },
+            "title": "By Day",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "hold_rate": {
+            "description": "Share of scored transactions held for REVIEW",
+            "title": "Hold Rate",
+            "type": "number"
+          },
+          "latency_p95_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency P95 Ms"
+          },
+          "model_fallbacks": {
+            "description": "Decisions served by the rules because the model failed",
+            "title": "Model Fallbacks",
+            "type": "integer"
+          },
+          "risky_payees": {
+            "items": {
+              "$ref": "#/components/schemas/RiskyPayee"
+            },
+            "title": "Risky Payees",
+            "type": "array"
+          },
+          "scored": {
+            "title": "Scored",
+            "type": "integer"
+          },
+          "top_rules": {
+            "items": {
+              "$ref": "#/components/schemas/RuleCount"
+            },
+            "title": "Top Rules",
+            "type": "array"
+          },
+          "totals": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Totals",
+            "type": "object"
+          },
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window_days",
+          "generated_at",
+          "scored",
+          "totals",
+          "hold_rate",
+          "block_rate",
+          "by_day",
+          "top_rules",
+          "risky_payees",
+          "model_fallbacks",
+          "latency_p95_ms"
+        ],
+        "title": "FraudStats",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -2657,6 +2776,71 @@
           "full_name"
         ],
         "title": "RegisterRequest",
+        "type": "object"
+      },
+      "RiskyPayee": {
+        "properties": {
+          "account": {
+            "description": "Masked: last four digits only",
+            "title": "Account",
+            "type": "string"
+          },
+          "bank_code": {
+            "title": "Bank Code",
+            "type": "string"
+          },
+          "customers": {
+            "description": "Distinct customers who sent flagged money here",
+            "title": "Customers",
+            "type": "integer"
+          },
+          "flagged_transfers": {
+            "title": "Flagged Transfers",
+            "type": "integer"
+          },
+          "max_risk": {
+            "title": "Max Risk",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bank_code",
+          "account",
+          "flagged_transfers",
+          "customers",
+          "max_risk"
+        ],
+        "title": "RiskyPayee",
+        "type": "object"
+      },
+      "RuleCount": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "required": [
+          "code",
+          "source",
+          "count"
+        ],
+        "title": "RuleCount",
         "type": "object"
       },
       "SpendingBreakdownResponse": {
@@ -5418,6 +5602,57 @@
           }
         ],
         "summary": "RELEASE (false positive, posts the held transfer) or REJECT (confirmed fraud)",
+        "tags": [
+          "fraud"
+        ]
+      }
+    },
+    "/api/v1/fraud/stats": {
+      "get": {
+        "description": "Aggregates only, cached in Redis for 60 seconds per window (TASK-035).",
+        "operationId": "get_stats_api_v1_fraud_stats_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FraudStats"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fraud telemetry: decisions over time, hold rate, top reasons, risky payees",
         "tags": [
           "fraud"
         ]
