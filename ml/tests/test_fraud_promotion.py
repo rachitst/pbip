@@ -8,8 +8,10 @@ good one. Exported champions must pass the serving loader's checksum check.
 
 import hashlib
 import json
+import os
 import shutil
 from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,7 +27,7 @@ from pbip_ml.fraud import promotion as p
 from pbip_ml.fraud import training as t
 from pbip_ml.fraud.evaluation import served_metrics
 from pbip_ml.fraud.train import load_export, log_to_mlflow, run
-from pbip_ml.tracking import TRACKING_URI_ENV, ensure_experiment, local_target
+from pbip_ml.tracking import TRACKING_URI_ENV, configure_tracking, ensure_experiment, local_target
 
 pytestmark = [pytest.mark.unit, pytest.mark.timeout(240)]
 
@@ -40,6 +42,25 @@ class Registry:
     good_run: str
     good_dir: Path
     bad_run: str
+
+
+@contextmanager
+def tracking_at(uri: str) -> Iterator[None]:
+    """Point MLflow (global and ``MLFLOW_TRACKING_URI``) at ``uri``, and leave both as found.
+
+    ``mlflow.set_tracking_uri`` also WRITES ``MLFLOW_TRACKING_URI`` (for subprocesses). Restoring
+    ``previous = mlflow.get_tracking_uri()`` afterwards therefore exported MLflow's resolved default
+    (``sqlite:///<cwd>/mlflow.db``) into the environment, and a later ``configure_tracking``
+    treated it as an explicit local store instead of using its ``local_dir``
+    (``test_cli_run_writes_artifacts_and_logs_to_mlflow`` failed in CI). ``None`` clears both;
+    the MonkeyPatch then puts the original env value back.
+    """
+    with pytest.MonkeyPatch.context() as env:
+        env.setenv(TRACKING_URI_ENV, uri)
+        try:
+            yield
+        finally:
+            mlflow.set_tracking_uri(None)  # type: ignore[arg-type]  # None = unset (mlflow source)
 
 
 def _train_and_log(data: Path, out: Path, local_dir: Path, claim: float | None = None) -> str:
@@ -62,14 +83,11 @@ def registry(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Registry]:
     rng = np.random.default_rng(7)
     labels["transaction_id"] = rng.choice(transfers["id"].to_numpy(), len(labels), replace=False)
     labels.to_csv(bad_data / "fraud_labels.csv", index=False)
-    previous = mlflow.get_tracking_uri()
-    with pytest.MonkeyPatch.context() as env:
-        env.setenv(TRACKING_URI_ENV, target.uri)
+    with tracking_at(target.uri):
         good_dir = tmp_path_factory.mktemp("good-model")
         good = _train_and_log(data, good_dir, root)
         bad = _train_and_log(bad_data, tmp_path_factory.mktemp("bad-model"), root, claim=0.99)
         yield Registry(target.uri, data, good, good_dir, bad)
-    mlflow.set_tracking_uri(previous)
 
 
 def _promote(
@@ -314,3 +332,16 @@ def test_tracking_uri_comes_from_argument_then_environment_never_a_local_fallbac
     assert p.tracking_uri_from(None, {}) == "http://localhost:5000"
     with pytest.raises(p.PromotionError):
         p.tracking_uri_from("s3://bucket/x", {})
+
+
+def test_fixture_cleanup_leaves_no_tracking_uri_in_the_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression (CI on #268): the module fixture leaked ``MLFLOW_TRACKING_URI`` into later tests,
+    so the training CLI test logged to ``<cwd>/mlflow.db`` instead of its own ``local_dir``."""
+    monkeypatch.delenv(TRACKING_URI_ENV, raising=False)  # as on CI: no MLflow configured
+    with tracking_at(local_target(tmp_path / "a").uri):
+        configure_tracking()
+    assert TRACKING_URI_ENV not in os.environ
+    target = configure_tracking(local_dir=tmp_path / "b", probe=lambda _uri: False)
+    assert target.uri == local_target(tmp_path / "b").uri  # falls back to local_dir, as CI expects

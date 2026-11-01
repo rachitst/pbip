@@ -368,7 +368,6 @@ def test_champion_exported_from_the_registry_is_what_the_api_loads_at_startup(
     target = local_target(tmp_path / "mlflow")
     ensure_experiment("pbip-fraud", target)
     monkeypatch.setenv(TRACKING_URI_ENV, target.uri)
-    previous = mlflow.get_tracking_uri()
     served = tmp_path / "models" / "fraud"
     try:
         report = json.loads((model_dir / "report.json").read_text(encoding="utf-8"))
@@ -378,7 +377,9 @@ def test_champion_exported_from_the_registry_is_what_the_api_loads_at_startup(
         assert result.promoted and result.champion_version == result.version
         export_champion(target.uri, served)
     finally:
-        mlflow.set_tracking_uri(previous)
+        # set_tracking_uri also writes MLFLOW_TRACKING_URI; None clears both, then monkeypatch
+        # restores the original env (never leak a resolved default into later tests).
+        mlflow.set_tracking_uri(None)  # type: ignore[arg-type]  # None = unset (mlflow source)
     configured = settings.model_copy(update={"fraud_model_dir": str(served)})
     engine = create_app(configured).state.fraud_engine
     assert engine is not None and engine.params.model_version == "hybrid-lgbm-iforest-1"
