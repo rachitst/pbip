@@ -1,4 +1,4 @@
-"""RM insights additions for the dashboard (TASK-066, ADR-0021).
+"""RM insights additions for the dashboard (TASK-066, ADR-0022).
 
 - the segment comes from the offline job's ``customer_segments`` table (regression)
 - loan propensity per row and a server-side ``min_loan_propensity`` filter that pages correctly

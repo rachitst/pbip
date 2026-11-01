@@ -1,4 +1,4 @@
-"""Relationship Manager outreach log (TASK-066, ADR-0021).
+"""Relationship Manager outreach log (TASK-066, ADR-0022).
 
 An RM records each call, meeting, email or note about a customer here so that the next RM sees what
 was already said. Rows are append-only from the API: there is no edit or delete endpoint, because

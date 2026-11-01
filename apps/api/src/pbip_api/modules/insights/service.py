@@ -3,11 +3,11 @@
 Cost is bounded: one set-based query gives every customer's balances and last activity, the churn
 signals are computed from those rows, and only the requested page gets product recommendations.
 The one exception is the loan-propensity filter: a customer's loan score exists only after the
-recommendation rules have run, so with that filter every candidate is scored (ADR-0021).
+recommendation rules have run, so with that filter every candidate is scored (ADR-0022).
 The ordering is by churn risk (retention priority), then balance.
 
 Scope: RM and admin see every customer. The bank has no RM-to-customer assignment yet, and the
-requirements (UC-12, actors table) do not define one; ADR-0021 records this.
+requirements (UC-12, actors table) do not define one; ADR-0022 records this.
 """
 
 from dataclasses import dataclass

@@ -1,4 +1,4 @@
-# ADR 0021: RM insights detail, loan-propensity filter and the outreach log
+# ADR 0022: RM insights detail, loan-propensity filter and the outreach log
 - Status: Proposed (needs owner approval before merge: new table)
 - Date: 2026-11-01
 - Deciders: Architecture Team
