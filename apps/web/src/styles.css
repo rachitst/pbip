@@ -1337,6 +1337,16 @@ a {
   gap: var(--space-2);
   align-items: center;
 }
+/* Label and count rows: the label wraps, the number never splits across lines. */
+.details--counts {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.details--counts dd {
+  overflow-wrap: normal;
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .short-id {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: var(--text-sm);

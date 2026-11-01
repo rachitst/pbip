@@ -202,7 +202,7 @@ export function LoginAnomaliesPanel({ panel }: { panel: Monitoring["login_anomal
     <section className="card fraud-panel" aria-labelledby="mon-logins">
       <h2 id="mon-logins">Login anomalies</h2>
       <p className="muted">Last {period}. User ids only; no addresses or emails.</p>
-      <dl className="details">
+      <dl className="details details--counts">
         {SECURITY_COUNTS.map((c) => (
           <div className="details__row" key={c.key}>
             <dt>{c.label}</dt>
