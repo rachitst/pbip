@@ -17,24 +17,77 @@ outgoing debits. This module implements Causal Temporal Progression and Flow Com
 ordering (t_in <= t_out across consecutive hops), maximum hop delays, and amount retention
 compatibility across the cycle. It does not prove that funds were not commingled with other
 account balance.
+
+Offline spike only: nothing on the API request path, the ledger or the fraud scorer imports this
+module (results and recommendation: ``docs/ml/circular-transfer-spike.md``). Input rows are typed
+structurally (``TransferLike``) so ``pbip_ml`` does not import ``pbip_datagen`` at runtime.
 """
 
 from collections import defaultdict
-from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from fractions import Fraction
+from typing import Protocol
 from uuid import UUID, uuid5
 
 import networkx as nx
-from pbip_datagen.fraud import Transfer
 
 DEFAULT_MIN_CYCLE_LENGTH = 3
 DEFAULT_MAX_CYCLE_LENGTH = 5
 DEFAULT_MIN_RETENTION = 0.90
 DEFAULT_MAX_HOP_DELAY = timedelta(days=7)
+# The whole loop (first hop to last hop) must close inside this window; equal to the default
+# lookback so a loop can never be assembled from transfers further apart than one batch window.
+DEFAULT_MAX_LOOP_SPAN = timedelta(days=14)
 DEFAULT_RISK_BOOST = 35
 MAX_SCORE = 100
+
+
+class TransferLike(Protocol):
+    """The fields this module reads from a transfer row (``pbip_datagen.fraud.Transfer`` fits)."""
+
+    @property
+    def id(self) -> UUID: ...
+    @property
+    def customer_id(self) -> UUID: ...
+    @property
+    def counterparty_id(self) -> UUID: ...
+    @property
+    def direction(self) -> str: ...
+    @property
+    def amount_minor(self) -> int: ...
+    @property
+    def occurred_at(self) -> datetime: ...
+
+
+@dataclass(frozen=True, slots=True)
+class TransferRow:
+    """A minimal concrete transfer, used by the synthetic benchmark below."""
+
+    id: UUID
+    customer_id: UUID
+    counterparty_id: UUID
+    direction: str
+    amount_minor: int
+    occurred_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class DetectionReport:
+    """Ground-truth comparison of detected loops (node sets) against planted rings."""
+
+    transfers_count: int
+    graph_nodes: int
+    graph_edges: int
+    ground_truth_count: int
+    detected_count: int
+    true_positives: int
+    false_positives: int
+    false_negatives: int
+    precision: float
+    recall: float
+    detected_loops: tuple["CircularLoop", ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,9 +157,9 @@ class AccountRiskBoost:
 
 
 def _ensure_utc(dt: datetime) -> datetime:
-    """Ensure datetime is timezone-aware in UTC for safe, consistent comparisons."""
+    """Normalise an aware datetime to UTC; naive datetimes are ambiguous and rejected."""
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=UTC)
+        raise ValueError("transfer timestamps must be timezone-aware")
     return dt.astimezone(UTC)
 
 
@@ -115,58 +168,30 @@ def _check_retention(
     p_max: int,
     min_retention: float = DEFAULT_MIN_RETENTION,
 ) -> tuple[bool, float]:
-    """Check retention ratio strictly > min_retention using integer arithmetic when applicable.
+    """Return (b_min / p_max > min_retention, ratio) with the comparison done exactly.
 
-    For the standard 90% threshold, uses exact integer cross-multiplication:
-        b_min * 10 > p_max * 9
-    preventing any floating-point representation anomalies at the boundary.
+    The threshold is read as its decimal literal (0.90 -> 9/10) and compared by integer
+    cross-multiplication, so a boundary loop is never accepted or rejected by float rounding.
     """
     if p_max <= 0:
         return False, 0.0
-    ret = float(b_min) / float(p_max)
-    if min_retention == DEFAULT_MIN_RETENTION:
-        is_above = (b_min * 10) > (p_max * 9)
-    else:
-        is_above = ret > min_retention
-    return is_above, ret
+    threshold = Fraction(str(min_retention))
+    is_above = b_min * threshold.denominator > p_max * threshold.numerator
+    return is_above, b_min / p_max
 
 
 def _extract_transfer_tuple(
-    record: Any,
-) -> tuple[UUID, UUID, int, datetime, UUID] | None:
-    """Extract (source, target, amount_minor, occurred_at, tx_id) from a transfer record."""
-    if isinstance(record, Transfer):
-        tx_id = record.id
-        occurred_at = _ensure_utc(record.occurred_at)
-        amt = record.amount_minor
-        if record.direction == "DEBIT":
-            src, tgt = record.customer_id, record.counterparty_id
-        else:
-            src, tgt = record.counterparty_id, record.customer_id
-        return (src, tgt, amt, occurred_at, tx_id)
-
-    if isinstance(record, dict):
-        tx_id = record["id"]
-        occurred_at = _ensure_utc(record["occurred_at"])
-        amt = int(record["amount_minor"])
-        direction = str(record.get("direction", "DEBIT"))
-        if direction == "DEBIT":
-            src, tgt = record["customer_id"], record["counterparty_id"]
-        else:
-            src, tgt = record["counterparty_id"], record["customer_id"]
-        return (src, tgt, amt, occurred_at, tx_id)
-
-    if hasattr(record, "amount_minor") and hasattr(record, "occurred_at"):
-        tx_id = record.id
-        occurred_at = _ensure_utc(record.occurred_at)
-        amt = int(record.amount_minor)
-        direction = str(getattr(record, "direction", "DEBIT"))
-        cust = record.customer_id
-        party = record.counterparty_id
-        src, tgt = (cust, party) if direction == "DEBIT" else (party, cust)
-        return (src, tgt, amt, occurred_at, tx_id)
-
-    return None
+    record: TransferLike,
+) -> tuple[UUID, UUID, int, datetime, UUID]:
+    """Return (source, target, amount_minor, occurred_at, tx_id): money flows source -> target."""
+    occurred_at = _ensure_utc(record.occurred_at)
+    if record.direction == "DEBIT":
+        src, tgt = record.customer_id, record.counterparty_id
+    elif record.direction == "CREDIT":
+        src, tgt = record.counterparty_id, record.customer_id
+    else:
+        raise ValueError("transfer direction must be DEBIT or CREDIT")
+    return (src, tgt, int(record.amount_minor), occurred_at, record.id)
 
 
 def _is_within_window(
@@ -214,7 +239,7 @@ def _add_edge_record(
 
 
 def build_transaction_graph(
-    transfers: Iterable[Any],
+    transfers: Iterable[TransferLike],
     *,
     lookback_window: timedelta | None = None,
     as_of: datetime | None = None,
@@ -232,7 +257,7 @@ def build_transaction_graph(
     extracted_records: list[tuple[UUID, UUID, int, datetime, UUID]] = []
     for item in items:
         extracted = _extract_transfer_tuple(item)
-        if extracted is not None and extracted[2] > 0 and extracted[0] != extracted[1]:
+        if extracted[2] > 0 and extracted[0] != extracted[1]:
             extracted_records.append(extracted)
 
     if not extracted_records:
@@ -264,48 +289,53 @@ def _normalize_cycle(cycle: Sequence[UUID]) -> tuple[UUID, ...]:
     return tup[min_idx:] + tup[:min_idx]
 
 
+_PathResult = tuple[float, int, int, list[UUID], list[datetime]]
+
+
 def _find_single_tx_causal_path(
     leg_transfers: list[list[EdgeTransfer]],
     max_hop_delay: timedelta,
     min_retention: float,
-) -> tuple[float, int, int, list[UUID], list[datetime]] | None:
-    """Search for a single-transfer chronological path forward in time across legs."""
-    best_result: tuple[float, int, int, list[UUID], list[datetime]] | None = None
-    best_retention = 0.0
+    max_loop_span: timedelta,
+) -> _PathResult | None:
+    """Best single-transfer-per-leg path moving forward in time across the legs.
 
-    def dfs(
-        step: int,
-        prev_time: datetime | None,
-        chosen: list[EdgeTransfer],
-    ) -> None:
-        nonlocal best_result, best_retention
+    Search is pruned as soon as a partial path breaks the hop delay, the loop span or the
+    retention threshold: min only falls and max only rises as hops are added, so a failing
+    partial ratio can never recover. This keeps the search small even for busy edges.
+    """
+    best: list[_PathResult] = []
+    chosen: list[EdgeTransfer] = []
+
+    def admissible(tx: EdgeTransfer) -> bool:
+        if not chosen:
+            return True
+        prev, first = chosen[-1].occurred_at, chosen[0].occurred_at
+        return (
+            prev <= tx.occurred_at
+            and tx.occurred_at - prev <= max_hop_delay
+            and tx.occurred_at - first <= max_loop_span
+        )
+
+    def dfs(step: int, lo: int, hi: int) -> None:
         if step == len(leg_transfers):
-            amounts = [tx.amount_minor for tx in chosen]
-            b_min, p_max = min(amounts), max(amounts)
-            is_above, ret = _check_retention(b_min, p_max, min_retention)
-            if is_above and ret > best_retention:
-                best_retention = ret
-                best_result = (
-                    ret,
-                    b_min,
-                    p_max,
-                    [tx.id for tx in chosen],
-                    [tx.occurred_at for tx in chosen],
-                )
+            ratio = lo / hi
+            if not best or ratio > best[0][0]:
+                ids = [tx.id for tx in chosen]
+                best[:] = [(ratio, lo, hi, ids, [tx.occurred_at for tx in chosen])]
             return
-
         for tx in leg_transfers[step]:
-            if prev_time is not None:
-                if tx.occurred_at < prev_time:
-                    continue
-                if tx.occurred_at - prev_time > max_hop_delay:
-                    continue
-            chosen.append(tx)
-            dfs(step + 1, tx.occurred_at, chosen)
-            chosen.pop()
+            new_lo, new_hi = min(lo, tx.amount_minor), max(hi, tx.amount_minor)
+            if admissible(tx) and _check_retention(new_lo, new_hi, min_retention)[0]:
+                chosen.append(tx)
+                dfs(step + 1, new_lo, new_hi)
+                chosen.pop()
 
-    dfs(0, None, [])
-    return best_result
+    for first_tx in leg_transfers[0] if leg_transfers else []:
+        chosen.append(first_tx)
+        dfs(1, first_tx.amount_minor, first_tx.amount_minor)
+        chosen.pop()
+    return best[0] if best else None
 
 
 def _find_bundle_causal_flow(
@@ -313,7 +343,8 @@ def _find_bundle_causal_flow(
     graph: nx.DiGraph,
     max_hop_delay: timedelta,
     min_retention: float,
-) -> tuple[float, int, int, list[UUID], list[datetime]] | None:
+    max_loop_span: timedelta,
+) -> _PathResult | None:
     """Verify aggregated leg bundling where each entire leg completes before next leg starts."""
     leg_totals: list[int] = []
     leg_starts: list[datetime] = []
@@ -336,6 +367,8 @@ def _find_bundle_causal_flow(
             return None
         if leg_starts[j + 1] - leg_ends[j] > max_hop_delay:
             return None
+    if leg_ends[-1] - leg_starts[0] > max_loop_span:
+        return None
 
     b_min = min(leg_totals)
     p_max = max(leg_totals)
@@ -351,14 +384,17 @@ def _verify_rotation(
     graph: nx.DiGraph,
     max_hop_delay: timedelta,
     min_retention: float,
-) -> tuple[float, int, int, list[UUID], list[datetime]] | None:
+    max_loop_span: timedelta,
+) -> _PathResult | None:
     """Evaluate both single-transfer and bundled multi-transfer flows for a rotation."""
     leg_transfers: list[list[EdgeTransfer]] = [
         sorted(graph[u][v]["transfers"], key=lambda tx: (tx.occurred_at, tx.id)) for u, v in legs
     ]
 
-    single_res = _find_single_tx_causal_path(leg_transfers, max_hop_delay, min_retention)
-    bundle_res = _find_bundle_causal_flow(legs, graph, max_hop_delay, min_retention)
+    single_res = _find_single_tx_causal_path(
+        leg_transfers, max_hop_delay, min_retention, max_loop_span
+    )
+    bundle_res = _find_bundle_causal_flow(legs, graph, max_hop_delay, min_retention, max_loop_span)
 
     if single_res is None:
         return bundle_res
@@ -374,6 +410,7 @@ def verify_causal_cycle_flow(
     *,
     min_retention: float = DEFAULT_MIN_RETENTION,
     max_hop_delay: timedelta = DEFAULT_MAX_HOP_DELAY,
+    max_loop_span: timedelta = DEFAULT_MAX_LOOP_SPAN,
 ) -> CausalFlowResult | None:
     """Verify that a cycle exhibits forward chronological progression with high retention.
 
@@ -393,7 +430,7 @@ def verify_causal_cycle_flow(
 
     for start_idx in range(n_nodes):
         rotated_legs = [cycle_edges[(start_idx + j) % n_nodes] for j in range(n_nodes)]
-        res = _verify_rotation(rotated_legs, graph, max_hop_delay, min_retention)
+        res = _verify_rotation(rotated_legs, graph, max_hop_delay, min_retention, max_loop_span)
         if res is not None and res[0] > best_ret:
             best_ret = res[0]
             start_node = cycle[start_idx]
@@ -411,39 +448,6 @@ def verify_causal_cycle_flow(
         chronological_tx_ids=tuple(best_flow[3]),
         hop_timestamps=tuple(best_flow[4]),
     )
-
-
-def calculate_cycle_retention(
-    cycle: Sequence[UUID],
-    graph: nx.DiGraph,
-) -> tuple[float, int, int]:
-    """Calculate funds retention ratio for a directed cycle based on leg volumes.
-
-    Formula:
-        retention = min_leg_volume / max_leg_volume
-    Returns (retention_ratio, bottleneck_minor, peak_minor).
-    """
-    if len(cycle) < 2:
-        return (0.0, 0, 0)
-
-    leg_amounts: list[int] = []
-    for i in range(len(cycle)):
-        u = cycle[i]
-        v = cycle[(i + 1) % len(cycle)]
-        if not graph.has_edge(u, v):
-            return (0.0, 0, 0)
-        leg_amounts.append(int(graph[u][v]["amount_minor"]))
-
-    if not leg_amounts:
-        return (0.0, 0, 0)
-
-    bottleneck = min(leg_amounts)
-    peak = max(leg_amounts)
-    if peak <= 0:
-        return (0.0, 0, 0)
-
-    ratio = float(bottleneck) / float(peak)
-    return (ratio, bottleneck, peak)
 
 
 def _build_cycle_edges(
@@ -476,8 +480,15 @@ def detect_circular_loops(
     max_length: int = DEFAULT_MAX_CYCLE_LENGTH,
     min_retention: float = DEFAULT_MIN_RETENTION,
     max_hop_delay: timedelta = DEFAULT_MAX_HOP_DELAY,
+    max_loop_span: timedelta = DEFAULT_MAX_LOOP_SPAN,
 ) -> list[CircularLoop]:
-    """Detect simple directed cycles of length 3-5 with verified causal flow and retention > 90%."""
+    """Detect simple directed cycles of length 3-5 with verified causal flow and retention > 90%.
+
+    A loop qualifies only if all three hold: ``min_length <= len <= max_length``, the funds
+    retained around it exceed ``min_retention`` and it closes within ``max_loop_span`` (each hop
+    also within ``max_hop_delay``). Enumeration passes ``length_bound`` to NetworkX so cycles
+    longer than ``max_length`` are never generated: unbounded ``simple_cycles`` is exponential.
+    """
     if graph.number_of_nodes() < min_length or graph.number_of_edges() < min_length:
         return []
 
@@ -485,7 +496,7 @@ def detect_circular_loops(
     qualifying_loops: list[CircularLoop] = []
 
     # NetworkX simple_cycles enumerates elementary circuits
-    for raw_cycle in nx.simple_cycles(graph):
+    for raw_cycle in nx.simple_cycles(graph, length_bound=max_length):
         cycle_len = len(raw_cycle)
         if cycle_len < min_length or cycle_len > max_length:
             continue
@@ -501,6 +512,7 @@ def detect_circular_loops(
             graph,
             min_retention=min_retention,
             max_hop_delay=max_hop_delay,
+            max_loop_span=max_loop_span,
         )
         if causal_flow is None:
             continue  # Broken causality or insufficient retention
@@ -564,54 +576,31 @@ def calculate_risk_boosts(
     return boosts
 
 
-@dataclass
-class CircularMuleRingRule:
-    """Explainable rule adapter evaluating participation in detected circular loops."""
-
-    code: str = "CIRCULAR_MULE_RING"
-    boost_points: int = DEFAULT_RISK_BOOST
-    known_boosts: dict[UUID, AccountRiskBoost] = field(default_factory=dict)
-
-    def evaluate(self, customer_id: UUID) -> tuple[bool, int, str]:
-        """Return (triggered, weight, reason)."""
-        boost = self.known_boosts.get(customer_id)
-        if boost is None:
-            return (False, 0, "")
-        reason = "; ".join(boost.reasons)
-        return (True, boost.risk_boost, reason)
-
-
 def _make_synth_transfer(
     tx_id: UUID,
     src: UUID,
     tgt: UUID,
     amount_minor: int,
     occurred_at: datetime,
-) -> Transfer:
-    """Helper creating a minimal Transfer instance for synthetic graph testing."""
-    return Transfer(
+) -> TransferRow:
+    """A DEBIT from ``src`` to ``tgt`` for the synthetic benchmark."""
+    return TransferRow(
         id=tx_id,
         customer_id=src,
-        occurred_at=occurred_at,
+        counterparty_id=tgt,
         direction="DEBIT",
         amount_minor=amount_minor,
-        counterparty_id=tgt,
-        payee_added_at=occurred_at - timedelta(days=40),
-        device_id=uuid5(src, "dev-1"),
-        new_device=False,
-        ip_country="IN",
-        ip_city="Mumbai",
-        failed_logins_24h=0,
+        occurred_at=occurred_at,
     )
 
 
 def _generate_ground_truth_rings(
     now: datetime,
-    node_id_fn: Any,
-    tx_id_fn: Any,
-) -> tuple[list[Transfer], set[frozenset[UUID]]]:
+    node_id_fn: Callable[[str], UUID],
+    tx_id_fn: Callable[[str], UUID],
+) -> tuple[list[TransferRow], set[frozenset[UUID]]]:
     """Generate ground truth circular rings with strictly forward chronological ordering."""
-    transfers: list[Transfer] = []
+    transfers: list[TransferRow] = []
     ground_truth_rings: set[frozenset[UUID]] = set()
 
     # Ring 1: 3-Node Ring (96% retention, forward hops: +3h each)
@@ -711,11 +700,11 @@ def _generate_ground_truth_rings(
 
 def _generate_distractor_transfers(
     now: datetime,
-    node_id_fn: Any,
-    tx_id_fn: Any,
-) -> list[Transfer]:
+    node_id_fn: Callable[[str], UUID],
+    tx_id_fn: Callable[[str], UUID],
+) -> list[TransferRow]:
     """Generate distractor transaction structures including adversarial negative cases."""
-    transfers: list[Transfer] = []
+    transfers: list[TransferRow] = []
 
     # Distractor 1: Low-retention 3-node cycle (50% retention)
     d1_nodes = [node_id_fn(f"d1_{i}") for i in range(3)]
@@ -881,7 +870,7 @@ def _generate_distractor_transfers(
 def generate_circular_ring_evaluation_dataset(
     seed: int = 42,
     base_time: datetime | None = None,
-) -> tuple[list[Transfer], set[frozenset[UUID]]]:
+) -> tuple[list[TransferRow], set[frozenset[UUID]]]:
     """Generate a deterministic synthetic dataset with ground-truth circular rings
     and distractors.
     """
@@ -900,7 +889,7 @@ def generate_circular_ring_evaluation_dataset(
 
 
 def evaluate_circular_detection(
-    transfers: Sequence[Any],
+    transfers: Sequence[TransferLike],
     ground_truth_rings: set[frozenset[UUID]],
     *,
     lookback_window: timedelta = timedelta(days=14),
@@ -909,7 +898,8 @@ def evaluate_circular_detection(
     max_length: int = DEFAULT_MAX_CYCLE_LENGTH,
     min_retention: float = DEFAULT_MIN_RETENTION,
     max_hop_delay: timedelta = DEFAULT_MAX_HOP_DELAY,
-) -> dict[str, Any]:
+    max_loop_span: timedelta = DEFAULT_MAX_LOOP_SPAN,
+) -> DetectionReport:
     """Evaluate circular loop detection against known ground truth."""
     graph = build_transaction_graph(transfers, lookback_window=lookback_window, as_of=as_of)
     detected_loops = detect_circular_loops(
@@ -918,6 +908,7 @@ def evaluate_circular_detection(
         max_length=max_length,
         min_retention=min_retention,
         max_hop_delay=max_hop_delay,
+        max_loop_span=max_loop_span,
     )
 
     detected_sets = {detected.node_set for detected in detected_loops}
@@ -932,16 +923,16 @@ def evaluate_circular_detection(
     precision = float(tp) / float(tp + fp) if (tp + fp) > 0 else 1.0
     recall = float(tp) / float(tp + fn) if (tp + fn) > 0 else 1.0
 
-    return {
-        "transfers_count": len(transfers),
-        "graph_nodes": graph.number_of_nodes(),
-        "graph_edges": graph.number_of_edges(),
-        "ground_truth_count": len(ground_truth_rings),
-        "detected_count": len(detected_loops),
-        "true_positives": tp,
-        "false_positives": fp,
-        "false_negatives": fn,
-        "precision": precision,
-        "recall": recall,
-        "detected_loops": detected_loops,
-    }
+    return DetectionReport(
+        transfers_count=len(transfers),
+        graph_nodes=graph.number_of_nodes(),
+        graph_edges=graph.number_of_edges(),
+        ground_truth_count=len(ground_truth_rings),
+        detected_count=len(detected_loops),
+        true_positives=tp,
+        false_positives=fp,
+        false_negatives=fn,
+        precision=precision,
+        recall=recall,
+        detected_loops=tuple(detected_loops),
+    )

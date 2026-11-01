@@ -2203,7 +2203,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #95 | **Sprint:** 5 | **Priority:** could | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Mon 26 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** - (set when merged) | **Status:** In Progress | **Risk:** Low (7.8 days of slack)
+- **Start:** Mon 26 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** - (set when merged) | **Status:** In Review (PR #267) | **Risk:** Low (7.8 days of slack)
 - **Depends on:** TASK-023 (#46, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-023
 - **Goal:** Network graph analysis using NetworkX detecting circular fund loops between mule accounts.
@@ -2219,6 +2219,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   - [x] Detects simple cycles of length 3-5 with high funds retention (> 90%)
   - [x] Outputs risk score boost for accounts participating in detected circular loops
 - **Definition of done (evidence):** NetworkX script identifies synthetic circular rings with 100% precision.
+- **Evidence:** `ml/src/pbip_ml/fraud/circular.py`, `ml/tests/test_fraud_circular.py`, `scripts/evaluate_circular_rings.py`, write-up `docs/ml/circular-transfer-spike.md` (spike: not wired into the scorer or the payment path).
 - **Required checks:**
   - Automated: pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable
   - Manual: inspect outputs/plots for sanity; re-run with the same seed and compare

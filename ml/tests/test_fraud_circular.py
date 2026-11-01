@@ -1,6 +1,6 @@
 """Tests for graph-based circular transfer and mule ring detection (TASK-072, F11)."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from uuid import UUID, uuid4, uuid5
 
 import networkx as nx
@@ -116,21 +116,10 @@ def test_build_graph_omits_invalid_and_self_transfers() -> None:
     assert graph.number_of_edges() == 0
 
 
-def test_build_graph_supports_dict_records() -> None:
-    u1, u2 = uuid4(), uuid4()
-    tx_id = uuid4()
-    record = {
-        "id": tx_id,
-        "customer_id": u1,
-        "counterparty_id": u2,
-        "amount_minor": 15_000_00,
-        "occurred_at": BASE_TIME,
-        "direction": "DEBIT",
-    }
-    graph = c.build_transaction_graph([record])
-    assert graph.has_edge(u1, u2)
-    assert graph[u1][u2]["amount_minor"] == 15_000_00
-    assert graph[u1][u2]["transaction_ids"] == [tx_id]
+def test_build_graph_rejects_unknown_direction() -> None:
+    row = c.TransferRow(uuid4(), uuid4(), uuid4(), "REFUND", 1_000_00, BASE_TIME)
+    with pytest.raises(ValueError, match="direction"):
+        c.build_transaction_graph([row])
 
 
 # ---------------------------------------------------------------------------
@@ -426,29 +415,6 @@ def test_risk_boost_overlapping_loops_single_boost_prevent_duplicate() -> None:
     assert len(boosts[u1].reasons) == 2
 
 
-def test_circular_mule_ring_rule_adapter() -> None:
-    u1 = uuid4()
-    boost = c.AccountRiskBoost(
-        account_id=u1,
-        risk_boost=35,
-        loop_count=1,
-        highest_retention=0.95,
-        reasons=("Participates in a 3-node circular mule ring with 95.0% funds retention",),
-        transaction_ids=(uuid4(),),
-    )
-    rule = c.CircularMuleRingRule(known_boosts={u1: boost})
-
-    triggered, weight, reason = rule.evaluate(u1)
-    assert triggered is True
-    assert weight == 35
-    assert "95.0%" in reason
-
-    triggered_clean, weight_clean, reason_clean = rule.evaluate(uuid4())
-    assert triggered_clean is False
-    assert weight_clean == 0
-    assert reason_clean == ""
-
-
 # ---------------------------------------------------------------------------
 # 6. Ground-Truth Evaluation & 100% Precision Tests
 # ---------------------------------------------------------------------------
@@ -463,21 +429,21 @@ def test_synthetic_evaluation_achieves_100_percent_precision() -> None:
         min_retention=0.90,
     )
 
-    assert metrics["ground_truth_count"] == 4
-    assert metrics["detected_count"] == 4
-    assert metrics["true_positives"] == 4
-    assert metrics["false_positives"] == 0
-    assert metrics["false_negatives"] == 0
-    assert metrics["precision"] == 1.0  # Exactly 100% precision
-    assert metrics["recall"] == 1.0  # Exactly 100% recall
+    assert metrics.ground_truth_count == 4
+    assert metrics.detected_count == 4
+    assert metrics.true_positives == 4
+    assert metrics.false_positives == 0
+    assert metrics.false_negatives == 0
+    assert metrics.precision == 1.0  # Exactly 100% precision
+    assert metrics.recall == 1.0  # Exactly 100% recall
 
 
 def test_evaluation_reproducible_across_different_seeds() -> None:
     for seed in (101, 2024, 777):
         transfers, gt_rings = c.generate_circular_ring_evaluation_dataset(seed=seed)
         metrics = c.evaluate_circular_detection(transfers, gt_rings)
-        assert metrics["false_positives"] == 0
-        assert metrics["precision"] == 1.0
+        assert metrics.false_positives == 0
+        assert metrics.precision == 1.0
 
 
 def test_evaluation_with_large_background_transfers() -> None:
@@ -502,9 +468,9 @@ def test_evaluation_with_large_background_transfers() -> None:
     all_transfers = list(base_transfers) + bg_transfers
     metrics = c.evaluate_circular_detection(all_transfers, gt_rings)
 
-    assert metrics["false_positives"] == 0
-    assert metrics["precision"] == 1.0
-    assert metrics["true_positives"] == len(gt_rings)
+    assert metrics.false_positives == 0
+    assert metrics.precision == 1.0
+    assert metrics.true_positives == len(gt_rings)
 
 
 # ---------------------------------------------------------------------------
@@ -553,39 +519,25 @@ def test_hop_delay_boundary_beyond_7_days_rejected() -> None:
     assert len(loops) == 0
 
 
-def test_timezone_aware_and_naive_timestamp_standardization() -> None:
-    """Timezone-naive datetimes and offset-aware datetimes are safely standardized to UTC."""
-    u1, u2, u3 = uuid4(), uuid4(), uuid4()
-    naive_dt = datetime(2026, 10, 26, 10, 0, tzinfo=None)  # noqa: DTZ001
-    rec1 = {
-        "id": uuid4(),
-        "customer_id": u1,
-        "counterparty_id": u2,
-        "amount_minor": 10_000_000,
-        "occurred_at": naive_dt,
-        "direction": "DEBIT",
-    }
-    rec2 = {
-        "id": uuid4(),
-        "customer_id": u2,
-        "counterparty_id": u3,
-        "amount_minor": 9_500_000,
-        "occurred_at": naive_dt + timedelta(hours=2),
-        "direction": "DEBIT",
-    }
-    rec3 = {
-        "id": uuid4(),
-        "customer_id": u3,
-        "counterparty_id": u1,
-        "amount_minor": 9_500_000,
-        "occurred_at": (naive_dt + timedelta(hours=4)).replace(tzinfo=UTC),
-        "direction": "DEBIT",
-    }
+def test_naive_timestamps_are_rejected() -> None:
+    """A naive datetime is ambiguous (UTC or IST?), so it is refused rather than guessed."""
+    naive = datetime(2026, 10, 26, 10, 0)  # noqa: DTZ001 - the input under test
+    with pytest.raises(ValueError, match="timezone-aware"):
+        c.build_transaction_graph([_make_transfer(uuid4(), uuid4(), 10_000_000, naive)])
 
-    graph = c.build_transaction_graph([rec1, rec2, rec3])
-    loops = c.detect_circular_loops(graph)
+
+def test_offset_aware_timestamps_are_normalised_to_utc() -> None:
+    """IST and UTC timestamps for the same instants order correctly around the loop."""
+    ist = timezone(timedelta(hours=5, minutes=30))
+    u1, u2, u3 = uuid4(), uuid4(), uuid4()
+    txs = [
+        _make_transfer(u1, u2, 10_000_000, datetime(2026, 10, 26, 15, 30, tzinfo=ist)),  # 10:00Z
+        _make_transfer(u2, u3, 9_500_000, datetime(2026, 10, 26, 11, 0, tzinfo=UTC)),
+        _make_transfer(u3, u1, 9_500_000, datetime(2026, 10, 26, 17, 30, tzinfo=ist)),  # 12:00Z
+    ]
+    loops = c.detect_circular_loops(c.build_transaction_graph(txs))
     assert len(loops) == 1
-    assert loops[0].retention_ratio == 0.95
+    assert loops[0].hop_timestamps[0] == datetime(2026, 10, 26, 10, 0, tzinfo=UTC)
 
 
 def test_strict_integer_retention_boundary_paise_precision() -> None:
@@ -647,14 +599,108 @@ def test_risk_boost_capping_and_non_participating_accounts() -> None:
     boosts = c.calculate_risk_boosts(loops, base_boost=150)
     assert boosts[u1].risk_boost == 100  # Capped at MAX_SCORE
     assert outside_acct not in boosts
+    assert "92.0%" in boosts[u1].reasons[0]
 
-    rule = c.CircularMuleRingRule(known_boosts=boosts)
-    trig, weight, reason = rule.evaluate(u1)
-    assert trig is True
-    assert weight == 100
-    assert "92.0%" in reason
 
-    trig_out, weight_out, reason_out = rule.evaluate(outside_acct)
-    assert trig_out is False
-    assert weight_out == 0
-    assert reason_out == ""
+# ---------------------------------------------------------------------------
+# 8. The three detection conditions: length bound, retention, time window
+# ---------------------------------------------------------------------------
+
+
+def _ring(nodes: list[UUID], amounts: list[int], hop: timedelta) -> list[Transfer]:
+    n = len(nodes)
+    return [
+        _make_transfer(nodes[i], nodes[(i + 1) % n], amounts[i], BASE_TIME + hop * i)
+        for i in range(n)
+    ]
+
+
+def test_cycle_enumeration_is_length_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    """NetworkX never generates cycles longer than max_length (unbounded enumeration explodes).
+
+    A complete digraph on 7 nodes has 2,365 elementary cycles, 1,560 of them of length 6 or 7;
+    without ``length_bound`` the spy would see those.
+    """
+    seen: list[int] = []
+    real = nx.simple_cycles
+
+    def spy(graph: nx.DiGraph, length_bound: int | None = None) -> object:
+        for cycle in real(graph, length_bound=length_bound):
+            seen.append(len(cycle))
+            yield cycle
+
+    monkeypatch.setattr(nx, "simple_cycles", spy)  # the module calls nx.simple_cycles
+    nodes = [uuid5(UUID(int=7), f"k{i}") for i in range(7)]
+    txs = [_make_transfer(a, b, 1_000_00, BASE_TIME) for a in nodes for b in nodes if a != b]
+    loops = c.detect_circular_loops(c.build_transaction_graph(txs))
+    assert seen
+    assert max(seen) <= c.DEFAULT_MAX_CYCLE_LENGTH
+    assert {loop.length for loop in loops} == {3, 4, 5}
+
+
+def test_loop_closing_outside_the_time_window_is_ignored() -> None:
+    """Every hop is within the 7-day hop delay, but the 5-hop loop takes 16 days to close."""
+    nodes = [uuid4() for _ in range(5)]
+    txs = _ring(nodes, [10_000_000] * 5, timedelta(days=4))
+    graph = c.build_transaction_graph(txs)
+    assert c.detect_circular_loops(graph) == []
+    # The same loop is found when the window is wide enough: the span is what rejected it.
+    assert len(c.detect_circular_loops(graph, max_loop_span=timedelta(days=16))) == 1
+
+
+def test_loop_window_also_bounds_bundled_legs() -> None:
+    """Aggregated (multi-transfer) legs are held to the same closing window."""
+    a, b, d = uuid4(), uuid4(), uuid4()
+    txs = [
+        _make_transfer(a, b, 5_000_000, BASE_TIME),
+        _make_transfer(a, b, 5_000_000, BASE_TIME + timedelta(days=1)),
+        _make_transfer(b, d, 9_800_000, BASE_TIME + timedelta(days=6)),
+        _make_transfer(d, a, 9_600_000, BASE_TIME + timedelta(days=12)),
+    ]
+    graph = c.build_transaction_graph(txs)
+    assert c.detect_circular_loops(graph, max_loop_span=timedelta(days=11)) == []
+    assert len(c.detect_circular_loops(graph, max_loop_span=timedelta(days=12))) == 1
+
+
+def test_loop_leaking_more_than_ten_percent_is_ignored() -> None:
+    nodes = [uuid4() for _ in range(4)]
+    leaky = _ring(nodes, [10_000_000, 9_500_000, 9_000_000, 8_900_000], timedelta(hours=2))
+    assert c.detect_circular_loops(c.build_transaction_graph(leaky)) == []
+    kept = _ring(nodes, [10_000_000, 9_800_000, 9_500_000, 9_100_000], timedelta(hours=2))
+    assert len(c.detect_circular_loops(c.build_transaction_graph(kept))) == 1
+
+
+def test_non_default_retention_threshold_is_compared_exactly() -> None:
+    nodes = [uuid4() for _ in range(3)]
+    at_95 = _ring(nodes, [10_000_000, 9_700_000, 9_500_000], timedelta(hours=1))
+    above_95 = _ring(nodes, [10_000_000, 9_700_000, 9_500_001], timedelta(hours=1))
+    assert c.detect_circular_loops(c.build_transaction_graph(at_95), min_retention=0.95) == []
+    found = c.detect_circular_loops(c.build_transaction_graph(above_95), min_retention=0.95)
+    assert len(found) == 1
+
+
+def test_busy_edges_are_searched_without_blowup() -> None:
+    """60 transfers per leg (216,000 single-transfer paths per rotation): partial paths that
+    already break retention are pruned, and the one compatible path is still found."""
+    a, b, d = uuid4(), uuid4(), uuid4()
+    txs: list[Transfer] = []
+    for i in range(60):
+        when = BASE_TIME + timedelta(minutes=i)
+        txs.append(_make_transfer(a, b, 100_00 + i * 1_000_00, when))
+        txs.append(_make_transfer(b, d, 100_00 + i * 2_000_00, when + timedelta(hours=1)))
+        txs.append(_make_transfer(d, a, 100_00 + i * 3_000_00, when + timedelta(hours=2)))
+    loops = c.detect_circular_loops(c.build_transaction_graph(txs))
+    assert len(loops) == 1
+    assert loops[0].retention_ratio > 0.9
+
+
+def test_two_cycle_inside_a_larger_graph_is_ignored() -> None:
+    """A ping-pong pair is not a ring even when the graph is large enough to hold one."""
+    a, b, x, y = uuid4(), uuid4(), uuid4(), uuid4()
+    txs = [
+        _make_transfer(a, b, 10_000_000, BASE_TIME),
+        _make_transfer(b, a, 9_900_000, BASE_TIME + timedelta(hours=1)),
+        _make_transfer(x, y, 1_000_00, BASE_TIME),
+        _make_transfer(y, a, 1_000_00, BASE_TIME),
+    ]
+    assert c.detect_circular_loops(c.build_transaction_graph(txs)) == []
