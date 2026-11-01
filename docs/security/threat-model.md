@@ -269,7 +269,7 @@ None of these is detected today, and the synthetic data generator (v1) injects n
 | F8 Dormant account sudden activity | SHOULD | Not implemented; TASK-071 (Sprint 5) |
 | F9 Card-testing micro-transactions | COULD | Not implemented; no backlog task |
 | F10 Synthetic identity (BAF-style application features) | COULD | Not implemented; no backlog task; threat documented in §7.4 |
-| F11 Circular transfers / mule rings (graph cycles) | COULD | Spike only (TASK-072): offline NetworkX detector `pbip_ml/fraud/circular.py`, not on the payment path; results and recommendation in `docs/ml/circular-transfer-spike.md` |
+| F11 Circular transfers / mule rings (graph cycles) | COULD | Spike only (TASK-072): offline NetworkX detector `ml/src/pbip_ml/fraud/circular.py`, not on the payment path; results and recommendation in `docs/ml/circular-transfer-spike.md` |
 
 ### 7.3 Rule evasion / adversarial ML (T25)
 
