@@ -1,0 +1,78 @@
+# Rendered at container start by the image's envsubst step (/etc/nginx/templates -> conf.d). Only
+# variables defined in the container environment are substituted; nginx's own $vars are untouched.
+#   PUBLIC_HTTPS_PORT  the HTTPS port clients use (443 in staging/production, 8443 for the dev stack)
+# Certificates: /etc/nginx/certs/tls.{crt,key} - scripts/dev_certs.py locally, certbot in staging
+# (docs/operations/runbook.md section 1.4). nginx refuses to start without them (fail closed).
+
+# Plain HTTP: ACME HTTP-01 challenges, the container health probe, and a redirect for everything else.
+server {
+    listen 8080;
+    server_name _;
+    server_tokens off;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/acme;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+
+    # Container HEALTHCHECK only (loopback); never reachable from outside the container.
+    location = /nginx-health {
+        allow 127.0.0.1;
+        deny all;
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location / {
+        return 301 https://$host:${PUBLIC_HTTPS_PORT}$request_uri;
+    }
+}
+
+server {
+    listen 8443 ssl;
+    http2 on;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+    server_tokens off;
+    client_max_body_size 1m;
+
+    ssl_certificate /etc/nginx/certs/tls.crt;
+    ssl_certificate_key /etc/nginx/certs/tls.key;
+    # Mozilla "intermediate" profile: TLS 1.2+ with AEAD ciphers only, no session tickets.
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:pbip_tls:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    # API: proxied untouched; the API sets its own security headers (and HSTS when COOKIE_SECURE).
+    location /api/ {
+        proxy_pass http://api:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_read_timeout 30s;
+    }
+
+    # Prometheus metrics are internal-only.
+    location = /metrics { return 404; }
+
+    location /assets/ {
+        include /etc/nginx/pbip-security-headers.conf;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    location / {
+        include /etc/nginx/pbip-security-headers.conf;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri /index.html;
+    }
+}

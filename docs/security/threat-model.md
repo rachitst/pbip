@@ -47,7 +47,7 @@ to address; PBIP is not a certified or regulated product.
 
 ```
 Internet
-  │  HTTPS (Deployment: TLS termination is not configured in this repo; nginx listens on :8080)
+  │  HTTPS: nginx terminates TLS 1.2+/HSTS on :8443; :8080 only redirects (infra/nginx/default.conf.template)
   ▼
 nginx ── static React build (security-headers.conf: CSP default-src 'self', script-src 'self',
   │                          frame-ancestors 'none', nosniff, X-Frame-Options DENY)
@@ -58,14 +58,21 @@ FastAPI (uvicorn) ── security headers + HSTS (when COOKIE_SECURE) ── JWT
   ├── Redis (rate-limit counters; Celery broker)                          │
   ├── Celery worker + beat (outbox relay task)                            │
   └── LLM adapter → Ollama (fixed URL; output untrusted, §8)             │
-                                                                     PostgreSQL
+                                                     PostgreSQL (TLS required, verify-full)
                                                   (users, refresh-token hashes, ledger, audit chain;
                                                    triggers, CHECK constraints, advisory locks)
 ```
 
 Explicit boundary rules:
-- Browser → nginx: HTTPS only in production (Deployment). The refresh cookie is `Secure` when
-  `COOKIE_SECURE=true`, which staging/production must set or the API refuses to boot.
+- Browser → nginx: HTTPS only, terminated by nginx in the repository's compose files (TLS 1.2/1.3, HSTS; plain HTTP
+  answers only a 301 to HTTPS and ACME challenges). Certificates: certbot on staging, a local dev CA on laptops and CI
+  (runbook §1.4). The refresh cookie is `Secure` (the compose stack hard-codes `COOKIE_SECURE=true`; staging/production
+  refuse to boot without it).
+- API/worker → PostgreSQL: TLS with `sslmode=verify-full`; the server rejects any plain-TCP connection (`pg_hba`
+  `reject`). Proven on the running stack by `scripts/verify_tls.sh` (CI e2e job).
+- nginx → API and services → Redis: plain TCP on the internal compose network (single host, not published). Accepted
+  residual: an attacker already on that network could read this traffic; mitigations are host hardening and no
+  untrusted containers on the network.
 - nginx → API: internal network; `location = /metrics { return 404; }` keeps Prometheus metrics internal.
 - API → LLM: LLM output is treated as **untrusted data** at all times: it can only select an approved tool with bounded arguments (§8).
 - CI → registry → server: first-party actions, SHA-pinned third-party actions, lockfile-pinned packages (ADR-0006).
@@ -137,7 +144,7 @@ Explicit boundary rules:
 | OWASP | Category | PBIP controls | Evidence |
 |---|---|---|---|
 | **A01** | Broken Access Control (BOLA/IDOR) | Object-level authorization via policy functions (`get_owned_account`, `get_owned_payee`, `get_owned_device`, `_owned_transaction`); non-owned == non-existent == 404; UUIDv4 IDs (no sequential enumeration); route-policy registry test fails CI if a route is neither authenticated nor on the `PUBLIC_ROUTES` allow-list; staff routes require `require_roles(..., mfa=True)`; BOLA matrix makes 12 cross-customer attempts, including transfers from/to the victim's account and with the victim's payee | `test_bola_customer_b_cannot_touch_customer_a_objects`, `test_route_policy_registry.py`; §6 |
-| **A02** | Cryptographic Failures | Argon2id password hashing (RFC 9106 parameters; §4); JWT HS256 with explicit algorithm allow-list; opaque refresh tokens (384-bit, SHA-256 stored); MFA secrets and the customer phone number encrypted at rest with Fernet/MultiFernet (AES-128-CBC + HMAC-SHA256; key rotation); `COOKIE_SECURE` required in staging/production; secrets only via validated settings/environment, never in source. Residual: email, full name and date of birth are stored unencrypted (email is the login key); TLS is a Deployment requirement | `core/security.py`, `core/crypto.py`, `core/config.py`; `test_crypto.py`; §4, §5 |
+| **A02** | Cryptographic Failures | Argon2id password hashing (RFC 9106 parameters; §4); JWT HS256 with explicit algorithm allow-list; opaque refresh tokens (384-bit, SHA-256 stored); MFA secrets and the customer phone number encrypted at rest with Fernet/MultiFernet (AES-128-CBC + HMAC-SHA256; key rotation); `COOKIE_SECURE` required in staging/production; secrets only via validated settings/environment, never in source. TLS 1.2+ at nginx with HSTS, and TLS with `verify-full` to PostgreSQL (runbook §1.4). Residual: email, full name and date of birth are stored unencrypted (email is the login key); nginx → API and Redis traffic is plaintext on the internal network | `core/security.py`, `core/crypto.py`, `core/config.py`; `test_crypto.py`; §4, §5 |
 | **A03** | Injection | SQLAlchemy ORM with bound parameters; Pydantic request models with bounds, regexes and enums; RFC 7807 errors that never echo user input. Planned: assistant tool arguments as validated enums/bounded numbers (§8) | `test_validation_error_never_echoes...`; §8 |
 | **A04** | Insecure Design | Double-entry ledger with append-only triggers and deferred balance constraint; single-responsibility rule (only `ledger/service.py` writes balances); idempotency keys prevent double-posting; advisory lock order prevents deadlocks; fail-safe scoring (rules-only, never ALLOW-all if model is down); money is integer minor units (no float rounding) | `test_database_itself_rejects...`, `test_concurrent_spending_never_overdraws`; AGENTS.md §4 |
 | **A05** | Security Misconfiguration | Refuses to boot in staging/production with dev defaults (tested); OpenAPI docs disabled in deployed environments; CORS restricted to the configured origin list; API security headers and HSTS when `COOKIE_SECURE=true`; nginx CSP `default-src 'self'; script-src 'self'; frame-ancestors 'none'` on static content; non-root containers (`USER app`, `nginx-unprivileged`); `/metrics` returns 404 at nginx | `test_production_rejects_unsafe_configuration`, `test_security_headers.py` |
@@ -371,7 +378,7 @@ are the origin of the UK rule. "Analogous" means PBIP mirrors the control object
 | **FCA SYSC 15A** (operational resilience) | Important business services stay within impact tolerances; plan for disruption | Implemented: readiness probe cached (1 s, single-flight) against probe amplification; rate limits fail open when Redis is down while the database lockout stays enforced; Prometheus/Loki observability. Planned: ML scorer with rules-only fallback (§7.1). Deployment: backups, DR and impact-tolerance testing | `test_readiness_is_cached_for_the_ttl_then_rechecked`; `core/ratelimit.py` |
 | **EBA Guidelines on ICT and security risk management** (EBA/GL/2019/04) | Access control, strong authentication, logging and monitoring, change management | Implemented: Argon2id + TOTP MFA; RBAC with MFA for staff; BOLA policy functions; security events; log redaction; PR + required CI checks for every change | §4–§6; auth and BOLA tests; `.github/rulesets/` |
 | **UK GDPR / GDPR Art. 25** (data protection by design) | Data minimisation, pseudonymisation, no PII in logs | Implemented: UUID identifiers in logs and metrics; log redaction of emails/tokens/long digit strings and of the `full_name`/`date_of_birth`/`phone` keys (tested); phone encrypted at rest; customer responses never include fraud reasons or scores. Residual: email, full name and date of birth are stored unencrypted | `test_logging_redaction.py`, `test_failed_login_does_not_leak_secrets_into_logs`; `core/crypto.py` |
-| **UK GDPR / GDPR Art. 32** (security of processing) | Appropriate technical measures; encryption in transit and at rest; regular testing | Implemented: Fernet field encryption (MFA secrets, phone), Argon2id, `Secure` cookies and HSTS when `COOKIE_SECURE`, startup refusal of unsafe config, automated security tests in CI. Deployment: TLS termination | `test_production_rejects_unsafe_configuration`; `core/config.py` |
+| **UK GDPR / GDPR Art. 32** (security of processing) | Appropriate technical measures; encryption in transit and at rest; regular testing | Implemented: Fernet field encryption (MFA secrets, phone), Argon2id, `Secure` cookies and HSTS, TLS in transit (nginx and PostgreSQL, `scripts/verify_tls.sh` in CI), startup refusal of unsafe config, automated security tests in CI. Deployment: certificate issuance with certbot (runbook §1.4) | `test_production_rejects_unsafe_configuration`; `core/config.py` |
 | **PCI DSS v4.0** (analogous; PBIP stores no card data) | Req. 8 (identify and authenticate access), Req. 10 (log and monitor), Req. 6 (secure development, vulnerability management) | Implemented: Argon2id credential hashing, MFA for staff, lockout; audit and security-event logging; pip-audit, npm audit, Bandit, CodeQL and detect-secrets in CI | §4, §5; CI `security` job; ADR-0006 |
 | **POCA 2002 / Money Laundering Regulations 2017** (analogous) | Monitor transactions, detect suspicious activity such as structuring | Implemented: `VELOCITY_BURST` (4 transfers / 10 min), `LARGE_AMOUNT`, daily transfer limit (₹5,00,000 per customer per UTC day, enforced in `payments/service.py`), analyst REVIEW queue. Not implemented: structuring detection (F7), KYC/CDD, suspicious-activity reporting | `fraud/baseline.py`; `test_transfers.py` |
 | **PSD2 / UK PSRs 2017 + SCA-RTS** (analogous) | Strong customer authentication for payments, with risk-based exemptions | Implemented: risk-based step-up — STEP_UP (score ≥ 30) requires a valid TOTP before posting; customers without MFA are escalated to REVIEW. Differs from the RTS: low-risk transfers post without a second factor (comparable to a transaction-risk-analysis exemption), and customer MFA is optional (login asks for TOTP only if the customer enrolled) | `test_step_up_with_mfa_completes_after_a_valid_code`, `test_step_up_without_mfa_escalates_to_analyst_review`; Blueprint §7 |
@@ -382,7 +389,7 @@ are the origin of the UK rule. "Analogous" means PBIP mirrors the control object
 
 | Item | Priority | Target |
 |---|---|---|
-| TLS termination (and WAF) in the production deployment | MUST | TASK-075 (Sprint 5), TASK-082 (Sprint 6) |
+| TLS termination: implemented in the repository (nginx, PostgreSQL). Still open: first certbot issuance on a real staging host, and a WAF | MUST (WAF: COULD) | #198 (staging host) |
 | Schemathesis contract fuzzing in CI | MUST | TASK-070 (Sprint 5) |
 | AI assistant: LLM-path latency under 2.5 s (routed questions already meet it, ADR-0018 amendment; unclear questions need faster hardware than the reference laptop) | SHOULD | hardware |
 | ML fraud scorer with rules-only fallback (§7.1, AGENTS.md §8): implemented behind `FRAUD_SCORER=hybrid` (ADR-0019); on in local/demo since #251 was fixed, code default `rules`; model directory mounted read-only in compose (T34) | MUST | Done (TASK-033, #251) |

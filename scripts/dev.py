@@ -108,6 +108,9 @@ def cmd_setup(args: list[str]) -> int:
     sys.stdout.write("==> Step 2: Installing Python dependencies via uv sync...\n")
     _run(["uv", "sync", "--all-packages"])
 
+    sys.stdout.write("==> Step 2b: Local dev TLS certificates (infra/certs, git-ignored)...\n")
+    _ensure_dev_certs()
+
     sys.stdout.write("==> Step 3: Installing Node dependencies in apps/web...\n")
     _run(["npm", "ci"], cwd=ROOT / "apps" / "web")
 
@@ -236,7 +239,8 @@ def _check_ports() -> None:
         (6379, "Redis (cache/queue)"),
         (8000, "API (uvicorn)"),
         (5173, "Web (Vite dev)"),
-        (8080, "Web/API proxy (Docker full stack)"),
+        (8080, "Web HTTP -> HTTPS redirect (Docker full stack)"),
+        (8443, "Web/API over HTTPS (Docker full stack)"),
         (3000, "Grafana"),
         (9090, "Prometheus"),
         (5000, "MLflow"),
@@ -307,8 +311,18 @@ def cmd_doctor(_args: list[str]) -> int:
     return 0
 
 
+DEV_CA = ROOT / "infra" / "certs" / "ca.crt"
+LOCAL_HTTPS_URL = "https://localhost:8443"
+
+
+def _ensure_dev_certs() -> int:
+    """Create the local CA and the web/db certificates the compose stack needs (idempotent)."""
+    return _run(["uv", "run", "python", str(ROOT / "scripts" / "dev_certs.py")])
+
+
 def cmd_infra_up(_args: list[str]) -> int:
     """Start PostgreSQL and Redis in Docker."""
+    _ensure_dev_certs()  # PostgreSQL requires TLS for TCP (infra/postgres/tls-entrypoint.sh)
     return _run(["docker", "compose", "up", "-d", "--wait", "db", "redis"])
 
 
@@ -318,7 +332,8 @@ def cmd_infra_down(_args: list[str]) -> int:
 
 
 _READY_MESSAGE = (
-    "\nPBIP is up: web http://localhost:8080 | API docs http://localhost:8000/docs\n"
+    f"\nPBIP is up: web {LOCAL_HTTPS_URL} (local dev CA: infra/certs/ca.crt) | "
+    "API docs http://localhost:8000/docs\n"
     "Demo users: python scripts/dev.py seed (prints the demo password)\n"
 )
 
@@ -329,6 +344,7 @@ def cmd_up(args: list[str]) -> int:
     Without --wait the command returned while the API was still starting, so the first page
     load through nginx was a 502.
     """
+    _ensure_dev_certs()
     code = _run(["docker", "compose", "up", "-d", "--build", "--wait", *args])
     sys.stdout.write(_READY_MESSAGE)
     return code
@@ -336,6 +352,7 @@ def cmd_up(args: list[str]) -> int:
 
 def cmd_up_all(args: list[str]) -> int:
     """Full stack + monitoring + MLflow."""
+    _ensure_dev_certs()
     return _run(
         [
             "docker",
@@ -727,9 +744,12 @@ def cmd_fuzz(args: list[str]) -> int:
 
 def cmd_smoke(args: list[str]) -> int:
     """Run post-deploy smoke test."""
-    url = args[0] if args else "http://localhost:8080"
+    url = args[0] if args else LOCAL_HTTPS_URL
     extra = args[1:]
-    return _run([sys.executable, str(ROOT / "scripts" / "smoke_test.py"), url, *extra])
+    env = None
+    if url.startswith(("https://localhost", "https://127.0.0.1")) and DEV_CA.exists():
+        env = {"SSL_CERT_FILE": str(DEV_CA)}  # verify the local stack against the dev CA
+    return _run([sys.executable, str(ROOT / "scripts" / "smoke_test.py"), url, *extra], env=env)
 
 
 def cmd_check(args: list[str]) -> int:
@@ -780,7 +800,7 @@ COMMANDS = {
     "env": "Create .env with freshly generated secrets",
     "infra-up": "Start PostgreSQL and Redis in Docker",
     "infra-down": "Stop PostgreSQL and Redis",
-    "up": "Build and start full PBIP stack (web on :8080)",
+    "up": "Build and start full PBIP stack (web on https://localhost:8443)",
     "up-all": "Full stack + Prometheus, Grafana, MLflow",
     "down": "Stop all Docker stack services",
     "logs": "Tail Docker API service logs",
@@ -807,7 +827,7 @@ COMMANDS = {
     "test-web": "Run Vitest frontend tests",
     "test-e2e": "Run Playwright end-to-end tests",
     "perf": "k6 baseline: health endpoints at 50 VUs, p95 < 50 ms (needs a running API)",
-    "smoke": "Run smoke test against localhost:8080 or custom URL",
+    "smoke": "Run smoke test against https://localhost:8443 or custom URL",
     "fuzz": "Run property-based API fuzzing with Schemathesis",
     "check": "Run full CI verification suite locally",
     "clean": "Remove cache files and build outputs",
