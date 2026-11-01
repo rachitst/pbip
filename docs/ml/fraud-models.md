@@ -1,6 +1,6 @@
 # Fraud models: LightGBM classifier and Isolation Forest (TASK-029, TASK-030)
 
-**Status:** trained offline and evaluated. Neither model is on the request path yet: the hybrid combiner (TASK-031), SHAP reasons (TASK-032) and API integration (TASK-033) come next.
+**Status:** trained offline and evaluated. The hybrid scorer is wired into transfers and bill payments behind `FRAUD_SCORER=hybrid` (TASK-033, ADR-0019). Local and demo run `hybrid` since the #251 fix (generator v2.1); the code default for other deployments stays `rules`. Current numbers: `docs/ml/model-evaluation-report-v1.md` (v1.1). The tables below are the v2.0 (pre-#251) training run, kept for history.
 **Code:**
 - `ml/src/pbip_ml/fraud/training.py`: dataset, time split, models, metrics.
 - `ml/src/pbip_ml/fraud/train.py`: CLI and MLflow logging.
@@ -14,7 +14,7 @@ uv run python -m pbip_datagen export --seed 4242 --customers 1500 --months 6 --o
 uv run python -m pbip_ml.fraud.train --data data/fraud --holdout data/holdout --out models/fraud
 ```
 
-The output is deterministic: two runs gave identical metrics. It writes `report.json`, `lightgbm.txt` and `isolation_forest.joblib`, and logs an MLflow run to experiment `pbip-fraud` (the local `mlruns/` fallback when no server is reachable).
+The output is deterministic: two runs gave identical metrics. It writes `report.json`, `lightgbm.txt`, `isolation_forest.joblib`, `hybrid_params.json` and `manifest.json` (the SHA-256 of each file, checked by the API loader), and logs an MLflow run to experiment `pbip-fraud` (the local `mlruns/` fallback when no server is reachable).
 
 ## Data and split
 
@@ -79,7 +79,7 @@ Code: `ml/src/pbip_ml/fraud/hybrid.py` and `ml/tests/test_fraud_hybrid.py`. The 
 1. The LightGBM probability is calibrated with isotonic regression, fitted on validation and stored as a lookup table.
 2. A logistic regression **stacks** the calibrated probability, the anomaly score and the rule points. Its weights are fitted on validation; that is what "calibrated weights" means here.
 3. Risk = round(100 × stacked probability).
-4. **Hard-rule overrides** set floors: RAPID_ATO_TRANSFER → at least REVIEW (60); NEW_PAYEE_LARGE_AMOUNT → at least STEP_UP (30).
+4. **Hard-rule overrides** set floors: RAPID_ATO_TRANSFER → at least REVIEW (60); NEW_PAYEE_LARGE_AMOUNT and VELOCITY_BURST → at least STEP_UP (30). VELOCITY_BURST joined in TASK-080: without it the stacked weights scored a six-transfers-in-ten-minutes burst at risk 0. The test-period metrics did not change. Full evaluation: `docs/ml/model-evaluation-report-v1.md` (TASK-039).
 5. Actions: ALLOW < 30 ≤ STEP_UP < 60 ≤ REVIEW < 85 ≤ BLOCK.
 
 **Fitted weights** (same run as above): intercept −6.84, model 8.31, anomaly 1.97, rules 1.70.
@@ -108,4 +108,17 @@ Example, a high-risk F5 transfer:
 
 **Latency** (laptop, wall time, one row): hybrid score p50 17.0 ms, p95 24.7 ms (the contract's limit is 100 ms); SHAP reasons p95 3.5 ms (target < 30 ms).
 
-**Not yet done:** the scorer is not on the request path. TASK-033 wires it into the transfer flow. That task must also show that `fraud_events` stores the snapshot and model version (the TASK-031 criterion) and that customer responses hide the reasons while staff endpoints show them (the TASK-032 criterion).
+## Serving (TASK-033, ADR-0019)
+
+- **Switch:** `FRAUD_SCORER=hybrid` plus `FRAUD_MODEL_DIR=models/fraud`. The models load once when the app starts and are warmed with one throw-away score.
+- **Floor and fallback:** the baseline rules score every transfer first, and `risk = max(baseline, hybrid)`, so the model can raise a decision but never lower it. A missing, failing or slow model (over `FRAUD_MODEL_BUDGET_MS`, default 50 ms) serves the baseline result, marked `+rules-only` with a `MODEL_UNAVAILABLE` reason.
+- **Inputs:** queried from the platform for each transfer: debits in the last 30 days, payee age, failed sign-ins in 24 h. They go through the same online feature code as training; `test_served_row_equals_the_training_row` checks every model column against `build_dataset`. Device signals are not on the payment path yet (TASK-095).
+- **Persistence:** `fraud_events` stores the full snapshot (baseline and hybrid inputs, `model_probability`, `anomaly_score`, both risks) and `model_version`. Customers never see reasons or scores; staff alert detail shows RULE/MODEL/ANOMALY reasons (`test_hybrid_risk_drives_the_transfer_state_machine`).
+- **Latency (laptop, served end to end, 25 transfers):** p50 20.6 ms, p95 24.7 ms, max 29.2 ms.
+
+### Served-path finding: new payees (#251)
+In the labelled data, no legitimate debit goes to a payee less than 761 h (about 32 days) old, while 83% of fraud debits use a payee under 72 h old. The models learned "new payee = fraud". When served, a ₹10 transfer to a 48 h-old verified payee scored model probability 0.99 and risk 75 (REVIEW), with `MODEL_PAYEE_AGE_SECONDS` as the top reason.
+
+The offline metrics above do not show this, because the test split has the same blind spot. It was a data-generator gap, not a serving bug.
+
+**Fixed (generator v2.1).** Legitimate new payees, phone changes and forgotten passwords were added and the models retrained. Legitimate transfers to payees under 3 days old are now held at REVIEW 0.09% of the time (test), down from 100%. Recall at REVIEW is 0.835, down from 0.957, because the old number was inflated by the shortcut. Details are in the evaluation report v1.1, §3.3.

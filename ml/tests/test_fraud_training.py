@@ -92,6 +92,7 @@ def test_cli_run_writes_artifacts_and_logs_to_mlflow(exported: Path, tmp_path: P
         "lightgbm.txt",
         "isolation_forest.joblib",
         "hybrid_params.json",
+        "manifest.json",  # SHA-256 per artifact, verified by the serving loader (TASK-033)
     }
     assert report["lightgbm"]["test"]["pr_auc"] > 0 and "holdout_seed" in report["lightgbm"]
     assert report["hybrid"]["at_review"]["recall"] >= report["rules_only"]["at_review"]["recall"]

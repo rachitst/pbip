@@ -12,13 +12,16 @@ from uuid import UUID
 
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from redis import Redis
 from sqlalchemy.orm import Session
 
 from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.crypto import CryptoError, FieldCipher
 from pbip_api.core.db import get_session
 from pbip_api.core.errors import ForbiddenError, UnauthorizedError
+from pbip_api.core.redis import get_redis
 from pbip_api.core.security import PasswordService, decode_token
+from pbip_api.core.velocity import VelocityCounters
 from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.auth.service import AuthService, RequestMeta
 
@@ -112,8 +115,9 @@ def get_auth_service(
     passwords: PasswordService = Depends(get_password_service),
     cipher: FieldCipher = Depends(get_field_cipher),
     clock: Callable[[], float] = Depends(get_clock),
+    redis_client: Redis = Depends(get_redis),
 ) -> AuthService:
-    return AuthService(session, settings, passwords, cipher, clock)
+    return AuthService(session, settings, passwords, cipher, clock, VelocityCounters(redis_client))
 
 
 def csrf_guard(

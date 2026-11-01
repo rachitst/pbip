@@ -1,0 +1,15 @@
+{
+  "_note": "Re-recorded 2026-11-01 for generator v2.1 (#251: legitimate new payees). app_scam 97 -> 92, still BLOCK: the old score leaned on 'new payee = fraud'. Raise deliberately; never lower without a stated reason.",
+  "account_takeover": {
+    "decision": "REVIEW",
+    "risk_score": 60
+  },
+  "app_scam": {
+    "decision": "BLOCK",
+    "risk_score": 92
+  },
+  "velocity_burst": {
+    "decision": "STEP_UP",
+    "risk_score": 30
+  }
+}

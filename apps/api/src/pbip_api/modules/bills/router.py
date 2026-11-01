@@ -23,6 +23,7 @@ from pbip_api.modules.bills.service import BillPaymentResult, BillsService, PayB
 from pbip_api.modules.customers.dependencies import get_current_customer
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.fraud.dependencies import get_country_resolver, get_fraud_scorer
+from pbip_api.modules.fraud.signals import device_uuid
 
 router = APIRouter(prefix="/api/v1/bills", tags=["bills"])
 
@@ -78,6 +79,12 @@ def pay_bill(
     customer: Customer = Depends(get_current_customer),
     service: BillsService = Depends(get_bills_service),
     meta: RequestMeta = Depends(get_request_meta),
+    x_device_id: str | None = Header(
+        default=None,
+        alias="X-Device-ID",
+        max_length=512,
+        description="Per-browser device id (lib/device.ts); only a derived id is used (ADR-0020)",
+    ),
 ) -> JSONResponse:
     result = service.pay_bill(
         user_id=principal.user_id,
@@ -91,6 +98,7 @@ def pay_bill(
         ),
         idempotency_key=idempotency_key,
         meta=meta,
+        device_id=device_uuid(x_device_id),
     )
     return _respond(result)
 

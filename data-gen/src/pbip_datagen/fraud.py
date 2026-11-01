@@ -1,5 +1,4 @@
-"""Synthetic dataset v2 (TASK-023, TASK-071): P2P transfers with context and labelled fraud
-scenarios F1-F8.
+"""Synthetic dataset v2 (TASK-023): P2P transfers with context, and labelled fraud scenarios F1-F6.
 
 v1 (``generator.py``) produces income, bills and card-style spending. Fraud happens on transfers, so
 v2 adds, for every customer, ordinary transfers to established payees and, for a configured share of
@@ -14,13 +13,17 @@ customers, ONE injected incident of a scenario:
   payee.
 * F6 mule pass-through: 3-6 credits from unrelated senders, then 90-98% of the inflow sent out to a
   new payee within 6 hours.
-* F7 structuring: 3-6 deposits just beneath the configured synthetic reporting threshold.
-* F8 dormant account sudden activity: accounts dormant for > 180 days suddenly initiating
-  maximum transfers.
 
 Every row of an incident is labelled (``fraud_labels``: transaction id -> scenario, incident, role).
-Ordinary transfers are built so they never match a scenario's signature (payees older than 30 days,
-home city, known device, no failed logins), so labels are clean by construction.
+Normal customers also do things for the first time (v2.1, #251), because real ones do:
+* L1 a new payee, paid minutes to days after it was added (a new landlord, a one-off purchase,
+  splitting a bill), at ordinary amounts or occasionally a one-off of up to 60% of monthly income;
+  the payee is then used again like any other.
+* L2 a new phone: from some date on, the customer's transfers come from a new device.
+* L3 a forgotten password: 1-4 failed logins, then a normal transfer from the usual device.
+None of these reaches a scenario's full signature (a new payee never gets 1.5x income or more, a
+new device never comes with failed logins or a new payee), so labels stay clean by construction.
+They draw from their own random stream, so ordinary and fraud rows are identical to v2.0.
 
 Determinism: each customer draws from ``default_rng([seed, index, 7])`` (independent of v1's stream
 ``[seed, index, 1]``) and ids are UUIDv5 from the run, so the same config yields identical output.
@@ -46,9 +49,9 @@ from pbip_datagen.generator import (
     run_id_for,
 )
 
-FRAUD_VERSION = "2.1.0"
-Scenario = Literal["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8"]
-SCENARIOS: tuple[Scenario, ...] = ("F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8")
+FRAUD_VERSION = "2.1.0"  # 2.1: legitimate first-time behaviour (#251)
+Scenario = Literal["F1", "F2", "F3", "F4", "F5", "F6"]
+SCENARIOS: tuple[Scenario, ...] = ("F1", "F2", "F3", "F4", "F5", "F6")
 SCENARIO_NAMES: dict[Scenario, str] = {
     "F1": "APP scam: new payee and large transfer",
     "F2": "Velocity burst",
@@ -56,8 +59,6 @@ SCENARIO_NAMES: dict[Scenario, str] = {
     "F4": "Impossible travel / geo jump",
     "F5": "Amount anomaly vs customer baseline",
     "F6": "Mule pass-through flow",
-    "F7": "Structuring: multiple deposits below reporting threshold",
-    "F8": "Dormant account sudden activity",
 }
 # Share of customers who suffer one incident of each scenario (a customer gets at most one).
 DEFAULT_RATES: dict[Scenario, float] = {
@@ -67,14 +68,7 @@ DEFAULT_RATES: dict[Scenario, float] = {
     "F4": 0.01,
     "F5": 0.015,
     "F6": 0.005,
-    "F7": 0.01,
-    "F8": 0.01,
 }
-# Configured synthetic reporting threshold (₹1,00,000.00 minor units / paise; aligned with
-# LARGE_AMOUNT_MINOR in pbip_api.modules.fraud.baseline; not a statutory PMLA threshold).
-DEFAULT_REPORTING_THRESHOLD_MINOR = 10_000_000
-DEFAULT_MAX_TRANSFER_MINOR = 20_000_000  # ₹2,00,000.00 maximum allowed transfer
-DEFAULT_DORMANCY_DAYS = 180  # accounts dormant for > 180 days
 FOREIGN_COUNTRIES = ("AE", "SG", "GB", "US", "NG", "RU")
 _PAYEE_MIN_DAYS = 30  # ordinary payees are at least this old
 _MIN_MINOR = 100
@@ -85,21 +79,12 @@ Direction = Literal["DEBIT", "CREDIT"]
 @dataclass(frozen=True, slots=True)
 class FraudConfig:
     rates: dict[Scenario, float] = field(default_factory=lambda: dict(DEFAULT_RATES))
-    reporting_threshold_minor: int = DEFAULT_REPORTING_THRESHOLD_MINOR
-    max_transfer_minor: int = DEFAULT_MAX_TRANSFER_MINOR
-    dormancy_days: int = DEFAULT_DORMANCY_DAYS
 
     def __post_init__(self) -> None:
         if set(self.rates) != set(SCENARIOS):
-            raise ValueError("rates must cover F1-F8 exactly")
+            raise ValueError("rates must cover F1-F6 exactly")
         if any(not 0 <= r <= 0.2 for r in self.rates.values()) or sum(self.rates.values()) > 0.5:
             raise ValueError("each rate must be within 0-0.2 and all together at most 0.5")
-        if self.reporting_threshold_minor <= 0:
-            raise ValueError("reporting_threshold_minor must be positive")
-        if self.max_transfer_minor <= 0:
-            raise ValueError("max_transfer_minor must be positive")
-        if self.dormancy_days < 180:
-            raise ValueError("dormancy_days must be at least 180")
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,7 +110,7 @@ class FraudLabel:
     transaction_id: uuid.UUID
     scenario: Scenario
     incident_id: uuid.UUID
-    role: str  # e.g. "transfer", "burst", "takeover", "deposit", "reactivation"
+    role: str  # e.g. "transfer", "burst", "takeover", "home", "abroad", "inbound", "outbound"
     fraudulent: bool  # False only for context legs (F4's genuine transfer from home)
 
 
@@ -176,7 +161,6 @@ class _Ctx:
     payees: list[tuple[uuid.UUID, datetime]]
     tx_ids: _Ids
     party_ids: _Ids
-    fraud_config: FraudConfig = field(default_factory=FraudConfig)
     rows: list[Transfer] = field(default_factory=list)
 
     def money(self, value: float) -> int:
@@ -296,79 +280,65 @@ def _f6(ctx: _Ctx) -> list[tuple[Transfer, str]]:
     return rows
 
 
-def _f7(ctx: _Ctx) -> list[tuple[Transfer, str]]:
-    """F7 Structuring: 3-6 deposits just beneath the configured synthetic reporting threshold."""
-    threshold = ctx.fraud_config.reporting_threshold_minor
-    start = ctx.moment(timedelta(hours=24))
-    count = int(ctx.rng.integers(3, 7))
-    rows: list[tuple[Transfer, str]] = []
-    for i in range(count):
-        raw_amount = float(ctx.rng.uniform(0.90, 0.995)) * threshold
-        amount = min(ctx.money(raw_amount), threshold - 100)
-        when = start + timedelta(minutes=20 * i + int(ctx.rng.integers(0, 15)))
-        row = ctx.add(when, "CREDIT", amount, ctx.party_ids.next(), None)
-        rows.append((row, "deposit"))
-    return rows
+def _instant(ctx: _Ctx, rng: np.random.Generator) -> datetime:
+    base = ctx.window_start + (ctx.window_end - ctx.window_start) * float(rng.uniform(0.02, 0.95))
+    return base.replace(hour=int(rng.integers(8, 22)), minute=int(rng.integers(0, 60)))
 
 
-def _f8(ctx: _Ctx) -> list[tuple[Transfer, str]]:
-    """F8 Dormant account sudden activity: > 180 days inactivity, then maximum transfer(s)."""
-    dormancy_days = int(
-        ctx.rng.integers(ctx.fraud_config.dormancy_days + 1, ctx.fraud_config.dormancy_days + 61)
-    )
-    days_before_end = int(
-        ctx.rng.integers(1, max(2, min(15, (ctx.window_end - ctx.window_start).days)))
-    )
-    reactivation_time = ctx.window_end - timedelta(
-        days=days_before_end, hours=int(ctx.rng.integers(1, 12))
-    )
-    reactivation_time = reactivation_time.replace(
-        hour=int(ctx.rng.integers(9, 21)), minute=int(ctx.rng.integers(0, 60))
-    )
-    last_active = reactivation_time - timedelta(days=dormancy_days)
-
-    ctx.rows = [t for t in ctx.rows if t.occurred_at <= last_active]
-
-    payee, added = ctx.payees[0]
-    payee_added = min(added, last_active - timedelta(days=_PAYEE_MIN_DAYS + 5))
-    ctx.add(
-        last_active,
-        "DEBIT",
-        ctx.money(ctx.customer.monthly_income_minor * float(ctx.rng.uniform(0.01, 0.10))),
-        payee,
-        payee_added,
-    )
-
-    max_transfer = ctx.fraud_config.max_transfer_minor
-    count = int(ctx.rng.integers(1, 3))
-    device = uuid.uuid5(ctx.customer.id, f"dormant-device-{reactivation_time.isoformat()}")
-    rows: list[tuple[Transfer, str]] = []
-    for i in range(count):
-        tx_time = reactivation_time + timedelta(minutes=int(ctx.rng.integers(5, 30)) * i)
-        target = ctx.party_ids.next()
-        payee_added = tx_time - timedelta(minutes=int(ctx.rng.integers(5, 45)))
-        row = ctx.add(
-            tx_time,
-            "DEBIT",
-            max_transfer,
-            target,
-            payee_added,
-            device=device,
-        )
-        rows.append((row, "reactivation"))
-    return rows
+def _usual(ctx: _Ctx, rng: np.random.Generator) -> int:
+    return ctx.money(ctx.customer.monthly_income_minor * float(rng.uniform(0.01, 0.12)))
 
 
-_INJECTORS = {
-    "F1": _f1,
-    "F2": _f2,
-    "F3": _f3,
-    "F4": _f4,
-    "F5": _f5,
-    "F6": _f6,
-    "F7": _f7,
-    "F8": _f8,
-}
+def _new_payees(ctx: _Ctx, rng: np.random.Generator, months: int) -> None:
+    """L1: about two new payees in six months, paid minutes to three days after being added."""
+    for _ in range(int(rng.poisson(0.35 * months))):
+        added = _instant(ctx, rng)
+        payee = ctx.party_ids.next()
+        delay = rng.uniform(2, 60) if rng.uniform() < 0.5 else rng.uniform(60, 3 * 24 * 60)
+        first = added + timedelta(minutes=float(delay))
+        one_off = rng.uniform() < 0.15  # a deposit or a big purchase: still under F1's 1.5x income
+        share = float(rng.uniform(0.15, 0.6)) if one_off else float(rng.uniform(0.01, 0.12))
+        if first < ctx.window_end:
+            ctx.add(
+                first, "DEBIT", ctx.money(ctx.customer.monthly_income_minor * share), payee, added
+            )
+        for _ in range(int(rng.integers(0, 3))):  # then used again, like any payee
+            later = first + timedelta(days=float(rng.uniform(5, 60)))
+            if later < ctx.window_end:
+                ctx.add(later, "DEBIT", _usual(ctx, rng), payee, added)
+
+
+def _new_phone(ctx: _Ctx, rng: np.random.Generator) -> None:
+    """L2: 12% of customers switch phones; transfers after that come from the new device."""
+    if rng.uniform() >= 0.12:
+        return
+    switch = _instant(ctx, rng)
+    phone = uuid.uuid5(ctx.customer.id, f"phone-{switch.isoformat()}")
+    for _ in range(int(rng.integers(1, 4))):
+        when = switch + timedelta(days=float(rng.uniform(0, 20)))
+        if when < ctx.window_end:
+            payee, added = ctx.payees[int(rng.integers(0, len(ctx.payees)))]
+            ctx.add(when, "DEBIT", _usual(ctx, rng), payee, added, device=phone)
+
+
+def _forgotten_password(ctx: _Ctx, rng: np.random.Generator, months: int) -> None:
+    """L3: 1-4 failed logins, then a normal transfer from the usual device to a known payee."""
+    for _ in range(int(rng.poisson(0.15 * months))):
+        payee, added = ctx.payees[int(rng.integers(0, len(ctx.payees)))]
+        failed = int(rng.integers(1, 5))
+        ctx.add(_instant(ctx, rng), "DEBIT", _usual(ctx, rng), payee, added, failed=failed)
+
+
+def _first_time_behaviour(ctx: _Ctx, rng: np.random.Generator, months: int) -> None:
+    """L1-L3 (module docstring). After the scenarios, on its own stream: scenario rows unchanged."""
+    if ctx.window_end - ctx.window_start < timedelta(days=2):
+        return
+    _new_payees(ctx, rng, months)
+    _new_phone(ctx, rng)
+    _forgotten_password(ctx, rng, months)
+
+
+_INJECTORS = {"F1": _f1, "F2": _f2, "F3": _f3, "F4": _f4, "F5": _f5, "F6": _f6}
 
 
 def _scenario_for(rng: np.random.Generator, config: FraudConfig) -> Scenario | None:
@@ -407,7 +377,6 @@ def customer_transfers(
         payees=payees,
         tx_ids=_Ids(customer, "transfers"),
         party_ids=party_ids,
-        fraud_config=fraud,
     )
     _ordinary_transfers(ctx, [m for m in months if m >= window_start - timedelta(days=31)])
     labels: list[FraudLabel] = []
@@ -418,6 +387,8 @@ def customer_transfers(
             FraudLabel(row.id, scenario, incident, role, role != "home")
             for row, role in _INJECTORS[scenario](ctx)
         ]
+    first_time_rng = np.random.default_rng([config.seed, customer.index, 8])
+    _first_time_behaviour(ctx, first_time_rng, config.months)
     rows = sorted(ctx.rows, key=lambda t: (t.occurred_at, t.id))
     return rows, labels
 

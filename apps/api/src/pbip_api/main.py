@@ -18,6 +18,7 @@ from pbip_api.modules.bills.router import router as bills_router
 from pbip_api.modules.compliance.router import router as compliance_router
 from pbip_api.modules.customers.router import router as customers_router
 from pbip_api.modules.events.router import router as events_router
+from pbip_api.modules.fraud.hybrid import load_engine
 from pbip_api.modules.fraud.router import router as fraud_router
 from pbip_api.modules.health.router import ReadinessCache
 from pbip_api.modules.health.router import router as health_router
@@ -91,6 +92,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         instrument_app(app, settings)
 
     app.state.readiness_cache = ReadinessCache(settings.health_ready_cache_seconds)
+    # Fraud models load once per process, here, never on a request (ADR-0019). None = rules only.
+    app.state.fraud_engine = load_engine(settings)
     register_error_handlers(app)
     for router in ROUTERS:
         app.include_router(router)

@@ -474,8 +474,18 @@ def test_new_payee_plus_large_amount_is_held_with_human_readable_reasons(
     detail = client.get(f"/api/v1/fraud/alerts/{alert['id']}", headers=analyst.headers).json()
     codes = {r["code"] for r in detail["reasons"]}
     assert "NEW_PAYEE_LARGE_AMOUNT" in codes
+    # TASK-036: the analyst sees who and what, without contact details.
+    assert detail["customer"]["kyc_status"] and detail["customer"]["full_name"]
+    assert set(detail["customer"]) == {
+        "full_name",
+        "kyc_status",
+        "segment",
+        "risk_profile",
+        "customer_since",
+    }
+    assert detail["transaction_type"] == "TRANSFER" and detail["reference"] == "rent"
     assert (
-        detail["model_version"] == "baseline-rules-0.2"
+        detail["model_version"] == "baseline-rules-0.3"
         and detail["features"]["payee_age_minutes"] is not None
     )
     assert any("minutes ago" in r["message"] for r in detail["reasons"])
@@ -524,7 +534,7 @@ def test_every_scoring_decision_is_persisted_for_audit_and_retraining(
         ).one()
     assert (
         row.decision == "ALLOW"
-        and row.model_version == "baseline-rules-0.2"
+        and row.model_version == "baseline-rules-0.3"
         and row.latency_ms >= 0
     )
     _ = (Transaction, func, select)  # imported for type narrowing in other tests
@@ -594,3 +604,51 @@ def test_transfer_from_a_new_country_adds_a_new_country_reason(
     assert "NEW_COUNTRY" in codes[2] and events[ids[2]].decision == "ALLOW"
     assert events[ids[2]].risk_score == 20
     assert "NEW_COUNTRY" not in codes[3]  # unknown country never adds risk
+
+
+def test_three_wrong_step_up_codes_hand_the_transfer_to_an_analyst(
+    app: FastAPI,
+    client: TestClient,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    auth_service_factory: Callable[[Session], AuthService],
+    migrated_engine: Engine,
+    clock: FakeClock,
+    make_staff: Callable[..., Actor],
+) -> None:
+    """TASK-037: after 3 failed codes the transfer is held for review, not left retryable."""
+    alice, _bob, payee = pair
+    enable_mfa(auth_service_factory, migrated_engine, alice, clock)
+    force_decision(app, FraudDecision.STEP_UP)
+    tid = send(client, alice, payee, 50_000).json()["id"]
+    url = f"/api/v1/transfers/{tid}/step-up"
+    for _ in range(2):
+        wrong = client.post(url, headers=alice.headers, json={"code": "000000"})
+        assert wrong.status_code == 422
+    third = client.post(url, headers=alice.headers, json={"code": "000000"})
+    assert third.status_code == 200 and third.json()["status"] == "PENDING_REVIEW"
+    assert balance(client, alice)["held"] == 50_000  # money held for the analyst
+    analyst = make_staff(RoleName.FRAUD_ANALYST)
+    alerts = client.get("/api/v1/fraud/alerts", headers=analyst.headers).json()
+    assert [a["transaction_status"] for a in alerts] == ["PENDING_REVIEW"]
+    again = client.post(url, headers=alice.headers, json={"code": "000000"})
+    assert again.status_code == 409  # no longer waiting for a code
+
+
+def test_a_correct_code_after_two_wrong_ones_still_completes(
+    app: FastAPI,
+    client: TestClient,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    auth_service_factory: Callable[[Session], AuthService],
+    migrated_engine: Engine,
+    clock: FakeClock,
+) -> None:
+    alice, bob, payee = pair
+    secret = enable_mfa(auth_service_factory, migrated_engine, alice, clock)
+    force_decision(app, FraudDecision.STEP_UP)
+    tid = send(client, alice, payee, 50_000).json()["id"]
+    url = f"/api/v1/transfers/{tid}/step-up"
+    for _ in range(2):
+        assert client.post(url, headers=alice.headers, json={"code": "000000"}).status_code == 422
+    done = client.post(url, headers=alice.headers, json={"code": totp_code(secret, clock)})
+    assert done.status_code == 200 and done.json()["status"] == "POSTED"
+    assert balance(client, bob)["ledger"] == 50_000

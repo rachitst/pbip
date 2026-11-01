@@ -8,6 +8,7 @@ safely retry with the same Idempotency-Key.
 
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -28,14 +29,16 @@ from pbip_api.core.metrics import (
     IDEMPOTENT_REPLAYS_TOTAL,
     TRANSFERS_TOTAL,
 )
+from pbip_api.core.velocity import VelocityCounters
 from pbip_api.modules.accounts.models import Account, AccountType
 from pbip_api.modules.accounts.policy import get_owned_account
-from pbip_api.modules.auth.models import User
+from pbip_api.modules.auth.models import SecurityEvent, SecurityEventType, User
 from pbip_api.modules.auth.service import AuthService, RequestMeta
 from pbip_api.modules.compliance.service import AuditService
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.fraud import service as fraud_service
-from pbip_api.modules.fraud.models import AlertStatus, FraudAlert
+from pbip_api.modules.fraud.models import AlertStatus, FraudAlert, FraudEvent
+from pbip_api.modules.fraud.signals import ip_network
 from pbip_api.modules.ledger import service as ledger
 from pbip_api.modules.ledger.models import (
     IdempotencyKey,
@@ -46,6 +49,9 @@ from pbip_api.modules.ledger.models import (
 from pbip_api.modules.notifications import service as notifications
 from pbip_api.modules.payees.models import Payee, PayeeStatus
 from pbip_api.modules.payees.policy import get_owned_payee
+
+# Wrong step-up codes for ONE transfer before it goes to an analyst instead (TASK-037).
+STEP_UP_MAX_FAILURES = 3
 
 
 class LimitExceededError(UnprocessableError):
@@ -88,12 +94,14 @@ class PaymentsService:
         scorer: FraudScorer,
         auth: AuthService,
         countries: CountryResolver | None = None,
+        counters: VelocityCounters | None = None,
     ) -> None:
         self.session = session
         self.settings = settings
         self.scorer = scorer
         self.auth = auth
         self.countries = countries or NoCountryResolver()
+        self.counters = counters
         self.audit = AuditService(session)
 
     # ----------------------------------------------------------------- creation
@@ -105,6 +113,7 @@ class PaymentsService:
         command: TransferCommand,
         idempotency_key: str,
         meta: RequestMeta,
+        device_id: UUID | None = None,
     ) -> TransferResult:
         if command.amount_minor > self.settings.max_transfer_minor:
             raise LimitExceededError("amount exceeds the per-transfer limit")
@@ -141,7 +150,9 @@ class PaymentsService:
                 currency=command.currency,
                 occurred_at=utcnow(),
                 payee_id=payee.id if payee else None,
+                device_id=device_id,
                 ip_country=self.countries.country(meta.ip),
+                ip_network=ip_network(meta.ip),
             )
         )
         FRAUD_INFERENCE_SECONDS.observe(result.latency_ms / 1000)
@@ -191,6 +202,8 @@ class PaymentsService:
         )
         self.session.commit()
         TRANSFERS_TOTAL.labels(transaction.status.value).inc()
+        if self.counters is not None:  # after commit: a rolled-back attempt is never counted
+            self.counters.record_transfer(source.id, transaction.id, transaction.amount, utcnow())
         return outcome
 
     # ---------------------------------------------------------------- idempotency
@@ -375,7 +388,12 @@ class PaymentsService:
         transaction = self._owned_transaction(user_id, transaction_id, lock=True)
         if transaction.status != TransactionStatus.PENDING_STEP_UP:
             raise ConflictError("this transfer is not waiting for verification")
-        self.auth.verify_step_up(user_id, code, meta)  # commits failure counters itself
+        try:  # a failure commits its own evidence (security event, lockout counter)
+            self.auth.verify_step_up(user_id, code, meta, subject=str(transaction.id))
+        except UnprocessableError:
+            if self._step_up_failures(user_id, transaction.id) >= STEP_UP_MAX_FAILURES:
+                return self._escalate_to_review(user_id, transaction_id, meta)
+            raise
         self._enforce_daily_limit(user_id, transaction)
         ledger.post_transaction(self.session, transaction, ledger.transfer_legs(transaction))
         self._enqueue(notifications.TRANSFER_POSTED, user_id, transaction)
@@ -391,6 +409,55 @@ class PaymentsService:
         TRANSFERS_TOTAL.labels(transaction.status.value).inc()
         return self._build_result(transaction)
 
+    def _step_up_failures(self, user_id: UUID, transaction_id: UUID) -> int:
+        count = self.session.scalar(
+            select(func.count()).where(
+                SecurityEvent.user_id == user_id,
+                SecurityEvent.event_type == SecurityEventType.STEP_UP_FAILURE,
+                SecurityEvent.details["subject"].astext == str(transaction_id),
+            )
+        )
+        return int(count or 0)
+
+    def _escalate_to_review(
+        self, user_id: UUID, transaction_id: UUID, meta: RequestMeta
+    ) -> TransferResult:
+        """Too many wrong codes: hold the money and hand the transfer to an analyst.
+
+        A new transaction (the failure was committed): same lock order as creation.
+        """
+        self._lock_user(user_id)
+        transaction = self._owned_transaction(user_id, transaction_id, lock=True)
+        if transaction.status != TransactionStatus.PENDING_STEP_UP:  # a concurrent request won
+            return self._build_result(transaction)
+        self._enforce_daily_limit(user_id, transaction)
+        ledger.place_hold(self.session, transaction)
+        transaction.status = TransactionStatus.PENDING_REVIEW
+        event = (
+            self.session.execute(
+                select(FraudEvent)
+                .where(FraudEvent.transaction_id == transaction.id)
+                .order_by(FraudEvent.created_at.desc())
+            )
+            .scalars()
+            .first()
+        )
+        if event is not None:
+            fraud_service.open_alert(self.session, event)
+        self._enqueue(notifications.TRANSFER_UNDER_REVIEW, user_id, transaction)
+        self.audit.record(
+            user_id,
+            "TRANSFER_STEP_UP_ESCALATED",
+            "transaction",
+            str(transaction.id),
+            ip=meta.ip,
+            request_id=meta.request_id,
+            details={"failed_codes": STEP_UP_MAX_FAILURES},
+        )
+        self.session.commit()
+        TRANSFERS_TOTAL.labels(transaction.status.value).inc()
+        return self._build_result(transaction)
+
     # --------------------------------------------------------- analyst review
     def review_alert(
         self,
@@ -400,7 +467,10 @@ class PaymentsService:
         release: bool,
         note: str | None,
         meta: RequestMeta,
+        settle_other: Callable[[Session, Transaction], bool] | None = None,
     ) -> None:
+        """Resolve an alert. ``settle_other`` lets another module (bill payments) mirror the
+        outcome on its own record in this same transaction; it returns True if it did."""
         alert = self.session.execute(
             select(FraudAlert)
             .where(FraudAlert.id == alert_id)
@@ -431,7 +501,8 @@ class PaymentsService:
         alert.assigned_to_user_id = analyst_id
         alert.resolved_at = utcnow()
 
-        if transaction.initiated_by_user_id is not None:
+        handled = settle_other is not None and settle_other(self.session, transaction)
+        if transaction.initiated_by_user_id is not None and not handled:
             self._enqueue(
                 notifications.TRANSFER_POSTED
                 if transaction.status == TransactionStatus.POSTED

@@ -41,6 +41,7 @@ from pbip_api.core.security import (
     new_opaque_token,
     validate_password_strength,
 )
+from pbip_api.core.velocity import VelocityCounters
 from pbip_api.modules.accounts.models import AccountType
 from pbip_api.modules.accounts.service import open_account
 from pbip_api.modules.auth.models import (
@@ -142,12 +143,14 @@ class AuthService:
         passwords: PasswordService,
         cipher: FieldCipher,
         clock: Callable[[], float] = time.time,
+        velocity: VelocityCounters | None = None,
     ) -> None:
         self.session = session
         self.settings = settings
         self.passwords = passwords
         self.cipher = cipher
         self.clock = clock
+        self.velocity = velocity  # per-IP failed sign-in window in Redis (TASK-034)
         self.audit = AuditService(session)
         self._last_refresh_row_id: UUID | None = None
 
@@ -162,16 +165,20 @@ class AuthService:
         meta: RequestMeta,
         **details: Any,
     ) -> None:
-        self.session.add(
-            SecurityEvent(
-                user_id=user_id,
-                event_type=event_type,
-                ip=meta.ip,
-                user_agent=(meta.user_agent or "")[:255] or None,
-                request_id=meta.request_id,
-                details=details,
-            )
+        event = SecurityEvent(
+            id=uuid4(),
+            user_id=user_id,
+            event_type=event_type,
+            ip=meta.ip,
+            user_agent=(meta.user_agent or "")[:255] or None,
+            request_id=meta.request_id,
+            details=details,
         )
+        self.session.add(event)
+        # Failed sign-ins always commit before the error is raised (evidence must persist), so
+        # counting here never counts a failure the database does not also keep.
+        if event_type is SecurityEventType.LOGIN_FAILURE and self.velocity and meta.ip:
+            self.velocity.record_login_failure(meta.ip, event.id, self._now())
 
     def _user_by_email(self, email: str) -> User | None:
         return self.session.execute(
@@ -533,15 +540,22 @@ class AuthService:
         self.session.commit()
         return codes
 
-    def verify_step_up(self, user_id: UUID, code: str, meta: RequestMeta) -> None:
-        """Second-factor check for a sensitive action (e.g. a flagged transfer)."""
+    def verify_step_up(
+        self, user_id: UUID, code: str, meta: RequestMeta, *, subject: str | None = None
+    ) -> None:
+        """Second-factor check for a sensitive action (e.g. a flagged transfer).
+
+        ``subject`` (e.g. the transaction id) is recorded on a failure, so the caller can count
+        failed attempts per action.
+        """
         user = self._get_user(user_id)
         if not user.mfa_enabled:
             raise ConflictError("enable MFA to complete this verification")
         if self._is_locked(user):
             raise UnauthorizedError("invalid verification code")
         if not self._verify_totp(user, code):
-            self._event(SecurityEventType.STEP_UP_FAILURE, user.id, meta)
+            details = {"subject": subject} if subject else {}
+            self._event(SecurityEventType.STEP_UP_FAILURE, user.id, meta, **details)
             self._register_failure(user, meta, "bad_step_up_code")
             self.session.commit()
             raise UnprocessableError("invalid verification code")

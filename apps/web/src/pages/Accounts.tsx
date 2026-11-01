@@ -1,20 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useSearchParams } from "react-router";
-import type { SyntheticEvent } from "react";
 import { api } from "../api/client";
-import type { AccountOut, OpenAccountType, TransferOut } from "../api/client";
+import type { AccountOut, OpenAccountType } from "../api/client";
 import { errorMessage } from "../lib/errors";
 import { accountTypeLabel } from "../lib/format";
-import { formatMinor, parseToMinor } from "../lib/money";
-import { transferStatus } from "../lib/status";
+import { formatMinor } from "../lib/money";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
-import { MoneyInput } from "../ui/MoneyInput";
 import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 import { AccountTransactions } from "./AccountTransactions";
+import { SendMoney } from "./SendMoney";
 
 export function Accounts() {
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts });
@@ -59,9 +57,9 @@ export function Accounts() {
         ))}
       </ul>
       <OpenAccount />
-      {accounts.data?.[0] && (
+      {accounts.data && accounts.data.length > 0 && (
         <SendMoney
-          fromAccountId={accounts.data[0].id}
+          accounts={accounts.data.filter((a) => a.status === "ACTIVE")}
           payees={(payees.data ?? []).filter((p) => p.status === "VERIFIED")}
         />
       )}
@@ -161,88 +159,6 @@ function OpenAccount() {
       )}
       {open.isError && (
         <Alert tone="error">{errorMessage(open.error, "Could not open the account.")}</Alert>
-      )}
-    </section>
-  );
-}
-
-interface SendMoneyProps {
-  fromAccountId: string;
-  payees: { id: string; name: string; account_number_masked: string }[];
-}
-
-function SendMoney({ fromAccountId, payees }: SendMoneyProps) {
-  const queryClient = useQueryClient();
-  const [payeeId, setPayeeId] = useState("");
-  const [amount, setAmount] = useState("");
-  const [result, setResult] = useState<TransferOut | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
-  // ONE key per user intent. If the request times out and the user presses the button again,
-  // the SAME key is reused, so a retry can never create a duplicate transfer.
-  const [intentKey, setIntentKey] = useState(() => crypto.randomUUID());
-
-  async function submit(event: SyntheticEvent) {
-    event.preventDefault();
-    setError(null);
-    const minor = parseToMinor(amount);
-    if (minor === null || !payeeId) {
-      setError("Choose a payee and enter a valid amount (up to 2 decimals).");
-      return;
-    }
-    setSending(true);
-    try {
-      const transfer = await api.transfer(
-        { from_account_id: fromAccountId, payee_id: payeeId, amount_minor: minor },
-        intentKey,
-      );
-      setResult(transfer);
-      setIntentKey(crypto.randomUUID()); // intent finished: next submit is a NEW intent
-      await queryClient.invalidateQueries({ queryKey: ["accounts"] });
-      await queryClient.invalidateQueries({ queryKey: ["entries"] });
-    } catch (caught) {
-      setError(errorMessage(caught, "The transfer could not be sent. Try again."));
-    } finally {
-      setSending(false);
-    }
-  }
-
-  return (
-    <section>
-      <h2>Send money</h2>
-      <form onSubmit={(event) => void submit(event)}>
-        <Field label="Payee">
-          {(control) => (
-            <select
-              {...control}
-              value={payeeId}
-              onChange={(event) => {
-                setPayeeId(event.target.value);
-              }}
-            >
-              <option value="">Select a verified payee</option>
-              {payees.map((payee) => (
-                <option key={payee.id} value={payee.id}>
-                  {payee.name} ({payee.account_number_masked})
-                </option>
-              ))}
-            </select>
-          )}
-        </Field>
-        <Field label="Amount (INR)">
-          {(control) => (
-            <MoneyInput {...control} value={amount} onValueChange={setAmount} currency="INR" />
-          )}
-        </Field>
-        {error && <Alert tone="error">{error}</Alert>}
-        <Button type="submit" loading={sending}>
-          Send
-        </Button>
-      </form>
-      {result && (
-        <Alert tone={transferStatus(result.status).tone === "success" ? "success" : "warning"}>
-          {result.message} ({formatMinor(result.amount_minor, result.currency)})
-        </Alert>
       )}
     </section>
   );

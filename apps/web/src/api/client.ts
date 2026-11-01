@@ -15,6 +15,9 @@ export type NotificationsPage = components["schemas"]["NotificationsPage"];
 export type BulkMarkReadResponse = components["schemas"]["BulkMarkReadResponse"];
 export type AuditLogOut = components["schemas"]["AuditLogOut"];
 export type ChainStatusOut = components["schemas"]["ChainStatusOut"];
+export type AlertSummary = components["schemas"]["AlertSummary"];
+export type AlertDetail = components["schemas"]["AlertDetail"];
+export type FraudStats = components["schemas"]["FraudStats"];
 export type SpendingBreakdownResponse = components["schemas"]["SpendingBreakdownResponse"];
 export type CategorySpendingItem = components["schemas"]["CategorySpendingItem"];
 export type SpendingTrendsResponse = components["schemas"]["SpendingTrendsResponse"];
@@ -183,13 +186,25 @@ export const api = {
   payees: () => apiFetch<PayeeOut[]>("/api/v1/payees"),
   /** One Idempotency-Key per user intent; reuse the SAME key when retrying the same submit. */
   transfer: (
-    body: { from_account_id: string; payee_id: string; amount_minor: number; reference?: string },
+    body: {
+      from_account_id: string;
+      payee_id: string;
+      amount_minor: number;
+      reference?: string | null;
+    },
     idempotencyKey: string,
   ) =>
     apiFetch<TransferOut>("/api/v1/transfers", {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(body),
+    }),
+  /** Complete a PENDING_STEP_UP transfer. 200 with POSTED, or PENDING_REVIEW after the third
+   * wrong code (the server escalates); 422 for a wrong code; 409 if it is no longer waiting. */
+  stepUp: (transferId: string, code: string) =>
+    apiFetch<TransferOut>(`/api/v1/transfers/${encodeURIComponent(transferId)}/step-up`, {
+      method: "POST",
+      body: JSON.stringify({ code }),
     }),
   notifications: (options?: { unread_only?: boolean; limit?: number; offset?: number }) => {
     const params = new URLSearchParams();
@@ -213,6 +228,19 @@ export const api = {
     return apiFetch<AuditLogOut[]>(`/api/v1/compliance/audit-logs?${params.toString()}`);
   },
   verifyAuditChain: () => apiFetch<ChainStatusOut>("/api/v1/compliance/audit-logs/verify"),
+  fraudAlerts: (status?: string) => {
+    const params = new URLSearchParams({ limit: "100" });
+    if (status) params.set("status", status);
+    return apiFetch<AlertSummary[]>(`/api/v1/fraud/alerts?${params.toString()}`);
+  },
+  fraudAlert: (alertId: string) =>
+    apiFetch<AlertDetail>(`/api/v1/fraud/alerts/${encodeURIComponent(alertId)}`),
+  decideAlert: (alertId: string, action: "RELEASE" | "REJECT", note: string) =>
+    apiFetch<undefined>(`/api/v1/fraud/alerts/${encodeURIComponent(alertId)}/decision`, {
+      method: "POST",
+      body: JSON.stringify({ action, note: note.trim() === "" ? null : note.trim() }),
+    }),
+  fraudStats: (days: number) => apiFetch<FraudStats>(`/api/v1/fraud/stats?days=${days}`),
   spendingBreakdown: (accountId: string, year?: number, month?: number) => {
     const params = new URLSearchParams({ account_id: accountId });
     if (year !== undefined) params.set("year", String(year));

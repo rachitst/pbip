@@ -26,6 +26,7 @@ class BillerStatus(StrEnum):
 
 class BillPaymentStatus(StrEnum):
     POSTED = "POSTED"
+    PENDING_REVIEW = "PENDING_REVIEW"  # funds held, waiting for a fraud analyst (like transfers)
     DECLINED = "DECLINED"
     REVERSED = "REVERSED"
 

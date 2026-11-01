@@ -37,6 +37,8 @@ ml/data/raw/
 ml/artifacts/
 data-gen/output/
 mlruns/
+models/
+data/fraud/
 mlartifacts/
 *.parquet
 *.ipynb_checkpoints/
