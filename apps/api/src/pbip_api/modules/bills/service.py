@@ -35,6 +35,7 @@ from pbip_api.modules.bills.policy import get_owned_bill_payment
 from pbip_api.modules.compliance.service import AuditService
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.fraud import service as fraud_service
+from pbip_api.modules.fraud.signals import ip_network
 from pbip_api.modules.ledger import service as ledger
 from pbip_api.modules.ledger.models import (
     EntryDirection,
@@ -140,6 +141,7 @@ class BillsService:
         command: PayBillCommand,
         idempotency_key: str,
         meta: RequestMeta,
+        device_id: UUID | None = None,
     ) -> BillPaymentResult:
         if command.amount_minor > self.settings.max_transfer_minor:
             raise LimitExceededError("amount exceeds the per-payment limit")
@@ -177,7 +179,9 @@ class BillsService:
                 currency=command.currency,
                 occurred_at=utcnow(),
                 payee_id=None,
+                device_id=device_id,
                 ip_country=self.countries.country(meta.ip),
+                ip_network=ip_network(meta.ip),
             )
         )
         FRAUD_INFERENCE_SECONDS.observe(result.latency_ms / 1000)
