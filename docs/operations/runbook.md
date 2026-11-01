@@ -3,7 +3,7 @@
 **Audience:** whoever is on call for a PBIP staging/production stack (platform owner, security owner, fraud analyst
 lead). **Scope:** the stack defined by `infra/deploy/docker-compose.prod.yml` as deployed by
 `.github/workflows/deploy.yml`. Everything here was checked against the repository at the time of writing; where a
-step depends on infrastructure that the repository does not configure (DNS and the certbot install, WAL archive storage, host disk
+step depends on infrastructure that the repository does not configure (TLS termination, WAL archive storage, host disk
 encryption, off-host backup storage) it is marked **External** and must be set up and verified on the target host
 before it can be relied on.
 
@@ -12,8 +12,8 @@ chat or this document; every command is run on the deployment host from `~/pbip`
 
 Related: [`docs/security/threat-model.md`](../security/threat-model.md) (controls and residual risks),
 [`docs/SETUP_GUIDE.md`](../SETUP_GUIDE.md) (local setup), [`README.md`](../../README.md) (deploy trigger),
-[`CONTRIBUTING.md`](../../CONTRIBUTING.md). Backup/restore automation is TASK-083 (#106); the staging VM pipeline is
-TASK-082 (#105); this runbook documents the manual procedures those tasks will automate.
+[`CONTRIBUTING.md`](../../CONTRIBUTING.md). Backup and restore drills are scripted (TASK-083, §4); the staging VM
+pipeline is TASK-082 (#105).
 
 ---
 
@@ -23,12 +23,12 @@ TASK-082 (#105); this runbook documents the manual procedures those tasks will a
 
 | Service | Image | Role | Restart | Data |
 |---|---|---|---|---|
-| `web` | `${IMAGE_PREFIX}/web:${IMAGE_TAG}` (nginx, unprivileged) | Terminates TLS (`${PUBLIC_HTTPS_PORT:-443}` → 8443); HTTP (`${PUBLIC_PORT:-80}` → 8080) only redirects and answers ACME challenges; static React build; proxies `/api/` to `api`. The only published ports | unless-stopped | `./certs/web`, `./acme` (read-only) |
+| `web` | `${IMAGE_PREFIX}/web:${IMAGE_TAG}` (nginx, unprivileged) | Static React build; proxies `/api/` to `api`; the only published port (`${PUBLIC_PORT:-80}` → 8080) | unless-stopped | none |
 | `api` | `${IMAGE_PREFIX}/api:${IMAGE_TAG}` | FastAPI (uvicorn) | unless-stopped | none |
 | `migrate` | same as `api` | One-shot `alembic upgrade head`; `api` waits for it to complete | no | none |
 | `worker` | same as `api` | Celery worker (outbox relay) | unless-stopped | none |
 | `beat` | same as `api` | Celery beat: `pbip.outbox.relay` every 10 s | unless-stopped | schedule file in `/tmp` |
-| `db` | `postgres:16-alpine` | PostgreSQL 16; not published; TLS required for every TCP client (`tls-entrypoint.sh`) | unless-stopped | volume `pgdata`, `./certs/db` (read-only) |
+| `db` | `postgres:16-alpine` | PostgreSQL 16; not published | unless-stopped | volume `pgdata` |
 | `redis` | `redis:7-alpine` (`--appendonly yes`) | Rate-limit counters, Celery broker/result backend | unless-stopped | volume `redisdata` |
 
 Images are built and pushed to GHCR by the `package` job of `deploy.yml` when a `v*` tag is pushed; the `deploy` job
@@ -46,9 +46,7 @@ runs only when the repository variable `DEPLOY_ENABLED` is `true` and uses the s
 | `CORS_ORIGINS` | api | Comma-separated browser origins; no `*` |
 | `COOKIE_SECURE` | api | Must be `true`; also enables HSTS on API responses |
 | `LOG_LEVEL` | api, worker, beat | `INFO` unless debugging |
-| `PUBLIC_PORT` | web | Host HTTP port (default 80): redirects to HTTPS, serves `/.well-known/acme-challenge/` |
-| `PUBLIC_HTTPS_PORT` | web | Host HTTPS port (default 443); also the port in the HTTP → HTTPS redirect |
-| `PUBLIC_HOSTNAME` | deploy.sh | Host name in the placeholder certificate until certbot issues the real one (§1.4) |
+| `PUBLIC_PORT` | web | Host port published by `web` (default 80) |
 | `IMAGE_PREFIX`, `IMAGE_TAG` | all app images | Set by the deploy job per release (`ghcr.io/<owner>/pbip`, `vX.Y.Z`); set them yourself for a manual deploy or rollback |
 | `DAILY_TRANSFER_LIMIT_MINOR` | api | Optional override of the per-customer daily transfer limit (default `50000000` = ₹5,00,000.00). Emergency lever in §5.1 |
 | `JWT_ACCESS_TTL_MINUTES` | api | Optional; default 15. Bounds how long a stolen access token stays valid (§5.2) |
@@ -63,61 +61,20 @@ runs only when the repository variable `DEPLOY_ENABLED` is `true` and uses the s
   Where the monitoring stack is deployed (`make up-all` locally; not part of the prod compose file), Alloy ships all
   container stdout to Loki and Grafana's Explore can query by container. Logs are redacted (`core/logging.py`): never
   expect to find tokens, passwords, emails or account numbers in them, and never add them.
-- Metrics: `/metrics` on the API container (not proxied by nginx: `infra/nginx/default.conf.template` returns 404). Prometheus
+- Metrics: `/metrics` on the API container (not proxied by nginx: `infra/nginx/default.conf` returns 404). Prometheus
   rules in `infra/prometheus/alerts.yml`: `ApiHighErrorRate`, `ApiSlowP95`, `FraudScoringSlow`, `LoginFailureSpike`,
   `CeleryBacklog`. Grafana dashboard `infra/grafana/dashboards/pbip-overview.json` ("PBIP - Overview").
 - Audit trail: `GET /api/v1/compliance/audit-logs` and `GET /api/v1/compliance/audit-logs/verify` (compliance officer
   or admin, MFA session) — the verify endpoint recomputes the hash chain.
 
-### 1.4 TLS (in the repository; certificate issuance is **External**)
+### 1.4 TLS termination (**External**)
 
-TLS is configured in code (NFR-02). What runs where:
-
-| Hop | Control | Where |
-|---|---|---|
-| Browser → `web` | nginx terminates TLS 1.2/1.3 (Mozilla intermediate ciphers, no session tickets) on 8443; port 8080 answers only `301` to `https://$host:${PUBLIC_HTTPS_PORT}` and ACME HTTP-01 challenges; HSTS `max-age=63072000; includeSubDomains` on static responses (nginx) and API responses (API, because `COOKIE_SECURE=true`) | `infra/nginx/default.conf.template`, `infra/nginx/security-headers.conf` |
-| Refresh cookie | `Secure`, `HttpOnly`, `SameSite=Strict`; staging/production refuse to boot with `COOKIE_SECURE=false` | `core/config.py`, `modules/auth/router.py` |
-| `api`/`worker`/`beat`/`migrate` → `db` | `sslmode=verify-full`: chain and host name `db` checked; PostgreSQL rejects plain TCP (`host ... reject`, only `hostssl` with SCRAM) | `DATABASE_URL` in the compose files, `infra/postgres/tls-entrypoint.sh` |
-| `web` → `api`, services → `redis` | Plain TCP on the internal compose network, not published. Accepted: single host, no untrusted workloads on that network (threat model §1) | — |
-
-**Staging host, first time** (needs DNS for `<host>` pointing at the host, ports 80 and 443 open, `PUBLIC_HOSTNAME`
-set in `~/pbip/.env`):
-
-1. Deploy normally. `deploy.sh` creates whatever is missing and never overwrites existing files:
-   `certs/db/server.{crt,key}` (self-signed PostgreSQL certificate for host `db`, 10 years; the API pins it as its
-   `sslrootcert`) and a 30-day placeholder `certs/web/tls.{crt,key}` for `PUBLIC_HOSTNAME`, so nginx can start and
-   answer the ACME challenge. `certs/` is `0700`; the web key is `0644` inside it because nginx runs as uid 101.
-2. Issue the real certificate with certbot's webroot plugin (nginx keeps serving; the challenge files go to
-   `~/pbip/acme`, which `web` serves read-only):
-
-   ```bash
-   sudo apt-get install -y certbot
-   sudo certbot certonly --webroot -w /home/<deploy-user>/pbip/acme -d <host> --agree-tos -m <ops-email> \
-     --deploy-hook "PBIP_DIR=/home/<deploy-user>/pbip bash /home/<deploy-user>/pbip/certbot-deploy-hook.sh"
-   ```
-
-   `certbot-deploy-hook.sh` copies `fullchain.pem`/`privkey.pem` to `certs/web/tls.{crt,key}`, runs `nginx -t` and
-   reloads nginx without downtime. certbot stores the hook in its renewal configuration, and the packaged
-   `certbot.timer` renews automatically; check with `sudo certbot renew --dry-run`.
-3. Verify from outside the host and record the output on the deployment issue (#198):
-
-   ```bash
-   curl -sI http://<host>/ | grep -iE '^(HTTP|location)'            # 301 to https://<host>:443/
-   curl -sI https://<host>/api/health/live | grep -i strict-transport  # HSTS present
-   python3 scripts/smoke_test.py https://<host>
-   ```
-
-**Rotating the database certificate:** delete `certs/db/*`, run the deploy again (new pair), then
-`docker compose -f docker-compose.prod.yml up -d --force-recreate db api worker beat`. Clients pin the new
-certificate as their root, so the old one stops working at once.
-
-**Local and CI:** `python scripts/dev_certs.py` (run by `make setup`, `make up`, `make up-all` and `make infra-up`)
-creates a throwaway local CA and leaf certificates in `infra/certs/` (git-ignored). The stack is at
-`https://localhost:8443`; `http://localhost:8080` redirects. Browsers warn because they do not trust the local CA;
-command-line clients pass `--cacert infra/certs/ca.crt` (curl) or `SSL_CERT_FILE=infra/certs/ca.crt` (Python; `make
-smoke` does this). Do not import the dev CA into your browser: with HSTS, the browser would then refuse plain HTTP to
-`localhost` for two years. `bash scripts/verify_tls.sh` proves the redirect, HSTS, TLS ≥ 1.2, that PostgreSQL rejects
-plain TCP and that every application connection to it is encrypted; CI runs it in the e2e job.
+`web` listens on plain HTTP (nginx on 8080, published on `PUBLIC_PORT`). Nothing in the repository terminates TLS.
+Put a TLS-terminating reverse proxy or load balancer in front of `PUBLIC_PORT` (certificate from your CA or ACME),
+forward `X-Forwarded-Proto: https`, and keep `COOKIE_SECURE=true` so the refresh cookie is `Secure` and the API sends
+HSTS. Verify from outside: `curl -sI https://<host>/api/health/live | grep -i strict-transport-security` must print a
+header, and `curl -sI http://<host>/` should redirect to HTTPS at the proxy. Record the result on the deployment issue;
+the threat model lists TLS as a deployment requirement, not an implemented control.
 
 ---
 
@@ -250,76 +207,154 @@ was not run; after step 5, rows are under the new key, so the new key must remai
 
 ## 4. Database backup and point-in-time recovery
 
-PostgreSQL 16 runs in the `db` container with its data in the `pgdata` volume. The repository ships **no** backup
-automation (that is TASK-083) and **no** WAL archiving configuration; the procedures below are manual and the
-archive/off-host storage is **External**. Redis holds only rate-limit counters and the Celery queue, which are safe
-to lose; its AOF file in `redisdata` restores the queue after a restart.
+PostgreSQL 16 runs in the `db` container with its data in the `pgdata` volume. Logical backups and restore drills are
+automated by `scripts/backup.py` and `scripts/restore.py` (TASK-083); scheduling them, off-host storage and WAL
+archiving are **External**. Redis holds only rate-limit counters and the Celery queue, which are safe to lose; its
+AOF file in `redisdata` restores the queue after a restart.
+
+**Where the scripts run.** They need a checkout of the repository at the deployed tag with `uv sync` done, `gpg`,
+and either the PostgreSQL 16 client tools or access to the `docker` CLI (`--docker-container` runs `pg_dump`/
+`pg_restore` inside the `db` container). They also connect with SQLAlchemy to take statistics and verify the audit
+chain, using `DATABASE_URL` from the environment or `.env`. On the deployment host the database is not published, so
+for the duration of a backup or drill publish it on loopback only with a host-kept override
+(`docker-compose.prod.backup.yml`: `services: { db: { ports: ["127.0.0.1:5432:5432"] } }`, applied with
+`docker compose -f docker-compose.prod.yml -f docker-compose.prod.backup.yml up -d db`) and point `DATABASE_URL` at
+`127.0.0.1` (**External**: neither the override nor the checkout is installed by `deploy.sh`). Connections use
+libpq's default `sslmode` (`prefer`); nothing in the scripts disables TLS.
 
 ### 4.1 Logical backup (daily, and before every migration or secret rotation)
 
 ```bash
-cd ~/pbip
-set -a; . ./.env; set +a
-STAMP=$(date -u +%Y%m%dT%H%M%SZ)
-docker compose -f docker-compose.prod.yml exec -T db pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc \
-  | gpg --symmetric --cipher-algo AES256 --batch --passphrase-file /root/.pbip-backup-passphrase \
-  > /var/backups/pbip/pbip-$STAMP.dump.gpg
-sha256sum /var/backups/pbip/pbip-$STAMP.dump.gpg > /var/backups/pbip/pbip-$STAMP.dump.gpg.sha256
+cd ~/pbip-repo                      # checkout at the deployed tag, `uv sync --all-packages --frozen` done
+set -a; . ~/pbip/.env; set +a
+export DATABASE_URL="postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
+DB=$(docker compose -f ~/pbip/docker-compose.prod.yml ps -q db)
+uv run python scripts/backup.py --out-dir /var/backups/pbip --passphrase-file /root/.pbip-backup-passphrase \
+  --docker-container "$DB" --dry-run          # prints the plan, executes nothing
+uv run python scripts/backup.py --out-dir /var/backups/pbip --passphrase-file /root/.pbip-backup-passphrase \
+  --docker-container "$DB"                    # or --recipient <fingerprint> instead of --passphrase-file
 ```
 
-- `-Fc` (custom format) allows selective and parallel restore. The dump contains encrypted MFA secrets and the hashed
-  credentials, so the file itself is encrypted; the passphrase file must be `chmod 600`, owned by root and backed up in
-  the secret store, never alongside the dumps.
-- Copy the `.gpg` and `.sha256` files off the host (object storage with versioning and a retention policy you choose;
-  **External**). A backup that exists only on the host it protects is not a backup.
-- Record in the backup log: timestamp, size, SHA-256, the `FIELD_ENCRYPTION_KEY` generation in use (§3.2 step 8) and
-  the release tag.
+What it does (`scripts/backup.py`):
+
+1. Opens a `REPEATABLE READ` transaction and exports its snapshot (`pg_export_snapshot()`).
+2. In that snapshot records: the row count of every table in every schema, the Alembic revision, the ledger totals
+   (customer balance total, held total, net balance over all accounts including `SYSTEM`, which must be 0), a SHA-256
+   over every account's `(id, ledger_balance, held_amount)`, the number of accounts whose balance differs from their
+   entries and of transactions whose entries do not balance, the audit-log head (`seq`, `hash`) and the result of
+   `AuditService.verify_chain` (`compliance/service.py`, the code behind `GET /api/v1/compliance/audit-logs/verify`).
+3. Runs `pg_dump --format=custom --snapshot=<that snapshot>` piped straight into `gpg` (AES-256 symmetric, or
+   public-key to `--recipient`), so the dump is exactly the state described in step 2 and no plaintext touches the
+   disk. Output: `pbip-<db>-<UTC yyyymmddThhmmssZ>.dump.gpg`, mode 600; a failed run leaves no file behind.
+4. Writes `pbip-<db>-<stamp>.manifest.json` (mode 600) next to it: the SHA-256 and size of the encrypted file plus the
+   statistics from step 2. The manifest holds counts, totals and hashes only; no customer data, no credentials.
+
+Exit codes: 0 success; 1 failure (nothing kept); 2 backup written but the **source** failed an integrity check (broken
+audit chain, unreconciled account, unbalanced transaction): keep the file as evidence and open an incident.
+
+- Copy both files off the host (object storage with versioning and a retention policy you choose; **External**).
+  A backup that exists only on the host it protects is not a backup.
+- Record in the backup log: file name, size, SHA-256 (from the script's output), the passphrase/key generation used,
+  the `FIELD_ENCRYPTION_KEY` generation in use (§3.2 step 8) and the release tag. The dump contains the encrypted MFA
+  secrets and phone numbers; restoring it needs the `FIELD_ENCRYPTION_KEY` of that time as well as the backup key.
+
+#### 4.1.1 Backup key management
+
+- **Symmetric (`--passphrase-file`).** Generate once per key generation:
+  `python3 -c "import secrets; print(secrets.token_urlsafe(48))" > /root/.pbip-backup-passphrase` then
+  `chmod 600 /root/.pbip-backup-passphrase`. The script refuses a passphrase file that group or others can read, and
+  gpg reads the file itself (`--passphrase-file`, `--pinentry-mode loopback`, `--no-symkey-cache`), so the passphrase
+  never appears in a command line, an environment variable or a log. Keep a copy in the secret store under two-person
+  control; never store it with the dumps or in the off-host bucket.
+- **Public key (`--recipient`, preferred for production).** The host holds only the public key, so a compromised host
+  cannot read earlier backups. Create the key pair offline, import the public key on the host
+  (`gpg --import pbip-backup.pub`) and mark it trusted (`echo "<FINGERPRINT>:6:" | gpg --import-ownertrust`; without
+  it gpg refuses to encrypt in batch mode). The private key lives in the secret store and is imported only on the
+  machine that runs the restore drill; `scripts/restore.py --passphrase-file` then unlocks that private key, or gpg
+  prompts for it.
+- **Rotation.** A new passphrase or key applies to new backups only. Keep each old passphrase/private key for as long as
+  any backup encrypted with it is retained, and record which generation encrypted which backup. A lost key is a lost
+  backup: the monthly drill (§4.2) proves the stored copy still decrypts.
 
 ### 4.2 Restore drill (monthly) and integrity check
 
-Restore into a **temporary database on the same server** so the live stack is untouched:
-
 ```bash
-cd ~/pbip
-set -a; . ./.env; set +a
-F=/var/backups/pbip/pbip-<stamp>.dump.gpg
-sha256sum -c "$F.sha256"
-docker compose -f docker-compose.prod.yml exec -T db psql -U "$POSTGRES_USER" -d postgres -c "DROP DATABASE IF EXISTS pbip_restore_test;" -c "CREATE DATABASE pbip_restore_test;"
-gpg --decrypt --batch --passphrase-file /root/.pbip-backup-passphrase "$F" \
-  | docker compose -f docker-compose.prod.yml exec -T db pg_restore -U "$POSTGRES_USER" -d pbip_restore_test --no-owner --exit-on-error
+uv run python scripts/restore.py /var/backups/pbip/pbip-<db>-<stamp>.dump.gpg \
+  --passphrase-file /root/.pbip-backup-passphrase --docker-container "$DB" --dry-run
+uv run python scripts/restore.py /var/backups/pbip/pbip-<db>-<stamp>.dump.gpg \
+  --passphrase-file /root/.pbip-backup-passphrase --docker-container "$DB"
 ```
 
-Verify the restored copy:
+`scripts/restore.py` (same environment as §4.1; the manifest must sit next to the dump) never writes to the live
+database. It:
 
-1. Row counts match the source for the core tables:
-   `docker compose -f docker-compose.prod.yml exec db psql -U "$POSTGRES_USER" -d pbip_restore_test -c "SELECT 'users', count(*) FROM users UNION ALL SELECT 'accounts', count(*) FROM accounts UNION ALL SELECT 'transactions', count(*) FROM transactions UNION ALL SELECT 'transaction_entries', count(*) FROM transaction_entries UNION ALL SELECT 'audit_logs', count(*) FROM audit_logs;"`
-   and the same query against `$POSTGRES_DB` taken at backup time.
+1. checks the encrypted file's SHA-256 and size against the manifest and stops before decrypting anything if they
+   differ;
+2. creates a new database `pbip_restore_drill_<stamp>_<random>` on the same server and streams
+   `gpg --decrypt | pg_restore --no-owner --exit-on-error` into it. gpg's own integrity check fails a tampered file
+   even if its manifest was edited to match;
+3. compares the restored copy with the manifest: the same tables, every table's row count, the Alembic revision,
+   every ledger figure (including the per-account balance hash) and the audit head (`seq`, `hash`);
+4. checks the copy on its own: `AuditService.verify_chain` from genesis must be valid and cover every `audit_logs`
+   row (hash-chain continuity: nothing lost, reordered or altered), every account balance must equal its entries,
+   every transaction must balance and the net balance must be 0;
+5. drops the drill database (`--keep` leaves it for investigation; drop it afterwards with
+   `DROP DATABASE <name> WITH (FORCE)`).
+
+It prints a JSON report (`PASS`/`FAIL`, problems, timings, the restored counts, ledger and audit figures) and exits 1
+on any mismatch. Attach the report to the operations issue. A restore that was never drilled does not count as a
+recovery capability. A `FAIL` means the backup cannot be trusted: keep the files, take a fresh backup, investigate.
+
+**Drill record (local stack, 2026-11-01).** Not staging: no staging host exists yet (TASK-082). Machine: developer
+laptop, Intel Celeron N4500 (2 cores, 1.1 GHz), 7 GiB RAM, PostgreSQL 16.15 in `postgres:16-alpine`, gpg 2.4.8,
+tools run with `--docker-container`. Source: the local `pbip` database with demo and synthetic data.
+
+| | Symmetric AES-256 | Public key (ed25519/cv25519) |
+|---|---|---|
+| Encrypted dump | 12,314,473 bytes | 12,311,374 bytes |
+| Backup (snapshot statistics + dump + encrypt) | 15.0 s | 8.0 s |
+| Decrypt + `pg_restore` | 13.5 s | 13.0 s |
+| Verification (counts, ledger, chain) | 0.5 s | 0.8 s |
+| Result | PASS | PASS |
+
+Restored copy, identical to the manifest in both runs: 39 tables, 775,226 rows (including `synthetic.transactions`
+772,079, `public.transactions` 46, `public.transaction_entries` 86, `public.accounts` 45, `public.audit_logs` 151,
+`public.security_events` 241); Alembic revision `0009`; customer balance total 170,000,000 minor units
+(₹17,00,000.00), held 11,000,000, net balance 0, 0 unreconciled accounts, 0 unbalanced transactions; audit chain valid,
+151 of 151 rows verified, head `seq` 151. Negative runs on the same backup, all `FAIL` with exit 1 and no drill
+database left behind: one flipped byte (checksum mismatch, nothing decrypted), the wrong passphrase (gpg exit 2), and
+a flipped byte with the manifest's SHA-256 rewritten to match (gpg integrity failure, exit 2).
+
+**Manual fallback** (if the scripts cannot run). Back up with
+`docker compose -f docker-compose.prod.yml exec -T db pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc | gpg --symmetric --cipher-algo AES256 --batch --pinentry-mode loopback --passphrase-file /root/.pbip-backup-passphrase > /var/backups/pbip/pbip-$(date -u +%Y%m%dT%H%M%SZ).dump.gpg`
+and restore into a scratch database with
+`gpg --decrypt --batch --pinentry-mode loopback --passphrase-file /root/.pbip-backup-passphrase "$F" | docker compose -f docker-compose.prod.yml exec -T db pg_restore -U "$POSTGRES_USER" -d <database> --no-owner --exit-on-error`.
+Then verify by hand:
+
+1. Row counts of the core tables match the source:
+   `SELECT 'users', count(*) FROM users UNION ALL SELECT 'accounts', count(*) FROM accounts UNION ALL SELECT 'transactions', count(*) FROM transactions UNION ALL SELECT 'transaction_entries', count(*) FROM transaction_entries UNION ALL SELECT 'audit_logs', count(*) FROM audit_logs;`
 2. The ledger balances: `SELECT count(*) FROM accounts a WHERE a.ledger_balance <> (SELECT coalesce(sum(CASE WHEN direction='CREDIT' THEN amount ELSE -amount END),0) FROM transaction_entries e WHERE e.account_id=a.id);` must return `0`.
-3. **Hash-chain continuity** of the audit log in the restored copy, using the same code the API's verify endpoint
-   runs (`AuditService.verify_chain`, `compliance/service.py`):
+3. The audit hash chain, with the API's own verifier:
 
    ```bash
    docker compose -f docker-compose.prod.yml exec \
-     -e DATABASE_URL="postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@db:5432/pbip_restore_test" \
+     -e DATABASE_URL="postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@db:5432/<database>" \
      api python -c "from pbip_api.core.db import get_engine; from sqlalchemy.orm import Session; from pbip_api.modules.compliance.service import AuditService; s = AuditService(Session(get_engine())).verify_chain(); print(s); raise SystemExit(0 if s.valid else 1)"
    ```
 
-   `valid=True` with `checked` equal to the `audit_logs` row count means no row was lost, reordered or altered between
-   backup and restore. `valid=False` names the first bad `seq`: treat the backup as compromised and investigate.
-4. Clean up: `... psql -U "$POSTGRES_USER" -d postgres -c "DROP DATABASE pbip_restore_test;"`.
-5. Record the drill (backup used, timings, counts, chain result) on the operations issue. A restore that was never
-   drilled does not count as a recovery capability.
+   `valid=True` with `checked` equal to the `audit_logs` row count; `valid=False` names the first bad `seq`.
 
 ### 4.3 Full restore of the live database
 
 Only after the decision in §5 (or a confirmed data loss), with the team informed:
 
 1. `docker compose -f docker-compose.prod.yml stop web api worker beat` (keep `db` and `redis` up).
-2. Take a safety dump of the current state as in §4.1 (even if it is believed corrupt).
-3. Recreate: `... psql -U "$POSTGRES_USER" -d postgres -c "DROP DATABASE \"$POSTGRES_DB\";" -c "CREATE DATABASE \"$POSTGRES_DB\";"` then `pg_restore` into it as in §4.2 (`-d "$POSTGRES_DB"`).
+2. Take a safety dump of the current state as in §4.1 (even if it is believed corrupt), and run the §4.2 drill on
+   the backup you are about to restore: only a backup that drills `PASS` goes back into production.
+3. Recreate: `... psql -U "$POSTGRES_USER" -d postgres -c "DROP DATABASE \"$POSTGRES_DB\";" -c "CREATE DATABASE \"$POSTGRES_DB\";"` then `pg_restore` into it with the manual command in §4.2 (`-d "$POSTGRES_DB"`).
 4. `docker compose -f docker-compose.prod.yml up -d` (runs `migrate`, which is a no-op if the backup is at head, or
    applies migrations released after the backup).
-5. Run the §4.2 checks 1–3 against the live database and the smoke test, then
+5. Run the §4.2 manual checks 1–3 against the live database and the smoke test, then
    `GET /api/v1/compliance/audit-logs/verify` as a compliance officer.
 6. Transactions that posted after the backup are lost; the outbox events for them are lost too. Reconcile from the
    previous day's statements/exports if any, and tell affected customers.
@@ -413,9 +448,10 @@ A fraud analyst, compliance officer or admin credential, TOTP secret, device or 
 (reports of actions the person did not take, `TOKEN_REUSE_DETECTED` on their user, logins from an unknown IP, admin
 unlocks they do not recognise, audit entries they deny).
 
-**Facts that shape the response** (from the code; threat model §5): every request with an access JWT checks the
-user's `status` and `token_version` in the database (ADR-0021, `auth/dependencies.py`), so disabling a user stops
-login, refresh **and** their outstanding access tokens on the next request. Refresh tokens live in `refresh_tokens` and can be revoked server-side. Staff routes also
+**Facts that shape the response** (from the code; threat model §5): access JWTs are validated by signature only — the
+API does not consult the database on each request (`auth/dependencies.py`) — so disabling a user stops their
+*refresh* and *login* immediately but a stolen access token keeps working until it expires (default 15 min,
+`JWT_ACCESS_TTL_MINUTES`). Refresh tokens live in `refresh_tokens` and can be revoked server-side. Staff routes also
 require `amr: otp`, so a stolen password alone is not enough; a stolen *session* is.
 
 **Steps.**
@@ -431,13 +467,12 @@ require `amr: otp`, so a stolen password alone is not enough; a stolen *session*
    UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = '<user_id>' AND revoked_at IS NULL;
    COMMIT;
    ```
-   Login, refresh **and every request with an existing access token** now fail for this user (`UserStatus.DISABLED`
-   is checked on all three paths; access tokens since ADR-0021). Confirm:
+   Login and refresh now fail for this user (`UserStatus.DISABLED` is checked on both paths). Confirm:
    `SELECT status FROM users WHERE id='<user_id>'; SELECT count(*) FROM refresh_tokens WHERE user_id='<user_id>' AND revoked_at IS NULL;` → `DISABLED`, `0`.
-3. **Confirm the session is dead.** A request with the attacker's token now returns 401 (ADR-0021). Watch the audit log
-   for anything the actor did before containment: `SELECT seq, created_at, action, resource_type, resource_id FROM audit_logs WHERE actor_user_id='<user_id>' AND created_at > now() - interval '30 minutes' ORDER BY seq;`
-4. **Kill switch** (only if the database check itself is in doubt, for example the users table was tampered with):
-   rotate `JWT_SECRET` now (§3.1). This invalidates *every* access token platform-wide within one rollout;
+3. **Bound the remaining exposure.** The attacker's current access token works for up to `JWT_ACCESS_TTL_MINUTES`
+   more. During that window, watch the audit log for the actor: `SELECT seq, created_at, action, resource_type, resource_id FROM audit_logs WHERE actor_user_id='<user_id>' AND created_at > now() - interval '30 minutes' ORDER BY seq;`
+4. **Kill switch when the window is unacceptable** (admin account, money-movement decisions in progress, or any
+   doubt): rotate `JWT_SECRET` now (§3.1). This invalidates *every* access token platform-wide within one rollout;
    other users recover transparently through refresh, the disabled user cannot.
 5. **Review what was done with the session.** Walk the exported `audit_logs`: fraud decisions (`RELEASE` of held
    transfers), admin unlocks, user creations. Reverse what can be reversed through the normal paths (a released
@@ -464,7 +499,8 @@ Run these after any change to the runbook or the stack and record the date on th
 - [ ] §2.1 deploy of a tag and §2.2 rollback to the previous tag, each followed by a passing smoke test.
 - [ ] §3.1 rotation on staging: old access token → 401, a signed-in browser survives, smoke test passes.
 - [ ] §3.2 rotation on staging: dry run, apply, old key removed, staff TOTP login works, dry run reports no error.
-- [ ] §4.1 backup produced, encrypted, hashed and copied off-host; §4.2 drill restores it and the hash chain verifies.
+- [ ] §4.1 backup produced with `scripts/backup.py` and copied off-host; §4.2 `scripts/restore.py` drill reports `PASS`
+      on the real host (done so far only on the local stack, §4.2 drill record).
 - [ ] §4.4 only if WAL archiving is configured: a PITR to a chosen timestamp drilled on the real host.
 - [ ] §5.2 steps 1–2 rehearsed on staging with a test staff user; `DISABLED` user cannot refresh or log in.
 - [ ] `apps/api/tests/unit/test_runbook_references.py` passes (every file, `make` target, API path and variable this
