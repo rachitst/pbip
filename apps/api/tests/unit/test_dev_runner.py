@@ -412,4 +412,25 @@ def test_up_waits_for_healthy_services(capsys: pytest.CaptureFixture[str]) -> No
         assert mock_run.call_args[0][0] == ["docker", "compose", "up", "-d", "--build", "--wait"]
         dev_mod.cmd_up_all([])
         assert "--wait" in mock_run.call_args[0][0]
-    assert "http://localhost:8080" in capsys.readouterr().out
+    assert "https://localhost:8443" in capsys.readouterr().out
+
+
+def test_stack_commands_create_the_dev_tls_material_first() -> None:
+    """The HTTPS stack (nginx :8443, PostgreSQL hostssl) cannot start without infra/certs."""
+    for command in (dev_mod.cmd_up, dev_mod.cmd_up_all, dev_mod.cmd_infra_up):
+        with patch("scripts.dev._run", return_value=0) as mock_run:
+            command([])
+        first = mock_run.call_args_list[0][0][0]
+        assert first[-1].endswith("dev_certs.py"), command.__name__
+        assert mock_run.call_args_list[-1][0][0][:2] == ["docker", "compose"]
+
+
+def test_smoke_defaults_to_https_and_trusts_the_dev_ca(tmp_path: Path) -> None:
+    ca = tmp_path / "ca.crt"
+    ca.write_text("dummy", encoding="utf-8")
+    with patch("scripts.dev.DEV_CA", ca), patch("scripts.dev._run", return_value=0) as mock_run:
+        dev_mod.cmd_smoke([])
+        assert mock_run.call_args[0][0][-1] == "https://localhost:8443"
+        assert mock_run.call_args[1]["env"] == {"SSL_CERT_FILE": str(ca)}
+        dev_mod.cmd_smoke(["https://staging.example"])
+        assert mock_run.call_args[1]["env"] is None  # real hosts use the system trust store

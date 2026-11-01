@@ -27,10 +27,17 @@ scrape_configs:
         labels: { probe: api-ready }
       - targets: ["http://api:8000/api/health/live"]
         labels: { probe: api-live }
-    relabel_configs:
+    relabel_configs: &blackbox-relabel
       - source_labels: [__address__]
         target_label: __param_target
       - source_labels: [__param_target]
         target_label: instance
       - target_label: __address__
         replacement: blackbox-exporter:9115
+  - job_name: blackbox-https
+    metrics_path: /probe
+    params: { module: [https_2xx] }
+    static_configs:
+      - targets: ["https://web:8443/api/health/ready"]
+        labels: { probe: web-ready }
+    relabel_configs: *blackbox-relabel

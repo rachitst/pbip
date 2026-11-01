@@ -8,3 +8,17 @@ modules:
       valid_status_codes: [200]
       preferred_ip_protocol: ip4
       no_follow_redirects: true
+  # The user's path: nginx TLS -> API. The chain is verified against the CA mounted into the exporter
+  # (the dev CA locally; on a host with a public certificate, point ca_file at the system bundle).
+  https_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      method: GET
+      valid_status_codes: [200]
+      preferred_ip_protocol: ip4
+      no_follow_redirects: true
+      fail_if_not_ssl: true
+      tls_config:
+        ca_file: /etc/blackbox/ca.crt
+        server_name: web

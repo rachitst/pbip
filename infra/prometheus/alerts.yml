@@ -69,18 +69,18 @@ groups:
   - name: pbip-availability
     rules:
       - record: pbip:availability:ratio_1h
-        expr: avg by (probe) (avg_over_time(probe_success{job="blackbox"}[1h]))
+        expr: avg by (probe) (avg_over_time(probe_success{job=~"blackbox.*"}[1h]))
       - record: pbip:availability:ratio_24h
-        expr: avg by (probe) (avg_over_time(probe_success{job="blackbox"}[24h]))
+        expr: avg by (probe) (avg_over_time(probe_success{job=~"blackbox.*"}[24h]))
       - record: pbip:availability:ratio_30d
-        expr: avg by (probe) (avg_over_time(probe_success{job="blackbox"}[30d]))
+        expr: avg by (probe) (avg_over_time(probe_success{job=~"blackbox.*"}[30d]))
       - alert: AvailabilityBelow99
-        expr: pbip:availability:ratio_1h{probe="api-ready"} < 0.99
+        expr: pbip:availability:ratio_1h{probe=~"web-ready|api-ready"} < 0.99
         for: 5m
         labels: { severity: page }
         annotations: { summary: "Readiness availability over the last hour is {{ $value | humanizePercentage }} (target 99%)" }
       - alert: HealthProbeFailing
-        expr: probe_success{job="blackbox"} == 0
+        expr: probe_success{job=~"blackbox.*"} == 0
         for: 2m
         labels: { severity: page }
         annotations: { summary: "{{ $labels.probe }} probe failing for 2 minutes" }

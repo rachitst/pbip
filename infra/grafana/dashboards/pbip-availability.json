@@ -1,7 +1,7 @@
 {
   "uid": "pbip-availability",
   "title": "PBIP - Availability",
-  "description": "Uptime of the health endpoints and the monthly availability figure (TASK-103).",
+  "description": "Uptime of the health endpoints and the monthly availability figure (TASK-103). web-ready probes through nginx TLS; api-ready and api-live probe the API directly.",
   "tags": [
     "pbip",
     "availability"
@@ -265,7 +265,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "probe_success{job=\"blackbox\"}",
+          "expr": "probe_success{job=~\"blackbox.*\"}",
           "legendFormat": "{{probe}}"
         }
       ]
@@ -317,7 +317,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "probe_duration_seconds{job=\"blackbox\"}",
+          "expr": "probe_duration_seconds{job=~\"blackbox.*\"}",
           "legendFormat": "{{probe}}"
         }
       ]

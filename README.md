@@ -30,7 +30,7 @@ make seed         # demo users, funded accounts, MFA-enrolled staff (local DB on
 make dev-api      # terminal 1 -> http://localhost:8000/docs
 make dev-web      # terminal 2 -> http://localhost:5173
 ```
-Or the whole stack in Docker: `make up` -> http://localhost:8080 (add `make up-all` for Grafana :3000,
+Or the whole stack in Docker: `make up` -> https://localhost:8443 (local dev CA in `infra/certs/`, so the browser warns once; http://localhost:8080 redirects) (add `make up-all` for Grafana :3000,
 Prometheus :9090, MLflow :5000). Demo logins: `alice@demo.pbip` / `bob@demo.pbip`; the password is the `DEMO_PASSWORD` constant in
 `scripts/seed_dev.py` (never printed). Staff TOTP codes: `uv run python scripts/totp.py analyst@demo.pbip`
 (decrypts the MFA secret from the local database; no secrets file is written).
@@ -69,7 +69,7 @@ health-gated start, runs `scripts/smoke_test.sh` and rolls back automatically on
 * Tests skip with "run `make infra-up`" -> PostgreSQL is not running (in CI a missing DB is a hard failure).
 * `NoReferencedTableError` -> a new `models.py` was not added to `pbip_api/modules/__init__.py` and `alembic/env.py`.
 * `alembic check` fails -> model changed without a migration: `alembic revision --autogenerate`.
-* Port in use (5432/6379/8000/8080) -> stop the other service or edit the published ports in `docker-compose.yml`.
+* Port in use (5432/6379/8000/8080/8443) -> stop the other service or edit the published ports in `docker-compose.yml`.
 
 ## Third-party data
 
