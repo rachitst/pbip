@@ -1662,7 +1662,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #76 | **Sprint:** 4 | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (8.5 days of slack)
+- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Sun 1 Nov (#262, `docs/architecture/HLD.md`) | **Status:** Done | **Risk:** Low
 - **Depends on:** none
 - **Mode:** Parallel: can start immediately
 - **Goal:** Comprehensive High-Level Design document covering system boundaries, C4 models, and integration contracts.
@@ -1674,9 +1674,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Scalability analysis and production migration roadmap
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #76`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] C4 Context and Container diagrams illustrating all components and data stores
-  - [ ] Documented API interface contracts and ML inference integration specifications
-  - [ ] Scalability analysis and production migration roadmap
+  - [x] C4 Context and Container diagrams illustrating all components and data stores
+  - [x] Documented API interface contracts and ML inference integration specifications
+  - [x] Scalability analysis and production migration roadmap
 - **Definition of done (evidence):** Committed to docs/architecture/HLD.md, peer-reviewed and approved.
 - **Required checks:**
   - Automated: document builds/renders, links valid, content matches the code and backlog
@@ -2176,7 +2176,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #94 | **Sprint:** 5 | **Priority:** could | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (8.2 days of slack)
+- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** In Review (#261) | **Risk:** Low (8.2 days of slack)
 - **Depends on:** TASK-023 (#46, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-023
 - **Goal:** Data generator extension injecting Structuring (F7) and Dormant account sudden activity (F8).
@@ -2188,9 +2188,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Generates corresponding ground-truth scenario tags for evaluation
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #94`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] F7: Multiple deposits just beneath the mandatory reporting threshold
-  - [ ] F8: Accounts dormant for > 180 days suddenly initiating maximum transfers
-  - [ ] Generates corresponding ground-truth scenario tags for evaluation
+  - [x] F7: Multiple deposits just beneath the mandatory reporting threshold
+  - [x] F8: Accounts dormant for > 180 days suddenly initiating maximum transfers
+  - [x] Generates corresponding ground-truth scenario tags for evaluation
 - **Definition of done (evidence):** Unit tests verify scenario signature parameters and label generation.
 - **Required checks:**
   - Automated: pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable
@@ -2965,8 +2965,8 @@ decision in ADR-0015.
 ### TASK-099 - Security Monitoring Dashboard API and UI
 
 - **Issue:** #182 | **Sprint:** unscheduled | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Frontend Web Application
-- **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov)
+- **Start:** Sun 01 Nov | **Target deadline:** Sun 01 Nov | **Actual completion:** Sun 1 Nov (`GET /api/v1/fraud/monitoring`, `/staff/monitoring`; in review) | **Status:** In review | **Risk:** Low
 - **Depends on:** TASK-019 (#42, Kalpak), TASK-035 (#58, Krishna), TASK-036 (#59, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; lives in the staff route tree.
@@ -2979,9 +2979,9 @@ decision in ADR-0015.
   5. Implement and make the tests pass for: No customer PII beyond what the analyst role already sees; metrics labelled by route templates only
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #182`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Staff API (require_roles with MFA) returns high-risk customers, open alerts, login anomalies (failed-login bursts, lockouts) and recent fraud events
-  - [ ] Dashboard page renders each panel with counts and drill-down links to the alert queue
-  - [ ] No customer PII beyond what the analyst role already sees; metrics labelled by route templates only
+  - [x] Staff API (require_roles with MFA) returns high-risk customers, open alerts, login anomalies (failed-login bursts, lockouts) and recent fraud events
+  - [x] Dashboard page renders each panel with counts and drill-down links to the alert queue
+  - [x] No customer PII beyond what the analyst role already sees; metrics labelled by route templates only
 - **Definition of done (evidence):** API RBAC and MFA tests, component tests for each panel, Playwright check of the staff route.
 - **Required checks:**
   - Automated: Vitest component tests and, for journeys, Playwright; ESLint strict, no `any`
@@ -3103,8 +3103,8 @@ decision in ADR-0015.
 ### TASK-104 - Business Requirements Specification and User Stories
 
 - **Issue:** #187 | **Sprint:** unscheduled | **Priority:** should | **Size:** S (0.5 person-days estimate) | **Epic:** Documentation & Governance
-- **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov; was unassigned)
+- **Start:** - | **Target deadline:** - | **Actual completion:** Sun 1 Nov (#263, `docs/requirements/requirements-specification.md`, `user-stories.md`) | **Status:** Done | **Risk:** Low
 - **Depends on:** none.
 - **Mode:** Unscheduled
 - **Goal:** The business documentation deliverables: requirements specification and user stories traced to use cases.
@@ -3116,9 +3116,9 @@ decision in ADR-0015.
   5. Implement and make the tests pass for: Links to docs/requirements/traceability.md for implementation and verification status
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #187`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Requirements specification derived from the use case document with numbered functional and non-functional requirements
-  - [ ] User stories for every use case UC-01 to UC-13 with acceptance criteria linked to backlog tasks
-  - [ ] Links to docs/requirements/traceability.md for implementation and verification status
+  - [x] Requirements specification derived from the use case document with numbered functional and non-functional requirements
+  - [x] User stories for every use case UC-01 to UC-13 with acceptance criteria linked to backlog tasks
+  - [x] Links to docs/requirements/traceability.md for implementation and verification status
 - **Definition of done (evidence):** Committed to docs/requirements/, reviewed by a teammate.
 - **Required checks:**
   - Automated: document builds/renders, links valid, content matches the code and backlog
@@ -3157,8 +3157,8 @@ decision in ADR-0015.
 ### TASK-106 - Entity-Relationship Diagram Generated from the Live Schema
 
 - **Issue:** #189 | **Sprint:** unscheduled | **Priority:** should | **Size:** S (0.5 person-days estimate) | **Epic:** Documentation & Governance
-- **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov; was unassigned)
+- **Start:** - | **Target deadline:** - | **Actual completion:** Sun 1 Nov (#259, `scripts/er_diagram.py`, `docs/architecture/er-diagram.md`, CI drift check) | **Status:** Done | **Risk:** Low
 - **Depends on:** none.
 - **Mode:** Unscheduled
 - **Goal:** The ER Diagram deliverable (section 9), kept in sync with the migrations.
@@ -3169,8 +3169,8 @@ decision in ADR-0015.
   4. Implement and make the tests pass for: A check fails CI when the committed diagram no longer matches the schema
   5. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #189`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] ER diagram covering every table, primary and foreign key, generated from the migrated schema
-  - [ ] A check fails CI when the committed diagram no longer matches the schema
+  - [x] ER diagram covering every table, primary and foreign key, generated from the migrated schema
+  - [x] A check fails CI when the committed diagram no longer matches the schema
 - **Definition of done (evidence):** Diagram committed under docs/architecture/ with the generation command documented.
 - **Required checks:**
   - Automated: document builds/renders, links valid, content matches the code and backlog

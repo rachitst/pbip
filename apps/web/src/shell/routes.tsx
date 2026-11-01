@@ -18,6 +18,7 @@ import { FraudDemoLab } from "../pages/staff/FraudDemoLab";
 import { FraudQueue } from "../pages/staff/FraudQueue";
 import { canReviewFraud } from "../pages/staff/fraudFormat";
 import { isProductionEnv } from "../pages/staff/fraudLabConfig";
+import { SecurityMonitoring } from "../pages/staff/SecurityMonitoring";
 import { StaffHome } from "../pages/staff/StaffHome";
 import { Alert } from "../ui/Alert";
 import { ErrorState, LoadingState } from "../ui/States";
@@ -43,7 +44,10 @@ function customerNav(me: UserOut): NavItem[] {
 /** Staff tools are added here by their tasks (TASK-036, TASK-048, ...), each filtered by role. */
 function staffNav(me: UserOut): NavItem[] {
   const items: NavItem[] = [{ to: "/staff", label: "Overview", end: true }];
-  if (canReviewFraud(me)) items.push({ to: "/staff/fraud", label: "Fraud alerts" });
+  if (canReviewFraud(me)) {
+    items.push({ to: "/staff/monitoring", label: "Security monitoring" });
+    items.push({ to: "/staff/fraud", label: "Fraud alerts" });
+  }
   if (canReviewFraud(me) && !isProductionEnv()) {
     items.push({ to: "/staff/fraud-lab", label: "Attack simulator" });
   }
@@ -191,6 +195,7 @@ export const routes: RouteObject[] = [
           { path: "fraud", element: <FraudQueue /> },
           { path: "fraud/:alertId", element: <FraudAlert /> },
           { path: "fraud-lab", element: <FraudDemoLab /> },
+          { path: "monitoring", element: <SecurityMonitoring /> },
         ],
       },
       { path: "*", element: <OutsideArea /> },
