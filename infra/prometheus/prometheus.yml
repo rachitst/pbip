@@ -15,3 +15,22 @@ scrape_configs:
     static_configs: [{ targets: ["redis-exporter:9121"] }]
   - job_name: postgres
     static_configs: [{ targets: ["postgres-exporter:9187"] }]
+  - job_name: celery
+    static_configs: [{ targets: ["celery-exporter:9808"] }]
+  # Availability (TASK-103): blackbox probes of readiness (DB + Redis) through the API, every 15 s.
+  # probe_success over time is the availability figure; see the pbip:availability:* recording rules.
+  - job_name: blackbox
+    metrics_path: /probe
+    params: { module: [http_2xx] }
+    static_configs:
+      - targets: ["http://api:8000/api/health/ready"]
+        labels: { probe: api-ready }
+      - targets: ["http://api:8000/api/health/live"]
+        labels: { probe: api-live }
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
