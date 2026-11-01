@@ -40,7 +40,7 @@ A loop is reported only if **all three** conditions hold:
   legs with equal totals).
 * **Generator size** (`scripts/evaluate_circular_rings.py generator`): the same transfers as
   `make datagen` (seed 42, 1,000 customers, 12 months), built in memory, no database:
-  **34,077 transfers**. Rings are **planted in the script, additively**; `pbip_datagen` and the
+  **34,059 transfers**. Rings are **planted in the script, additively**; `pbip_datagen` and the
   training data are unchanged, so F1-F6/L1-L3 outputs and the trained models are unaffected.
   * 30 positive rings (10 each of length 3, 4, 5) between distinct existing customers, start
     INR 50k-5L, 0.5-2% lost per hop, hops 1-36 h apart.
@@ -52,17 +52,17 @@ A loop is reported only if **all three** conditions hold:
   * **Stress variant**: every ordinary transfer is rewired to a random other customer, so the
     graph has customer-to-customer edges and coincidental cycles (pessimistic for false positives).
 
-## Results (run 2026-11-01, shared 2-CPU / 7 GB machine under load from other jobs)
+## Results (generator v2.2 with F7/F8, run 2026-11-01, shared 2-CPU / 7 GB machine under load from other jobs)
 
 | Run | Detected / planted | False positives | Negatives flagged | Time (51 windows) | Slowest window | Memory |
 |---|---|---|---|---|---|---|
 | Hand-built benchmark | 4 / 4 | 0 | 0 / 9 distractors | 16 ms | - | - |
-| Generator data, untouched | - | **0** | - | 9.1 s CPU (16.8 s wall) | 607 ms | - |
-| Generator data + planted rings | **30 / 30** | **0** | **0 / 50** | 42.8 s CPU (76 s wall) with tracemalloc on | 2.3 s | tracemalloc peak 7.5 MiB |
-| Stress: rewired to customers + planted | 30 / 30 | 0 | 0 / 50 | 12.7 s CPU (25.5 s wall) | 825 ms | - |
+| Generator data, untouched | - | **0** | - | 10.4 s CPU (13.1 s wall) | 517 ms | - |
+| Generator data + planted rings | **30 / 30** | **0** | **0 / 50** | 49.2 s CPU (67 s wall) with tracemalloc on | 2.3 s | tracemalloc peak 7.5 MiB |
+| Stress: rewired to customers + planted | 30 / 30 | 0 | 0 / 50 | 13.8 s CPU (25.5 s wall) | 1.0 s | - |
 
-Whole script: 155 s wall, **peak RSS 92 MiB**. Largest window graph: about 1,960 nodes and 1,206
-edges (rewired: 953 nodes, 1,550 edges, at most 12 cycles of length <= 5 per window). Most of the
+Whole script: 146 s wall, **peak RSS 96 MiB**. Largest window graph: about 1,970 nodes and 1,212
+edges (rewired: 955 nodes, 1,553 edges, at most 14 cycles of length <= 5 per window). Most of the
 per-window time is rebuilding the graph from all 34k rows (about 144 ms CPU per window on the
 untouched data) against about 16 ms for detection; a real job would build the window incrementally.
 
