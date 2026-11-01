@@ -6,8 +6,10 @@ Pipeline, in order:
    characters, 500 characters max).
 2. :mod:`guard` refuses money movement, other people's data, SQL, privilege requests and
    instruction overrides (also inside base64) before any model sees the message.
-3. The LLM router picks a tool (grammar-constrained JSON, validated again here). If Ollama is
-   off, slow or wrong, the deterministic :mod:`fallback` router answers instead.
+3. Routing. A clear question (one intent, arguments parse) goes straight to its tool through
+   :func:`fallback.clear_route` - no model call, so it answers in milliseconds. Only an unclear
+   question goes to the LLM router (grammar-constrained JSON, validated again here); if Ollama
+   is off, slow or wrong, the deterministic :func:`fallback.route` answers instead.
 4. The tool runs in a ``READ ONLY`` transaction with the customer id from the access token.
 5. The server writes the reply from the tool's structured result; :func:`sanitize.redact_output`
    masks account numbers, tokens and emails.
@@ -172,9 +174,14 @@ class AssistantService:
         )
 
     def _decide(self, message: str) -> _Decision:
+        clear = fallback.clear_route(message)
+        if clear is not None:
+            return _Decision(clear, "rules")
         if self.model is not None:
             try:
-                return _Decision(llm_route(self.model, system_prompt(), message), "llm")
+                return _Decision(
+                    _grounded(llm_route(self.model, system_prompt(), message), message), "llm"
+                )
             except LLMUnavailableError as exc:
                 _logger.warning("assistant_llm_fallback", reason=str(exc))
         return _Decision(fallback.route(message), "rules")
@@ -202,6 +209,18 @@ class AssistantService:
 
     def _audit(self, user_id: UUID, action: str, details: dict[str, object]) -> None:
         AuditService(self.session).record(user_id, action, "assistant", details=dict(details))
+
+
+def _grounded(route: Route, message: str) -> Route:
+    """Refuse model-invented figures: a loan check needs an amount the customer actually wrote.
+
+    Measured with qwen2.5:1.5b: "can I get a loan?" came back as a 1 lakh / 12 month loan the
+    customer never mentioned, and the server would have answered for it. Without an amount in the
+    message the customer gets the help text, which shows how to ask.
+    """
+    if route.tool is ToolName.LOAN_AFFORDABILITY and fallback.parse_rupees(message) is None:
+        return Route(None)
+    return route
 
 
 def stream_chat(

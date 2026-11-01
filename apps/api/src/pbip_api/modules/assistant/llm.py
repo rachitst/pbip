@@ -20,6 +20,11 @@ from pbip_api.modules.assistant.fallback import Route
 from pbip_api.modules.assistant.tools import REGISTRY, ToolName
 
 NO_TOOL = "none"
+# The system prompt is about 475 tokens and a message at most 500 characters, so 1024 fits with
+# room to spare; a smaller context is cheaper to allocate and evaluate on a CPU-only host.
+NUM_CTX = 1024
+# The longest valid choice (a loan with three arguments) is about 40 tokens.
+NUM_PREDICT = 64
 
 
 class LLMUnavailableError(Exception):
@@ -41,19 +46,22 @@ class OllamaChatModel:
         model: str,
         timeout_seconds: float,
         transport: httpx.BaseTransport | None = None,
+        keep_alive: str = "24h",
     ) -> None:
         self._url = base_url.rstrip("/") + "/api/chat"
         self._model = model
         self._timeout = timeout_seconds
         self._transport = transport
+        self._keep_alive = keep_alive
 
     def complete_json(self, system: str, user: str, schema: Mapping[str, object]) -> str:
         body = {
             "model": self._model,
             "stream": False,
             "format": schema,
-            "keep_alive": "30m",
-            "options": {"temperature": 0, "num_predict": 96},
+            # Keep the weights in memory between questions: a cold load costs seconds.
+            "keep_alive": self._keep_alive,
+            "options": {"temperature": 0, "num_predict": NUM_PREDICT, "num_ctx": NUM_CTX},
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},

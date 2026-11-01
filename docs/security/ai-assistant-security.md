@@ -41,7 +41,7 @@ tools, with bounded arguments, over the caller's own accounts.
 | 4 | Tools are read-only; no money movement | No mutating tool exists; tools run inside `SET TRANSACTION READ ONLY` so PostgreSQL rejects any write; money-movement requests are refused with a link to the normal, MFA-protected Transfers flow | `test_tools_run_in_a_read_only_transaction` (a rogue tool's UPDATE is rejected); `test_money_movement_is_refused_and_nothing_moves` |
 | 5 | Retrieved text is untrusted | It never reaches the model. In replies it is a quoted data block, stripped of control/bidi characters and quotes, capped at 40 characters (`sanitize.untrusted_block`) | `test_indirect_injection_in_a_transaction_reference_cannot_steer_anything` |
 | 6 | No data leakage | `redact_output` on every reply and stored message (12–19-digit numbers → last four, JWTs, emails); history is per customer with no cross-user index; audit rows record tool, outcome and engine, never the message or result | `test_output_filter`; `test_conversation_is_stored_redacted_and_private`; `test_every_tool_call_and_refusal_is_audited_without_payloads`; `test_a_failing_tool_never_leaks_sql_or_internals` |
-| 7 | Availability: deterministic fallback | Ollama off, slow (> `OLLAMA_TIMEOUT_SECONDS`) or wrong → `fallback.route`; tool failures become a generic reply; stream failures end with a generic `error` event | `test_fallback_takes_over_when_the_model_is_down_or_wrong`; `test_unreachable_ollama_falls_back_seamlessly`; `test_stream_failure_ends_with_a_generic_error_event` |
+| 7 | Availability: deterministic fallback | Clear questions skip the model (`fallback.clear_route`); Ollama off, slow (> `OLLAMA_TIMEOUT_SECONDS`) or wrong → `fallback.route`; tool failures become a generic reply; stream failures end with a generic `error` event | `test_fallback_takes_over_when_the_model_is_down_or_wrong`; `test_unreachable_ollama_falls_back_seamlessly`; `test_stream_failure_ends_with_a_generic_error_event` |
 
 ## 3. OWASP Top 10 for LLM Applications (2025): evaluation
 
@@ -112,6 +112,20 @@ Measured on 1 Nov 2026 with `OLLAMA_TIMEOUT_SECONDS` raised so the model always 
 
   The guard refuses the last two before the model is asked. The strict validation rejects all three shapes, which are kept as regression cases in `test_llm_choice_is_validated_against_the_tool_model`.
 - **Latency:** the TASK-058 target of under 2.5 s with the local model is **not met on this hardware**. With the default 4 s timeout, the rules engine answers in about 4.4 s end to end on first use.
+
+### 4.4 Rules-first routing and the default model (1 Nov 2026, same laptop: Celeron N4500, no AVX)
+
+Clear questions no longer reach the model (ADR-0018 amendment). The table was measured through the API against PostgreSQL. The raw rows are kept with the TASK-058 PR.
+
+| Path | qwen2.5:1.5b-instruct (default) | qwen2.5:3b-instruct |
+|---|---|---|
+| Routed, 60 questions (6 intents × 10) | p50 29 ms, p95 87 ms; slowest 2.49 s (first forecast, numba compile) | p50 44 ms, p95 82 ms; slowest 3.46 s (first forecast) |
+| Unclear, warm model | 12-30 s per question | 41-50 s per question |
+| Unclear, first call after load | 206 s | over 300 s (timed out, rules answered) |
+| 15 adversarial probes | 13 refused or answered with own data by the rules; "all customers" → own balance (LLM) | 13 the same; "all customers" → help (LLM) |
+| Victim data in any reply | none | none |
+
+Invented arguments are the main LLM-path risk on the smaller model. `_grounded` drops a model-chosen loan check when the customer did not write an amount.
 
 ## 5. Residual risks and limits
 

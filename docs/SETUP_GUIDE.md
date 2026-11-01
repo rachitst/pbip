@@ -380,10 +380,13 @@ baseline are in `infra/k6/README.md`.
 ### AI assistant: Ollama on the host
 The assistant calls a local LLM through Ollama; it never needs a cloud key. If Ollama is not
 running, the assistant answers from a deterministic keyword router instead, so a demo never fails.
+Clear questions ("what's my balance", "groceries last month", "5 lakh car loan over 5 years") never
+call the model: they go straight to their tool and answer in well under a second. Only unclear
+questions are sent to Ollama.
 
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh      # Windows/macOS: install from ollama.com
-ollama pull qwen2.5:3b-instruct                    # ~2 GB; fits an 8 GB laptop
+ollama pull qwen2.5:1.5b-instruct                  # ~1 GB; the default (qwen2.5:3b-instruct also works)
 curl -s http://localhost:11434/api/tags            # the model is listed
 ```
 
@@ -394,10 +397,14 @@ curl -s http://localhost:11434/api/tags            # the model is listed
 * On Linux, Ollama listens on 127.0.0.1 by default. For the container to reach it, run it on the
   Docker bridge too: `sudo systemctl edit ollama` → `Environment="OLLAMA_HOST=0.0.0.0:11434"`, then
   `sudo systemctl restart ollama`; keep port 11434 closed to other machines with your firewall.
-* `OLLAMA_TIMEOUT_SECONDS` (default 4): past this the keyword router answers instead. On a CPU-only
-  laptop a 3B model can take far longer than that per message (25-60 s measured on 2 CPUs), so the
-  assistant will show `engine: rules` unless you raise it or have a GPU. `ASSISTANT_LLM_ENABLED=false`
-  skips the model entirely. Pre-warm before a demo: `ollama run qwen2.5:3b-instruct ""`.
+* `OLLAMA_TIMEOUT_SECONDS` (default 4): past this the keyword router answers an unclear question
+  instead. On the reference laptop (Celeron N4500, 2 cores, no AVX) one routing call takes 12-30 s
+  with the 1.5B model and 41-50 s with the 3B model once loaded, so unclear questions show
+  `engine: rules` there unless you raise the timeout or have faster hardware.
+  `ASSISTANT_LLM_ENABLED=false` skips the model entirely.
+* `OLLAMA_KEEP_ALIVE` (default `24h`): how long Ollama keeps the model in memory after a question.
+  The first call after a load took 3-5 minutes on the reference laptop. Pre-warm before a demo:
+  `ollama run qwen2.5:1.5b-instruct ""`.
 * Try it: `POST /api/v1/assistant/chat` with `{"message": "what's my balance?"}` in Swagger (`/docs`).
 
 ### MLflow only (ML work without the whole stack)

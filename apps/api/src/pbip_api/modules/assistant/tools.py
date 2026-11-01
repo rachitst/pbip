@@ -184,6 +184,13 @@ def recent_transactions(ctx: ToolContext, raw: Mapping[str, object]) -> ToolRepl
     )
 
 
+# Fixed English names: strftime("%B") would follow the server's locale.
+_MONTH_NAMES = (
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+)  # fmt: skip
+
+
 def _month(now: datetime, period: SpendPeriod) -> tuple[int, int]:
     if period is SpendPeriod.THIS_MONTH:
         return now.year, now.month
@@ -198,14 +205,13 @@ def spend(ctx: ToolContext, raw: Mapping[str, object]) -> ToolReply:
         ctx.session, ctx.customer_id, account.id, year, month
     )
     money = breakdown.currency
+    period = f"{_MONTH_NAMES[month - 1]} {year}"  # "September 2026", not "2026-09"
     if args.category is not None:
         item = next((c for c in breakdown.categories if c.category == args.category.value), None)
         if item is None:
-            return ToolReply(
-                f"No {args.category.value} spending in {breakdown.period}.", "/insights"
-            )
+            return ToolReply(f"No {args.category.value} spending in {period}.", "/insights")
         return ToolReply(
-            f"In {breakdown.period} you spent {format_minor(item.amount_minor, money)} on "
+            f"In {period} you spent {format_minor(item.amount_minor, money)} on "
             f"{item.category} ({item.transaction_count} transaction(s), "
             f"{item.percentage:.0f}% of spending).",
             "/insights",
@@ -214,7 +220,7 @@ def spend(ctx: ToolContext, raw: Mapping[str, object]) -> ToolReply:
     tops = ", ".join(f"{c.category} {format_minor(c.amount_minor, money)}" for c in top)
     total = format_minor(breakdown.total_spend_minor, money)
     suffix = f" Top categories: {tops}." if tops else ""
-    return ToolReply(f"In {breakdown.period} you spent {total}.{suffix}", "/insights")
+    return ToolReply(f"In {period} you spent {total}.{suffix}", "/insights")
 
 
 def balance_forecast(ctx: ToolContext, raw: Mapping[str, object]) -> ToolReply:

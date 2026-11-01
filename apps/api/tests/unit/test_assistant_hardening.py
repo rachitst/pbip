@@ -79,7 +79,8 @@ def test_base64_encoded_instructions_are_decoded_and_refused() -> None:
         ("acct 1234-5678-9012-3456", "acct ••3456"),
         ("mail alice@example.com now", "mail [email removed] now"),
         (f"token {_FAKE_JWT}", "token [token removed]"),
-        ("You spent INR 100,000.00 on 01 Nov", "You spent INR 100,000.00 on 01 Nov"),
+        ("You spent INR 1,00,000.00 on 01 Nov", "You spent INR 1,00,000.00 on 01 Nov"),
+        ("INR 12,34,56,789.00 total", "INR 12,34,56,789.00 total"),  # crore grouping kept
         ("ref 12345678901", "ref 12345678901"),  # 11 digits: not an account number
     ],
 )
