@@ -271,9 +271,9 @@ def test_import_tasks_prevents_accidental_import_of_other_sprints(
 
 
 def test_validate_backlog_full_repo_and_preserves_dependency_validation() -> None:
-    # Full backlog validation on the canonical 107 tasks (93 planned + 14 requirement-gap tasks)
+    # Full backlog validation on the canonical 112 tasks (93 planned + 19 requirement-gap tasks: 094-107, 108-112)
     tasks = load_backlog(BACKLOG_FILE)
-    assert len(tasks) == 107
+    assert len(tasks) == 112
     valid, errors = validate_backlog(tasks)
     assert valid is True
     assert errors == []

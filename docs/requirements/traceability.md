@@ -59,7 +59,7 @@ the tests that prove them, in [user-stories.md](user-stories.md).
 | Requirement | Status | Evidence | Owning tasks | Gap |
 |---|---|---|---|---|
 | Secure authentication | Verified | auth tests, route-policy registry test | 004, 006, 007 (Done); 090 #113 | |
-| Encrypt sensitive data | Verified | `core/crypto.py`, `test_crypto.py`, `test_rotate_field_key.py` | 075 (Done) | TLS not configured in the repo (runbook section 1.4) |
+| Encrypt sensitive data | Verified | `core/crypto.py`, `test_crypto.py`, `test_rotate_field_key.py`; TLS in the repository (#280): nginx TLS 1.2+ with HSTS, PostgreSQL `verify-full`, proven by `scripts/verify_tls.sh` in the CI e2e job | 075 (Done) | Certbot issuance on a real staging host (#198) |
 | Role-based access control | Verified | `require_roles`, `test_rbac_bola.py` | | |
 | Audit logs | Verified | hash-chained `audit_logs`, `test_audit_and_outbox.py`, `AuditLog.test.tsx` | 048 #71 (Done) | |
 | OWASP Top 10 | Partial | threat model mapping, Bandit, CodeQL, nightly fuzzing (run 40948518916: 940 cases, 0 5xx) | 028 (Done), 070 (Done), 090 #113 | No DAST against a deployed environment |

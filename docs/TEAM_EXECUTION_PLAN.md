@@ -3209,6 +3209,86 @@ decision in ADR-0015.
   - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
 - **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
 
+### Requirement-gap tasks added 2026-11-01 (TASK-108 to TASK-112)
+
+Added by tracing use case document v0.2 section 5 and the requirements specification again: each covers a
+requirement with "no task" (FR-05 administration and configuration, FR-08 total balance, FR-39 unusual expenses,
+FR-55 held products, FR-50 web clickstream). Unassigned, no dates, Todo on the board. Registration/MFA screens stay
+with #201 and TLS was delivered in #280, so neither is repeated here.
+
+### TASK-108 - Administration Screens and Application Configuration
+
+- **Issue:** #282 | **Sprint:** unscheduled | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Identity & Core Banking
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-007.
+- **Mode:** Unscheduled
+- **Goal:** FR-05 / section 5 administration: an ADMIN can manage staff users and view or change the application settings that are safe to change at runtime, from the web app.
+- **Expected end result / acceptance criteria:**
+  - [ ] Staff web screens (ADMIN, MFA session) to create staff users with explicit roles and to inspect and clear a lockout, using the existing admin API
+  - [ ] A documented allow-list of runtime-configurable settings (for example the daily transfer limit) with typed, bounded validation; secrets and security settings are never configurable from the UI
+  - [ ] Every configuration change is audited (who, old and new value, reason) in the hash-chained audit log
+  - [ ] Non-admin roles get 403 on every admin route and screen (RBAC tests), and the route-policy registry covers the new routes
+- **Definition of done (evidence):** Component and E2E tests for the screens; API tests for validation, RBAC and audit; threat model updated for the new configuration surface.
+
+### TASK-109 - Total Balance Overview on the Customer Dashboard
+
+- **Issue:** #283 | **Sprint:** unscheduled | **Priority:** should | **Size:** S (0.5 person-days estimate) | **Epic:** Frontend Web Application
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-019.
+- **Mode:** Unscheduled
+- **Goal:** FR-08 / section 5 'total balance overview': the dashboard shows the total balance across the customer's own accounts.
+- **Expected end result / acceptance criteria:**
+  - [ ] Dashboard shows the total available and ledger balance across the authenticated customer's accounts, in integer minor units formatted by lib/money.ts
+  - [ ] The total is computed server-side from the customer's own accounts only (policy function; another customer's accounts never contribute)
+  - [ ] Loading, error and empty (no accounts) states are handled
+- **Definition of done (evidence):** API test (ownership, multiple accounts, zero accounts) and component test; OpenAPI regenerated if the API changes.
+
+### TASK-110 - Assistant Intent: Show Unusual Expenses
+
+- **Issue:** #284 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** AI Assistant & Security
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-057, TASK-059.
+- **Mode:** Unscheduled
+- **Goal:** FR-39 / UC-08 example 'Show unusual expenses': a read-only assistant tool that lists the customer's spending that is unusual for them, with the reason.
+- **Expected end result / acceptance criteria:**
+  - [ ] Approved read-only tool in the assistant registry; customer_id is injected server-side and is not part of the tool schema; arguments are bounded enums (period)
+  - [ ] Unusual means outside the customer's own baseline (for example category spend or single transactions well above their usual amount); the rule and threshold are documented and each item states why it is unusual
+  - [ ] Merchant names and references in the result are treated as untrusted data (delimited, length-capped, control characters stripped)
+  - [ ] Routed intent answers without the LLM; adversarial tests cover cross-customer requests and prompt injection through a merchant name
+- **Definition of done (evidence):** Unit tests for the anomaly rule with known inputs; assistant integration and adversarial tests; tool call audited.
+
+### TASK-111 - Held Products as a Recommendation Input
+
+- **Issue:** #285 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-054.
+- **Mode:** Unscheduled
+- **Goal:** FR-55 / UC-12: recommendations take the products a customer already holds into account.
+- **Expected end result / acceptance criteria:**
+  - [ ] Recommendation input includes the customer's held products (accounts, loans and, once they exist, deposits and investments), read through the owning modules' service functions
+  - [ ] A product the customer already holds is not recommended again unless the rule explains why (for example a top-up), and the reason says so
+  - [ ] The recommendation contract change is recorded in an ADR if pbip_ml contract.py changes
+- **Definition of done (evidence):** Unit tests with known holdings proving exclusion and explained exceptions; contract/ADR updated if changed.
+
+### TASK-112 - Web Clickstream Instrumentation
+
+- **Issue:** #286 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-055.
+- **Mode:** Unscheduled
+- **Goal:** FR-50 / UC-11: the web app sends page-visit and interaction events to the existing clickstream ingestion API (TASK-055).
+- **Expected end result / acceptance criteria:**
+  - [ ] Page visits (route template, never raw ids or query strings) and a defined list of key interactions are sent in batches to the ingestion API
+  - [ ] No personal data, amounts, account numbers or free text in events; a test asserts the event payload shape
+  - [ ] Sending never blocks or breaks the UI: failures are dropped silently and batches are size- and rate-bounded
+  - [ ] Instrumentation respects the analytics consent decision recorded for the customer, if one exists
+- **Definition of done (evidence):** Component tests for the event hook and batching; an E2E check that a page visit reaches the ingestion API; privacy review noted in the threat model.
+
 ## 7. Cross-owner handoffs
 
 | From | Provider | To | Receiver | Provider target | Receiver start |
