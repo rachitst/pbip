@@ -40,6 +40,11 @@ updates:
       api-image-minor-patch:
         applies-to: version-updates
         update-types: [minor, patch]
+    ignore:
+      # CI tests Python 3.12 only (setup-uv / requires-python); a 3.13 image would ship an untested
+      # interpreter. Moving to 3.13 is a deliberate change to CI and the image together.
+      - dependency-name: "python"
+        versions: [">=3.13"]
   - package-ecosystem: docker
     directory: /apps/web
     schedule: { interval: weekly }

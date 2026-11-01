@@ -1,8 +1,13 @@
 """Deterministic keyword/regex intent router (TASK-058): the assistant without a model.
 
-Used when Ollama is off, slow (past ``OLLAMA_TIMEOUT_SECONDS``) or returns anything that does
-not validate. Same output shape as the LLM router, so the rest of the pipeline cannot tell the
-difference - and the demo never breaks. It is a rule set, not a model.
+Two uses, same rules (a rule set, not a model):
+
+* :func:`clear_route` - the FAST PATH. A message that names exactly one intent with usable
+  arguments ("what's my balance", "groceries last month") goes straight to its tool; no LLM call.
+* :func:`route` - the FALLBACK when Ollama is off, slow (past ``OLLAMA_TIMEOUT_SECONDS``) or
+  returns anything that does not validate. Order of precedence picks one intent.
+
+Same output shape as the LLM router, so the rest of the pipeline cannot tell the difference.
 """
 
 import re
@@ -36,6 +41,12 @@ _LOAN = re.compile(r"\b(loan|emi|borrow|mortgage|afford)\b", _I)
 _TRANSACTIONS = re.compile(r"\b(transactions?|recent|history|statement|last \d+)\b", _I)
 _SPEND = re.compile(r"\b(spend|spent|spending|expenses?|expenditure|cost me)\b", _I)
 _BALANCE = re.compile(r"\b(balance|accounts?|how much (money )?(do i have|is in|have i got))\b", _I)
+# Mentions of other people: never fast-pathed, so "balances of all customers" is not answered
+# with the caller's own balance as if that were what they asked (the guard refuses the clear
+# cross-customer requests; the model judges the rest).
+_THIRD_PARTY = re.compile(
+    r"\b(customers?|users?|everyone|everybody|people|someone|somebody|others?|their|his|her)\b", _I
+)
 _LAST_MONTH = re.compile(r"\b(last|previous|past) month\b", _I)
 # Whitespace runs and digit groups are BOUNDED ({0,3}, {1,12}): unbounded \s* / nested quantifiers
 # on customer text are polynomial-time regexes (CodeQL py/polynomial-redos).
@@ -169,6 +180,37 @@ def _spend(message: str) -> Route:
     if category is not None:
         arguments["category"] = category.value
     return Route(ToolName.SPEND, _with_account(message, arguments))
+
+
+def _intents(message: str) -> list[ToolName]:
+    """Every intent whose keywords appear, most specific first."""
+    found = [
+        tool
+        for tool, rx in (
+            (ToolName.BALANCE_FORECAST, _FORECAST),
+            (ToolName.LOAN_AFFORDABILITY, _LOAN),
+            (ToolName.RECENT_TRANSACTIONS, _TRANSACTIONS),
+            (ToolName.SPEND, _SPEND),
+        )
+        if rx.search(message)
+    ]
+    # "account" appears in questions about anything ("spend on my second account"), so the
+    # balance intent counts only when nothing more specific was named.
+    if not found and _BALANCE.search(message):
+        found.append(ToolName.ACCOUNT_SUMMARY)
+    return found
+
+
+def clear_route(message: str) -> Route | None:
+    """The fast path: exactly one intent and its arguments parse. Otherwise None (ask the LLM).
+
+    "spending and recent transactions" names two intents, "can I get a loan?" has no amount:
+    both are unclear and go to the model (or, without one, to :func:`route`).
+    """
+    if len(_intents(message)) != 1 or _THIRD_PARTY.search(message):
+        return None
+    chosen = route(message)
+    return chosen if chosen.tool is not None else None
 
 
 def route(message: str) -> Route:

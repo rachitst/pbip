@@ -71,9 +71,11 @@ class Settings(BaseSettings):
     ollama_base_url: str = Field(
         default="http://localhost:11434", pattern=r"^https?://[A-Za-z0-9.\-]+(:[0-9]{1,5})?/?$"
     )
-    ollama_model: str = Field(default="qwen2.5:3b-instruct", min_length=1, max_length=100)
+    ollama_model: str = Field(default="qwen2.5:1.5b-instruct", min_length=1, max_length=100)
     # Past this the deterministic rules answer instead, so a slow model never stalls the chat.
     ollama_timeout_seconds: float = Field(default=4.0, gt=0, le=120)
+    # How long Ollama keeps the model in memory after a question (Ollama duration syntax).
+    ollama_keep_alive: str = Field(default="24h", pattern=r"^-?[0-9]{1,5}[smh]?$")
     assistant_llm_enabled: bool = True
 
     # Fraud scoring (ADR-0019). "rules" = baseline rules only. "hybrid" adds the trained models

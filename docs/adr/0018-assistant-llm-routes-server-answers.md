@@ -45,5 +45,27 @@ router answers instead. The response says which one did (`engine: llm | rules`).
   slow model step.
 - The 2.5 s acceptance criterion of TASK-058 is not met with the LLM on the reference laptop; the rules engine
   answers in well under it. This is recorded on the task, not hidden.
+
+## Amendment (1 Nov 2026): rules first, model only for unclear questions
+Measured end to end through the API on the reference laptop (Intel Celeron N4500, 2 cores, **no AVX**,
+7 GB RAM). Decoding runs at about 0.65 s per token, with or without the JSON grammar, so the hardware is
+the limit, not the prompt. The routing pipeline therefore became **rules first**:
+
+- `fallback.clear_route` answers a question that names exactly one intent with usable arguments, and no
+  other person, without calling the model. 60 such questions per model: p50 29-44 ms, p95 82-87 ms.
+  The exception is the first forecast in a process (2.5-3.5 s while statsforecast compiles).
+- Only unclear questions go to Ollama, with `num_ctx` 1024, `num_predict` 64 and `keep_alive`
+  (`OLLAMA_KEEP_ALIVE`, default 24 h). Warm calls took 12-30 s with `qwen2.5:1.5b-instruct` and 41-50 s
+  with `qwen2.5:3b-instruct`. The first call after a load took 206 s and over 300 s. With the default 4 s
+  timeout, unclear questions fall back to the rules on this laptop.
+- The default model is now **qwen2.5:1.5b-instruct**: it is the faster one, and neither model leaked
+  another customer's data on the 15 adversarial probes. 1.5B is less careful than 3B. It invented a loan
+  amount for "can I get a loan?", so a model-chosen loan check now needs an amount written by the customer
+  (`_grounded`, `test_a_loan_amount_the_customer_never_wrote_is_not_answered`). It also answered
+  "balances of all customers" with the caller's own balance, which is safe but unhelpful. 3B gave the
+  help text for both.
+- "Stream the first token": the reply is server-written, so its first token is sent as soon as the tool
+  returns, within the routed-path figures above. On the LLM path no token can be shown before the routing
+  JSON is complete, so streaming Ollama's output would not show the customer anything sooner.
 - New runtime dependency: `httpx` (BSD-3, already in the lockfile through FastAPI's test client) for the
   Ollama client with explicit timeouts.

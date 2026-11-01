@@ -20,7 +20,10 @@ def get_chat_model(settings: Settings = Depends(get_settings)) -> ChatModel | No
     if not settings.assistant_llm_enabled:
         return None
     return OllamaChatModel(
-        settings.ollama_base_url, settings.ollama_model, settings.ollama_timeout_seconds
+        settings.ollama_base_url,
+        settings.ollama_model,
+        settings.ollama_timeout_seconds,
+        keep_alive=settings.ollama_keep_alive,
     )
 
 

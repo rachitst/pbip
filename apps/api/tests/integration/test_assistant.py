@@ -1,6 +1,7 @@
 """TASK-057/058: POST /api/v1/assistant/chat end to end against PostgreSQL."""
 
 import json
+import re
 from collections.abc import Callable, Iterator, Mapping
 from typing import Any
 
@@ -67,15 +68,17 @@ def test_rules_engine_answers_each_tool_from_own_data(
     summary = _chat(client, alice, "What's my balance?")
     assert summary["outcome"] == "answered" and summary["engine"] == "rules"
     assert summary["tool"] == "get_account_summary"
-    assert "INR 100,000.00 available" in summary["reply"]
+    assert "INR 1,00,000.00 available" in summary["reply"]
     assert alice.account_number not in summary["reply"]  # masked: last four only
     assert alice.account_number[-4:] in summary["reply"]
 
     txns = _chat(client, alice, "show my last 3 transactions")
-    assert txns["tool"] == "get_recent_transactions" and "+INR 100,000.00" in txns["reply"]
+    assert txns["tool"] == "get_recent_transactions" and "+INR 1,00,000.00" in txns["reply"]
 
     spend = _chat(client, alice, "how much did I spend this month")
     assert spend["tool"] == "get_spend" and "you spent INR 0.00" in spend["reply"]
+    assert re.match(r"In (January|February|March|April|May|June|July|August|September|October"
+                    r"|November|December) 20\d\d you spent", spend["reply"])  # fmt: skip
 
     forecast = _chat(client, alice, "forecast my balance for next week")
     assert forecast["tool"] == "get_balance_forecast"
@@ -83,7 +86,7 @@ def test_rules_engine_answers_each_tool_from_own_data(
 
     loan = _chat(client, alice, "can I afford a 2 lakh personal loan over 2 years")
     assert loan["tool"] == "get_loan_affordability" and loan["link"] == "/loans"
-    assert "personal loan of INR 200,000.00 over 24 months" in loan["reply"]
+    assert "personal loan of INR 2,00,000.00 over 24 months" in loan["reply"]
 
 
 def test_llm_engine_chooses_the_tool_and_the_server_writes_the_reply(
@@ -92,10 +95,35 @@ def test_llm_engine_chooses_the_tool_and_the_server_writes_the_reply(
     alice = make_customer(funds=5_000_00)
     model = FakeModel('{"tool": "get_account_summary", "arguments": {}}')
     use_model(model)
-    body = _chat(client, alice, "how much money have I got")
+    body = _chat(client, alice, "am I doing ok money-wise?")  # no keyword: unclear
     assert body["engine"] == "llm" and body["tool"] == "get_account_summary"
     assert "INR 5,000.00 available" in body["reply"]
-    assert model.messages == ["how much money have I got"]  # only the customer's text
+    assert model.messages == ["am I doing ok money-wise?"]  # only the customer's text
+
+
+def test_a_loan_amount_the_customer_never_wrote_is_not_answered(
+    client: TestClient, make_customer: Callable[..., Actor], use_model: Callable[[object], None]
+) -> None:
+    alice = make_customer(funds=5_000_00)
+    invented = {"loan_type": "PERSONAL", "amount_rupees": 100000, "tenure_months": 12}
+    use_model(FakeModel(json.dumps({"tool": "get_loan_affordability", "arguments": invented})))
+    body = _chat(client, alice, "can I get a loan?")  # what qwen2.5:1.5b really returned
+    assert body["outcome"] == "help" and body["tool"] is None and "lakh" in body["reply"]
+
+
+def test_clear_questions_are_answered_without_calling_the_model(
+    client: TestClient, make_customer: Callable[..., Actor], use_model: Callable[[object], None]
+) -> None:
+    alice = make_customer(funds=5_000_00)
+    model = FakeModel('{"tool": "get_spend", "arguments": {"period": "this_month"}}')
+    use_model(model)
+    for message, tool in (
+        ("what's my balance", "get_account_summary"),
+        ("show my last 3 transactions", "get_recent_transactions"),
+    ):
+        body = _chat(client, alice, message)
+        assert body["engine"] == "rules" and body["tool"] == tool
+    assert model.messages == []  # the fast path never reached the model
 
 
 @pytest.mark.parametrize(
@@ -114,10 +142,13 @@ def test_fallback_takes_over_when_the_model_is_down_or_wrong(
     reply: str | Exception,
 ) -> None:
     alice = make_customer(funds=5_000_00)
-    use_model(FakeModel(reply))
-    body = _chat(client, alice, "what's my balance")
-    assert body["engine"] == "rules" and body["tool"] == "get_account_summary"
-    assert "INR 5,000.00" in body["reply"]
+    model = FakeModel(reply)
+    use_model(model)
+    body = _chat(client, alice, "recent transactions and my spending")  # two intents: unclear
+    assert model.messages == ["recent transactions and my spending"]  # the model was asked
+    assert (
+        body["engine"] == "rules" and body["tool"] == "get_recent_transactions"
+    )  # rules precedence
 
 
 def test_unreachable_ollama_falls_back_seamlessly(
@@ -125,7 +156,7 @@ def test_unreachable_ollama_falls_back_seamlessly(
 ) -> None:
     alice = make_customer(funds=5_000_00)
     use_model(OllamaChatModel("http://127.0.0.1:9", "qwen2.5:3b-instruct", 0.5))
-    body = _chat(client, alice, "show my recent transactions")
+    body = _chat(client, alice, "spending and recent transactions")  # unclear: model first
     assert body["engine"] == "rules" and body["outcome"] == "answered"
 
 

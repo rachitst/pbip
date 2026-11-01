@@ -1803,8 +1803,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-058 - AI Assistant Contextual Intent Router & LLM Adapter
 
 - **Issue:** #81 | **Sprint:** 5 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** AI Assistant & Security
-- **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (1.6 days of slack)
+- **Owner:** Rachit (`rachitst`)
+- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** Sun 1 Nov (router/adapter in #243; rules-first fast path, keep-alive, capped context and qwen2.5:1.5b default in the TASK-058 latency PR) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-057 (#80, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-057
 - **Goal:** LLM orchestrator connecting user messages to approved tools via Ollama with deterministic fallback.
@@ -1817,10 +1817,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: End-to-end response generated in < 2.5s with local model
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #81`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Connects to local Ollama instance (Llama 3 / Qwen) with strict JSON function calling
-  - [ ] Deterministic keyword/regex fallback when Ollama is offline (demo never crashes)
-  - [ ] Constructs system prompt emphasizing customer security and tool argument bounds
-  - [ ] End-to-end response generated in < 2.5s with local model
+  - [x] Connects to local Ollama instance (Llama 3 / Qwen) with strict JSON function calling (JSON-schema grammar per tool, re-validated server-side)
+  - [x] Deterministic keyword/regex fallback when Ollama is offline (demo never crashes) (`test_unreachable_ollama_falls_back_seamlessly`)
+  - [x] Constructs system prompt emphasizing customer security and tool argument bounds (`test_system_prompt_states_the_security_rules_and_bounds`)
+  - [x] End-to-end response generated in < 2.5s with local model: met for routed questions, which never call the model (p95 82-87 ms end to end over 60 questions; first forecast per process 2.5-3.5 s while numba compiles). The LLM path for unclear questions does **not** meet it on the reference laptop (Celeron N4500, no AVX): 12-30 s warm with qwen2.5:1.5b, 41-50 s with 3b; it falls back to the rules after the 4 s timeout. Accepted by the owner as the Done bar (rules-first routing, LLM path documented: ADR-0018 amendment, `docs/security/ai-assistant-security.md` §4.4)
 - **Definition of done (evidence):** Integration tests prove fallback activates seamlessly when Ollama server is unreachable.
 - **Required checks:**
   - Automated: pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths; pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable
