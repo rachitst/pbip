@@ -505,3 +505,156 @@ def test_evaluation_with_large_background_transfers() -> None:
     assert metrics["false_positives"] == 0
     assert metrics["precision"] == 1.0
     assert metrics["true_positives"] == len(gt_rings)
+
+
+# ---------------------------------------------------------------------------
+# 7. Targeted Boundary, Timestamp & Precision Tests
+# ---------------------------------------------------------------------------
+
+
+def test_identical_timestamps_different_tx_ids_deterministic() -> None:
+    """Simultaneous transfers with identical timestamps across hops are causally accepted
+    and tie-broken deterministically by transaction ID."""
+    u1, u2, u3 = uuid4(), uuid4(), uuid4()
+    simultaneous_time = BASE_TIME
+    t1 = _make_transfer(u1, u2, 10_000_000, simultaneous_time, tx_id=uuid4())
+    t2 = _make_transfer(u2, u3, 9_500_000, simultaneous_time, tx_id=uuid4())
+    t3 = _make_transfer(u3, u1, 9_500_000, simultaneous_time, tx_id=uuid4())
+
+    graph = c.build_transaction_graph([t1, t2, t3])
+    loops = c.detect_circular_loops(graph)
+    assert len(loops) == 1
+    assert loops[0].retention_ratio == 0.95
+    assert len(loops[0].transaction_ids) == 3
+
+
+def test_hop_delay_boundary_exactly_7_days_qualifies() -> None:
+    """Hop delay of exactly 7 days (7d 0h 0m 0s) is within max_hop_delay limit."""
+    u1, u2, u3 = uuid4(), uuid4(), uuid4()
+    t1 = _make_transfer(u1, u2, 10_000_000, BASE_TIME - timedelta(days=14))
+    t2 = _make_transfer(u2, u3, 9_500_000, BASE_TIME - timedelta(days=7))
+    t3 = _make_transfer(u3, u1, 9_500_000, BASE_TIME)
+
+    graph = c.build_transaction_graph([t1, t2, t3])
+    loops = c.detect_circular_loops(graph, max_hop_delay=timedelta(days=7))
+    assert len(loops) == 1
+    assert loops[0].retention_ratio == 0.95
+
+
+def test_hop_delay_boundary_beyond_7_days_rejected() -> None:
+    """Hop delay of 7 days and 1 second exceeds max_hop_delay limit and must be rejected."""
+    u1, u2, u3 = uuid4(), uuid4(), uuid4()
+    t1 = _make_transfer(u1, u2, 10_000_000, BASE_TIME - timedelta(days=14, seconds=2))
+    t2 = _make_transfer(u2, u3, 9_500_000, BASE_TIME - timedelta(days=7))  # 7d 2s delay (> 7d)
+    t3 = _make_transfer(u3, u1, 9_500_000, BASE_TIME)
+
+    graph = c.build_transaction_graph([t1, t2, t3])
+    loops = c.detect_circular_loops(graph, max_hop_delay=timedelta(days=7))
+    assert len(loops) == 0
+
+
+def test_timezone_aware_and_naive_timestamp_standardization() -> None:
+    """Timezone-naive datetimes and offset-aware datetimes are safely standardized to UTC."""
+    u1, u2, u3 = uuid4(), uuid4(), uuid4()
+    naive_dt = datetime(2026, 10, 26, 10, 0, tzinfo=None)  # noqa: DTZ001
+    rec1 = {
+        "id": uuid4(),
+        "customer_id": u1,
+        "counterparty_id": u2,
+        "amount_minor": 10_000_000,
+        "occurred_at": naive_dt,
+        "direction": "DEBIT",
+    }
+    rec2 = {
+        "id": uuid4(),
+        "customer_id": u2,
+        "counterparty_id": u3,
+        "amount_minor": 9_500_000,
+        "occurred_at": naive_dt + timedelta(hours=2),
+        "direction": "DEBIT",
+    }
+    rec3 = {
+        "id": uuid4(),
+        "customer_id": u3,
+        "counterparty_id": u1,
+        "amount_minor": 9_500_000,
+        "occurred_at": (naive_dt + timedelta(hours=4)).replace(tzinfo=UTC),
+        "direction": "DEBIT",
+    }
+
+    graph = c.build_transaction_graph([rec1, rec2, rec3])
+    loops = c.detect_circular_loops(graph)
+    assert len(loops) == 1
+    assert loops[0].retention_ratio == 0.95
+
+
+def test_strict_integer_retention_boundary_paise_precision() -> None:
+    """Exact integer check for > 90.0%: 1 paisa above qualifies, 1 paisa below is rejected."""
+    u1, u2, u3 = uuid4(), uuid4(), uuid4()
+
+    # 1 paisa above 90%: 9_000_001 / 10_000_000 = 0.9000001
+    txs_pass = [
+        _make_transfer(u1, u2, 10_000_000, BASE_TIME),
+        _make_transfer(u2, u3, 9_500_000, BASE_TIME + timedelta(hours=2)),
+        _make_transfer(u3, u1, 9_000_001, BASE_TIME + timedelta(hours=4)),
+    ]
+    graph_pass = c.build_transaction_graph(txs_pass)
+    loops_pass = c.detect_circular_loops(graph_pass, min_retention=0.90)
+    assert len(loops_pass) == 1
+
+    # 1 paisa below 90%: 8_999_999 / 10_000_000 = 0.8999999
+    txs_fail = [
+        _make_transfer(u1, u2, 10_000_000, BASE_TIME),
+        _make_transfer(u2, u3, 9_500_000, BASE_TIME + timedelta(hours=2)),
+        _make_transfer(u3, u1, 8_999_999, BASE_TIME + timedelta(hours=4)),
+    ]
+    graph_fail = c.build_transaction_graph(txs_fail)
+    loops_fail = c.detect_circular_loops(graph_fail, min_retention=0.90)
+    assert len(loops_fail) == 0
+
+
+def test_partial_forwarding_multiple_transfers_no_double_counting() -> None:
+    """Multiple transfers on an edge contribute their exact sum and cannot be duplicated."""
+    u1, u2, u3 = uuid4(), uuid4(), uuid4()
+    fixed_id = uuid4()
+    t0a = _make_transfer(u1, u2, 5_000_000, BASE_TIME, tx_id=fixed_id)
+    t0a_dup = _make_transfer(u1, u2, 5_000_000, BASE_TIME, tx_id=fixed_id)  # Replay!
+    t0b = _make_transfer(u1, u2, 5_000_000, BASE_TIME + timedelta(minutes=30))  # Leg 0 total = 10M
+    t1 = _make_transfer(u2, u3, 9_500_000, BASE_TIME + timedelta(hours=2))
+    t2 = _make_transfer(u3, u1, 9_200_000, BASE_TIME + timedelta(hours=4))
+
+    graph = c.build_transaction_graph([t0a, t0a_dup, t0b, t1, t2])
+    # Edge u1 -> u2 must have exactly 10M, not 15M
+    assert graph[u1][u2]["amount_minor"] == 10_000_000
+    loops = c.detect_circular_loops(graph)
+    assert len(loops) == 1
+    assert loops[0].retention_ratio == 0.92
+
+
+def test_risk_boost_capping_and_non_participating_accounts() -> None:
+    """Risk boost is capped at MAX_SCORE (100) and non-participating accounts get 0."""
+    u1, u2, u3 = uuid4(), uuid4(), uuid4()
+    outside_acct = uuid4()
+    txs = [
+        _make_transfer(u1, u2, 10_000_000, BASE_TIME),
+        _make_transfer(u2, u3, 9_500_000, BASE_TIME + timedelta(hours=2)),
+        _make_transfer(u3, u1, 9_200_000, BASE_TIME + timedelta(hours=4)),
+    ]
+    graph = c.build_transaction_graph(txs)
+    loops = c.detect_circular_loops(graph)
+
+    # Base boost configured higher than MAX_SCORE (e.g. 150)
+    boosts = c.calculate_risk_boosts(loops, base_boost=150)
+    assert boosts[u1].risk_boost == 100  # Capped at MAX_SCORE
+    assert outside_acct not in boosts
+
+    rule = c.CircularMuleRingRule(known_boosts=boosts)
+    trig, weight, reason = rule.evaluate(u1)
+    assert trig is True
+    assert weight == 100
+    assert "92.0%" in reason
+
+    trig_out, weight_out, reason_out = rule.evaluate(outside_acct)
+    assert trig_out is False
+    assert weight_out == 0
+    assert reason_out == ""

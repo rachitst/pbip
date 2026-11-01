@@ -103,13 +103,41 @@ class AccountRiskBoost:
     transaction_ids: tuple[UUID, ...]
 
 
+def _ensure_utc(dt: datetime) -> datetime:
+    """Ensure datetime is timezone-aware in UTC for safe, consistent comparisons."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
+
+
+def _check_retention(
+    b_min: int,
+    p_max: int,
+    min_retention: float = DEFAULT_MIN_RETENTION,
+) -> tuple[bool, float]:
+    """Check retention ratio strictly > min_retention using integer arithmetic when applicable.
+
+    For the standard 90% threshold, uses exact integer cross-multiplication:
+        b_min * 10 > p_max * 9
+    preventing any floating-point representation anomalies at the boundary.
+    """
+    if p_max <= 0:
+        return False, 0.0
+    ret = float(b_min) / float(p_max)
+    if min_retention == DEFAULT_MIN_RETENTION:
+        is_above = (b_min * 10) > (p_max * 9)
+    else:
+        is_above = ret > min_retention
+    return is_above, ret
+
+
 def _extract_transfer_tuple(
     record: Any,
 ) -> tuple[UUID, UUID, int, datetime, UUID] | None:
     """Extract (source, target, amount_minor, occurred_at, tx_id) from a transfer record."""
     if isinstance(record, Transfer):
         tx_id = record.id
-        occurred_at = record.occurred_at
+        occurred_at = _ensure_utc(record.occurred_at)
         amt = record.amount_minor
         if record.direction == "DEBIT":
             src, tgt = record.customer_id, record.counterparty_id
@@ -119,7 +147,7 @@ def _extract_transfer_tuple(
 
     if isinstance(record, dict):
         tx_id = record["id"]
-        occurred_at = record["occurred_at"]
+        occurred_at = _ensure_utc(record["occurred_at"])
         amt = int(record["amount_minor"])
         direction = str(record.get("direction", "DEBIT"))
         if direction == "DEBIT":
@@ -130,7 +158,7 @@ def _extract_transfer_tuple(
 
     if hasattr(record, "amount_minor") and hasattr(record, "occurred_at"):
         tx_id = record.id
-        occurred_at = record.occurred_at
+        occurred_at = _ensure_utc(record.occurred_at)
         amt = int(record.amount_minor)
         direction = str(getattr(record, "direction", "DEBIT"))
         cust = record.customer_id
@@ -254,17 +282,16 @@ def _find_single_tx_causal_path(
         if step == len(leg_transfers):
             amounts = [tx.amount_minor for tx in chosen]
             b_min, p_max = min(amounts), max(amounts)
-            if p_max > 0:
-                ret = float(b_min) / float(p_max)
-                if ret > min_retention and ret > best_retention:
-                    best_retention = ret
-                    best_result = (
-                        ret,
-                        b_min,
-                        p_max,
-                        [tx.id for tx in chosen],
-                        [tx.occurred_at for tx in chosen],
-                    )
+            is_above, ret = _check_retention(b_min, p_max, min_retention)
+            if is_above and ret > best_retention:
+                best_retention = ret
+                best_result = (
+                    ret,
+                    b_min,
+                    p_max,
+                    [tx.id for tx in chosen],
+                    [tx.occurred_at for tx in chosen],
+                )
             return
 
         for tx in leg_transfers[step]:
@@ -312,11 +339,8 @@ def _find_bundle_causal_flow(
 
     b_min = min(leg_totals)
     p_max = max(leg_totals)
-    if p_max <= 0:
-        return None
-
-    ret = float(b_min) / float(p_max)
-    if ret <= min_retention:
+    is_above, ret = _check_retention(b_min, p_max, min_retention)
+    if not is_above:
         return None
 
     return (ret, b_min, p_max, all_tx_ids, leg_starts)
@@ -330,7 +354,7 @@ def _verify_rotation(
 ) -> tuple[float, int, int, list[UUID], list[datetime]] | None:
     """Evaluate both single-transfer and bundled multi-transfer flows for a rotation."""
     leg_transfers: list[list[EdgeTransfer]] = [
-        sorted(graph[u][v]["transfers"], key=lambda tx: tx.occurred_at) for u, v in legs
+        sorted(graph[u][v]["transfers"], key=lambda tx: (tx.occurred_at, tx.id)) for u, v in legs
     ]
 
     single_res = _find_single_tx_causal_path(leg_transfers, max_hop_delay, min_retention)
