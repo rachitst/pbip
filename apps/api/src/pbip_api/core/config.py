@@ -76,6 +76,13 @@ class Settings(BaseSettings):
     ollama_timeout_seconds: float = Field(default=4.0, gt=0, le=120)
     assistant_llm_enabled: bool = True
 
+    # Fraud scoring (ADR-0019). "rules" = baseline rules only. "hybrid" adds the trained models
+    # from FRAUD_MODEL_DIR (operator-controlled; it holds a pickle) with the rules as a floor.
+    # Any model problem, or scoring slower than the budget, falls back to the rules.
+    fraud_scorer: Literal["rules", "hybrid"] = "rules"
+    fraud_model_dir: str | None = Field(default=None, max_length=500)
+    fraud_model_budget_ms: int = Field(default=50, ge=5, le=90)
+
     # Banking limits (INTEGER MINOR UNITS)
     internal_bank_code: str = "PBIP0001"
     max_transfer_minor: int = 20_000_000  # 2,00,000.00 per transfer
