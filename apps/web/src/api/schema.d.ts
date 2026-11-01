@@ -3436,6 +3436,8 @@ export interface operations {
             header: {
                 /** @description Unique per logical request; retrying with the same key never duplicates. */
                 "Idempotency-Key": string;
+                /** @description Per-browser device id (lib/device.ts); only a derived id is used (ADR-0020) */
+                "X-Device-ID"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -4192,6 +4194,8 @@ export interface operations {
             header: {
                 /** @description Unique per logical request; retrying with the same key never duplicates. */
                 "Idempotency-Key": string;
+                /** @description Per-browser device id (lib/device.ts); only a derived id is used (ADR-0020) */
+                "X-Device-ID"?: string | null;
             };
             path?: never;
             cookie?: never;

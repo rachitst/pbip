@@ -55,6 +55,11 @@ class TransactionContext(BaseModel):
     payee_id: UUID | None = None
     device_id: UUID | None = None
     ip_country: str | None = Field(default=None, min_length=2, max_length=2)
+    ip_network: str | None = Field(
+        default=None,
+        max_length=43,
+        description="Client network prefix (IPv4 /24, IPv6 /48), never the full address (ADR-0020)",
+    )
     geo_lat: float | None = Field(default=None, ge=-90, le=90)
     geo_lon: float | None = Field(default=None, ge=-180, le=180)
 

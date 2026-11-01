@@ -41,6 +41,7 @@ from pbip_api.core.security import (
     new_opaque_token,
     validate_password_strength,
 )
+from pbip_api.core.velocity import VelocityCounters
 from pbip_api.modules.accounts.models import AccountType
 from pbip_api.modules.accounts.service import open_account
 from pbip_api.modules.auth.models import (
@@ -142,12 +143,14 @@ class AuthService:
         passwords: PasswordService,
         cipher: FieldCipher,
         clock: Callable[[], float] = time.time,
+        velocity: VelocityCounters | None = None,
     ) -> None:
         self.session = session
         self.settings = settings
         self.passwords = passwords
         self.cipher = cipher
         self.clock = clock
+        self.velocity = velocity  # per-IP failed sign-in window in Redis (TASK-034)
         self.audit = AuditService(session)
         self._last_refresh_row_id: UUID | None = None
 
@@ -162,16 +165,20 @@ class AuthService:
         meta: RequestMeta,
         **details: Any,
     ) -> None:
-        self.session.add(
-            SecurityEvent(
-                user_id=user_id,
-                event_type=event_type,
-                ip=meta.ip,
-                user_agent=(meta.user_agent or "")[:255] or None,
-                request_id=meta.request_id,
-                details=details,
-            )
+        event = SecurityEvent(
+            id=uuid4(),
+            user_id=user_id,
+            event_type=event_type,
+            ip=meta.ip,
+            user_agent=(meta.user_agent or "")[:255] or None,
+            request_id=meta.request_id,
+            details=details,
         )
+        self.session.add(event)
+        # Failed sign-ins always commit before the error is raised (evidence must persist), so
+        # counting here never counts a failure the database does not also keep.
+        if event_type is SecurityEventType.LOGIN_FAILURE and self.velocity and meta.ip:
+            self.velocity.record_login_failure(meta.ip, event.id, self._now())
 
     def _user_by_email(self, email: str) -> User | None:
         return self.session.execute(

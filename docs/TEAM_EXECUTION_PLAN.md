@@ -125,7 +125,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 |---|---|---|---|---|---|---|---|---|
 | TASK-029 | LightGBM Supervised Fraud Classifier Training Pipeline | Rachit | Mon 26 Oct | Tue 27 Oct | 023, 024 | Seq | High | #52 |
 | TASK-030 | Isolation Forest Anomaly Detection Engine | Rachit | Mon 26 Oct | Tue 27 Oct | 024 | Seq | Low | #53 |
-| TASK-034 | Redis Real-Time Velocity & Frequency Counters | Sujal | Tue 27 Oct | Tue 27 Oct | - | Par | Low | #57 |
+| TASK-034 | Redis Real-Time Velocity & Frequency Counters | Rachit | Tue 27 Oct | Tue 27 Oct | - | Par | Low | #57 |
 | TASK-031 | Hybrid Fraud Decision Combiner & Threshold Calibration | Rachit | Tue 27 Oct | Wed 28 Oct | 025, 029, 030 | Seq | High | #54 |
 | TASK-032 | SHAP Explainability & Reason Code Generator | Rachit | Wed 28 Oct | Wed 28 Oct | 029, 031 | Seq | High | #55 |
 | TASK-033 | HybridFraudScorer Service Integration in Transfer Flow | Rachit | Wed 28 Oct | Thu 29 Oct | 031, 032 | Seq | High | #56 |
@@ -1100,8 +1100,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-034 - Redis Real-Time Velocity & Frequency Counters
 
 - **Issue:** #57 | **Sprint:** 3 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Core Banking & Ledger
-- **Owner:** Sujal (`SUJALGPM`)
-- **Start:** Tue 27 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (7.2 days of slack)
+- **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov; was Sujal)
+- **Start:** Tue 27 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** Sun 1 Nov (ADR-0020, `core/velocity.py`) | **Status:** Done | **Risk:** Low
 - **Depends on:** none
 - **Mode:** Parallel: can start immediately
 - **Goal:** Redis-backed sliding window counters for rapid transfer and login velocity detection.
@@ -1114,10 +1114,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Atomic pipeline operations prevent race conditions under concurrent load
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #57`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Sliding window counters tracking transfers per 10 minutes and volume per 1 hour
-  - [ ] Tracks IP address login failures with automatic expiration
-  - [ ] Fail-open design: if Redis is unavailable, falls back gracefully to database checks
-  - [ ] Atomic pipeline operations prevent race conditions under concurrent load
+  - [x] Sliding window counters tracking transfers per 10 minutes and volume per 1 hour (sorted sets; `test_transfer_window_slides_and_excludes_the_transfer_being_scored`, `test_velocity_and_volume_come_from_redis_after_each_commit`)
+  - [x] Tracks IP address login failures with automatic expiration (24 h window + TTL; `test_failed_logins_are_counted_per_ip_in_redis`)
+  - [x] Fail-open design: if Redis is unavailable, falls back gracefully to database checks (`test_velocity_falls_back_to_postgresql_when_redis_is_down`)
+  - [x] Atomic pipeline operations prevent race conditions under concurrent load (MULTI/EXEC; 400 writes from 16 threads counted exactly: `test_concurrent_writers_never_lose_or_double_count_an_event`)
 - **Definition of done (evidence):** Concurrency tests verify counter accuracy under multi-threaded requests.
 - **Required checks:**
   - Automated: pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths; CI job or `scripts/dev.py` command exercised in tests; works from a fresh clone
@@ -2856,8 +2856,8 @@ decision in ADR-0015.
 ### TASK-095 - Fraud Signals for Recent Login Failures and New Device or Network
 
 - **Issue:** #178 | **Sprint:** unscheduled | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Core Banking & Ledger
-- **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** In Progress | **Risk:** Unscheduled
+- **Owner:** Rachit (`rachitst`)
+- **Start:** - | **Target deadline:** - | **Actual completion:** Sun 1 Nov (ADR-0020, `baseline-rules-0.3`) | **Status:** Done | **Risk:** Low
 - **Depends on:** none.
 - **Mode:** In Progress (geographic criterion merged in #196; login-failure and new-device criteria open)
 - **Goal:** The transfer risk score uses the UC-09 triggers 'multiple login failures' and 'new location' (as new device or network).
@@ -2870,10 +2870,10 @@ decision in ADR-0015.
   6. Implement and make the tests pass for: Rule NEW_COUNTRY adds risk when the transfer's IP country (DB-IP Lite, ADR-0014) differs from every country in the customer's scored transfers of the last 180 days; an unknown country never adds risk
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #178`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Rule RECENT_LOGIN_FAILURES adds risk when the user had failed logins in the last 24 hours (from security events)
-  - [ ] Rule NEW_DEVICE_OR_NETWORK adds risk when the transfer comes from a device fingerprint or IP network not seen for this customer
-  - [ ] Each rule returns a human-readable reason with source RULE and is persisted with the feature snapshot
-  - [ ] Rule NEW_COUNTRY adds risk when the transfer's IP country (DB-IP Lite, ADR-0014) differs from every country in the customer's scored transfers of the last 180 days; an unknown country never adds risk
+  - [x] Rule RECENT_LOGIN_FAILURES adds risk when the user had failed logins in the last 24 hours (from security events) (+20 at 3 or more; `test_recent_login_failures_rule` fires at 3, not at 2)
+  - [x] Rule NEW_DEVICE_OR_NETWORK adds risk when the transfer comes from a device fingerprint or IP network not seen for this customer (+15; `test_new_device_fires_only_against_an_existing_device_history`, `test_new_network_fires_and_the_full_ip_is_never_stored`, `test_registered_devices_count_as_seen`)
+  - [x] Each rule returns a human-readable reason with source RULE and is persisted with the feature snapshot (`login_failures_24h`, `device_id`, `ip_network`, `new_device`, `new_network` in `fraud_events.features`)
+  - [x] Rule NEW_COUNTRY adds risk when the transfer's IP country (DB-IP Lite, ADR-0014) differs from every country in the customer's scored transfers of the last 180 days; an unknown country never adds risk
 - **Definition of done (evidence):** Unit and integration tests prove each rule fires and does not fire; behaviour-regression thresholds unchanged.
 - **Required checks:**
   - Automated: unit + integration tests against PostgreSQL in CI; coverage gate met

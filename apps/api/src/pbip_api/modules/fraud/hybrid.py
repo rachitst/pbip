@@ -29,10 +29,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from pbip_api.core.config import Settings
+from pbip_api.core.velocity import VelocityCounters
 from pbip_api.modules.accounts.models import AccountHolder
 from pbip_api.modules.auth.models import SecurityEvent, SecurityEventType
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.fraud.baseline import BaselineRulesScorer, decide
+from pbip_api.modules.fraud.models import FraudEvent
 from pbip_api.modules.ledger.models import Transaction
 from pbip_api.modules.payees.models import Payee
 
@@ -78,11 +80,17 @@ def load_engine(settings: Settings) -> "HybridScorer | None":
 
 
 class HybridFraudScorer:
-    def __init__(self, session: Session, engine: "HybridScorer | None", budget_ms: int) -> None:
+    def __init__(
+        self,
+        session: Session,
+        engine: "HybridScorer | None",
+        budget_ms: int,
+        counters: VelocityCounters | None = None,
+    ) -> None:
         self.session = session
         self.engine = engine
         self.budget_seconds = budget_ms / 1000
-        self.baseline = BaselineRulesScorer(session)
+        self.baseline = BaselineRulesScorer(session, counters)
 
     def score(self, context: TransactionContext) -> FraudScoreResult:
         started = time.perf_counter()
@@ -91,7 +99,7 @@ class HybridFraudScorer:
             return _rules_only(base, "NOT_LOADED", started)
         from pbip_ml.fraud.inference import score_transfer  # loaded already by load_engine
 
-        inputs = self._inputs(context)
+        inputs = self._inputs(context, new_device=bool(base.features.get("new_device")))
         try:
             hybrid = _POOL.submit(score_transfer, self.engine, inputs).result(
                 timeout=self.budget_seconds
@@ -118,7 +126,7 @@ class HybridFraudScorer:
             },
         )
 
-    def _inputs(self, context: TransactionContext) -> "TransferInputs":
+    def _inputs(self, context: TransactionContext, new_device: bool) -> "TransferInputs":
         from pbip_ml.fraud.inference import TransferInputs
 
         at = context.occurred_at
@@ -131,21 +139,30 @@ class HybridFraudScorer:
             AccountHolder.customer_id == context.customer_id
         )
         debits = self.session.execute(
-            select(Transaction.created_at, Transaction.amount).where(
+            select(
+                Transaction.created_at,
+                Transaction.amount,
+                FraudEvent.features["device_id"].astext,  # the device of each earlier transfer
+            )
+            .outerjoin(FraudEvent, FraudEvent.transaction_id == Transaction.id)
+            .where(
                 Transaction.debit_account_id.in_(accounts),
                 Transaction.id != context.transaction_id,
                 Transaction.created_at >= at - AVG_WINDOW,
                 Transaction.created_at < at,
             )
         ).all()
-        history = [PastTransfer(created, "DEBIT", amount, None) for created, amount in debits]
+        history = [
+            PastTransfer(created, "DEBIT", amount, UUID(device) if device else None)
+            for created, amount, device in debits
+        ]
         return TransferInputs(
             amount_minor=context.amount_minor,
             currency=context.currency,
             occurred_at=at,
             payee_added_at=payee_added_at,
             device_id=context.device_id,
-            new_device=False,  # device registry joins the payment path in TASK-095
+            new_device=new_device,  # NEW_DEVICE_OR_NETWORK's device half (TASK-095)
             failed_logins_24h=self._failed_logins(context.customer_id, at - LOGIN_WINDOW),
             history=history,
         )
