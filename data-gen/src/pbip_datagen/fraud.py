@@ -15,8 +15,15 @@ customers, ONE injected incident of a scenario:
   new payee within 6 hours.
 
 Every row of an incident is labelled (``fraud_labels``: transaction id -> scenario, incident, role).
-Ordinary transfers are built so they never match a scenario's signature (payees older than 30 days,
-home city, known device, no failed logins), so labels are clean by construction.
+Normal customers also do things for the first time (v2.1, #251), because real ones do:
+* L1 a new payee, paid minutes to days after it was added (a new landlord, a one-off purchase,
+  splitting a bill), at ordinary amounts or occasionally a one-off of up to 60% of monthly income;
+  the payee is then used again like any other.
+* L2 a new phone: from some date on, the customer's transfers come from a new device.
+* L3 a forgotten password: 1-4 failed logins, then a normal transfer from the usual device.
+None of these reaches a scenario's full signature (a new payee never gets 1.5x income or more, a
+new device never comes with failed logins or a new payee), so labels stay clean by construction.
+They draw from their own random stream, so ordinary and fraud rows are identical to v2.0.
 
 Determinism: each customer draws from ``default_rng([seed, index, 7])`` (independent of v1's stream
 ``[seed, index, 1]``) and ids are UUIDv5 from the run, so the same config yields identical output.
@@ -42,7 +49,7 @@ from pbip_datagen.generator import (
     run_id_for,
 )
 
-FRAUD_VERSION = "2.0.0"
+FRAUD_VERSION = "2.1.0"  # 2.1: legitimate first-time behaviour (#251)
 Scenario = Literal["F1", "F2", "F3", "F4", "F5", "F6"]
 SCENARIOS: tuple[Scenario, ...] = ("F1", "F2", "F3", "F4", "F5", "F6")
 SCENARIO_NAMES: dict[Scenario, str] = {
@@ -273,6 +280,64 @@ def _f6(ctx: _Ctx) -> list[tuple[Transfer, str]]:
     return rows
 
 
+def _instant(ctx: _Ctx, rng: np.random.Generator) -> datetime:
+    base = ctx.window_start + (ctx.window_end - ctx.window_start) * float(rng.uniform(0.02, 0.95))
+    return base.replace(hour=int(rng.integers(8, 22)), minute=int(rng.integers(0, 60)))
+
+
+def _usual(ctx: _Ctx, rng: np.random.Generator) -> int:
+    return ctx.money(ctx.customer.monthly_income_minor * float(rng.uniform(0.01, 0.12)))
+
+
+def _new_payees(ctx: _Ctx, rng: np.random.Generator, months: int) -> None:
+    """L1: about two new payees in six months, paid minutes to three days after being added."""
+    for _ in range(int(rng.poisson(0.35 * months))):
+        added = _instant(ctx, rng)
+        payee = ctx.party_ids.next()
+        delay = rng.uniform(2, 60) if rng.uniform() < 0.5 else rng.uniform(60, 3 * 24 * 60)
+        first = added + timedelta(minutes=float(delay))
+        one_off = rng.uniform() < 0.15  # a deposit or a big purchase: still under F1's 1.5x income
+        share = float(rng.uniform(0.15, 0.6)) if one_off else float(rng.uniform(0.01, 0.12))
+        if first < ctx.window_end:
+            ctx.add(
+                first, "DEBIT", ctx.money(ctx.customer.monthly_income_minor * share), payee, added
+            )
+        for _ in range(int(rng.integers(0, 3))):  # then used again, like any payee
+            later = first + timedelta(days=float(rng.uniform(5, 60)))
+            if later < ctx.window_end:
+                ctx.add(later, "DEBIT", _usual(ctx, rng), payee, added)
+
+
+def _new_phone(ctx: _Ctx, rng: np.random.Generator) -> None:
+    """L2: 12% of customers switch phones; transfers after that come from the new device."""
+    if rng.uniform() >= 0.12:
+        return
+    switch = _instant(ctx, rng)
+    phone = uuid.uuid5(ctx.customer.id, f"phone-{switch.isoformat()}")
+    for _ in range(int(rng.integers(1, 4))):
+        when = switch + timedelta(days=float(rng.uniform(0, 20)))
+        if when < ctx.window_end:
+            payee, added = ctx.payees[int(rng.integers(0, len(ctx.payees)))]
+            ctx.add(when, "DEBIT", _usual(ctx, rng), payee, added, device=phone)
+
+
+def _forgotten_password(ctx: _Ctx, rng: np.random.Generator, months: int) -> None:
+    """L3: 1-4 failed logins, then a normal transfer from the usual device to a known payee."""
+    for _ in range(int(rng.poisson(0.15 * months))):
+        payee, added = ctx.payees[int(rng.integers(0, len(ctx.payees)))]
+        failed = int(rng.integers(1, 5))
+        ctx.add(_instant(ctx, rng), "DEBIT", _usual(ctx, rng), payee, added, failed=failed)
+
+
+def _first_time_behaviour(ctx: _Ctx, rng: np.random.Generator, months: int) -> None:
+    """L1-L3 (module docstring). After the scenarios, on its own stream: scenario rows unchanged."""
+    if ctx.window_end - ctx.window_start < timedelta(days=2):
+        return
+    _new_payees(ctx, rng, months)
+    _new_phone(ctx, rng)
+    _forgotten_password(ctx, rng, months)
+
+
 _INJECTORS = {"F1": _f1, "F2": _f2, "F3": _f3, "F4": _f4, "F5": _f5, "F6": _f6}
 
 
@@ -322,6 +387,8 @@ def customer_transfers(
             FraudLabel(row.id, scenario, incident, role, role != "home")
             for row, role in _INJECTORS[scenario](ctx)
         ]
+    first_time_rng = np.random.default_rng([config.seed, customer.index, 8])
+    _first_time_behaviour(ctx, first_time_rng, config.months)
     rows = sorted(ctx.rows, key=lambda t: (t.occurred_at, t.id))
     return rows, labels
 

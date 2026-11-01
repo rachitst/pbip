@@ -45,6 +45,30 @@ def _confusions(y: np.ndarray, risk: np.ndarray) -> dict[str, dict[str, float | 
     }
 
 
+def _first_time_fpr(frame: Any, risk: np.ndarray) -> dict[str, dict[str, float | int]]:
+    """False-positive rates on LEGITIMATE first-time behaviour (#251), at STEP_UP and REVIEW."""
+    normal = (frame["label"].to_numpy() == 0) & (frame["is_debit"].to_numpy() == 1)
+    payee_age = frame["payee_age_seconds"].to_numpy()
+    groups = {
+        "new_payee_under_3_days": normal & (payee_age >= 0) & (payee_age < 3 * 86_400),
+        "new_device": normal & (frame["new_device"].to_numpy() == 1),
+        "failed_logins": normal & (frame["failure_count_24h"].to_numpy() > 0),
+        "all_legitimate_debits": normal,
+    }
+    return {
+        name: {
+            "rows": int(mask.sum()),
+            "fpr_at_step_up": round(float((risk[mask] >= h.STEP_UP_AT).mean()), 4)
+            if mask.any()
+            else 0,
+            "fpr_at_review": round(float((risk[mask] >= h.REVIEW_AT).mean()), 4)
+            if mask.any()
+            else 0,
+        }
+        for name, mask in groups.items()
+    }
+
+
 def _latency(scorer: h.HybridScorer) -> dict[str, Any]:
     now = datetime(2026, 6, 15, 13, 0, tzinfo=UTC)
     history = [PastTransfer(now - timedelta(days=i), "DEBIT", 2_000_00, None) for i in range(1, 30)]
@@ -78,6 +102,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     for name in ("--model", "--data", "--holdout", "--json", "--img"):
         parser.add_argument(name, type=Path, required=True)
+    parser.add_argument("--skip-latency", action="store_true", help="metrics only (faster)")
     args = parser.parse_args()
     args.img.mkdir(parents=True, exist_ok=True)
 
@@ -110,6 +135,8 @@ def main() -> None:
     report["test"]["hybrid"] = _confusions(y, risk_test)
     report["test"]["rules_only"] = _confusions(y, h.batch_risk(rules_only, test))
     report["holdout"]["hybrid"] = _confusions(held["label"].to_numpy(), risk_held)
+    report["test"]["first_time_fpr"] = _first_time_fpr(test, risk_test)
+    report["holdout"]["first_time_fpr"] = _first_time_fpr(held, risk_held)
 
     amounts = _amounts(test)
     report["test"]["fraud_amount_minor"] = int(amounts[y == 1].sum())
@@ -142,7 +169,8 @@ def main() -> None:
     fig.tight_layout()
     fig.savefig(args.img / "fraud-cost-curve.png", dpi=120)
 
-    report["latency"] = _latency(scorer)
+    if not args.skip_latency:
+        report["latency"] = _latency(scorer)
     args.json.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
 
 

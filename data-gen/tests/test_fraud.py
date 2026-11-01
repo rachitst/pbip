@@ -138,13 +138,39 @@ def test_f6_inflow_from_several_senders_passed_on_within_six_hours(
 
 
 def test_ordinary_transfers_never_match_a_scenario_signature(data: LabelledTransfers) -> None:
+    """Normal customers do first-time things (#251), but never a scenario's FULL signature."""
     labelled = {lb.transaction_id for lb in data.labels}
+    income = {c.id: c.monthly_income_minor for c in iter_customers(CONFIG)}
     for t in data.transfers:
         if t.id in labelled:
             continue
-        assert t.direction == "DEBIT" and t.payee_added_at is not None
-        assert t.occurred_at - t.payee_added_at >= timedelta(days=30)
-        assert (t.ip_country, t.new_device, t.failed_logins_24h) == ("IN", False, 0)
+        assert t.direction == "DEBIT" and t.payee_added_at is not None and t.ip_country == "IN"
+        new_payee = t.occurred_at - t.payee_added_at < timedelta(days=30)
+        if new_payee:  # never F1's 1.5x monthly income
+            assert t.amount_minor < 1.5 * income[t.customer_id]
+        if t.new_device:  # never F3's failed logins or new payee
+            assert t.failed_logins_24h == 0 and not new_payee
+        if t.failed_logins_24h:
+            assert not t.new_device
+
+
+def test_legitimate_first_time_behaviour_is_present(data: LabelledTransfers) -> None:
+    """#251: legitimate transfers to new payees, new phones and failed logins all exist."""
+    labelled = {lb.transaction_id for lb in data.labels}
+    normal = [t for t in data.transfers if t.id not in labelled]
+    assert any(
+        t.occurred_at - t.payee_added_at < timedelta(hours=1) for t in normal if t.payee_added_at
+    )
+    within_3_days = sum(
+        1
+        for t in normal
+        if t.payee_added_at and t.occurred_at - t.payee_added_at < timedelta(days=3)
+    )
+    assert within_3_days > 500
+    assert (
+        sum(t.new_device for t in normal) > 100
+        and sum(t.failed_logins_24h > 0 for t in normal) > 100
+    )
 
 
 def test_fraud_config_is_validated() -> None:
