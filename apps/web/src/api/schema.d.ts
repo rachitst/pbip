@@ -673,6 +673,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fraud/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fraud decision telemetry, hold rates, rule breakdown, and high-risk payees */
+        get: operations["get_fraud_stats_api_v1_fraud_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/insights/customers": {
         parameters: {
             query?: never;
@@ -1531,6 +1548,42 @@ export interface components {
              */
             segment: "HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER";
         };
+        /**
+         * DailyDecisionPoint
+         * @description Decision counts for a single calendar day (YYYY-MM-DD).
+         */
+        DailyDecisionPoint: {
+            /**
+             * Allow
+             * @description ALLOW count for this day
+             */
+            allow: number;
+            /**
+             * Block
+             * @description BLOCK count for this day
+             */
+            block: number;
+            /**
+             * Date
+             * @description Calendar date in ISO format (YYYY-MM-DD)
+             */
+            date: string;
+            /**
+             * Review
+             * @description REVIEW count for this day
+             */
+            review: number;
+            /**
+             * Step Up
+             * @description STEP_UP count for this day
+             */
+            step_up: number;
+            /**
+             * Total
+             * @description Total decisions on this day
+             */
+            total: number;
+        };
         /** DecisionRequest */
         DecisionRequest: {
             /**
@@ -1540,6 +1593,52 @@ export interface components {
             action: "RELEASE" | "REJECT";
             /** Note */
             note?: string | null;
+        };
+        /**
+         * DecisionSummary
+         * @description Aggregate decision counts and rates across the analyzed period.
+         */
+        DecisionSummary: {
+            /**
+             * Allow
+             * @description Total transactions allowed
+             */
+            allow: number;
+            /**
+             * Block
+             * @description Total transactions declined outright
+             */
+            block: number;
+            /**
+             * Block Rate
+             * @description Proportion of transactions blocked
+             */
+            block_rate: number;
+            /**
+             * Hold Rate
+             * @description Proportion of transactions held for review
+             */
+            hold_rate: number;
+            /**
+             * Review
+             * @description Total transactions held for fraud analyst review
+             */
+            review: number;
+            /**
+             * Step Up
+             * @description Total transactions requiring step-up MFA challenge
+             */
+            step_up: number;
+            /**
+             * Step Up Rate
+             * @description Proportion of transactions challenged
+             */
+            step_up_rate: number;
+            /**
+             * Total
+             * @description Total decisions scored in period
+             */
+            total: number;
         };
         /**
          * DeviceOut
@@ -1825,6 +1924,56 @@ export interface components {
              */
             window_months: number;
         };
+        /**
+         * FraudStatsResponse
+         * @description Comprehensive telemetry report for fraud analysts and risk operations.
+         */
+        FraudStatsResponse: {
+            /**
+             * Block Rate
+             * @description Overall block rate for the period
+             */
+            block_rate: number;
+            /**
+             * Decision Counts
+             * @description Decision counts keyed by ALLOW, STEP_UP, REVIEW, BLOCK
+             */
+            decision_counts: {
+                [key: string]: number;
+            };
+            /**
+             * High Risk Payees
+             * @description Payees associated with flagged transactions or elevated risk scores
+             */
+            high_risk_payees: components["schemas"]["HighRiskPayeeStat"][];
+            /**
+             * Hold Rate
+             * @description Overall hold rate for the period
+             */
+            hold_rate: number;
+            /**
+             * Period Days
+             * @description Analyzed lookback window in days
+             */
+            period_days: number;
+            /**
+             * Rules Breakdown
+             * @description Most frequently triggered detection rules ranked by frequency
+             */
+            rules_breakdown: components["schemas"]["TriggeredRuleStat"][];
+            /** @description Detailed summary of decision counts and proportions */
+            summary: components["schemas"]["DecisionSummary"];
+            /**
+             * Timeline
+             * @description Chronological daily decision volume over time
+             */
+            timeline: components["schemas"]["DailyDecisionPoint"][];
+            /**
+             * Total Decisions
+             * @description Total decisions scored across the period
+             */
+            total_decisions: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1866,6 +2015,38 @@ export interface components {
              * @description Weight in percent
              */
             weight_percentage: number;
+        };
+        /**
+         * HighRiskPayeeStat
+         * @description Payee with suspicious or repeatedly flagged transaction history.
+         */
+        HighRiskPayeeStat: {
+            /**
+             * Avg Risk Score
+             * @description Average risk score across transactions to this payee
+             */
+            avg_risk_score: number;
+            /**
+             * Bank Code
+             * @description Destination bank or IFSC code
+             */
+            bank_code: string;
+            /**
+             * Flagged Count
+             * @description Count of flagged transactions directed to this payee
+             */
+            flagged_count: number;
+            /**
+             * Payee Id
+             * Format: uuid
+             * @description Payee unique identifier
+             */
+            payee_id: string;
+            /**
+             * Payee Name
+             * @description Payee legal name
+             */
+            payee_name: string;
         };
         /** InstalmentOut */
         InstalmentOut: {
@@ -2543,6 +2724,27 @@ export interface components {
              * @description One of MY OWN other accounts
              */
             to_account_id?: string | null;
+        };
+        /**
+         * TriggeredRuleStat
+         * @description Frequency and prevalence of an individual fraud detection rule.
+         */
+        TriggeredRuleStat: {
+            /**
+             * Count
+             * @description Number of events that triggered this rule
+             */
+            count: number;
+            /**
+             * Percentage
+             * @description Percentage of total decisions that triggered this rule
+             */
+            percentage: number;
+            /**
+             * Rule Code
+             * @description Machine-readable rule identifier (e.g. HIGH_AMOUNT, VELOCITY)
+             */
+            rule_code: string;
         };
         /** UnlockResultOut */
         UnlockResultOut: {
@@ -3806,6 +4008,38 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_fraud_stats_api_v1_fraud_stats_get: {
+        parameters: {
+            query?: {
+                /** @description Lookback window in days */
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FraudStatsResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

@@ -1130,7 +1130,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #58 | **Sprint:** 3 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Fri 30 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
+- **Start:** Fri 30 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged) | **Status:** In Review | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
 - **Depends on:** TASK-033 (#56, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-033
 - **Goal:** Staff analytics endpoints providing fraud decision breakdown, hold rates, and rule triggers.
@@ -1143,10 +1143,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Responses cached in Redis with 60-second TTL to avoid database strain
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #58`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] GET /api/v1/fraud/stats returns decision counts (ALLOW, STEP_UP, REVIEW, BLOCK) over time
-  - [ ] Breakdown of most frequently triggered rules and high-risk payees
-  - [ ] Protected by require_roles([FRAUD_ANALYST, ADMIN], mfa=True)
-  - [ ] Responses cached in Redis with 60-second TTL to avoid database strain
+  - [x] GET /api/v1/fraud/stats returns decision counts (ALLOW, STEP_UP, REVIEW, BLOCK) over time
+  - [x] Breakdown of most frequently triggered rules and high-risk payees
+  - [x] Protected by require_roles([FRAUD_ANALYST, ADMIN], mfa=True)
+  - [x] Responses cached in Redis with 60-second TTL to avoid database strain
 - **Definition of done (evidence):** RBAC tests verify analyst authorization and MFA claim, response format verified.
 - **Required checks:**
   - Automated: pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths

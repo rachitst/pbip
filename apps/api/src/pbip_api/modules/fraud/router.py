@@ -2,11 +2,15 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
+from redis import Redis
+from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
 from pbip_api.core.db import get_session
+from pbip_api.core.redis import get_redis
 from pbip_api.core.validation import Text
 from pbip_api.modules.accounts.service import mask_account_number
 from pbip_api.modules.auth.dependencies import Principal, get_request_meta, require_roles
@@ -14,9 +18,13 @@ from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.auth.service import RequestMeta
 from pbip_api.modules.fraud import service
 from pbip_api.modules.fraud.models import AlertStatus, FraudAlert, FraudEvent
+from pbip_api.modules.fraud.schemas import FraudStatsResponse
 from pbip_api.modules.ledger.models import Transaction
 from pbip_api.modules.payments.router import get_payments_service
 from pbip_api.modules.payments.service import PaymentsService
+
+_logger = structlog.get_logger(__name__)
+CACHE_TTL_SECONDS = 60
 
 router = APIRouter(prefix="/api/v1/fraud", tags=["fraud"])
 
@@ -120,6 +128,36 @@ def decide_alert(
         note=body.note,
         meta=meta,
     )
+
+
+@router.get(
+    "/stats",
+    response_model=FraudStatsResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Fraud decision telemetry, hold rates, rule breakdown, and high-risk payees",
+)
+def get_fraud_stats(
+    days: int = Query(default=30, ge=1, le=365, description="Lookback window in days"),
+    _analyst: Principal = Depends(analyst_gate),
+    session: Session = Depends(get_session),
+    redis_client: Redis = Depends(get_redis),
+) -> FraudStatsResponse:
+    cache_key = f"fraud:stats:days:{days}"
+    try:
+        cached = redis_client.get(cache_key)
+        if cached:
+            return FraudStatsResponse.model_validate_json(cached)
+    except RedisError as exc:
+        _logger.warning("fraud_stats_cache_read_failed", error_type=type(exc).__name__)
+
+    stats = service.get_fraud_stats(session=session, days=days)
+
+    try:
+        redis_client.setex(cache_key, CACHE_TTL_SECONDS, stats.model_dump_json())
+    except RedisError as exc:
+        _logger.warning("fraud_stats_cache_write_failed", error_type=type(exc).__name__)
+
+    return stats
 
 
 # mask helper re-exported for the account numbers shown in future alert views

@@ -1213,6 +1213,56 @@
         "title": "CustomerSegmentResponse",
         "type": "object"
       },
+      "DailyDecisionPoint": {
+        "description": "Decision counts for a single calendar day (YYYY-MM-DD).",
+        "properties": {
+          "allow": {
+            "description": "ALLOW count for this day",
+            "minimum": 0.0,
+            "title": "Allow",
+            "type": "integer"
+          },
+          "block": {
+            "description": "BLOCK count for this day",
+            "minimum": 0.0,
+            "title": "Block",
+            "type": "integer"
+          },
+          "date": {
+            "description": "Calendar date in ISO format (YYYY-MM-DD)",
+            "title": "Date",
+            "type": "string"
+          },
+          "review": {
+            "description": "REVIEW count for this day",
+            "minimum": 0.0,
+            "title": "Review",
+            "type": "integer"
+          },
+          "step_up": {
+            "description": "STEP_UP count for this day",
+            "minimum": 0.0,
+            "title": "Step Up",
+            "type": "integer"
+          },
+          "total": {
+            "description": "Total decisions on this day",
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "allow",
+          "step_up",
+          "review",
+          "block",
+          "total"
+        ],
+        "title": "DailyDecisionPoint",
+        "type": "object"
+      },
       "DecisionRequest": {
         "properties": {
           "action": {
@@ -1240,6 +1290,74 @@
           "action"
         ],
         "title": "DecisionRequest",
+        "type": "object"
+      },
+      "DecisionSummary": {
+        "description": "Aggregate decision counts and rates across the analyzed period.",
+        "properties": {
+          "allow": {
+            "description": "Total transactions allowed",
+            "minimum": 0.0,
+            "title": "Allow",
+            "type": "integer"
+          },
+          "block": {
+            "description": "Total transactions declined outright",
+            "minimum": 0.0,
+            "title": "Block",
+            "type": "integer"
+          },
+          "block_rate": {
+            "description": "Proportion of transactions blocked",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Block Rate",
+            "type": "number"
+          },
+          "hold_rate": {
+            "description": "Proportion of transactions held for review",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Hold Rate",
+            "type": "number"
+          },
+          "review": {
+            "description": "Total transactions held for fraud analyst review",
+            "minimum": 0.0,
+            "title": "Review",
+            "type": "integer"
+          },
+          "step_up": {
+            "description": "Total transactions requiring step-up MFA challenge",
+            "minimum": 0.0,
+            "title": "Step Up",
+            "type": "integer"
+          },
+          "step_up_rate": {
+            "description": "Proportion of transactions challenged",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Step Up Rate",
+            "type": "number"
+          },
+          "total": {
+            "description": "Total decisions scored in period",
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "allow",
+          "step_up",
+          "review",
+          "block",
+          "total",
+          "hold_rate",
+          "block_rate",
+          "step_up_rate"
+        ],
+        "title": "DecisionSummary",
         "type": "object"
       },
       "DeviceOut": {
@@ -1780,6 +1898,86 @@
         "title": "FinancialHealthScoreResponse",
         "type": "object"
       },
+      "FraudStatsResponse": {
+        "description": "Comprehensive telemetry report for fraud analysts and risk operations.",
+        "properties": {
+          "block_rate": {
+            "description": "Overall block rate for the period",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Block Rate",
+            "type": "number"
+          },
+          "decision_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Decision counts keyed by ALLOW, STEP_UP, REVIEW, BLOCK",
+            "title": "Decision Counts",
+            "type": "object"
+          },
+          "high_risk_payees": {
+            "description": "Payees associated with flagged transactions or elevated risk scores",
+            "items": {
+              "$ref": "#/components/schemas/HighRiskPayeeStat"
+            },
+            "title": "High Risk Payees",
+            "type": "array"
+          },
+          "hold_rate": {
+            "description": "Overall hold rate for the period",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Hold Rate",
+            "type": "number"
+          },
+          "period_days": {
+            "description": "Analyzed lookback window in days",
+            "minimum": 1.0,
+            "title": "Period Days",
+            "type": "integer"
+          },
+          "rules_breakdown": {
+            "description": "Most frequently triggered detection rules ranked by frequency",
+            "items": {
+              "$ref": "#/components/schemas/TriggeredRuleStat"
+            },
+            "title": "Rules Breakdown",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/DecisionSummary",
+            "description": "Detailed summary of decision counts and proportions"
+          },
+          "timeline": {
+            "description": "Chronological daily decision volume over time",
+            "items": {
+              "$ref": "#/components/schemas/DailyDecisionPoint"
+            },
+            "title": "Timeline",
+            "type": "array"
+          },
+          "total_decisions": {
+            "description": "Total decisions scored across the period",
+            "minimum": 0.0,
+            "title": "Total Decisions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "period_days",
+          "total_decisions",
+          "decision_counts",
+          "hold_rate",
+          "block_rate",
+          "summary",
+          "timeline",
+          "rules_breakdown",
+          "high_risk_payees"
+        ],
+        "title": "FraudStatsResponse",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1853,6 +2051,49 @@
           "assessment"
         ],
         "title": "HealthScoreComponent",
+        "type": "object"
+      },
+      "HighRiskPayeeStat": {
+        "description": "Payee with suspicious or repeatedly flagged transaction history.",
+        "properties": {
+          "avg_risk_score": {
+            "description": "Average risk score across transactions to this payee",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Avg Risk Score",
+            "type": "number"
+          },
+          "bank_code": {
+            "description": "Destination bank or IFSC code",
+            "title": "Bank Code",
+            "type": "string"
+          },
+          "flagged_count": {
+            "description": "Count of flagged transactions directed to this payee",
+            "minimum": 0.0,
+            "title": "Flagged Count",
+            "type": "integer"
+          },
+          "payee_id": {
+            "description": "Payee unique identifier",
+            "format": "uuid",
+            "title": "Payee Id",
+            "type": "string"
+          },
+          "payee_name": {
+            "description": "Payee legal name",
+            "title": "Payee Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "payee_id",
+          "payee_name",
+          "bank_code",
+          "flagged_count",
+          "avg_risk_score"
+        ],
+        "title": "HighRiskPayeeStat",
         "type": "object"
       },
       "InstalmentOut": {
@@ -3263,6 +3504,36 @@
           "amount_minor"
         ],
         "title": "TransferRequest",
+        "type": "object"
+      },
+      "TriggeredRuleStat": {
+        "description": "Frequency and prevalence of an individual fraud detection rule.",
+        "properties": {
+          "count": {
+            "description": "Number of events that triggered this rule",
+            "minimum": 0.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "percentage": {
+            "description": "Percentage of total decisions that triggered this rule",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Percentage",
+            "type": "number"
+          },
+          "rule_code": {
+            "description": "Machine-readable rule identifier (e.g. HIGH_AMOUNT, VELOCITY)",
+            "title": "Rule Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule_code",
+          "count",
+          "percentage"
+        ],
+        "title": "TriggeredRuleStat",
         "type": "object"
       },
       "UnlockResultOut": {
@@ -5418,6 +5689,58 @@
           }
         ],
         "summary": "RELEASE (false positive, posts the held transfer) or REJECT (confirmed fraud)",
+        "tags": [
+          "fraud"
+        ]
+      }
+    },
+    "/api/v1/fraud/stats": {
+      "get": {
+        "operationId": "get_fraud_stats_api_v1_fraud_stats_get",
+        "parameters": [
+          {
+            "description": "Lookback window in days",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "description": "Lookback window in days",
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FraudStatsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fraud decision telemetry, hold rates, rule breakdown, and high-risk payees",
         "tags": [
           "fraud"
         ]

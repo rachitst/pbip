@@ -26,6 +26,7 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("get", "/api/v1/bills/payments"),
         ("get", f"/api/v1/bills/payments/{uuid.uuid4()}"),
         ("get", "/api/v1/fraud/alerts"),
+        ("get", "/api/v1/fraud/stats"),
         ("get", "/api/v1/compliance/audit-logs"),
         ("get", "/api/v1/notifications"),
         ("post", "/api/v1/notifications/mark-all-read"),
@@ -53,6 +54,7 @@ def test_customer_cannot_use_staff_endpoints(
 ) -> None:
     alice = make_customer()
     assert client.get("/api/v1/fraud/alerts", headers=alice.headers).status_code == 403
+    assert client.get("/api/v1/fraud/stats", headers=alice.headers).status_code == 403
     assert client.get("/api/v1/compliance/audit-logs", headers=alice.headers).status_code == 403
     assert client.get("/api/v1/insights/customers", headers=alice.headers).status_code == 403
     assert (
@@ -153,8 +155,11 @@ def test_staff_endpoints_demand_mfa_in_the_session(
     no_mfa = make_staff(RoleName.FRAUD_ANALYST, mfa=False)
     denied = client.get("/api/v1/fraud/alerts", headers=no_mfa.headers)
     assert denied.status_code == 403 and denied.json()["code"] == "mfa_required"
+    denied_stats = client.get("/api/v1/fraud/stats", headers=no_mfa.headers)
+    assert denied_stats.status_code == 403 and denied_stats.json()["code"] == "mfa_required"
     with_mfa = make_staff(RoleName.FRAUD_ANALYST)
     assert client.get("/api/v1/fraud/alerts", headers=with_mfa.headers).status_code == 200
+    assert client.get("/api/v1/fraud/stats", headers=with_mfa.headers).status_code == 200
 
 
 def test_roles_are_separated_between_staff_functions(
@@ -164,6 +169,7 @@ def test_roles_are_separated_between_staff_functions(
     compliance = make_staff(RoleName.COMPLIANCE_OFFICER)
     assert client.get("/api/v1/compliance/audit-logs", headers=analyst.headers).status_code == 403
     assert client.get("/api/v1/fraud/alerts", headers=compliance.headers).status_code == 403
+    assert client.get("/api/v1/fraud/stats", headers=compliance.headers).status_code == 403
     assert (
         client.get("/api/v1/compliance/audit-logs", headers=compliance.headers).status_code == 200
     )
