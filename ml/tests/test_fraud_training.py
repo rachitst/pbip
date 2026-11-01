@@ -8,8 +8,10 @@ import pandas as pd
 import pytest
 from pbip_datagen.__main__ import _export_fraud
 from pbip_datagen.generator import GeneratorConfig
+from pbip_ml.fraud import train as train_cli
 from pbip_ml.fraud import training as t
 from pbip_ml.fraud.train import load_export, log_to_mlflow, run
+from pbip_ml.tracking import TrackingTarget, local_target
 
 
 @pytest.fixture(scope="module")
@@ -84,7 +86,14 @@ def test_training_is_deterministic(dataset: pd.DataFrame) -> None:
     assert np.array_equal(a.predict(x), b.predict(x))
 
 
-def test_cli_run_writes_artifacts_and_logs_to_mlflow(exported: Path, tmp_path: Path) -> None:
+def test_cli_run_writes_artifacts_and_logs_to_mlflow(
+    exported: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _no_shared_server(*_args: object, **_kwargs: object) -> TrackingTarget:
+        # Regression: with a local MLflow server on :5000 the test used to log there, not to tmp_path.
+        raise AssertionError("test must not resolve (or probe) the shared tracking server")
+
+    monkeypatch.setattr(train_cli, "configure_tracking", _no_shared_server)
     out = tmp_path / "models"
     report = run(exported, out, holdout=exported)
     assert {p.name for p in out.iterdir()} == {
@@ -96,5 +105,5 @@ def test_cli_run_writes_artifacts_and_logs_to_mlflow(exported: Path, tmp_path: P
     }
     assert report["lightgbm"]["test"]["pr_auc"] > 0 and "holdout_seed" in report["lightgbm"]
     assert report["hybrid"]["at_review"]["recall"] >= report["rules_only"]["at_review"]["recall"]
-    run_id = log_to_mlflow(report, out, tmp_path / "mlruns")
+    run_id = log_to_mlflow(report, out, tmp_path / "mlruns", local_target(tmp_path / "mlruns"))
     assert run_id and any((tmp_path / "mlruns").rglob("lightgbm.txt"))
