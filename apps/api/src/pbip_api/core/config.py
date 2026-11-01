@@ -84,6 +84,12 @@ class Settings(BaseSettings):
     fraud_scorer: Literal["rules", "hybrid"] = "rules"
     fraud_model_dir: str | None = Field(default=None, max_length=500)
     fraud_model_budget_ms: int = Field(default=50, ge=5, le=90)
+    # MLflow Model Registry (TASK-038): dynamic model loading from alias 'champion'
+    # with disk fallback.
+    mlflow_tracking_uri: str = Field(default="http://localhost:5000", max_length=500)
+    fraud_registered_model_name: str = Field(default="pbip-fraud", max_length=100)
+    fraud_model_alias: str = Field(default="champion", max_length=50)
+    fraud_model_cache_dir: str | None = Field(default=None, max_length=500)
 
     # Banking limits (INTEGER MINOR UNITS)
     internal_bank_code: str = "PBIP0001"

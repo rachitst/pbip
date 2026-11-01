@@ -122,3 +122,13 @@ In the labelled data, no legitimate debit goes to a payee less than 761 h (about
 The offline metrics above do not show this, because the test split has the same blind spot. It was a data-generator gap, not a serving bug.
 
 **Fixed (generator v2.1).** Legitimate new payees, phone changes and forgotten passwords were added and the models retrained. Legitimate transfers to payees under 3 days old are now held at REVIEW 0.09% of the time (test), down from 100%. Recall at REVIEW is 0.835, down from 0.957, because the old number was inflated by the shortcut. Details are in the evaluation report v1.1, §3.3.
+
+## Model Registry & Promotion (TASK-038)
+
+- **Registry naming:** models are tracked and registered under `pbip-fraud` in the MLflow Model Registry (`MLFLOW_TRACKING_URI`, default `http://localhost:5000` with local SQLite fallback).
+- **Champion/Challenger workflow:**
+  - Candidate models are evaluated using `python scripts/promote_model.py --run-id <run_id>` (or `python scripts/dev.py promote-model --latest-run`).
+  - **Metrics gate:** candidates must satisfy baseline gates (PR-AUC ≥ 0.85, single-row p95 latency ≤ 25 ms) and must not regress on PR-AUC against the incumbent champion.
+  - **Winning candidate promotion:** registered in the model registry and tagged with the alias `champion`. The previous champion is tagged as `challenger`.
+  - **FastAPI dynamic startup load:** when `FRAUD_SCORER=hybrid`, `load_engine` queries the model registry for alias `champion`, downloads the artifacts, verifies `manifest.json` SHA-256 digests, and warms up the scorer.
+  - **Local disk fallback:** if the MLflow server is disconnected or unreachable, the service falls back gracefully to `FRAUD_MODEL_DIR` (`models/fraud`), ensuring high availability and zero request-path downtime. If both are unavailable, the system safely falls back to deterministic rules only.

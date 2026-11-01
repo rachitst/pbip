@@ -50,6 +50,10 @@ datagen: ## Generate + COPY-load the synthetic ML dataset (seed 42, 1,000 custom
 fraud-model: ## Train the fraud models into models/fraud (needed for FRAUD_SCORER=hybrid)
 	@$(PYTHON) scripts/dev.py fraud-model
 
+promote-model: ## Evaluate and promote candidate fraud model in MLflow registry (TASK-038)
+	@$(PYTHON) scripts/dev.py promote-model
+
+
 notebooks: ## Execute the EDA notebooks head-to-tail and save outputs
 	@$(PYTHON) scripts/dev.py notebooks
 

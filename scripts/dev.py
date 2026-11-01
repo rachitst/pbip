@@ -407,6 +407,11 @@ def cmd_fraud_model(args: list[str]) -> int:
     )  # fmt: skip
 
 
+def cmd_promote_model(args: list[str]) -> int:
+    """Evaluate candidate model against baseline metrics gate and promote in MLflow registry."""
+    return _run(["uv", "run", "python", "-m", "pbip_ml.fraud.promotion", *args])
+
+
 def cmd_notebooks(args: list[str]) -> int:
     """Execute ml/notebooks/*.ipynb head-to-tail and save outputs (``--check`` to only verify)."""
     return _run(["uv", "run", "python", "scripts/run_notebooks.py", *args])
@@ -791,6 +796,7 @@ COMMANDS = {
     "notebooks": "Execute the EDA notebooks head-to-tail (--check: verify only)",
     "datagen": "Generate + COPY-load the synthetic ML dataset (seed 42, 1,000 customers)",
     "fraud-model": "Train the fraud models into models/fraud (needed for FRAUD_SCORER=hybrid)",
+    "promote-model": "Evaluate and promote candidate fraud model in MLflow registry (TASK-038)",
     "dev-api": "Run FastAPI backend on :8000 with auto-reload",
     "dev-worker": "Run Celery worker + beat (Windows: solo pool, beat as a second process)",
     "dev-web": "Run Vite React frontend on :5173",

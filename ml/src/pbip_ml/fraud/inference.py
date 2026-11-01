@@ -70,6 +70,64 @@ def load(directory: Path) -> HybridScorer:
     return HybridScorer(params, booster, anomaly, default_registry())
 
 
+def load_from_registry(
+    registry_name: str = "pbip-fraud",
+    alias: str = "champion",
+    tracking_uri: str | None = None,
+    cache_dir: Path | None = None,
+) -> HybridScorer:
+    """Download model artifacts for an alias ('champion') from MLflow Model Registry and load them.
+
+    Raises ModelLoadError if the MLflow server is unreachable, the model alias is not found,
+    or the downloaded artifacts do not match the manifest.
+    """
+    import os
+
+    from mlflow.artifacts import download_artifacts
+    from mlflow.tracking import MlflowClient
+
+    from pbip_ml.tracking import (
+        DEFAULT_TRACKING_URI,
+        TRACKING_URI_ENV,
+        resolve_tracking_target,
+        server_is_reachable,
+    )
+
+    candidate = tracking_uri or os.environ.get(TRACKING_URI_ENV) or DEFAULT_TRACKING_URI
+    if candidate.startswith(("http://", "https://")) and not server_is_reachable(candidate):
+        raise ModelLoadError(f"MLflow server at {candidate} is unreachable")
+
+    target = resolve_tracking_target(tracking_uri)
+
+    client = MlflowClient(tracking_uri=target.uri)
+    try:
+        model_version = client.get_model_version_by_alias(registry_name, alias)
+    except Exception as exc:
+        raise ModelLoadError(
+            f"Alias '{alias}' not found in registry '{registry_name}': {exc}"
+        ) from exc
+
+    run_id = model_version.run_id
+    if not run_id:
+        raise ModelLoadError(f"Model version {model_version.version} has no run_id")
+
+    dest_path = str(cache_dir.resolve()) if cache_dir is not None else None
+    try:
+        downloaded = download_artifacts(run_id=run_id, tracking_uri=target.uri, dst_path=dest_path)
+    except Exception as exc:
+        raise ModelLoadError(f"Failed to download artifacts for run {run_id}: {exc}") from exc
+
+    downloaded_dir = Path(downloaded)
+    if not (downloaded_dir / MANIFEST).is_file():
+        candidates = list(downloaded_dir.rglob(MANIFEST))
+        if candidates:
+            downloaded_dir = candidates[0].parent
+        else:
+            raise ModelLoadError(f"{MANIFEST} not found in downloaded artifacts")
+
+    return load(downloaded_dir)
+
+
 @dataclass(frozen=True, slots=True)
 class TransferInputs:
     """What the platform knows about one outgoing transfer at decision time."""

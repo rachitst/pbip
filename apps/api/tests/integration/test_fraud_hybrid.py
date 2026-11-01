@@ -338,3 +338,61 @@ def test_a_broken_model_stack_never_stops_the_api_from_starting(
     from pbip_api.main import create_app
 
     assert create_app(configured).state.fraud_engine is None  # the app still builds
+
+
+def test_load_engine_dynamically_loads_from_registry_champion(
+    settings: Settings, model_dir: Path, tmp_path: Path
+) -> None:
+    """TASK-038: FastAPI loads model dynamically from MLflow registry alias 'champion'."""
+    from mlflow.tracking import MlflowClient
+    from pbip_ml.fraud.promotion import MetricsGate, promote_model
+    from pbip_ml.tracking import ensure_experiment, local_target
+
+    target = local_target(tmp_path / "mlflow")
+    client = MlflowClient(tracking_uri=target.uri)
+    exp = ensure_experiment("api-champion-test", target)
+    run = client.create_run(exp)
+    for item in model_dir.iterdir():
+        client.log_artifact(run.info.run_id, str(item))
+    client.log_metric(run.info.run_id, "lgbm_pr_auc", 0.95)
+    client.log_metric(run.info.run_id, "latency_p95_ms", 12.0)
+
+    promote_model(
+        run_id=run.info.run_id,
+        model_name="pbip-fraud",
+        alias="champion",
+        gate=MetricsGate(min_pr_auc=0.05, max_latency_ms=100.0),
+        tracking_uri=target.uri,
+    )
+
+    configured = settings.model_copy(
+        update={
+            "fraud_scorer": "hybrid",
+            "mlflow_tracking_uri": target.uri,
+            "fraud_registered_model_name": "pbip-fraud",
+            "fraud_model_alias": "champion",
+            "fraud_model_cache_dir": str(tmp_path / "cache"),
+            "fraud_model_dir": None,  # no local disk fallback provided
+        }
+    )
+    engine = load_engine(configured)
+    assert engine is not None
+    assert engine.params.model_version == "hybrid-lgbm-iforest-1"
+
+
+def test_load_engine_falls_back_to_local_disk_when_mlflow_unreachable(
+    settings: Settings, model_dir: Path
+) -> None:
+    """TASK-038: When MLflow server is disconnected/unreachable, fall back to FRAUD_MODEL_DIR."""
+    configured = settings.model_copy(
+        update={
+            "fraud_scorer": "hybrid",
+            "mlflow_tracking_uri": "http://127.0.0.1:1",  # guaranteed unreachable
+            "fraud_registered_model_name": "pbip-fraud",
+            "fraud_model_alias": "champion",
+            "fraud_model_dir": str(model_dir),
+        }
+    )
+    engine = load_engine(configured)
+    assert engine is not None
+    assert engine.params.model_version == "hybrid-lgbm-iforest-1"
