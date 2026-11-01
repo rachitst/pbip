@@ -188,7 +188,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 | TASK-066 | Relationship Manager Insights Dashboard UI | Krishna | Sat 31 Oct | Sun 01 Nov | 056, 019 | Seq | Low | #89 |
 | TASK-076 | AI Assistant Security Architecture & Guardrails Specification | Abbas | Sat 31 Oct | Sun 01 Nov | 057, 059, 067 | Seq | Low | #99 |
 | TASK-064 | Fixed Deposit Booking & Double-Entry Ledger Lock | Sujal | Sat 31 Oct | Sun 01 Nov | 063, 005 | Seq | Low | #87 |
-| TASK-061 | AI Assistant Conversational Chat UI Drawer | Kalpak | Sun 01 Nov | Mon 02 Nov | 060, 019 | Seq | Medium | #84 |
+| TASK-061 | AI Assistant Conversational Chat UI Drawer | Rachit | Sun 01 Nov | Mon 02 Nov | 060, 019 | Seq | Medium | #84 |
 | TASK-068 | Data Drift & Population Stability Index (PSI) Monitor | Pranay | Sun 01 Nov | Mon 02 Nov | 024, 029 | Seq | Low | #91 |
 | TASK-065 | Wealth Portfolio & Holdings UI | Krishna | Mon 02 Nov | Mon 02 Nov | 064, 019 | Seq | Low | #88 |
 | TASK-062 | Customer Product Recommendations Carousel UI | Kalpak | Mon 02 Nov | Mon 02 Nov | 054, 019 | Seq | Low | #85 |
@@ -1885,14 +1885,14 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   - Manual: exercise the endpoint through Swagger (`/docs`, local) with a seeded user and a second user (BOLA)
   - Security: AGENTS.md section 5 checklist: `get_current_principal`, role + object authorization, bounded Pydantic input, RFC 7807 errors without echo, audit in the same transaction
   - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
-- **Hands off to:** Kalpak (`Patil-Kalpak`) for TASK-061
+- **Hands off to:** Rachit (`rachitst`) for TASK-061
 - **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
 
 ### TASK-061 - AI Assistant Conversational Chat UI Drawer
 
 - **Issue:** #84 | **Sprint:** 5 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Frontend Web Application
-- **Owner:** Kalpak (`Patil-Kalpak`)
-- **Start:** Sun 01 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Medium (1.1 days of slack before downstream work is delayed)
+- **Owner:** Rachit (`rachitst`), taken over from Kalpak on Sun 1 Nov to unblock the AI assistant chain
+- **Start:** Sun 01 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** Sun 1 Nov (floating button + native-dialog side drawer on every customer page; streamed reply rendered progressively with safe minimal markdown (paragraphs, lists, bold; no HTML); tool badges from SSE tool_call/tool_result; starter chips; redacted history; checked against the real API under the production CSP at 1280/360 px, light and dark) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-060 (#83, Rachit), TASK-019 (#42, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-060, TASK-019
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; the drawer opens from the shared shell on every customer page.
@@ -1906,10 +1906,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Quick starter prompt chips ('How much did I spend on dining?', 'Can I afford a personal loan?')
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #84`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Floating action button opening responsive side drawer across all pages
-  - [ ] Renders streamed tokens in real time with markdown formatting
-  - [ ] Displays tool execution indicator badges (e.g. 'Checking account balance...')
-  - [ ] Quick starter prompt chips ('How much did I spend on dining?', 'Can I afford a personal loan?')
+  - [x] Floating action button opening responsive side drawer across all pages
+  - [x] Renders streamed tokens in real time with markdown formatting
+  - [x] Displays tool execution indicator badges (e.g. 'Checking account balance...')
+  - [x] Quick starter prompt chips ('How much did I spend on dining?', 'Can I afford a personal loan?')
 - **Definition of done (evidence):** Component tests test streaming message accumulation and error states.
 - **Required checks:**
   - Automated: Vitest + Testing Library covering loading, empty, error and success states; Playwright journey for critical flows; types only from `schema.d.ts`
@@ -2765,7 +2765,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Issue:** #115 | **Sprint:** 7 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Rachit (`rachitst`)
 - **Start:** Mon 02 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Medium (1.1 days of slack before downstream work is delayed)
-- **Depends on:** TASK-019 (#42, Kalpak), TASK-036 (#59, Kalpak), TASK-061 (#84, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Depends on:** TASK-019 (#42, Kalpak), TASK-036 (#59, Kalpak), TASK-061 (#84, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-019, TASK-036, TASK-061
 - **Goal:** End-user and operations documentation with step-by-step instructions and UI walkthroughs.
 - **Implementation steps:**
@@ -3242,7 +3242,7 @@ decision in ADR-0015.
 | TASK-035 | Krishna | TASK-036 | Kalpak | Fri 30 Oct | Fri 30 Oct |
 | TASK-035 | Krishna | TASK-069 | Rachit | Fri 30 Oct | Fri 30 Oct |
 | TASK-019 | Kalpak | TASK-066 | Krishna | Mon 26 Oct | Sat 31 Oct |
-| TASK-060 | Rachit | TASK-061 | Kalpak | Sat 31 Oct | Sun 01 Nov |
+| TASK-060 | Rachit | TASK-061 | Rachit | Sat 31 Oct | Sun 01 Nov |
 | TASK-019 | Kalpak | TASK-077 | Rachit | Mon 26 Oct | Sun 01 Nov |
 | TASK-036 | Kalpak | TASK-077 | Rachit | Sun 01 Nov | Sun 01 Nov |
 | TASK-037 | Kalpak | TASK-077 | Rachit | Thu 29 Oct | Sun 01 Nov |
@@ -3253,7 +3253,7 @@ decision in ADR-0015.
 | TASK-054 | Krishna | TASK-062 | Kalpak | Fri 30 Oct | Mon 02 Nov |
 | TASK-019 | Kalpak | TASK-092 | Rachit | Mon 26 Oct | Mon 02 Nov |
 | TASK-036 | Kalpak | TASK-092 | Rachit | Sun 01 Nov | Mon 02 Nov |
-| TASK-061 | Kalpak | TASK-092 | Rachit | Mon 02 Nov | Mon 02 Nov |
+| TASK-061 | Rachit | TASK-092 | Rachit | Mon 02 Nov | Mon 02 Nov |
 | TASK-029 | Rachit | TASK-088 | Krishna | Tue 27 Oct | Mon 02 Nov |
 | TASK-084 | Pranay | TASK-088 | Krishna | Sun 01 Nov | Mon 02 Nov |
 | TASK-016 | Sujal | TASK-074 | Kalpak | Fri 30 Oct | Mon 02 Nov |

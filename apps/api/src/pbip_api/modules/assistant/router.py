@@ -15,7 +15,12 @@ from pbip_api.modules.assistant.dependencies import (
     get_chat_model,
 )
 from pbip_api.modules.assistant.llm import ChatModel
-from pbip_api.modules.assistant.schemas import AssistantHistory, ChatRequest, ChatResponse
+from pbip_api.modules.assistant.schemas import (
+    AssistantHistory,
+    AssistantStreamFrames,
+    ChatRequest,
+    ChatResponse,
+)
 from pbip_api.modules.assistant.service import AssistantService, stream_chat
 from pbip_api.modules.auth.dependencies import Principal, get_clock, get_current_principal
 from pbip_api.modules.customers.dependencies import get_current_customer
@@ -26,7 +31,9 @@ router = APIRouter(prefix="/api/v1/assistant", tags=["assistant"])
 # Any: FastAPI types OpenAPI response overrides as dict[int | str, dict[str, Any]].
 _SSE_DOC: dict[int | str, dict[str, Any]] = {
     200: {
-        "description": "text/event-stream: tool_call, tool_result, token..., then done (or error)",
+        "description": "text/event-stream: tool_call, tool_result, token..., then done (or error)."
+        " Frame payloads are documented by AssistantStreamFrames.",
+        "model": AssistantStreamFrames,
         "content": {
             "text/event-stream": {
                 # One SSE frame: `event:` name and a single JSON `data:` line.

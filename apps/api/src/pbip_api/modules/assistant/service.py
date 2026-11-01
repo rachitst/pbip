@@ -26,7 +26,7 @@ from typing import Literal
 from uuid import UUID
 
 import structlog
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import Engine as DbEngine
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
@@ -41,6 +41,10 @@ from pbip_api.modules.assistant.schemas import (
     AssistantHistory,
     AssistantMessageOut,
     ChatResponse,
+    StreamError,
+    StreamToken,
+    StreamToolCall,
+    StreamToolResult,
 )
 from pbip_api.modules.assistant.sse import format_event, reply_chunks
 from pbip_api.modules.assistant.tools import (
@@ -73,7 +77,7 @@ class ToolCalled:
 @dataclass(frozen=True)
 class ToolFinished:
     tool: ToolName
-    outcome: str
+    outcome: Literal["ok", "input", "error"]
 
 
 @dataclass(frozen=True)
@@ -177,7 +181,7 @@ class AssistantService:
 
     def _run_read_only(
         self, ctx: ToolContext, tool: ToolName, arguments: dict[str, object]
-    ) -> tuple[ToolReply, str]:
+    ) -> tuple[ToolReply, Literal["ok", "input", "error"]]:
         """Run the tool in its own READ ONLY transaction; PostgreSQL rejects any write."""
         self.session.rollback()  # end the auth lookup's transaction; the next one starts read-only
         self.session.execute(text("SET TRANSACTION READ ONLY"))
@@ -219,18 +223,16 @@ def stream_chat(
         try:
             for event in AssistantService(session, model).run(customer_id, user_id, message, now):
                 if isinstance(event, ToolCalled):
-                    yield format_event(
-                        "tool_call", {"tool": event.tool.value, "engine": event.engine}
-                    )
+                    frame: BaseModel = StreamToolCall(tool=event.tool, engine=event.engine)
+                    yield format_event("tool_call", frame.model_dump(mode="json"))
                 elif isinstance(event, ToolFinished):
-                    yield format_event(
-                        "tool_result", {"tool": event.tool.value, "outcome": event.outcome}
-                    )
+                    frame = StreamToolResult(tool=event.tool, outcome=event.outcome)
+                    yield format_event("tool_result", frame.model_dump(mode="json"))
                 else:
                     for chunk in reply_chunks(event.response.reply):
-                        yield format_event("token", {"text": chunk})
+                        yield format_event("token", StreamToken(text=chunk).model_dump())
                     yield format_event("done", event.response.model_dump(mode="json"))
         except Exception as exc:
             session.rollback()
             _logger.warning("assistant_stream_failed", error=type(exc).__name__)
-            yield format_event("error", {"detail": UNAVAILABLE_TEXT})
+            yield format_event("error", StreamError(detail=UNAVAILABLE_TEXT).model_dump())
