@@ -72,11 +72,18 @@ function email(i) {
 }
 
 function login(i) {
-  const res = http.post(`${BASE_URL}/api/v1/auth/login`, JSON.stringify({ email: email(i), password: PASSWORD }), {
-    headers: JSON_HEADERS,
-    tags: { endpoint: "login", kind: "auth" },
+  const res = http.post(
+    `${BASE_URL}/api/v1/auth/login`,
+    JSON.stringify({ email: email(i), password: PASSWORD }),
+    {
+      headers: JSON_HEADERS,
+      tags: { endpoint: "login", kind: "auth" },
+    },
+  );
+  const ok = check(res, {
+    "login: 200 with an access token": (r) =>
+      r.status === 200 && !!r.json("access_token"),
   });
-  const ok = check(res, { "login: 200 with an access token": (r) => r.status === 200 && !!r.json("access_token") });
   if (!ok) unexpected.add(1, { endpoint: "login", status: String(res.status) });
   return ok ? res.json("access_token") : null;
 }
@@ -90,8 +97,13 @@ export function setup() {
   const users = [];
   for (let i = 0; i < USERS; i++) {
     const token = login(i);
-    if (!token) throw new Error(`login failed for ${email(i)}: is scripts/seed_load.py seeded and the login limit raised?`);
-    const accounts = http.get(`${BASE_URL}/api/v1/accounts`, auth(token)).json();
+    if (!token)
+      throw new Error(
+        `login failed for ${email(i)}: is scripts/seed_load.py seeded and the login limit raised?`,
+      );
+    const accounts = http
+      .get(`${BASE_URL}/api/v1/accounts`, auth(token))
+      .json();
     const payees = http.get(`${BASE_URL}/api/v1/payees`, auth(token)).json();
     users.push({ i, token, accountId: accounts[0].id, payeeId: payees[0].id });
   }
@@ -99,12 +111,21 @@ export function setup() {
 }
 
 function readAccounts(u) {
-  const list = http.get(`${BASE_URL}/api/v1/accounts`, { ...auth(u.token), tags: { endpoint: "accounts_list", kind: "accounts" } });
-  const detail = http.get(`${BASE_URL}/api/v1/accounts/${u.accountId}`, { ...auth(u.token), tags: { endpoint: "account_detail", kind: "accounts" } });
-  const txns = http.get(`${BASE_URL}/api/v1/accounts/${u.accountId}/transactions?limit=25`, {
+  const list = http.get(`${BASE_URL}/api/v1/accounts`, {
     ...auth(u.token),
-    tags: { endpoint: "transactions", kind: "accounts" },
+    tags: { endpoint: "accounts_list", kind: "accounts" },
   });
+  const detail = http.get(`${BASE_URL}/api/v1/accounts/${u.accountId}`, {
+    ...auth(u.token),
+    tags: { endpoint: "account_detail", kind: "accounts" },
+  });
+  const txns = http.get(
+    `${BASE_URL}/api/v1/accounts/${u.accountId}/transactions?limit=25`,
+    {
+      ...auth(u.token),
+      tags: { endpoint: "transactions", kind: "accounts" },
+    },
+  );
   check(list, { "accounts: 200": (r) => r.status === 200 });
   check(detail, { "account detail: 200": (r) => r.status === 200 });
   check(txns, { "transactions: 200": (r) => r.status === 200 });
@@ -112,20 +133,42 @@ function readAccounts(u) {
 
 // Per-account analytics. /analytics/segment is left out: it is 404 until the weekly segmentation job has run.
 const ANALYTICS = ["spending", "trends", "health-score", "forecast"];
+// Forecast answers its documented 422 until an account has two days of history (freshly seeded
+// accounts): a correct contract response, not an error, so it is expected for that route only.
+const FORECAST_OK = http.expectedStatuses(200, 422);
 function readAnalytics(u) {
   const path = ANALYTICS[Math.floor(Math.random() * ANALYTICS.length)];
-  const res = http.get(`${BASE_URL}/api/v1/analytics/${path}?account_id=${u.accountId}`, { ...auth(u.token), tags: { endpoint: `analytics_${path}`, kind: "analytics" } });
-  check(res, { "analytics: 200": (r) => r.status === 200 });
+  const forecast = path === "forecast";
+  const res = http.get(
+    `${BASE_URL}/api/v1/analytics/${path}?account_id=${u.accountId}`,
+    {
+      ...auth(u.token),
+      tags: { endpoint: `analytics_${path}`, kind: "analytics" },
+      ...(forecast ? { responseCallback: FORECAST_OK } : {}),
+    },
+  );
+  check(res, {
+    "analytics: 200 (forecast: 200 or 422)": (r) =>
+      r.status === 200 || (forecast && r.status === 422),
+  });
 }
 
 // Each message names exactly one intent, so the deterministic router answers without the LLM.
-const ROUTED = ["What is my balance?", "Show my recent transactions", "How much did I spend last month?"];
+const ROUTED = [
+  "What is my balance?",
+  "Show my recent transactions",
+  "How much did I spend last month?",
+];
 function askAssistant(u) {
   const message = ROUTED[Math.floor(Math.random() * ROUTED.length)];
-  const res = http.post(`${BASE_URL}/api/v1/assistant/chat`, JSON.stringify({ message }), {
-    ...auth(u.token),
-    tags: { endpoint: "assistant_chat", kind: "assistant" },
-  });
+  const res = http.post(
+    `${BASE_URL}/api/v1/assistant/chat`,
+    JSON.stringify({ message }),
+    {
+      ...auth(u.token),
+      tags: { endpoint: "assistant_chat", kind: "assistant" },
+    },
+  );
   check(res, { "assistant: 200": (r) => r.status === 200 });
 }
 
@@ -138,15 +181,23 @@ function transfer(u) {
     payee_id: u.payeeId,
     amount_minor: 100 + Math.floor(Math.random() * 4900), // 1.00 - 50.00: far below every limit
   });
-  const params = { headers: { ...auth(u.token).headers, "Idempotency-Key": key }, tags: { endpoint: "transfer", kind: "transfers" }, responseCallback: TRANSFER_OK };
+  const params = {
+    headers: { ...auth(u.token).headers, "Idempotency-Key": key },
+    tags: { endpoint: "transfer", kind: "transfers" },
+    responseCallback: TRANSFER_OK,
+  };
   const res = http.post(`${BASE_URL}/api/v1/transfers`, body, params);
   const known = [201, 202, 403].includes(res.status);
   transferOutcome.add(1, { status: String(res.status) });
-  if (!known) unexpected.add(1, { endpoint: "transfer", status: String(res.status) });
+  if (!known)
+    unexpected.add(1, { endpoint: "transfer", status: String(res.status) });
   check(res, { "transfer: 201/202/403": () => known });
   if (known && Math.random() < 0.1) {
     // Idempotent retry: same key and body must return the stored response, never a second posting.
-    const replay = http.post(`${BASE_URL}/api/v1/transfers`, body, { ...params, tags: { endpoint: "transfer_replay", kind: "transfers" } });
+    const replay = http.post(`${BASE_URL}/api/v1/transfers`, body, {
+      ...params,
+      tags: { endpoint: "transfer_replay", kind: "transfers" },
+    });
     check(replay, {
       "replay: same status, same transfer, marked replayed": (r) =>
         r.status === res.status &&
@@ -161,8 +212,13 @@ function authFlow(u) {
   jar.clear(BASE_URL);
   const token = login(u.i);
   if (!token) return;
-  const res = http.post(`${BASE_URL}/api/v1/auth/refresh`, null, { headers: CSRF, tags: { endpoint: "refresh", kind: "auth" } });
-  check(res, { "refresh: 200": (r) => r.status === 200 && !!r.json("access_token") });
+  const res = http.post(`${BASE_URL}/api/v1/auth/refresh`, null, {
+    headers: CSRF,
+    tags: { endpoint: "refresh", kind: "auth" },
+  });
+  check(res, {
+    "refresh: 200": (r) => r.status === 200 && !!r.json("access_token"),
+  });
 }
 
 export default function (data) {

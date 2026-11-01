@@ -23,7 +23,7 @@ from pbip_api.core.redis import get_redis
 from pbip_api.core.security import PasswordService, decode_token
 from pbip_api.core.velocity import VelocityCounters
 from pbip_api.modules.auth.models import RoleName
-from pbip_api.modules.auth.service import AuthService, RequestMeta
+from pbip_api.modules.auth.service import AuthService, RequestMeta, access_token_is_current
 
 _bearer = HTTPBearer(auto_error=False)
 CSRF_HEADER = "x-requested-with"
@@ -52,6 +52,7 @@ class Principal:
 def get_current_principal(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     settings: Settings = Depends(get_settings),
+    session: Session = Depends(get_session),
 ) -> Principal:
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise UnauthorizedError("authentication required", headers={"WWW-Authenticate": "Bearer"})
@@ -59,6 +60,9 @@ def get_current_principal(
         claims = decode_token(settings, credentials.credentials, "access")
     except UnauthorizedError as exc:
         raise UnauthorizedError(exc.detail, headers={"WWW-Authenticate": "Bearer"}) from exc
+    # Same message as a bad signature: a revoked session is not distinguishable from an invalid one.
+    if not access_token_is_current(session, claims.subject, claims.version):
+        raise UnauthorizedError("invalid or expired token", headers={"WWW-Authenticate": "Bearer"})
     return Principal(claims.subject, claims.roles, claims.amr, claims.token_id)
 
 

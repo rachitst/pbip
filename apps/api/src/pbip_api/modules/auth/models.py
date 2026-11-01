@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -76,6 +77,7 @@ class User(Base):
     __table_args__ = (
         Index("uq_users_email_lower", text("lower(email)"), unique=True),
         in_check("status", UserStatus, "status_valid"),
+        CheckConstraint("token_version >= 0", name="token_version_non_negative"),
     )
 
     id: Mapped[UUID] = uuid_pk()
@@ -91,6 +93,11 @@ class User(Base):
     mfa_last_step: Mapped[int | None] = mapped_column(BigInteger)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Bumped when every session must end (password change). Access tokens carry the value as `ver`
+    # and stop working at once when it no longer matches (ADR-0021).
+    token_version: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
     created_at: Mapped[datetime] = created_at_col()
 
     roles: Mapped[list["UserRole"]] = relationship(
