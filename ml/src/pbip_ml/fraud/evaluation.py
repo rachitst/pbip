@@ -72,6 +72,9 @@ def cheapest(points: list[CostPoint]) -> CostPoint:
 def served_metrics(scorer: h.HybridScorer, frame: pd.DataFrame) -> t.Metrics:
     """The served hybrid on a labelled frame, flagged at REVIEW (report section 3.1).
 
+    ``frame`` comes from ``training.build_dataset`` (via ``train.load_export``): outgoing transfers
+    only, the rows the API scores and the evaluation report uses.
+
     PR-AUC is threshold-free (computed on the risk score); precision/recall/FPR are at REVIEW.
     """
     risk = h.batch_risk(scorer, frame)

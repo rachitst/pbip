@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import shutil
+import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -177,6 +178,30 @@ def test_challenger_worse_than_the_champion_is_rejected_and_champion_stays(
     again = _promote(registry, registry.good_run, "promo-cc")
     assert again.promoted and again.champion_version == "3"
     assert _aliases(registry, "promo-cc") == {"champion": "3"}
+
+
+def test_gate_pr_auc_is_the_evaluation_reports_on_the_same_outgoing_rows(
+    registry: Registry, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The gate and ``scripts/fraud_eval_report.py`` score the same rows (``build_dataset``:
+    outgoing transfers only, #261) and so report the same PR-AUC, test and held-out."""
+    from scripts import fraud_eval_report
+
+    out = tmp_path / "eval.json"
+    argv = ["fraud_eval_report.py", "--model", str(registry.good_dir), "--data",
+            str(registry.data), "--holdout", str(registry.data), "--json", str(out),
+            "--img", str(tmp_path / "img"), "--skip-latency"]  # fmt: skip
+    monkeypatch.setattr(sys, "argv", argv)
+    fraud_eval_report.main()
+    report = json.loads(out.read_text(encoding="utf-8"))
+    result = p.promote(registry.uri, registry.good_run, registry.data, holdout=registry.data,
+                       model_name="promo-report", gate=GATE, latency_calls=CALLS)  # fmt: skip
+    measured = result.gate.candidate
+    assert measured.pr_auc_test == report["test"]["hybrid"]["review"]["pr_auc"]
+    assert measured.pr_auc_holdout == report["holdout"]["hybrid"]["review"]["pr_auc"]
+    assert measured.rows_test == report["test"]["hybrid"]["review"]["rows"]
+    test = t.time_split(load_export(registry.data)).test
+    assert measured.rows_test == len(test) and set(test["is_debit"]) == {1}  # outgoing only
 
 
 def test_latency_gate_uses_the_measured_latency(registry: Registry) -> None:

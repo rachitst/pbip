@@ -89,6 +89,7 @@ class Measured:
     fpr_at_review: float
     latency_p95_ms: float
     pr_auc_holdout: float | None = None
+    rows_test: int = 0  # outgoing transfers in the test period (``build_dataset``)
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,6 +198,7 @@ def measure(
         fpr_at_review=on_test.fpr,
         latency_p95_ms=float(latency["p95_ms"]),
         pr_auc_holdout=on_holdout.pr_auc if on_holdout is not None else None,
+        rows_test=on_test.rows,
     )
 
 
