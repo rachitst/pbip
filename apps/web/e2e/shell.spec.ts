@@ -50,6 +50,8 @@ test("URLs, reload, back, role areas and the skip link", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Page not found" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Security monitoring" })).toHaveCount(0);
   expect((await page.request.get("/api/v1/fraud/monitoring")).status()).toBe(401);
+  await page.getByRole("link", { name: "Go to your home page" }).click();
+  await expect(page.getByRole("heading", { name: "My accounts" })).toBeVisible();
 
   // Keyboard users can skip the header and navigation.
   await page.reload();
