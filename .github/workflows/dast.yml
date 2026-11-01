@@ -31,7 +31,10 @@ jobs:
       - run: pip install cryptography
       - run: python scripts/init_env.py
       - run: python scripts/dev_certs.py
-      - run: docker compose up -d --build --wait
+      # No --wait: worker and beat have no healthcheck by design; wait on readiness like the e2e job.
+      - run: docker compose up -d --build
+      - name: Wait for the stack (HTTPS)
+        run: curl --fail --silent --retry 60 --retry-delay 2 --retry-all-errors --cacert infra/certs/ca.crt https://localhost:8443/api/health/ready
       - name: ZAP baseline (fails on any finding not accepted in baseline-rules.tsv)
         run: |
           mkdir -p zap && chmod 777 zap
