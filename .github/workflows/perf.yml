@@ -1,0 +1,90 @@
+name: Performance
+
+# TASK-078 / TASK-102: the k6 load suite and the browser page-load budgets against the full compose stack
+# (HTTPS through nginx, hybrid fraud scorer on). Results are uploaded as an artifact with the runner's
+# hardware; any crossed threshold or broken money invariant fails the job. Not a PR gate (it needs
+# ~15 minutes): nightly, on demand, and on pushes to main that touch the API, web app or this suite.
+on:
+  schedule:
+    - cron: "30 1 * * *"
+  workflow_dispatch:
+    inputs:
+      vus: { description: "k6 virtual users", default: "50" }
+      duration: { description: "k6 steady-state duration", default: "2m" }
+  push:
+    branches: [main]
+    paths: ["apps/**", "infra/k6/**", "infra/nginx/**", "docker-compose.yml", ".github/workflows/perf.yml"]
+
+concurrency:
+  group: perf-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  UV_VERSION: "0.11.7"
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+  VUS: ${{ inputs.vus || '50' }}
+  DURATION: ${{ inputs.duration || '2m' }}
+  LOAD_USERS: "100"
+
+jobs:
+  load:
+    name: k6 load suite and page-load budgets
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: { python-version: "${{ env.PYTHON_VERSION }}" }
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: pip install uv==${{ env.UV_VERSION }}
+      - run: uv sync --all-packages --frozen
+      - run: python scripts/init_env.py
+      - run: uv run python scripts/dev_certs.py
+      - name: Train the fraud models the hybrid scorer serves
+        run: uv run python scripts/dev.py fraud-model
+      - name: Start the stack with the load-test rate limits
+        run: docker compose -f docker-compose.yml -f infra/k6/compose.load.yml up -d --build --wait
+      - name: Seed load users and snapshot the invariants
+        run: |
+          mkdir -p perf-results
+          uv run python scripts/seed_load.py --users "$LOAD_USERS"
+          uv run python scripts/load_invariants.py snapshot > perf-results/invariants-before.json
+      - name: Describe the environment
+        run: |
+          {
+            echo "runner: GitHub-hosted ${{ runner.os }} ${{ runner.arch }} ($RUNNER_NAME)"
+            echo "cpus: $(nproc)"; lscpu | grep -E 'Model name|Thread|Core' || true
+            free -h | head -2
+            echo "vus: $VUS duration: $DURATION users: $LOAD_USERS target: https://localhost:8443 (nginx TLS -> api)"
+            echo "commit: $GITHUB_SHA"
+          } | tee perf-results/environment.txt
+      - name: k6 load suite (thresholds = NFR budgets)
+        env:
+          BASE_URL: https://localhost:8443
+          USERS: ${{ env.LOAD_USERS }}
+        run: python scripts/dev.py load --summary-export /results/k6-summary.json
+      - name: Money and concurrency invariants after the run
+        if: always()
+        run: uv run python scripts/load_invariants.py check perf-results/invariants-before.json | tee perf-results/invariants-after.json
+      - run: npm ci
+        working-directory: apps/web
+      - run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+      - name: Page-load and login budgets (Playwright)
+        working-directory: apps/web
+        env: { CI: "true" }
+        run: npx playwright test e2e/perf.spec.ts --reporter=list,json --output=../../perf-results/playwright > ../../perf-results/page-load.json
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with: { name: perf-results, path: perf-results }
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=200 api web

@@ -60,3 +60,6 @@ data/geoip/
 
 # Local dev TLS material (scripts/dev_certs.py)
 infra/certs/
+
+# k6 summaries and invariants from local load runs
+perf-results/

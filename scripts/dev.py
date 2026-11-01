@@ -457,7 +457,7 @@ def build_k6_command(
         return ["k6", "run", f"infra/k6/{script}", *extra], {"BASE_URL": url}
     url = base_url or ("http://localhost:8000" if linux else "http://host.docker.internal:8000")
     cmd = ["docker", "run", "--rm", "-i", "-e", f"BASE_URL={url}"]
-    for name in ("VUS", "DURATION", "THINK_SECONDS"):
+    for name in ("VUS", "DURATION", "THINK_SECONDS", "USERS"):
         if os.environ.get(name):
             cmd += ["-e", f"{name}={os.environ[name]}"]
     if linux:
@@ -472,6 +472,41 @@ def cmd_perf(args: list[str]) -> int:
     cmd, env = build_k6_command(
         "baseline.js", os.environ.get("BASE_URL"), _find_tool("k6") is not None, args
     )
+    return _run(cmd, env=env)
+
+
+PERF_RESULTS = ROOT / "perf-results"
+
+
+def build_load_command(
+    base_url: str | None, has_native_k6: bool, extra: list[str]
+) -> tuple[list[str], dict[str, str]]:
+    """k6 load suite (infra/k6/load.js): like ``perf``, plus a writable /results mount for
+    ``--summary-export /results/...`` and trust in the local dev CA for ``https://localhost``."""
+    cmd, env = build_k6_command("load.js", base_url, has_native_k6, extra)
+    url = base_url or ""
+    local_tls = url.startswith(("https://localhost", "https://127.0.0.1")) and DEV_CA.exists()
+    if has_native_k6:
+        if local_tls:
+            env["SSL_CERT_FILE"] = str(DEV_CA)  # Go's crypto/x509 honours it on Linux and macOS
+        cmd = [part.replace("/results/", f"{PERF_RESULTS.as_posix()}/") for part in cmd]
+        return cmd, env
+    PERF_RESULTS.mkdir(exist_ok=True)
+    image_at = cmd.index(K6_IMAGE)
+    mounts = ["-v", f"{PERF_RESULTS.as_posix()}:/results"]
+    if local_tls:
+        mounts += [
+            "-v",
+            f"{DEV_CA.as_posix()}:/certs/ca.crt:ro",
+            "-e",
+            "SSL_CERT_FILE=/certs/ca.crt",
+        ]
+    return [*cmd[:image_at], *mounts, *cmd[image_at:]], env
+
+
+def cmd_load(args: list[str]) -> int:
+    """Run the k6 load suite (infra/k6/load.js, TASK-078) against a running, seeded stack."""
+    cmd, env = build_load_command(os.environ.get("BASE_URL"), _find_tool("k6") is not None, args)
     return _run(cmd, env=env)
 
 
@@ -827,6 +862,7 @@ COMMANDS = {
     "test-web": "Run Vitest frontend tests",
     "test-e2e": "Run Playwright end-to-end tests",
     "perf": "k6 baseline: health endpoints at 50 VUs, p95 < 50 ms (needs a running API)",
+    "load": "k6 load suite (TASK-078): banking mix with NFR thresholds (seeded stack)",
     "smoke": "Run smoke test against https://localhost:8443 or custom URL",
     "fuzz": "Run property-based API fuzzing with Schemathesis",
     "check": "Run full CI verification suite locally",

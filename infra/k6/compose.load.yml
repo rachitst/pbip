@@ -1,0 +1,9 @@
+# Overlay for load testing ONLY (TASK-078): every k6 virtual user comes from one IP, so the per-IP
+# login and assistant limits are raised for the duration of the test. Never use in staging/production.
+#   docker compose -f docker-compose.yml -f infra/k6/compose.load.yml up -d --wait
+# The limiter itself stays covered by test_login_rate_limit_per_ip and the assistant rate-limit tests.
+services:
+  api:
+    environment:
+      RATE_LIMIT_LOGIN_PER_MINUTE: "100000"
+      RATE_LIMIT_ASSISTANT_PER_MINUTE: "600"
