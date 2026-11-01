@@ -48,7 +48,7 @@ function staffNav(me: UserOut): NavItem[] {
     items.push({ to: "/staff/monitoring", label: "Security monitoring" });
     items.push({ to: "/staff/fraud", label: "Fraud alerts" });
   }
-  if (canAccessRMInsights(me)) items.push({ to: "/staff/insights", label: "RM Insights" });
+  if (canAccessRMInsights(me)) items.push({ to: "/staff/insights", label: "Customer insights" });
   if (me.roles.includes("COMPLIANCE_OFFICER") || me.roles.includes("ADMIN")) {
     items.push({ to: "/staff/audit-log", label: "Audit log" });
   }

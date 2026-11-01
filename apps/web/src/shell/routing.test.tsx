@@ -150,6 +150,36 @@ describe("routing, roles and the application shell (ADR-0016)", () => {
       expect(requested("/fraud/monitoring")).toBe(1);
     });
 
+    it("links customer insights for relationship managers only (TASK-066)", async () => {
+      me = { ...analystMe, roles: ["RELATIONSHIP_MANAGER"] };
+      const insightCalls = () =>
+        fetchMock.mock.calls.filter(([input]) => urlOf(input).includes("/insights/customers"))
+          .length;
+      const user = userEvent.setup();
+      const first = renderApp();
+      const nav = await screen.findByRole("navigation", { name: "Main" });
+      expect(within(nav).queryByRole("link", { name: "Fraud alerts" })).not.toBeInTheDocument();
+      await user.click(within(nav).getByRole("link", { name: "Customer insights" }));
+      expect(await screen.findByRole("heading", { name: "Customer insights" })).toBeInTheDocument();
+      expect(window.location.pathname).toBe("/staff/insights");
+      await waitFor(() => {
+        expect(insightCalls()).toBe(1);
+      });
+      first.unmount();
+
+      me = analystMe;
+      const second = renderApp();
+      await screen.findByRole("heading", { name: "Customer insights" });
+      expect(screen.queryByRole("link", { name: "Customer insights" })).not.toBeInTheDocument();
+      expect(screen.getByText(/need the Relationship Manager or Administrator role/)).toBeVisible();
+      second.unmount();
+
+      me = customerMe;
+      renderApp();
+      expect(await screen.findByRole("heading", { name: "Page not found" })).toBeInTheDocument();
+      expect(insightCalls()).toBe(1);
+    });
+
     it("links both areas for a user who is a customer and staff", async () => {
       me = { ...customerMe, roles: ["CUSTOMER", "COMPLIANCE_OFFICER"] };
       const user = userEvent.setup();

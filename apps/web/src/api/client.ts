@@ -23,6 +23,12 @@ export type SpendingBreakdownResponse = components["schemas"]["SpendingBreakdown
 export type CustomerInsightsListResponse = components["schemas"]["CustomerInsightsListResponse"];
 export type CustomerInsightItem = components["schemas"]["CustomerInsightItem"];
 export type ChurnRiskLevel = components["schemas"]["ChurnRiskLevel"];
+export type CustomerInsightDetail = components["schemas"]["CustomerInsightDetail"];
+export type InteractionChannel = components["schemas"]["InteractionChannel"];
+export type InteractionOutcome = components["schemas"]["InteractionOutcome"];
+export type InteractionCreate = components["schemas"]["InteractionCreate"];
+export type InteractionOut = components["schemas"]["InteractionOut"];
+export type InteractionListResponse = components["schemas"]["InteractionListResponse"];
 export type CategorySpendingItem = components["schemas"]["CategorySpendingItem"];
 export type SpendingTrendsResponse = components["schemas"]["SpendingTrendsResponse"];
 export type MonthlySpendingSummary = components["schemas"]["MonthlySpendingSummary"];
@@ -264,23 +270,37 @@ export const api = {
       `/api/v1/analytics/health-score?${params.toString()}`,
     );
   },
-  customerInsights: (options?: {
-    min_churn_risk?: number;
+  customerInsights: (filters: {
     segment?: string;
-    limit?: number;
-    offset?: number;
+    min_churn_risk?: number;
+    min_loan_propensity?: number;
+    limit: number;
+    offset: number;
   }) => {
-    const params = new URLSearchParams();
-    if (options?.min_churn_risk !== undefined)
-      params.set("min_churn_risk", String(options.min_churn_risk));
-    if (options?.segment) params.set("segment", options.segment);
-    if (options?.limit !== undefined) params.set("limit", String(options.limit));
-    if (options?.offset !== undefined) params.set("offset", String(options.offset));
-    const qs = params.toString();
+    const params = new URLSearchParams({
+      limit: String(filters.limit),
+      offset: String(filters.offset),
+    });
+    if (filters.segment) params.set("segment", filters.segment);
+    if (filters.min_churn_risk !== undefined)
+      params.set("min_churn_risk", String(filters.min_churn_risk));
+    if (filters.min_loan_propensity !== undefined)
+      params.set("min_loan_propensity", String(filters.min_loan_propensity));
     return apiFetch<CustomerInsightsListResponse>(
-      `/api/v1/insights/customers${qs ? `?${qs}` : ""}`,
+      `/api/v1/insights/customers?${params.toString()}`,
     );
   },
+  customerInsightDetail: (customerId: string) =>
+    apiFetch<CustomerInsightDetail>(`/api/v1/insights/customers/${encodeURIComponent(customerId)}`),
+  customerInteractions: (customerId: string, limit = 20) =>
+    apiFetch<InteractionListResponse>(
+      `/api/v1/insights/customers/${encodeURIComponent(customerId)}/interactions?limit=${String(limit)}`,
+    ),
+  logInteraction: (customerId: string, body: InteractionCreate) =>
+    apiFetch<InteractionOut>(
+      `/api/v1/insights/customers/${encodeURIComponent(customerId)}/interactions`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
   assistantHistory: (limit = 50) =>
     apiFetch<AssistantHistory>(`/api/v1/assistant/messages?limit=${String(limit)}`),
 };

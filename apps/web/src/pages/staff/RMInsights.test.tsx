@@ -1,382 +1,350 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactElement } from "react";
-import { MemoryRouter, Route, Routes } from "react-router";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CustomerInsightItem, CustomerInsightsListResponse, UserOut } from "../../api/client";
+import { MemoryRouter } from "react-router";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type {
+  CustomerInsightDetail,
+  CustomerInsightItem,
+  CustomerInsightsListResponse,
+  InteractionListResponse,
+  InteractionOut,
+  UserOut,
+} from "../../api/client";
 import { MeContext } from "../../shell/MeContext";
 import { json, urlOf } from "../../test-utils";
-import { CustomerFlyout } from "./CustomerFlyout";
 import { RMInsights } from "./RMInsights";
-import {
-  canAccessRMInsights,
-  churnRiskTone,
-  deriveHealthLabel,
-  formatProductName,
-  formatSegment,
-  loadCustomerActions,
-  saveCustomerAction,
-} from "./rmInsightsFormat";
+import { canAccessRMInsights, declineText, inactivityText, segmentLabel } from "./rmInsightsFormat";
 
-const rmUser: UserOut = {
+const rm: UserOut = {
   id: "u-rm",
-  email: "rm@pbip.bank",
+  email: "rm@demo.pbip",
   roles: ["RELATIONSHIP_MANAGER"],
   mfa_enabled: true,
   mfa_verified_session: true,
   created_at: "2026-01-01T00:00:00Z",
 };
+const admin: UserOut = { ...rm, id: "u-admin", roles: ["ADMIN"] };
+const analyst: UserOut = { ...rm, id: "u-fa", roles: ["FRAUD_ANALYST"] };
+const compliance: UserOut = { ...rm, id: "u-co", roles: ["COMPLIANCE_OFFICER"] };
 
-const adminUser: UserOut = {
-  ...rmUser,
-  id: "u-admin",
-  email: "admin@pbip.bank",
-  roles: ["ADMIN"],
-};
+const ASHA = "c0ffee00-1111-4222-8333-000000000001";
+const RAVI = "c0ffee00-1111-4222-8333-000000000002";
 
-const analystUser: UserOut = {
-  ...rmUser,
-  id: "u-analyst",
-  email: "analyst@pbip.bank",
-  roles: ["FRAUD_ANALYST"],
-};
-
-const leadHighRisk: CustomerInsightItem = {
-  customer_id: "c-1",
-  full_name: "Rahul Sharma",
-  segment: "HIGH_NET_WORTH",
-  total_balance_minor: 50_000_000,
+const asha: CustomerInsightItem = {
+  customer_id: ASHA,
+  full_name: "Asha Rao",
+  segment: "INACTIVE_SAVER",
+  total_balance_minor: 150_000_00,
   inactivity_days: 45,
-  balance_decline_rate: 0.65,
+  balance_decline_rate: 0.4,
   churn_risk_score: 0.82,
   churn_risk_level: "HIGH",
-  top_recommended_product: "FIXED_DEPOSIT",
-  top_product_score: 0.9,
+  top_recommended_product: "Fixed deposit",
+  top_product_score: 0.91,
+  loan_product: "Personal credit line",
+  loan_propensity_score: 0.64,
   high_value: true,
 };
-
-const leadMediumRisk: CustomerInsightItem = {
-  customer_id: "c-2",
-  full_name: "Pooja Verma",
-  segment: "SALARIED",
-  total_balance_minor: 1_200_000,
-  inactivity_days: 12,
-  balance_decline_rate: 0.2,
-  churn_risk_score: 0.45,
-  churn_risk_level: "MEDIUM",
-  top_recommended_product: "PERSONAL_LOAN",
-  top_product_score: 0.75,
-  high_value: false,
-};
-
-const leadLowRisk: CustomerInsightItem = {
-  customer_id: "c-3",
-  full_name: "Amit Patel",
-  segment: "STUDENT",
-  total_balance_minor: 250_000,
-  inactivity_days: 2,
-  balance_decline_rate: 0.05,
-  churn_risk_score: 0.15,
+const ravi: CustomerInsightItem = {
+  ...asha,
+  customer_id: RAVI,
+  full_name: "Ravi Kumar",
+  segment: "UNSEGMENTED",
+  total_balance_minor: 2_500_00,
+  inactivity_days: 0,
+  balance_decline_rate: 0,
+  churn_risk_score: 0.1,
   churn_risk_level: "LOW",
-  top_recommended_product: "STUDENT_CARD",
-  top_product_score: 0.4,
+  loan_product: null,
+  loan_propensity_score: null,
   high_value: false,
 };
 
-const mockListResponse: CustomerInsightsListResponse = {
-  items: [leadHighRisk, leadMediumRisk, leadLowRisk],
-  total: 3,
+function page(items: CustomerInsightItem[], total = items.length): CustomerInsightsListResponse {
+  return { items, total, evaluated_at: "2026-11-01T12:00:00Z" };
+}
+
+const detail: CustomerInsightDetail = {
+  insight: asha,
+  customer_since: "2025-03-14T09:00:00Z",
+  health: { overall_score: 58, rating: "FAIR", insufficient_data: false },
+  transaction_volume: {
+    window_days: 30,
+    transaction_count: 2,
+    inflow_minor: 100_000_00,
+    outflow_minor: 40_000_00,
+  },
+  recommendations: [
+    {
+      title: "Fixed deposit",
+      product_type: "SAVINGS",
+      score: 0.91,
+      reasons: ["Your financial health score is 58/100."],
+    },
+  ],
   evaluated_at: "2026-11-01T12:00:00Z",
 };
 
-function renderAt(path: string, ui: ReactElement, me: UserOut = rmUser) {
+const logged: InteractionOut = {
+  id: "i-1",
+  channel: "CALL",
+  outcome: "FOLLOW_UP",
+  note: "Asked about a credit line.",
+  logged_by: "rm@demo.pbip",
+  created_at: "2026-11-01T11:00:00Z",
+};
+
+interface Routes {
+  list?: () => Response;
+  detail?: () => Response;
+  log?: () => Response;
+  post?: (body: unknown) => Response;
+}
+
+/** Answers the insights endpoints by path and method; records every call for assertions. */
+function mockApi(routes: Routes) {
+  return vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+    const url = new URL(urlOf(input), "http://localhost");
+    const method = init?.method ?? "GET";
+    if (url.pathname.endsWith("/interactions")) {
+      if (method === "POST") {
+        const body: unknown = JSON.parse(typeof init?.body === "string" ? init.body : "null");
+        return Promise.resolve(routes.post ? routes.post(body) : json(500, {}));
+      }
+      return Promise.resolve(routes.log ? routes.log() : json(200, { items: [], total: 0 }));
+    }
+    if (url.pathname === "/api/v1/insights/customers") {
+      return Promise.resolve(routes.list ? routes.list() : json(200, page([])));
+    }
+    return Promise.resolve(routes.detail ? routes.detail() : json(200, detail));
+  });
+}
+
+function listCalls(fetchMock: ReturnType<typeof mockApi>): URLSearchParams[] {
+  return fetchMock.mock.calls
+    .map(([input]) => new URL(urlOf(input), "http://localhost"))
+    .filter((u) => u.pathname === "/api/v1/insights/customers")
+    .map((u) => u.searchParams);
+}
+
+function renderPage(me: UserOut = rm) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
       <MeContext.Provider value={me}>
-        <MemoryRouter initialEntries={[path]}>
-          <Routes>
-            <Route path="/staff/insights" element={ui} />
-          </Routes>
+        <MemoryRouter>
+          <RMInsights />
         </MemoryRouter>
       </MeContext.Provider>
     </QueryClientProvider>,
   );
 }
 
-beforeEach(() => {
-  localStorage.clear();
-});
-
 afterEach(() => {
   vi.restoreAllMocks();
-  localStorage.clear();
 });
 
-describe("rmInsightsFormat helpers", () => {
-  it("formats segments, products and tone correctly", () => {
-    expect(formatSegment("HIGH_NET_WORTH")).toBe("High Net Worth");
-    expect(formatSegment("STUDENT")).toBe("Student");
-    expect(formatProductName("PERSONAL_LOAN")).toBe("Personal Loan");
-    expect(formatProductName(null)).toBe("None");
-    expect(churnRiskTone("HIGH")).toBe("danger");
-    expect(churnRiskTone("MEDIUM")).toBe("warning");
-    expect(churnRiskTone("LOW")).toBe("success");
+describe("rmInsightsFormat", () => {
+  it("admits relationship managers and admins only", () => {
+    expect(canAccessRMInsights(rm)).toBe(true);
+    expect(canAccessRMInsights(admin)).toBe(true);
+    expect(canAccessRMInsights(analyst)).toBe(false);
+    expect(canAccessRMInsights(compliance)).toBe(false);
   });
 
-  it("checks RM and Admin role access", () => {
-    expect(canAccessRMInsights(rmUser)).toBe(true);
-    expect(canAccessRMInsights(adminUser)).toBe(true);
-    expect(canAccessRMInsights(analystUser)).toBe(false);
-  });
-
-  it("derives appropriate health indicators based on risk and decline rate", () => {
-    expect(deriveHealthLabel(leadHighRisk).tone).toBe("danger");
-    expect(deriveHealthLabel(leadMediumRisk).tone).toBe("warning");
-    expect(deriveHealthLabel(leadLowRisk).tone).toBe("success");
-  });
-
-  it("saves and loads customer outreach actions to localStorage", () => {
-    const act = saveCustomerAction({
-      customer_id: "c-1",
-      action_type: "CALL",
-      outcome: "Connected - Interested in Offer",
-      notes: "Follow up next Friday.",
-      logged_by: "rm@pbip.bank",
-    });
-    expect(act.id).toBeDefined();
-    expect(act.created_at).toBeDefined();
-
-    const loaded = loadCustomerActions("c-1");
-    expect(loaded).toHaveLength(1);
-    expect(loaded[0]?.notes).toBe("Follow up next Friday.");
+  it("reads segments, inactivity and decline as words", () => {
+    expect(segmentLabel("INACTIVE_SAVER")).toBe("Inactive saver");
+    expect(segmentLabel("UNSEGMENTED")).toBe("Not segmented yet");
+    expect(segmentLabel("NEW_SEGMENT_X")).toBe("New segment x");
+    expect(inactivityText(0)).toBe("Active today");
+    expect(inactivityText(1)).toBe("1 day");
+    expect(inactivityText(45)).toBe("45 days");
+    expect(declineText(0)).toBe("No decline");
+    expect(declineText(0.404)).toBe("40%");
   });
 });
 
-describe("RMInsights Page & Table Filtering (TASK-066)", () => {
-  it("renders customer leads table with names, segments, churn risk and recommendations", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(json(200, mockListResponse));
-    renderAt("/staff/insights", <RMInsights />);
-
-    expect(
-      await screen.findByRole("heading", { name: "Relationship Manager Insights" }),
-    ).toBeInTheDocument();
-
-    // Verify all 3 customers appear in the table
-    const table = await screen.findByRole("table");
-    expect(within(table).getByText("Rahul Sharma")).toBeInTheDocument();
-    expect(within(table).getByText("Pooja Verma")).toBeInTheDocument();
-    expect(within(table).getByText("Amit Patel")).toBeInTheDocument();
-
-    // Verify segments in table
-    expect(within(table).getByText("High Net Worth")).toBeInTheDocument();
-    expect(within(table).getByText("Salaried")).toBeInTheDocument();
-    expect(within(table).getByText("Student")).toBeInTheDocument();
-
-    // High value badge
-    expect(within(table).getByText("High Value")).toBeInTheDocument();
-
-    // Top recommended products
-    expect(within(table).getByText("Fixed Deposit")).toBeInTheDocument();
-    expect(within(table).getByText("Personal Loan")).toBeInTheDocument();
-    expect(within(table).getByText("Student Credit Card")).toBeInTheDocument();
-
-    // Churn Risk
-    expect(within(table).getByText("HIGH (82%)")).toBeInTheDocument();
-    expect(within(table).getByText("MEDIUM (45%)")).toBeInTheDocument();
-    expect(within(table).getByText("LOW (15%)")).toBeInTheDocument();
-  });
-
-  it("denies access and does not call API for staff without RM role", () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch");
-    renderAt("/staff/insights", <RMInsights />, analystUser);
-
-    expect(
-      screen.getByText(/Access restricted: Customer leads and behavioral insights require/i),
-    ).toBeInTheDocument();
+describe("RMInsights page (TASK-066)", () => {
+  it.each([analyst, compliance])("blocks $roles and never calls the API", (me) => {
+    const fetchMock = mockApi({});
+    renderPage(me);
+    expect(screen.getByText(/Access restricted/)).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("allows access for administrator users", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(json(200, mockListResponse));
-    renderAt("/staff/insights", <RMInsights />, adminUser);
-
-    expect(
-      await screen.findByRole("heading", { name: "Relationship Manager Insights" }),
-    ).toBeInTheDocument();
-    expect(await screen.findByText("Rahul Sharma")).toBeInTheDocument();
+  it("shows the leads with readable values from the API", async () => {
+    mockApi({ list: () => json(200, page([asha, ravi])) });
+    renderPage();
+    const table = await screen.findByRole("table");
+    const [, ashaRow, raviRow] = within(table).getAllByRole("row");
+    if (!ashaRow || !raviRow) throw new Error("rows missing");
+    expect(within(ashaRow).getByText("Asha Rao")).toBeInTheDocument();
+    expect(within(ashaRow).getByText("High value")).toBeInTheDocument();
+    expect(within(ashaRow).getByText("Inactive saver")).toBeInTheDocument();
+    expect(within(ashaRow).getByText("INR 1,50,000.00")).toBeInTheDocument();
+    expect(within(ashaRow).getByText("High · 82")).toBeInTheDocument();
+    expect(within(ashaRow).getByText("45 days ago")).toBeInTheDocument();
+    expect(within(ashaRow).getByText("(Personal credit line)")).toBeInTheDocument();
+    expect(within(raviRow).getByText("Not segmented yet")).toBeInTheDocument();
+    expect(within(raviRow).getByText("Today")).toBeInTheDocument();
+    expect(within(raviRow).getByText("No eligible loan")).toBeInTheDocument();
+    expect(screen.getByText(/Showing 1-2 of 2 customers/)).toBeInTheDocument();
   });
 
-  it("filters leads by loan/product propensity score", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(json(200, mockListResponse));
-    renderAt("/staff/insights", <RMInsights />);
-
-    expect(await screen.findByText("Rahul Sharma")).toBeInTheDocument();
-    expect(screen.getByText("Pooja Verma")).toBeInTheDocument();
-    expect(screen.getByText("Amit Patel")).toBeInTheDocument();
-
-    // Select >= 70% propensity
-    const propensitySelect = screen.getByLabelText(/Loan \/ Product Propensity/i);
-    await userEvent.selectOptions(propensitySelect, "0.7");
-
-    // Only Rahul (0.9) and Pooja (0.75) should be visible; Amit (0.4) should be filtered out
-    expect(screen.getByText("Rahul Sharma")).toBeInTheDocument();
-    expect(screen.getByText("Pooja Verma")).toBeInTheDocument();
-    expect(screen.queryByText("Amit Patel")).not.toBeInTheDocument();
-
-    // Select >= 85% propensity -> only Rahul (0.9)
-    await userEvent.selectOptions(propensitySelect, "0.85");
-    expect(screen.getByText("Rahul Sharma")).toBeInTheDocument();
-    expect(screen.queryByText("Pooja Verma")).not.toBeInTheDocument();
+  it("says 1 customer, not 1 customers", async () => {
+    mockApi({ list: () => json(200, page([asha])) });
+    renderPage(admin);
+    expect(await screen.findByText(/Showing 1-1 of 1 customer\./)).toBeInTheDocument();
   });
 
-  it("passes segment and churn filters to the API", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = urlOf(input);
-      if (url.includes("segment=SALARIED")) {
-        return Promise.resolve(
-          json(200, { items: [leadMediumRisk], total: 1, evaluated_at: "2026-11-01T12:00:00Z" }),
-        );
-      }
-      return Promise.resolve(json(200, mockListResponse));
-    });
+  it("sends every filter to the API and starts again from the first page", async () => {
+    const user = userEvent.setup();
+    const many = page([asha, ravi], 45);
+    const fetchMock = mockApi({ list: () => json(200, many) });
+    renderPage();
+    await screen.findByRole("table");
+    expect(listCalls(fetchMock)[0]?.toString()).toBe("limit=20&offset=0");
 
-    renderAt("/staff/insights", <RMInsights />);
-    expect(await screen.findByText("Rahul Sharma")).toBeInTheDocument();
-
-    // Change segment filter
-    const segmentSelect = screen.getByLabelText(/Customer Segment/i);
-    await userEvent.selectOptions(segmentSelect, "SALARIED");
-
+    await user.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() => {
-      expect(urlOf(fetchMock.mock.calls.at(-1)?.[0] ?? "")).toContain("segment=SALARIED");
+      expect(listCalls(fetchMock).at(-1)?.get("offset")).toBe("20");
+    });
+
+    await user.selectOptions(screen.getByLabelText("Segment"), "INACTIVE_SAVER");
+    await user.selectOptions(screen.getByLabelText("Churn risk"), "0.7");
+    await user.selectOptions(screen.getByLabelText("Loan propensity"), "0.5");
+    await waitFor(() => {
+      const last = listCalls(fetchMock).at(-1);
+      expect(last?.get("segment")).toBe("INACTIVE_SAVER");
+      expect(last?.get("min_churn_risk")).toBe("0.7");
+      expect(last?.get("min_loan_propensity")).toBe("0.5");
+      expect(last?.get("offset")).toBe("0");
     });
   });
 
-  it("shows empty state when no leads match", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      json(200, { items: [], total: 0, evaluated_at: "2026-11-01T12:00:00Z" }),
-    );
-    renderAt("/staff/insights", <RMInsights />);
-
-    expect(
-      await screen.findByText("No customer leads match the chosen criteria."),
-    ).toBeInTheDocument();
+  it("disables Previous on the first page and Next on the last", async () => {
+    mockApi({ list: () => json(200, page([asha, ravi])) });
+    renderPage();
+    await screen.findByRole("table");
+    expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
   });
 
-  it("shows error state with working retry button on failure", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(json(500, { title: "Database error" }));
-    renderAt("/staff/insights", <RMInsights />);
-
-    expect(await screen.findByText(/Could not load customer insights/i)).toBeInTheDocument();
-    const retryBtn = screen.getByRole("button", { name: /try again|retry/i });
-    expect(retryBtn).toBeInTheDocument();
+  it("explains an empty result, and an error with a retry", async () => {
+    const user = userEvent.setup();
+    let fail = true;
+    mockApi({
+      list: () =>
+        fail ? json(500, { title: "Internal Server Error", status: 500 }) : json(200, page([])),
+    });
+    renderPage();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not load customer insights.");
+    fail = false;
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("There are no customers yet.")).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Segment"), "HIGH_NET_WORTH");
+    expect(await screen.findByText("No customers match these filters.")).toBeInTheDocument();
   });
 });
 
-describe("CustomerFlyout & Action Logger (TASK-066)", () => {
-  it("opens flyout, displays balance volume, health indicators, churn probability, and closes cleanly", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(json(200, mockListResponse));
-    renderAt("/staff/insights", <RMInsights />);
+describe("customer flyout (TASK-066)", () => {
+  async function openAsha(routes: Routes) {
+    const user = userEvent.setup();
+    const fetchMock = mockApi({ list: () => json(200, page([asha])), ...routes });
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "Open Asha Rao" }));
+    const dialog = await screen.findByRole("dialog", { name: "Asha Rao" });
+    return { user, fetchMock, dialog };
+  }
 
-    expect(await screen.findByText("Rahul Sharma")).toBeInTheDocument();
+  it("loads the detail for that customer and shows volume, health and churn", async () => {
+    const { fetchMock, dialog } = await openAsha({});
+    expect(await within(dialog).findByText("2 transactions")).toBeInTheDocument();
+    const urls = fetchMock.mock.calls.map(([input]) => urlOf(input));
+    expect(urls).toContain(`/api/v1/insights/customers/${ASHA}`);
+    expect(within(dialog).getByText("INR 1,00,000.00")).toBeInTheDocument();
+    expect(within(dialog).getByText("INR 40,000.00")).toBeInTheDocument();
+    expect(within(dialog).getByText("58 out of 100")).toBeInTheDocument();
+    expect(within(dialog).getByText("Fair")).toBeInTheDocument();
+    expect(within(dialog).getByText("82 out of 100")).toBeInTheDocument();
+    expect(within(dialog).getByText(/rule-based score, not a measured probability/)).toBeVisible();
+    expect(within(dialog).getByText("40%")).toBeInTheDocument();
+    expect(within(dialog).getByText("Your financial health score is 58/100.")).toBeInTheDocument();
+    expect(within(dialog).getByText(/customer since 14 Mar 2025/)).toBeInTheDocument();
+  });
 
-    // Click "View Details" on Rahul Sharma
-    const viewButton = screen.getByRole("button", { name: "View details for Rahul Sharma" });
-    await userEvent.click(viewButton);
+  it("says 1 transaction and handles a customer with no account", async () => {
+    const one: CustomerInsightDetail = {
+      ...detail,
+      health: null,
+      recommendations: [],
+      transaction_volume: { ...detail.transaction_volume, transaction_count: 1 },
+    };
+    const { dialog } = await openAsha({ detail: () => json(200, one) });
+    expect(await within(dialog).findByText("1 transaction")).toBeInTheDocument();
+    expect(within(dialog).getByText(/no health score/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/No product passes the eligibility rules/)).toBeVisible();
+  });
 
-    // Dialog is visible
-    const dialog = await screen.findByRole("dialog", {
-      name: "Customer details: Rahul Sharma",
+  it("shows an error when the detail cannot load", async () => {
+    const { dialog } = await openAsha({ detail: () => json(404, { status: 404 }) });
+    expect(
+      await within(dialog).findByText(/Could not load this customer|not found/i),
+    ).toBeVisible();
+  });
+
+  it("refuses an empty note without calling the API", async () => {
+    const post = vi.fn(() => json(201, logged));
+    const { user, dialog } = await openAsha({ post });
+    expect(await within(dialog).findByText("Nothing logged for this customer yet.")).toBeVisible();
+    await user.type(within(dialog).getByLabelText(/^Note/), "   ");
+    await user.click(within(dialog).getByRole("button", { name: "Log it" }));
+    expect(within(dialog).getByText("Write what was discussed.")).toBeVisible();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("posts the note to the API and shows the saved log", async () => {
+    let saved: InteractionListResponse = { items: [], total: 0 };
+    const post = vi.fn((body: unknown) => {
+      saved = { items: [logged], total: 1 };
+      return json(201, { ...logged, ...(body as object) });
     });
-    expect(dialog).toBeInTheDocument();
+    const { user, dialog } = await openAsha({ post, log: () => json(200, saved) });
+    await within(dialog).findByText("Nothing logged for this customer yet.");
+    await user.selectOptions(within(dialog).getByLabelText("Type"), "MEETING");
+    await user.selectOptions(within(dialog).getByLabelText("Outcome"), "INTERESTED");
+    await user.type(within(dialog).getByLabelText(/^Note/), "  Asked about a credit line.  ");
+    await user.click(within(dialog).getByRole("button", { name: "Log it" }));
 
-    // Verify indicators in flyout
-    expect(within(dialog).getByText(/45 days inactive/i)).toBeInTheDocument();
-    expect(within(dialog).getByText(/65\.0%/)).toBeInTheDocument(); // 65.0% balance decline
-    expect(within(dialog).getByText("Needs Attention")).toBeInTheDocument();
-    expect(within(dialog).getByText(/HIGH \(82%\)/)).toBeInTheDocument();
-    expect(within(dialog).getByText("Propensity score: 90%")).toBeInTheDocument();
-
-    // Close with the close button
-    const closeBtn = within(dialog).getByRole("button", { name: "Close details" });
-    await userEvent.click(closeBtn);
-
-    expect(
-      screen.queryByRole("dialog", { name: "Customer details: Rahul Sharma" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("closes flyout on Escape key press", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(json(200, mockListResponse));
-    renderAt("/staff/insights", <RMInsights />);
-
-    const viewButton = await screen.findByRole("button", {
-      name: "View details for Rahul Sharma",
+    await waitFor(() => {
+      expect(post).toHaveBeenCalledWith({
+        channel: "MEETING",
+        outcome: "INTERESTED",
+        note: "Asked about a credit line.",
+      });
     });
-    await userEvent.click(viewButton);
-
-    expect(
-      await screen.findByRole("dialog", { name: "Customer details: Rahul Sharma" }),
-    ).toBeInTheDocument();
-
-    await userEvent.keyboard("{Escape}");
-
-    expect(
-      screen.queryByRole("dialog", { name: "Customer details: Rahul Sharma" }),
-    ).not.toBeInTheDocument();
+    expect(await within(dialog).findByText("Asked about a credit line.")).toBeVisible();
+    expect(within(dialog).getByText("1 entry")).toBeVisible();
+    expect(within(dialog).getByText(/rm@demo\.pbip/)).toBeVisible();
+    expect(within(dialog).getByLabelText(/^Note/)).toHaveValue("");
+    expect(localStorage.length).toBe(0); // nothing about the customer is kept in the browser
   });
 
-  it("records a call in action logger and renders in the outreach history", async () => {
-    const handleClose = vi.fn();
-    render(
-      <CustomerFlyout
-        customer={leadHighRisk}
-        onClose={handleClose}
-        currentUserEmail="rm@pbip.bank"
-      />,
-    );
-
-    // Initial state: no outreach recorded
-    expect(screen.getByText("No outreach recorded yet for this customer.")).toBeInTheDocument();
-
-    // Fill notes and submit
-    const notesInput = screen.getByLabelText(/Meeting \/ Call Notes/i);
-    await userEvent.type(notesInput, "Customer agreed to deposit INR 5,00,000 in 1-year FD.");
-
-    const logActionBtn = screen.getByRole("button", { name: "Log Action" });
-    await userEvent.click(logActionBtn);
-
-    // Success feedback and new history entry
-    expect(await screen.findByText("Action recorded successfully.")).toBeInTheDocument();
-    expect(
-      screen.getByText("Customer agreed to deposit INR 5,00,000 in 1-year FD."),
-    ).toBeInTheDocument();
-    expect(screen.getByText("By rm@pbip.bank")).toBeInTheDocument();
-    expect(screen.getByText(/Outreach History \(1\)/)).toBeInTheDocument();
-
-    // Check localStorage persistence
-    const saved = loadCustomerActions("c-1");
-    expect(saved).toHaveLength(1);
-    expect(saved[0]?.notes).toBe("Customer agreed to deposit INR 5,00,000 in 1-year FD.");
+  it("keeps the note and shows the error when saving fails", async () => {
+    const post = vi.fn(() => json(403, { status: 403, title: "Forbidden" }));
+    const { user, dialog } = await openAsha({ post });
+    await user.type(within(dialog).getByLabelText(/^Note/), "Left a voicemail.");
+    await user.click(within(dialog).getByRole("button", { name: "Log it" }));
+    expect(await within(dialog).findByRole("alert")).toBeVisible();
+    expect(within(dialog).getByLabelText(/^Note/)).toHaveValue("Left a voicemail.");
   });
 
-  it("validates notes field before saving action", async () => {
-    const handleClose = vi.fn();
-    render(
-      <CustomerFlyout
-        customer={leadMediumRisk}
-        onClose={handleClose}
-        currentUserEmail="rm@pbip.bank"
-      />,
-    );
-
-    const logActionBtn = screen.getByRole("button", { name: "Log Action" });
-    await userEvent.click(logActionBtn);
-
-    expect(
-      await screen.findByText("Please enter notes for this outreach action."),
-    ).toBeInTheDocument();
+  it("closes with the Close button", async () => {
+    const { user, dialog } = await openAsha({});
+    await user.click(within(dialog).getByRole("button", { name: "Close" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
   });
 });

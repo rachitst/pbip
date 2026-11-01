@@ -7,6 +7,8 @@ interface DialogProps {
   /** Called for Esc and for the caller's own cancel controls; the parent owns `open`. */
   onClose: () => void;
   children: ReactNode;
+  /** Extra class for a variant, e.g. "dialog--flyout" for a side panel. */
+  className?: string;
 }
 
 /**
@@ -14,7 +16,7 @@ interface DialogProps {
  * background, Esc handling and top-layer stacking from the browser instead of hand-written code,
  * and the browser returns focus to the opener on close.
  */
-export function Dialog({ open, title, onClose, children }: DialogProps) {
+export function Dialog({ open, title, onClose, children, className }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
 
@@ -28,7 +30,7 @@ export function Dialog({ open, title, onClose, children }: DialogProps) {
   return (
     <dialog
       ref={ref}
-      className="dialog"
+      className={className ? `dialog ${className}` : "dialog"}
       aria-labelledby={titleId}
       onCancel={(event) => {
         event.preventDefault(); // keep React state the single source of truth for `open`

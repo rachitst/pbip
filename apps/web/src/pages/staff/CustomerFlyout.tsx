@@ -1,286 +1,285 @@
-import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import type { SyntheticEvent } from "react";
-import type { CustomerInsightItem } from "../../api/client";
-import { formatDateTime } from "../../lib/format";
+import { api } from "../../api/client";
+import type {
+  CustomerInsightDetail,
+  InteractionChannel,
+  InteractionOutcome,
+} from "../../api/client";
+import { RATINGS } from "../../lib/analytics";
+import { errorMessage } from "../../lib/errors";
+import { countOf, formatDate, formatDateTime, formatRelative } from "../../lib/format";
+import { Alert } from "../../ui/Alert";
 import { Amount } from "../../ui/Amount";
 import { Button } from "../../ui/Button";
+import { Dialog } from "../../ui/Dialog";
+import { Field } from "../../ui/Field";
+import { ErrorState, LoadingState } from "../../ui/States";
 import { StatusBadge } from "../../ui/StatusBadge";
 import {
-  churnRiskTone,
-  deriveHealthLabel,
-  formatProductName,
-  formatSegment,
-  loadCustomerActions,
-  saveCustomerAction,
+  CHANNEL_LABEL,
+  CHURN_LABEL,
+  OUTCOME_LABEL,
+  PRODUCT_TYPE_LABEL,
+  declineText,
+  inactivityText,
+  score100,
+  segmentLabel,
 } from "./rmInsightsFormat";
-import type { RMActionItem } from "./rmInsightsFormat";
+
+const NOTE_MAX = 1000;
+const LOG_LIMIT = 20;
 
 interface CustomerFlyoutProps {
-  customer: CustomerInsightItem;
+  customerId: string;
+  name: string;
   onClose: () => void;
-  currentUserEmail: string;
 }
 
-const ACTION_TYPES = [
-  { value: "CALL", label: "Phone Call" },
-  { value: "MEETING", label: "In-Person / Video Meeting" },
-  { value: "EMAIL", label: "Email Outreach" },
-  { value: "NOTE", label: "General Note" },
-] as const;
-
-const OUTCOMES = [
-  "Connected - Interested in Offer",
-  "Connected - Not Interested",
-  "Follow-up Call Scheduled",
-  "Left Voicemail / Message",
-  "Sent Product Brochure / Details",
-  "General Account Review",
-] as const;
-
-export function CustomerFlyout({ customer, onClose, currentUserEmail }: CustomerFlyoutProps) {
-  const [actions, setActions] = useState<RMActionItem[]>(() =>
-    loadCustomerActions(customer.customer_id),
+/** TASK-066: one customer's detail and outreach log in a side panel (native <dialog>, so focus is
+ * trapped and Esc closes it). Everything shown comes from the insights API; nothing is stored in
+ * the browser. */
+export function CustomerFlyout({ customerId, name, onClose }: CustomerFlyoutProps) {
+  const detail = useQuery({
+    queryKey: ["insights", "customer", customerId],
+    queryFn: () => api.customerInsightDetail(customerId),
+  });
+  return (
+    <Dialog open title={name} onClose={onClose} className="dialog--flyout">
+      <Button variant="ghost" size="sm" className="flyout-close" onClick={onClose}>
+        Close
+      </Button>
+      {detail.isPending && <LoadingState label="Loading customer details..." />}
+      {detail.isError && (
+        <ErrorState
+          message={errorMessage(detail.error, "Could not load this customer.")}
+          onRetry={() => {
+            void detail.refetch();
+          }}
+        />
+      )}
+      {detail.data && <Indicators detail={detail.data} />}
+      <OutreachLog customerId={customerId} />
+    </Dialog>
   );
-  const [actionType, setActionType] = useState<"CALL" | "MEETING" | "EMAIL" | "NOTE">("CALL");
-  const [outcome, setOutcome] = useState<string>(OUTCOMES[0]);
-  const [notes, setNotes] = useState("");
-  const [feedback, setFeedback] = useState<string | null>(null);
+}
 
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        onClose();
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [onClose]);
+function Indicators({ detail }: { detail: CustomerInsightDetail }) {
+  const { insight, health, transaction_volume: volume } = detail;
+  const churn = CHURN_LABEL[insight.churn_risk_level];
+  const products = detail.recommendations ?? [];
+  return (
+    <>
+      <p className="muted">
+        {segmentLabel(insight.segment)} · customer since {formatDate(detail.customer_since)}
+      </p>
+      <section className="flyout-section" aria-labelledby="rm-churn">
+        <h3 id="rm-churn">Churn risk</h3>
+        <p>
+          <StatusBadge status={{ label: churn.label, tone: churn.tone }} />{" "}
+          <strong>{score100(insight.churn_risk_score)} out of 100</strong>
+        </p>
+        <dl className="details details--counts">
+          <dt>Balance lost in the last 30 days</dt>
+          <dd>{declineText(insight.balance_decline_rate)}</dd>
+          <dt>Days since last activity</dt>
+          <dd>{inactivityText(insight.inactivity_days)}</dd>
+          <dt>Balance now</dt>
+          <dd>
+            <Amount minor={insight.total_balance_minor} currency="INR" />
+          </dd>
+        </dl>
+        <p className="muted small">
+          A rule-based score, not a measured probability: 55% from the balance decline and 45% from
+          inactivity (60 days counts as fully inactive).
+        </p>
+      </section>
+      <section className="flyout-section" aria-labelledby="rm-health">
+        <h3 id="rm-health">Financial health</h3>
+        {health ? (
+          <p>
+            <strong>{health.overall_score} out of 100</strong>{" "}
+            <StatusBadge status={RATINGS[health.rating]} />
+            {health.insufficient_data && (
+              <span className="muted"> Less than 3 months of history, so treat it as early.</span>
+            )}
+          </p>
+        ) : (
+          <p className="muted">No account yet, so there is no health score.</p>
+        )}
+      </section>
+      <section className="flyout-section" aria-labelledby="rm-volume">
+        <h3 id="rm-volume">Last {volume.window_days} days</h3>
+        <dl className="details details--counts">
+          <dt>Transactions with other parties</dt>
+          <dd>{countOf(volume.transaction_count, "transaction")}</dd>
+          <dt>Money in</dt>
+          <dd>
+            <Amount minor={volume.inflow_minor} currency="INR" />
+          </dd>
+          <dt>Money out</dt>
+          <dd>
+            <Amount minor={volume.outflow_minor} currency="INR" />
+          </dd>
+        </dl>
+      </section>
+      <section className="flyout-section" aria-labelledby="rm-products">
+        <h3 id="rm-products">Eligible products</h3>
+        {products.length === 0 ? (
+          <p className="muted">No product passes the eligibility rules for this customer yet.</p>
+        ) : (
+          <ul className="rm-products">
+            {products.map((p) => (
+              <li key={p.title}>
+                <strong>{p.title}</strong>{" "}
+                <span className="muted">
+                  {PRODUCT_TYPE_LABEL[p.product_type] ?? p.product_type} · score {score100(p.score)}
+                </span>
+                <ul>
+                  {p.reasons.map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </>
+  );
+}
 
-  const health = deriveHealthLabel(customer);
-  const propensityPercent =
-    customer.top_product_score !== null && customer.top_product_score !== undefined
-      ? `${Math.round(customer.top_product_score * 100)}%`
-      : "—";
+function OutreachLog({ customerId }: { customerId: string }) {
+  const queryClient = useQueryClient();
+  const [channel, setChannel] = useState<InteractionChannel>("CALL");
+  const [outcome, setOutcome] = useState<InteractionOutcome>("FOLLOW_UP");
+  const [note, setNote] = useState("");
+  const [noteError, setNoteError] = useState<string | null>(null);
+  const log = useQuery({
+    queryKey: ["insights", "interactions", customerId],
+    queryFn: () => api.customerInteractions(customerId, LOG_LIMIT),
+  });
+  const save = useMutation({
+    mutationFn: () => api.logInteraction(customerId, { channel, outcome, note: note.trim() }),
+    onSuccess: async () => {
+      setNote("");
+      await queryClient.invalidateQueries({ queryKey: ["insights", "interactions", customerId] });
+    },
+  });
 
-  function handleLogAction(e: SyntheticEvent) {
-    e.preventDefault();
-    const trimmedNotes = notes.trim();
-    if (!trimmedNotes) {
-      setFeedback("Please enter notes for this outreach action.");
+  function submit(event: SyntheticEvent) {
+    event.preventDefault();
+    if (note.trim() === "") {
+      setNoteError("Write what was discussed.");
       return;
     }
-
-    const saved = saveCustomerAction({
-      customer_id: customer.customer_id,
-      action_type: actionType,
-      outcome,
-      notes: trimmedNotes,
-      logged_by: currentUserEmail,
-    });
-
-    setActions((prev) => [saved, ...prev]);
-    setNotes("");
-    setFeedback("Action recorded successfully.");
+    setNoteError(null);
+    save.mutate();
   }
 
   return (
-    <div className="flyout-overlay" onClick={onClose} data-testid="flyout-overlay">
-      <div
-        className="flyout-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Customer details: ${customer.full_name}`}
-        onClick={(e) => {
-          e.stopPropagation();
-        }}
-      >
-        <header className="flyout-header">
-          <div>
-            <div className="flyout-title-row">
-              <h2 className="flyout-title">{customer.full_name}</h2>
-              {customer.high_value && <span className="badge badge--success">High Value</span>}
-            </div>
-            <p className="flyout-subtitle" data-testid="customer-id">
-              ID: {customer.customer_id} &bull; {formatSegment(customer.segment)}
-            </p>
-          </div>
-          <button
-            type="button"
-            className="btn btn--sm btn--secondary"
-            aria-label="Close details"
-            onClick={onClose}
-          >
-            &times;
-          </button>
-        </header>
-
-        <div className="flyout-body">
-          {/* Key Indicators Card */}
-          <section className="card flyout-card" aria-label="Key financial indicators">
-            <h3 className="section-title">Indicators & Health Overview</h3>
-            <div className="indicator-grid">
-              <div className="indicator-cell">
-                <span className="indicator-label">Total Spendable Balance</span>
-                <span className="indicator-value">
-                  <Amount minor={customer.total_balance_minor} currency="INR" />
-                </span>
-              </div>
-              <div className="indicator-cell">
-                <span className="indicator-label">Churn Risk & Probability</span>
-                <div className="indicator-badge-row">
-                  <StatusBadge
-                    status={{
-                      label: `${customer.churn_risk_level} (${Math.round(customer.churn_risk_score * 100)}%)`,
-                      tone: churnRiskTone(customer.churn_risk_level),
-                    }}
-                  />
-                </div>
-              </div>
-              <div className="indicator-cell">
-                <span className="indicator-label">30-Day Balance Decline</span>
-                <span className="indicator-value">
-                  {(customer.balance_decline_rate * 100).toFixed(1)}%
-                </span>
-              </div>
-              <div className="indicator-cell">
-                <span className="indicator-label">Recent Activity Gap</span>
-                <span className="indicator-value">
-                  {customer.inactivity_days === 0
-                    ? "Active today"
-                    : `${customer.inactivity_days} days inactive`}
-                </span>
-              </div>
-            </div>
-
-            <div className="indicator-summary">
-              <span className="indicator-label">Financial Health Status</span>
-              <div className="indicator-badge-row">
-                <StatusBadge status={{ label: health.label, tone: health.tone }} />
-              </div>
-              <p className="muted small-text">{health.description}</p>
-            </div>
-          </section>
-
-          {/* Propensity & Recommendations */}
-          <section className="card flyout-card" aria-label="Product recommendations">
-            <h3 className="section-title">Recommended Product & Propensity</h3>
-            <div className="recommendation-box">
-              <div className="rec-info">
-                <span className="rec-name">
-                  {formatProductName(customer.top_recommended_product)}
-                </span>
-                <span className="rec-score">Propensity score: {propensityPercent}</span>
-              </div>
-              <p className="muted small-text">
-                Eligible based on transaction trends, category velocity, and customer segment.
-              </p>
-            </div>
-          </section>
-
-          {/* Action Logger */}
-          <section className="card flyout-card" aria-label="Action logger">
-            <h3 className="section-title">Action Logger</h3>
-            <p className="muted small-text">
-              Record calls, meetings, or client advisory notes for this customer.
-            </p>
-
-            {feedback && (
-              <div
-                className={`notice ${feedback.includes("successfully") ? "notice--success" : "notice--error"}`}
-                role="status"
-              >
-                {feedback}
-              </div>
-            )}
-
-            <form onSubmit={handleLogAction} className="action-form">
-              <div className="form-row">
-                <label htmlFor="action-type" className="form-label">
-                  Action Type
-                </label>
-                <select
-                  id="action-type"
-                  className="input select"
-                  value={actionType}
-                  onChange={(e) => {
-                    setActionType(e.target.value as "CALL" | "MEETING" | "EMAIL" | "NOTE");
-                  }}
-                >
-                  {ACTION_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-row">
-                <label htmlFor="action-outcome" className="form-label">
-                  Outcome
-                </label>
-                <select
-                  id="action-outcome"
-                  className="input select"
-                  value={outcome}
-                  onChange={(e) => {
-                    setOutcome(e.target.value);
-                  }}
-                >
-                  {OUTCOMES.map((o) => (
-                    <option key={o} value={o}>
-                      {o}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-row">
-                <label htmlFor="action-notes" className="form-label">
-                  Meeting / Call Notes
-                </label>
-                <textarea
-                  id="action-notes"
-                  className="input textarea"
-                  rows={3}
-                  value={notes}
-                  placeholder="Record customer reaction, loan willingness, next steps..."
-                  onChange={(e) => {
-                    setNotes(e.target.value);
-                  }}
-                />
-              </div>
-
-              <div className="form-actions">
-                <Button type="submit">Log Action</Button>
-              </div>
-            </form>
-
-            {/* Action History */}
-            <div className="action-history" aria-label="Logged outreach history">
-              <h4 className="history-heading">Outreach History ({actions.length})</h4>
-              {actions.length === 0 ? (
-                <p className="muted small-text">No outreach recorded yet for this customer.</p>
-              ) : (
-                <ul className="action-list">
-                  {actions.map((act) => (
-                    <li key={act.id} className="action-item">
-                      <div className="action-item-header">
-                        <span className="badge badge--neutral">{act.action_type}</span>
-                        <span className="action-outcome-label">{act.outcome}</span>
-                        <span className="action-timestamp">{formatDateTime(act.created_at)}</span>
-                      </div>
-                      <p className="action-notes-body">{act.notes}</p>
-                      <span className="action-logged-by">By {act.logged_by}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </section>
-        </div>
-      </div>
-    </div>
+    <section className="flyout-section" aria-labelledby="rm-log">
+      <h3 id="rm-log">Calls and notes</h3>
+      <form className="rm-log-form" onSubmit={submit} noValidate>
+        <Field label="Type">
+          {(control) => (
+            <select
+              {...control}
+              value={channel}
+              onChange={(e) => {
+                setChannel(e.target.value as InteractionChannel);
+              }}
+            >
+              {(Object.keys(CHANNEL_LABEL) as InteractionChannel[]).map((c) => (
+                <option key={c} value={c}>
+                  {CHANNEL_LABEL[c]}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+        <Field label="Outcome">
+          {(control) => (
+            <select
+              {...control}
+              value={outcome}
+              onChange={(e) => {
+                setOutcome(e.target.value as InteractionOutcome);
+              }}
+            >
+              {(Object.keys(OUTCOME_LABEL) as InteractionOutcome[]).map((o) => (
+                <option key={o} value={o}>
+                  {OUTCOME_LABEL[o]}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+        <Field
+          label="Note"
+          hint={`Kept on the customer's record and visible to other relationship managers. ${String(NOTE_MAX - note.length)} characters left.`}
+          error={noteError}
+        >
+          {(control) => (
+            <textarea
+              {...control}
+              rows={3}
+              maxLength={NOTE_MAX}
+              value={note}
+              onChange={(e) => {
+                setNote(e.target.value);
+              }}
+            />
+          )}
+        </Field>
+        {save.isError && (
+          <Alert tone="error">{errorMessage(save.error, "Could not save the note.")}</Alert>
+        )}
+        {save.isSuccess && note === "" && (
+          <p className="muted" role="status">
+            Saved.
+          </p>
+        )}
+        <Button type="submit" loading={save.isPending}>
+          {save.isPending ? "Saving..." : "Log it"}
+        </Button>
+      </form>
+      {log.isPending && <LoadingState label="Loading the log..." />}
+      {log.isError && (
+        <ErrorState
+          message={errorMessage(log.error, "Could not load the log.")}
+          onRetry={() => {
+            void log.refetch();
+          }}
+        />
+      )}
+      {log.data?.total === 0 && <p className="muted">Nothing logged for this customer yet.</p>}
+      {log.data && log.data.total > 0 && (
+        <>
+          <p className="muted small">
+            {log.data.total > log.data.items.length
+              ? `Latest ${String(log.data.items.length)} of ${countOf(log.data.total, "entry", "entries")}`
+              : countOf(log.data.total, "entry", "entries")}
+          </p>
+          <ul className="rm-log">
+            {log.data.items.map((i) => (
+              <li key={i.id}>
+                <p>
+                  <strong>{CHANNEL_LABEL[i.channel]}</strong> · {OUTCOME_LABEL[i.outcome]}
+                </p>
+                <p className="rm-log-note">{i.note}</p>
+                <p className="muted small">
+                  {i.logged_by} ·{" "}
+                  <time dateTime={i.created_at} title={formatDateTime(i.created_at)}>
+                    {formatRelative(i.created_at)}
+                  </time>
+                </p>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
   );
 }
