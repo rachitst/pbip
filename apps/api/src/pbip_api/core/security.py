@@ -82,6 +82,7 @@ class TokenClaims:
     amr: frozenset[str]
     token_id: str
     expires_at: datetime
+    version: int = 0  # users.token_version at issue time; tokens from before ADR-0021 count as 0
 
 
 def encode_token(
@@ -92,6 +93,7 @@ def encode_token(
     ttl: timedelta,
     roles: tuple[str, ...] = (),
     amr: tuple[str, ...] = (),
+    version: int = 0,
 ) -> str:
     now = datetime.now(UTC)
     payload = {
@@ -104,6 +106,7 @@ def encode_token(
         "typ": token_type,
         "roles": list(roles),
         "amr": list(amr),
+        "ver": version,
     }
     return jwt.encode(payload, settings.jwt_secret.get_secret_value(), algorithm=_ALGORITHM)
 
@@ -127,6 +130,7 @@ def decode_token(settings: Settings, token: str, expected_type: TokenType) -> To
             amr=frozenset(payload.get("amr", [])),
             token_id=payload["jti"],
             expires_at=datetime.fromtimestamp(payload["exp"], UTC),
+            version=int(payload.get("ver", 0)),
         )
     except (jwt.PyJWTError, ValueError, KeyError) as exc:
         raise UnauthorizedError("invalid or expired token") from exc

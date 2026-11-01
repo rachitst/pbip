@@ -63,6 +63,7 @@ class Transaction(Base):
         ),
         Index("ix_transactions_debit_account_id_created_at", "debit_account_id", "created_at"),
         Index("ix_transactions_status", "status"),
+        Index("ix_transactions_payee_id", "payee_id"),  # payee deletion check; FK index (TASK-079)
     )
 
     id: Mapped[UUID] = uuid_pk()

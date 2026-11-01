@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -76,6 +77,7 @@ class User(Base):
     __table_args__ = (
         Index("uq_users_email_lower", text("lower(email)"), unique=True),
         in_check("status", UserStatus, "status_valid"),
+        CheckConstraint("token_version >= 0", name="token_version_non_negative"),
     )
 
     id: Mapped[UUID] = uuid_pk()
@@ -91,6 +93,11 @@ class User(Base):
     mfa_last_step: Mapped[int | None] = mapped_column(BigInteger)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Bumped when every session must end (password change). Access tokens carry the value as `ver`
+    # and stop working at once when it no longer matches (ADR-0021).
+    token_version: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
     created_at: Mapped[datetime] = created_at_col()
 
     roles: Mapped[list["UserRole"]] = relationship(
@@ -113,7 +120,10 @@ class UserRole(Base):
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
-    __table_args__ = (Index("ix_refresh_tokens_family_id", "family_id"),)
+    __table_args__ = (
+        Index("ix_refresh_tokens_family_id", "family_id"),
+        Index("ix_refresh_tokens_user_id", "user_id"),  # revoke-all-sessions; FK index (TASK-079)
+    )
 
     id: Mapped[UUID] = uuid_pk()
     user_id: Mapped[UUID] = mapped_column(
