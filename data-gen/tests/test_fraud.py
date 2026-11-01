@@ -1,4 +1,4 @@
-"""TASK-023: labelled fraud scenarios F1-F6 are injected deterministically and cleanly."""
+"""TASK-023, TASK-071: labelled fraud scenarios F1-F8 are injected deterministically and cleanly."""
 
 import json
 from collections import defaultdict
@@ -8,6 +8,9 @@ from pathlib import Path
 import pytest
 from pbip_datagen.__main__ import main
 from pbip_datagen.fraud import (
+    DEFAULT_DORMANCY_DAYS,
+    DEFAULT_MAX_TRANSFER_MINOR,
+    DEFAULT_REPORTING_THRESHOLD_MINOR,
     SCENARIOS,
     FraudConfig,
     LabelledTransfers,
@@ -137,6 +140,104 @@ def test_f6_inflow_from_several_senders_passed_on_within_six_hours(
         assert outbound.occurred_at - max(r.occurred_at for r in inbound) <= timedelta(hours=6)
 
 
+def test_f7_multiple_deposits_just_below_reporting_threshold(
+    data: LabelledTransfers,
+) -> None:
+    incidents = _incidents(data, "F7")
+    assert len(incidents) > 0
+    for incident in incidents:
+        assert 3 <= len(incident) <= 6
+        for row, role in incident:
+            assert role == "deposit"
+            assert row.direction == "CREDIT"
+            assert row.payee_added_at is None
+            assert (
+                0.89 * DEFAULT_REPORTING_THRESHOLD_MINOR
+                <= row.amount_minor
+                < DEFAULT_REPORTING_THRESHOLD_MINOR
+            )
+        total_inflow = sum(row.amount_minor for row, _ in incident)
+        assert total_inflow > DEFAULT_REPORTING_THRESHOLD_MINOR
+        assert len({row.counterparty_id for row, _ in incident}) == len(incident)
+
+
+def test_f7_custom_reporting_threshold_is_respected() -> None:
+    custom_threshold = 5_000_000  # INR 50,000.00
+    cfg = FraudConfig(
+        rates=dict.fromkeys(SCENARIOS, 0.05),
+        reporting_threshold_minor=custom_threshold,
+    )
+    custom_data = generate_labelled(GeneratorConfig(seed=42, customers=200, months=3), cfg)
+    incidents = _incidents(custom_data, "F7")
+    assert len(incidents) > 0
+    for incident in incidents:
+        for row, role in incident:
+            assert role == "deposit"
+            assert row.direction == "CREDIT"
+            assert 0.89 * custom_threshold <= row.amount_minor < custom_threshold
+
+
+def test_f8_dormancy_greater_than_180_days_and_maximum_transfers(
+    data: LabelledTransfers,
+) -> None:
+    by_customer: dict[object, list[Transfer]] = defaultdict(list)
+    for t in data.transfers:
+        by_customer[t.customer_id].append(t)
+
+    incidents = _incidents(data, "F8")
+    assert len(incidents) > 0
+    for incident in incidents:
+        assert 1 <= len(incident) <= 2
+        f8_rows = [row for row, role in incident]
+        customer_id = f8_rows[0].customer_id
+        customer_txns = sorted(by_customer[customer_id], key=lambda t: t.occurred_at)
+
+        for row, role in incident:
+            assert role == "reactivation"
+            assert row.direction == "DEBIT"
+            assert row.amount_minor == DEFAULT_MAX_TRANSFER_MINOR
+            assert row.new_device
+            assert row.payee_added_at is not None
+            assert row.occurred_at - row.payee_added_at < timedelta(hours=1)
+
+        first_f8 = min(row.occurred_at for row in f8_rows)
+        priors = [t for t in customer_txns if t.occurred_at < first_f8]
+        assert priors, "Dormant account must have prior activity before dormancy"
+        last_prior = priors[-1]
+        gap = first_f8 - last_prior.occurred_at
+        assert gap > timedelta(days=DEFAULT_DORMANCY_DAYS)
+
+        in_gap = [t for t in customer_txns if last_prior.occurred_at < t.occurred_at < first_f8]
+        assert in_gap == []
+
+
+def test_f8_custom_dormancy_days_and_limit() -> None:
+    custom_dormancy = 90
+    custom_max_transfer = 15_000_000  # INR 1,50,000.00
+    cfg = FraudConfig(
+        rates=dict.fromkeys(SCENARIOS, 0.05),
+        dormancy_days=custom_dormancy,
+        max_transfer_minor=custom_max_transfer,
+    )
+    custom_data = generate_labelled(GeneratorConfig(seed=42, customers=200, months=6), cfg)
+    by_customer: dict[object, list[Transfer]] = defaultdict(list)
+    for t in custom_data.transfers:
+        by_customer[t.customer_id].append(t)
+
+    incidents = _incidents(custom_data, "F8")
+    assert len(incidents) > 0
+    for incident in incidents:
+        f8_rows = [row for row, role in incident]
+        customer_txns = sorted(by_customer[f8_rows[0].customer_id], key=lambda t: t.occurred_at)
+        for row, role in incident:
+            assert role == "reactivation"
+            assert row.amount_minor == custom_max_transfer
+        first_f8 = min(row.occurred_at for row in f8_rows)
+        priors = [t for t in customer_txns if t.occurred_at < first_f8]
+        assert priors
+        assert first_f8 - priors[-1].occurred_at > timedelta(days=custom_dormancy)
+
+
 def test_ordinary_transfers_never_match_a_scenario_signature(data: LabelledTransfers) -> None:
     labelled = {lb.transaction_id for lb in data.labels}
     for t in data.transfers:
@@ -148,10 +249,16 @@ def test_ordinary_transfers_never_match_a_scenario_signature(data: LabelledTrans
 
 
 def test_fraud_config_is_validated() -> None:
-    with pytest.raises(ValueError, match=r"F1-F6"):
-        FraudConfig(rates={"F1": 0.1})  # type: ignore[dict-item]  # deliberately incomplete
+    with pytest.raises(ValueError, match=r"F1-F8"):
+        FraudConfig(rates={"F1": 0.1})  # deliberately incomplete
     with pytest.raises(ValueError, match=r"at most 0\.5"):
-        FraudConfig(rates=dict.fromkeys(SCENARIOS, 0.1))  # type: ignore[arg-type]  # Literal keys
+        FraudConfig(rates=dict.fromkeys(SCENARIOS, 0.1))  # Literal keys
+    with pytest.raises(ValueError, match=r"reporting_threshold_minor must be positive"):
+        FraudConfig(reporting_threshold_minor=0)
+    with pytest.raises(ValueError, match=r"max_transfer_minor must be positive"):
+        FraudConfig(max_transfer_minor=-100)
+    with pytest.raises(ValueError, match=r"dormancy_days must be positive"):
+        FraudConfig(dormancy_days=0)
 
 
 def test_export_writes_labels_and_counts(
