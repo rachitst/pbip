@@ -12,7 +12,7 @@ statsforecast is imported lazily: it JIT-compiles with numba (about 2 s per proc
 which must not slow API start-up or unrelated tests.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import date, timedelta
 
 import numpy as np
@@ -36,12 +36,13 @@ def method_for(history_days: int) -> str:
 def _model(method: str) -> object:
     from statsforecast.models import AutoARIMA, AutoETS, Naive, SeasonalNaive  # lazy, see above
 
-    return {
+    factories: dict[str, Callable[[], object]] = {
         "auto_ets": lambda: AutoETS(season_length=SEASON),
         "auto_arima": lambda: AutoARIMA(season_length=SEASON),
         "seasonal_naive": lambda: SeasonalNaive(season_length=SEASON),
         "naive": lambda: Naive(),
-    }[method]()
+    }
+    return factories[method]()
 
 
 def predict(
