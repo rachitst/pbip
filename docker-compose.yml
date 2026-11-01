@@ -16,6 +16,9 @@ x-api-env: &api-env
   OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-4}
   OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-24h}
   ASSISTANT_LLM_ENABLED: ${ASSISTANT_LLM_ENABLED:-true}
+  # Fraud scoring (ADR-0019): the demo uses the hybrid; ./models/fraud comes from `make fraud-model`.
+  FRAUD_SCORER: ${FRAUD_SCORER:-hybrid}
+  FRAUD_MODEL_DIR: /models/fraud
 
 x-api-build: &api-build
   context: .
@@ -65,6 +68,8 @@ services:
       redis: { condition: service_healthy }
     ports: ["127.0.0.1:8000:8000"]
     extra_hosts: ["host.docker.internal:host-gateway"]  # Linux; Docker Desktop provides it already
+    # Read-only: the API must never be able to rewrite the models it loads (threat model T34).
+    volumes: ["./models/fraud:/models/fraud:ro"]
     restart: unless-stopped
 
   worker:

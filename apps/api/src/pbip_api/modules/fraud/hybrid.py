@@ -59,22 +59,24 @@ def load_engine(settings: Settings) -> "HybridScorer | None":
     """
     if settings.fraud_scorer != "hybrid":
         return None
-    from pbip_ml.fraud.inference import ModelLoadError, TransferInputs, load, score_transfer
-
     if not settings.fraud_model_dir:
         _logger.error("fraud_model_not_loaded", reason="FRAUD_MODEL_DIR is not set")
         return None
+    # Anything here may fail: a missing native library (libgomp for LightGBM), a broken file, a
+    # bad pickle. The API must still start and serve the rules (fail safe), never crash.
     try:
+        from pbip_ml.fraud.inference import TransferInputs, load, score_transfer
+
         engine = load(Path(settings.fraud_model_dir))
-    except ModelLoadError as exc:
-        _logger.error("fraud_model_not_loaded", reason=str(exc))
+        # One throw-away score warms LightGBM/sklearn/pandas, so the first customer's transfer
+        # is not the one that pays the cold start (34 ms vs a 15 ms median on the laptop).
+        warm_up = TransferInputs(
+            100_00, "INR", datetime(2026, 1, 1, tzinfo=UTC), None, None, False, 0, ()
+        )
+        score_transfer(engine, warm_up)
+    except Exception as exc:  # fail safe: rules only, never a crashed API or ALLOW-all
+        _logger.error("fraud_model_not_loaded", reason=type(exc).__name__, detail=str(exc)[:200])
         return None
-    # One throw-away score warms LightGBM/sklearn/pandas, so the first customer's transfer is not
-    # the one that pays the cold start (34 ms vs a 15 ms median, measured on the laptop).
-    warm_up = TransferInputs(
-        100_00, "INR", datetime(2026, 1, 1, tzinfo=UTC), None, None, False, 0, ()
-    )
-    score_transfer(engine, warm_up)
     _logger.info("fraud_model_loaded", model_version=engine.params.model_version)
     return engine
 
