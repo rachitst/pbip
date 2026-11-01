@@ -434,3 +434,38 @@ def test_smoke_defaults_to_https_and_trusts_the_dev_ca(tmp_path: Path) -> None:
         assert mock_run.call_args[1]["env"] == {"SSL_CERT_FILE": str(ca)}
         dev_mod.cmd_smoke(["https://staging.example"])
         assert mock_run.call_args[1]["env"] is None  # real hosts use the system trust store
+
+
+def test_load_mounts_results_and_trusts_the_dev_ca_for_local_https(tmp_path: Path) -> None:
+    ca = tmp_path / "ca.crt"
+    ca.write_text("dummy", encoding="utf-8")
+    with patch("scripts.dev.DEV_CA", ca), patch("scripts.dev.PERF_RESULTS", tmp_path / "out"):
+        cmd, _ = dev_mod.build_load_command(
+            "https://localhost:8443", False, ["--summary-export", "/results/s.json"]
+        )
+        assert cmd[-3:] == ["/scripts/load.js", "--summary-export", "/results/s.json"]
+        image_at = cmd.index(dev_mod.K6_IMAGE)
+        assert f"{(tmp_path / 'out').as_posix()}:/results" in cmd[:image_at]
+        assert "SSL_CERT_FILE=/certs/ca.crt" in cmd[:image_at]
+        remote, _ = dev_mod.build_load_command("https://staging.example", False, [])
+        assert "SSL_CERT_FILE=/certs/ca.crt" not in remote  # real hosts use the system trust store
+        native, env = dev_mod.build_load_command(
+            "https://localhost:8443", True, ["--summary-export", "/results/s.json"]
+        )
+        assert native[:3] == ["k6", "run", "infra/k6/load.js"] and env["SSL_CERT_FILE"] == str(ca)
+        assert native[-1] == f"{(tmp_path / 'out').as_posix()}/s.json"
+
+
+def test_k6_load_suite_keeps_its_nfr_thresholds() -> None:
+    """Guard against silently weakening TASK-078/TASK-102 pass/fail criteria."""
+    script = (dev_mod.ROOT / "infra" / "k6" / "load.js").read_text(encoding="utf-8")
+    for required in (
+        'http_req_failed: ["rate<0.005"]',
+        '"http_req_duration{kind:accounts}": ["p(95)<500"]',
+        '"http_req_duration{kind:transfers}": ["p(95)<500"]',
+        '"http_req_duration{kind:analytics}": ["p(95)<500"]',
+        '"http_req_duration{kind:assistant}": ["p(95)<500"]',
+        '"http_req_duration{endpoint:login}": ["p(95)<3000"]',
+        "Idempotency-Key",
+    ):
+        assert required in script, required
