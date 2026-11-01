@@ -16,7 +16,7 @@ Task status comes from `docs/TEAM_EXECUTION_PLAN.md` and the project board.
 TASK-094 to TASK-107 were created on 2026-10-30 for requirements no task covered; they are
 unassigned, without dates, and Todo until someone starts one (capacity confirmed by the product owner).
 
-Last reviewed against `main` on 2026-11-01 (`2e65b87`) for TASK-104; the earlier local verification run is
+Last reviewed against `main` on 2026-11-01 (`4fa96df`) for TASK-069/078/079/083/090/102/103 (Session 4); earlier (`2e65b87`) for TASK-104; the earlier local verification run is
 recorded in `docs/testing/local-verification-2026-10-30.md`. The numbered requirements (FR/NFR) are in
 [requirements-specification.md](requirements-specification.md) and the user stories, with acceptance criteria and
 the tests that prove them, in [user-stories.md](user-stories.md).
@@ -62,11 +62,11 @@ the tests that prove them, in [user-stories.md](user-stories.md).
 | Encrypt sensitive data | Verified | `core/crypto.py`, `test_crypto.py`, `test_rotate_field_key.py`; TLS in the repository (#280): nginx TLS 1.2+ with HSTS, PostgreSQL `verify-full`, proven by `scripts/verify_tls.sh` in the CI e2e job | 075 (Done) | Certbot issuance on a real staging host (#198) |
 | Role-based access control | Verified | `require_roles`, `test_rbac_bola.py` | | |
 | Audit logs | Verified | hash-chained `audit_logs`, `test_audit_and_outbox.py`, `AuditLog.test.tsx` | 048 #71 (Done) | |
-| OWASP Top 10 | Partial | threat model mapping, Bandit, CodeQL, nightly fuzzing (run 40948518916: 940 cases, 0 5xx) | 028 (Done), 070 (Done), 090 #113 | No DAST against a deployed environment |
-| Page load < 2 s, API < 500 ms, login < 3 s | Partial | Analytics endpoints measured locally with `scripts/measure_analytics_latency.py`: p95 12-19 ms, 300 requests each ([local verification](../testing/local-verification-2026-10-30.md)); `infra/k6/baseline.js` (TASK-012) | 078 #101, **102 #185 (new)** | Page load and login never measured; other routes not measured; nothing measured under concurrency (078 #101) |
-| 99% availability in test environment | Unverified | | **103 #186 (new)** | No environment deployed; no task existed |
+| OWASP Top 10 | Partial | threat model mapping, Bandit (0 high/medium), CodeQL, nightly fuzzing, OWASP ZAP baseline against the running HTTPS stack (0 WARN/0 FAIL after the CORP/COEP fix, nightly `dast.yml`), `docs/security/security-audit-2026-11.md` | 028, 070, 090 (Done, #290) | ZAP baseline is passive; no authenticated active scan; no DAST against a deployed environment (#198) |
+| Page load < 2 s, API < 500 ms, login < 3 s | Partial | Laptop, 2-CPU Celeron ([performance report](../testing/performance-2026-11-01.md)): browser page loads 913-1,665 ms and login 2,102 ms (met, `e2e/perf.spec.ts`); API p95 1.5-5.0 s at 50 VUs through nginx TLS (not met on the laptop); k6 suite `infra/k6/load.js` and nightly `perf.yml` | 078 #101, 102 #185, 079 #102 (In Progress, #288) | API budget unproven on staging hardware (#198) |
+| 99% availability in test environment | Partial | Blackbox probes (web-ready through nginx TLS, api-ready, api-live), `pbip:availability:ratio_30d`, `AvailabilityBelow99` alert, verified on the laptop stack | 103 #186 (In Progress, #289) | No deployed test environment to measure a month on (#198) |
 | Horizontal scaling, stateless APIs, containers | Partial | Docker images, compose files, JWT access tokens | 082 (Done), 079 #102 | Multi-replica deployment never exercised |
-| Centralised logging, error tracking, health, metrics | Unverified | `infra/{loki,alloy,prometheus,grafana}`, `/api/health/*` | 069 #92, 085 #108, **103 #186 (new)** | Error tracking had no task; nothing deployed |
+| Centralised logging, error tracking, health, metrics | Verified (locally) | Loki/Alloy with `service` labels; `unhandled_exception` events (request id, route template, no message) and `unhandled_errors_total`, `test_errors.py`; dashboards and alerts as code, `test_monitoring_as_code.py`; all panels rendered data on the running stack | 069 #92 (Done, #289), 103 #186 | Not deployed; no alert notification channel (owner decision) |
 
 ## Deliverables and engineering practices (sections 9 to 11)
 
