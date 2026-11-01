@@ -6,6 +6,10 @@
 **MLflow run:** `5de0a9dc7c534ed29701cd7703d4fb6a`, experiment `pbip-fraud`. The v1.0 report (generator
 v2.0) used run `79157b22dc9a46d0b2dcfbb0ccde5cd9`; its headline numbers are kept in §3.3 for comparison.
 
+> **Update for generator v2.2 (TASK-071): see §8.** From v2.2, models are trained and evaluated on outgoing
+> transfers only, which is what the API scores. §8 has the retrained model's numbers, and they supersede §3.1
+> and the four bars in §3.3. §1-§7 and the charts are the v1.1 (generator v2.1) evaluation, kept for comparison.
+
 > **All data in this report is synthetic.** It comes from the seeded generator (`pbip_datagen`, TASK-023),
 > which plants six fraud scenarios (F1-F6) and, since v2.1, three kinds of legitimate first-time behaviour.
 > Scores show the models separate the planted patterns. They are **not** an estimate of performance on real
@@ -179,3 +183,77 @@ Protections in code:
 - the metric gate in `test_fraud_hybrid.py`;
 - the API test that a legitimate transfer to a 2-day-old payee is ALLOWed by the real models
   (`test_real_artifacts_load_once_and_score_within_the_latency_budget`).
+
+## 8. Generator v2.2 (TASK-071): F7/F8, and training on outgoing transfers only
+
+**Date:** 1 Nov 2026. **MLflow run:** `394b64764f694164b3a1e0d356f4cf1d`, experiment `pbip-fraud-task071`.
+Commands are the same as §1 on this branch. For F8, one extra export was scored with the same script:
+`--seed 4242 --customers 1500 --months 12 --out data/holdout12`, passed as `--holdout`. Latency was not
+re-measured: the model shapes are the same and the machine was shared.
+
+**Data.** v2.2 only adds rows. Every v2.1 row and label is byte-identical, which `test_v2_1_rows_are_unchanged`
+checks. The 6-month training export gains 31 F7 incidents (142 deposit rows). It has no F8: F8 needs more than
+180 days of dormancy inside the data.
+
+**Change: train and evaluate on outgoing transfers only.** `pbip_ml.fraud.training.build_dataset` drops incoming
+rows. Training and evaluation both build their rows there, so the two cannot diverge
+(`test_dataset_holds_outgoing_transfers_only_with_features_from_all_rows`). Features are still computed over
+every row, because online history includes credits too.
+
+Why: the API scores only outgoing transfers, so training on incoming rows was train/serve skew. The generator
+has no legitimate incoming transfers, so "incoming" labelled itself as fraud. Adding the F7 deposits made this
+visible:
+- Trained on all rows, the v2.2 model scored the canonical APP scam **30 (STEP_UP)**; v2.1 scored it 99.
+- With the F7 rate set to 0, the score returned to normal.
+
+Effect on comparability: F6's inbound legs and F7's deposits are no longer scored. Recall now means recall on
+outgoing fraud transfers. "Before" below is the v2.1 model scored on the same outgoing v2.2 rows.
+
+| Measure (test / held-out) | Before: v2.1 model | After: v2.2 retrain, outgoing only |
+|---|---|---|
+| Fraud rows scored | 104 / 226 | 104 / 226 |
+| Hybrid recall at REVIEW | 0.817 / 0.801 | 0.808 / 0.805 |
+| False positives at REVIEW | 4 / 8 | 2 / 10 |
+| Hybrid PR-AUC | 0.842 / 0.825 | 0.886 / 0.850 |
+| Rules only, recall at REVIEW (test) | 0.202 | 0.202 |
+| LightGBM alone (threshold 0.817 from validation) | - | P 0.903, R 0.894, PR-AUC 0.962 (test) |
+
+Hybrid on the test split: STEP_UP precision 0.520, recall 0.865, FPR 0.82%. REVIEW precision 0.977, recall
+0.808, FPR 0.020%. BLOCK precision 1.000, recall 0.789.
+
+**The four bars from §3.3, retrained model (test / held-out):**
+
+| Criterion | Bar | Result |
+|---|---|---|
+| Legitimate new-payee transfers held for REVIEW | ≤ 1% | 0.09% / 0.30% (pass) |
+| Legitimate new-payee transfers asked for STEP_UP | ≤ 10% | 7.5% / 8.0% (pass) |
+| All legitimate debits held at REVIEW | ≤ 0.1% | 0.02% / 0.04% (pass) |
+| Recall at REVIEW, hybrid vs the rules alone | hybrid clearly better | 0.808 vs 0.202 (pass) |
+
+These numbers are not directly comparable with the earlier 0.835 vs 0.183, which also counted the incoming
+F6 legs. Those legs were easy for the model and almost never caught by the rules.
+
+**Behaviour baseline (TASK-080):**
+- The suite's model scores the canonical cases APP scam 94 (BLOCK), velocity burst 30, takeover 60 and routine
+  grocery 0. Against the recorded baseline (92, 30, 60), all pass, so the baseline file is unchanged.
+- The full 3,000-customer model scores the APP scam 88 (BLOCK).
+
+**Recall by scenario, at REVIEW (test / held-out, outgoing rows):**
+
+| Scenario | Recall |
+|---|---|
+| F1 | 0.93 / 0.75 |
+| F2 | 0.79 / 0.86 |
+| F3 | 1.00 / 1.00 |
+| F4 | 0.63 / 0.69 |
+| F5 | 0.67 / 0.46 |
+| F6 (outbound leg) | 1.00 / 0.90 |
+| F7 | **not applicable** |
+| F8 (12-month held-out, 17 rows) | 0.88 (STEP_UP 1.00) |
+
+- **F7 is not detected by the per-transfer scorer.** Structuring is a pattern of incoming deposits, and the
+  scorer only sees outgoing transfers. Detecting it needs a deposit-window aggregate feature or a batch
+  monitor. That is a follow-up (#274); F7 stays in the data as labelled ground truth for it.
+- **F8 is caught by the takeover signals, not by dormancy.** It looks like F1/F3: a new device, a payee added
+  minutes earlier and the maximum amount. No feature measures the time since the last activity, so a careful
+  dormant-account fraud without those signals would be missed. That is also a follow-up (#275).

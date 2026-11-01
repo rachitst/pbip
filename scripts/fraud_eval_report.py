@@ -23,6 +23,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from pbip_ml.fraud import hybrid as h
 from pbip_ml.fraud import training as t
 from pbip_ml.fraud.evaluation import cheapest, cost_curve
@@ -66,6 +67,32 @@ def _first_time_fpr(frame: Any, risk: np.ndarray) -> dict[str, dict[str, float |
             else 0,
         }
         for name, mask in groups.items()
+    }
+
+
+def _scenario_of_rows(directory: Path) -> np.ndarray:
+    """Scenario of each fraud row of an export, "" for legitimate rows (``load_export`` order)."""
+    ids = pd.read_csv(directory / "transfers.csv", usecols=["id"])["id"]
+    labels = pd.read_csv(directory / "fraud_labels.csv")
+    fraud = labels[labels["fraudulent"].astype(str) == "True"]
+    scenario = dict(zip(fraud["transaction_id"], fraud["scenario"], strict=True))
+    of_rows: np.ndarray = ids.map(scenario).fillna("").to_numpy(dtype=str)
+    return of_rows
+
+
+def _recall_by_scenario(frame: Any, risk: np.ndarray, scenarios: np.ndarray) -> dict[str, Any]:
+    """Recall per scenario at STEP_UP and REVIEW, and over F1-F6 only (comparable to v2.1)."""
+    of_rows = scenarios[frame.index.to_numpy()]
+    groups = {s: of_rows == s for s in sorted(set(of_rows) - {""})}
+    groups["F1-F6"] = np.isin(of_rows, ["F1", "F2", "F3", "F4", "F5", "F6"])
+    return {
+        name: {
+            "rows": int(mask.sum()),
+            "recall_at_step_up": round(float((risk[mask] >= h.STEP_UP_AT).mean()), 4),
+            "recall_at_review": round(float((risk[mask] >= h.REVIEW_AT).mean()), 4),
+        }
+        for name, mask in groups.items()
+        if mask.any()
     }
 
 
@@ -137,6 +164,17 @@ def main() -> None:
     report["holdout"]["hybrid"] = _confusions(held["label"].to_numpy(), risk_held)
     report["test"]["first_time_fpr"] = _first_time_fpr(test, risk_test)
     report["holdout"]["first_time_fpr"] = _first_time_fpr(held, risk_held)
+    rules_test = h.batch_risk(rules_only, test)
+    for name, frame, risk, directory in (
+        ("test", test, risk_test, args.data),
+        ("holdout", held, risk_held, args.holdout),
+    ):
+        report[name]["recall_by_scenario"] = _recall_by_scenario(
+            frame, risk, _scenario_of_rows(directory)
+        )
+    report["test"]["rules_only_recall_by_scenario"] = _recall_by_scenario(
+        test, rules_test, _scenario_of_rows(args.data)
+    )
 
     amounts = _amounts(test)
     report["test"]["fraud_amount_minor"] = int(amounts[y == 1].sum())
