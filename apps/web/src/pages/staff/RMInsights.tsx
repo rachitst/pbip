@@ -247,8 +247,8 @@ function LeadsTable({
             <th scope="col">Churn risk</th>
             <th scope="col">Last active</th>
             <th scope="col">Loan propensity</th>
-            <th scope="col">
-              <span className="sr-only">Details</span>
+            <th scope="col" className="right">
+              Details
             </th>
           </tr>
         </thead>

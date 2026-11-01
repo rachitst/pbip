@@ -192,6 +192,20 @@ describe("RMInsights page (TASK-066)", () => {
     expect(screen.getByText(/Showing 1-2 of 2 customers/)).toBeInTheDocument();
   });
 
+  // jsdom has no layout, so this cannot prove the page does not scroll sideways at 360px (that needs
+  // a browser). It pins the cause: an absolutely positioned sr-only span in the header escaped the
+  // table's scroll region and widened the page, so the Details header must be plain visible text.
+  it("labels the last column with a visible Details header, not an sr-only span", async () => {
+    mockApi({ list: () => json(200, page([asha])) });
+    renderPage();
+    const table = await screen.findByRole("table");
+    const headers = within(table).getAllByRole("columnheader");
+    const last = headers[headers.length - 1];
+    if (!last) throw new Error("no column headers");
+    expect(last).toHaveTextContent("Details");
+    expect(last.querySelector(".sr-only")).toBeNull();
+  });
+
   it("says 1 customer, not 1 customers", async () => {
     mockApi({ list: () => json(200, page([asha])) });
     renderPage(admin);
