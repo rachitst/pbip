@@ -83,6 +83,8 @@ jobs:
           uv run alembic -c apps/api/alembic.ini downgrade base
           uv run alembic -c apps/api/alembic.ini upgrade head
           uv run alembic -c apps/api/alembic.ini check
+      - name: ER diagram matches the migrated schema (TASK-106)
+        run: uv run python scripts/er_diagram.py --check
       - name: "Tests with coverage (gate - 80 percent)"
         run: uv run pytest --cov --cov-report=xml --cov-report=term-missing
       - name: Coverage summary
