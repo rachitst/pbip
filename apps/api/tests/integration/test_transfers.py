@@ -474,6 +474,16 @@ def test_new_payee_plus_large_amount_is_held_with_human_readable_reasons(
     detail = client.get(f"/api/v1/fraud/alerts/{alert['id']}", headers=analyst.headers).json()
     codes = {r["code"] for r in detail["reasons"]}
     assert "NEW_PAYEE_LARGE_AMOUNT" in codes
+    # TASK-036: the analyst sees who and what, without contact details.
+    assert detail["customer"]["kyc_status"] and detail["customer"]["full_name"]
+    assert set(detail["customer"]) == {
+        "full_name",
+        "kyc_status",
+        "segment",
+        "risk_profile",
+        "customer_since",
+    }
+    assert detail["transaction_type"] == "TRANSFER" and detail["reference"] == "rent"
     assert (
         detail["model_version"] == "baseline-rules-0.3"
         and detail["features"]["payee_age_minutes"] is not None
