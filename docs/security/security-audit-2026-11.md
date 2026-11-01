@@ -48,6 +48,11 @@ code, with HTTPS through nginx and TLS to PostgreSQL.
   and 10049 *Storable content*: `index.html` is `no-cache` so a deploy is picked up immediately, and hashed
   `/assets/*` are `immutable` by design; neither contains personal data, and API responses are not involved.
 
+## Raw reports
+
+`docs/security/zap-2026-11-01/`: `before.json` and `before.md` (6 WARN, before the header fix), `after.json` and
+`after.html` (0 WARN/0 FAIL with `infra/zap/baseline-rules.tsv`). Target `https://localhost:18443` on the laptop.
+
 ## Made repeatable
 
 - `.github/workflows/dast.yml`: nightly and on demand, it builds the full stack with dev certificates and runs the
