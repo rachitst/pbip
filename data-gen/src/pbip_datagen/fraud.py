@@ -369,7 +369,7 @@ def _later_scenarios(
         rows = _f7(ctx, fraud.reporting_threshold_minor)
     elif dormant is not None and f7 <= draw < f7 + fraud.rates["F8"]:
         scenario = "F8"
-        # v2.0 keeps making ordinary transfers after churn (only v1 and the v2.1 additions stop).
+        # v2.0 keeps making ordinary transfers after churn (#276; v1 and the v2.1 additions stop).
         # A dormant account has none: drop them for THIS customer only. Every other v2.1 row is
         # untouched, and 6-month datasets (training) have no F8, so they stay byte-identical.
         ctx.rows = [t for t in ctx.rows if t.occurred_at < ctx.window_end]

@@ -30,7 +30,7 @@ LONG_CONFIG = GeneratorConfig(seed=11, customers=500, months=12)
 # SHA-256 of every row and label except F7/F8 ones, recorded by ``_v2_1_digest`` on the output of
 # generator v2.1.0 (main at 2e65b87, before TASK-071). TASK-071 must be additive: if any F1-F6,
 # ordinary or legitimate first-time (L1-L3) row or label changes, these stop matching. The one
-# exception: an F8 customer's ordinary transfers dated after churn (a v2.0 artefact; a dormant
+# exception: an F8 customer's ordinary transfers dated after churn (a v2.0 defect, #276; a dormant
 # account has none) are skipped. CONFIG has no F8, so its digest has no exception at all.
 V2_1_DIGESTS = {
     CONFIG: "dcdba4f908ae10108299272f257620aab538d6030430527fed8736c5af893d72",  # pragma: allowlist secret (a SHA-256 digest of data)
