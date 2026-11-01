@@ -69,7 +69,7 @@ def test_served_row_equals_the_training_row(tmp_path: Path) -> None:
     """Every model column of every debit, built online, matches ``build_dataset`` (training)."""
     config = GeneratorConfig(seed=11, customers=120, months=3)
     _export_fraud(config, tmp_path)
-    offline = load_export(tmp_path).reset_index(drop=True)
+    offline = load_export(tmp_path)  # outgoing rows, indexed by position in transfers.csv
     transfers = generate_labelled(config).transfers
     by_customer: dict[UUID, list[Transfer]] = {}
     for transfer in transfers:
@@ -80,7 +80,7 @@ def test_served_row_equals_the_training_row(tmp_path: Path) -> None:
             continue
         history = [h for h in by_customer[transfer.customer_id] if h.id != transfer.id]
         row, context = inf.feature_row(_inputs(transfer, history))
-        expected = offline.iloc[i]
+        expected = offline.loc[i]
         for name in t.MODEL_FEATURES:
             assert row.iloc[0][name] == pytest.approx(expected[name], rel=0, abs=1e-12), name
         assert context.new_device == transfer.new_device
