@@ -265,15 +265,23 @@ def test_bill_payments_get_the_same_hybrid_score(
 
 # --------------------------------------------------------------------------- real artifacts
 @pytest.fixture(scope="session")
-def model_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Train the real pipeline on a small labelled export (seeded) and write the artifacts."""
+def fraud_data(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A small labelled export (seeded)."""
     from pbip_datagen.__main__ import _export_fraud
     from pbip_datagen.generator import GeneratorConfig
+
+    data = tmp_path_factory.mktemp("fraud-data")
+    _export_fraud(GeneratorConfig(seed=42, customers=600, months=4), data)
+    return data
+
+
+@pytest.fixture(scope="session")
+def model_dir(tmp_path_factory: pytest.TempPathFactory, fraud_data: Path) -> Path:
+    """Train the real pipeline on the small export and write the artifacts."""
     from pbip_ml.fraud.train import run
 
-    data, out = tmp_path_factory.mktemp("fraud-data"), tmp_path_factory.mktemp("fraud-model")
-    _export_fraud(GeneratorConfig(seed=42, customers=600, months=4), data)
-    run(data, out)
+    out = tmp_path_factory.mktemp("fraud-model")
+    run(fraud_data, out)
     return out
 
 
@@ -340,59 +348,37 @@ def test_a_broken_model_stack_never_stops_the_api_from_starting(
     assert create_app(configured).state.fraud_engine is None  # the app still builds
 
 
-def test_load_engine_dynamically_loads_from_registry_champion(
-    settings: Settings, model_dir: Path, tmp_path: Path
+def test_champion_exported_from_the_registry_is_what_the_api_loads_at_startup(
+    settings: Settings,
+    fraud_data: Path,
+    model_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """TASK-038: FastAPI loads model dynamically from MLflow registry alias 'champion'."""
-    from mlflow.tracking import MlflowClient
-    from pbip_ml.fraud.promotion import MetricsGate, promote_model
-    from pbip_ml.tracking import ensure_experiment, local_target
+    """TASK-038: training run -> measured gate -> MLflow 'champion' -> export-champion -> the API's
+    unchanged startup loader (checksums verified) serves it. The API itself never calls MLflow."""
+    import json
+
+    import mlflow
+    from pbip_api.main import create_app
+    from pbip_ml.fraud.promotion import MetricsGate, export_champion, promote
+    from pbip_ml.fraud.train import log_to_mlflow
+    from pbip_ml.tracking import TRACKING_URI_ENV, ensure_experiment, local_target
 
     target = local_target(tmp_path / "mlflow")
-    client = MlflowClient(tracking_uri=target.uri)
-    exp = ensure_experiment("api-champion-test", target)
-    run = client.create_run(exp)
-    for item in model_dir.iterdir():
-        client.log_artifact(run.info.run_id, str(item))
-    client.log_metric(run.info.run_id, "lgbm_pr_auc", 0.95)
-    client.log_metric(run.info.run_id, "latency_p95_ms", 12.0)
-
-    promote_model(
-        run_id=run.info.run_id,
-        model_name="pbip-fraud",
-        alias="champion",
-        gate=MetricsGate(min_pr_auc=0.05, max_latency_ms=100.0),
-        tracking_uri=target.uri,
-    )
-
-    configured = settings.model_copy(
-        update={
-            "fraud_scorer": "hybrid",
-            "mlflow_tracking_uri": target.uri,
-            "fraud_registered_model_name": "pbip-fraud",
-            "fraud_model_alias": "champion",
-            "fraud_model_cache_dir": str(tmp_path / "cache"),
-            "fraud_model_dir": None,  # no local disk fallback provided
-        }
-    )
-    engine = load_engine(configured)
-    assert engine is not None
-    assert engine.params.model_version == "hybrid-lgbm-iforest-1"
-
-
-def test_load_engine_falls_back_to_local_disk_when_mlflow_unreachable(
-    settings: Settings, model_dir: Path
-) -> None:
-    """TASK-038: When MLflow server is disconnected/unreachable, fall back to FRAUD_MODEL_DIR."""
-    configured = settings.model_copy(
-        update={
-            "fraud_scorer": "hybrid",
-            "mlflow_tracking_uri": "http://127.0.0.1:1",  # guaranteed unreachable
-            "fraud_registered_model_name": "pbip-fraud",
-            "fraud_model_alias": "champion",
-            "fraud_model_dir": str(model_dir),
-        }
-    )
-    engine = load_engine(configured)
-    assert engine is not None
-    assert engine.params.model_version == "hybrid-lgbm-iforest-1"
+    ensure_experiment("pbip-fraud", target)
+    monkeypatch.setenv(TRACKING_URI_ENV, target.uri)
+    previous = mlflow.get_tracking_uri()
+    served = tmp_path / "models" / "fraud"
+    try:
+        report = json.loads((model_dir / "report.json").read_text(encoding="utf-8"))
+        run_id = log_to_mlflow(report, model_dir, tmp_path / "mlflow")
+        gate = MetricsGate(min_pr_auc=0.6, max_latency_p95_ms=1_000.0)
+        result = promote(target.uri, run_id, fraud_data, gate=gate, latency_calls=20)
+        assert result.promoted and result.champion_version == result.version
+        export_champion(target.uri, served)
+    finally:
+        mlflow.set_tracking_uri(previous)
+    configured = settings.model_copy(update={"fraud_model_dir": str(served)})
+    engine = create_app(configured).state.fraud_engine
+    assert engine is not None and engine.params.model_version == "hybrid-lgbm-iforest-1"

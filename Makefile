@@ -3,7 +3,7 @@
 # On Windows, use dev.ps1 or dev.cmd instead of make.
 .DEFAULT_GOAL := help
 .PHONY: help doctor setup env infra-up infra-down up up-all down logs migrate seed \
-	datagen fraud-model notebooks ml-up mlflow-smoke dev-api dev-worker dev-web lint fmt typecheck imports security openapi \
+	datagen fraud-model promote-model fraud-champion notebooks ml-up mlflow-smoke dev-api dev-worker dev-web lint fmt typecheck imports security openapi \
 	test test-unit test-int test-web test-e2e smoke perf fuzz check clean
 
 PYTHON ?= python3
@@ -50,9 +50,11 @@ datagen: ## Generate + COPY-load the synthetic ML dataset (seed 42, 1,000 custom
 fraud-model: ## Train the fraud models into models/fraud (needed for FRAUD_SCORER=hybrid)
 	@$(PYTHON) scripts/dev.py fraud-model
 
-promote-model: ## Evaluate and promote candidate fraud model in MLflow registry (TASK-038)
+promote-model: ## Measure the newest fraud run on data/fraud; promote to MLflow 'champion' if it passes
 	@$(PYTHON) scripts/dev.py promote-model
 
+fraud-champion: ## Export the MLflow 'champion' fraud model into models/fraud (checksums verified)
+	@$(PYTHON) scripts/dev.py fraud-champion
 
 notebooks: ## Execute the EDA notebooks head-to-tail and save outputs
 	@$(PYTHON) scripts/dev.py notebooks

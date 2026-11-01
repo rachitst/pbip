@@ -11,10 +11,6 @@ one the API loads. Latency is wall time on the machine that runs it: name the ma
 
 import argparse
 import json
-import statistics
-import time
-from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -25,9 +21,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pbip_ml.fraud import hybrid as h
 from pbip_ml.fraud import training as t
-from pbip_ml.fraud.evaluation import cheapest, cost_curve
-from pbip_ml.fraud.features import PastTransfer
-from pbip_ml.fraud.inference import TransferInputs, load, score_transfer
+from pbip_ml.fraud.evaluation import cheapest, cost_curve, latency_profile
+from pbip_ml.fraud.inference import load
 from pbip_ml.fraud.train import load_export
 from sklearn.metrics import precision_recall_curve
 
@@ -67,35 +62,6 @@ def _first_time_fpr(frame: Any, risk: np.ndarray) -> dict[str, dict[str, float |
         }
         for name, mask in groups.items()
     }
-
-
-def _latency(scorer: h.HybridScorer) -> dict[str, Any]:
-    now = datetime(2026, 6, 15, 13, 0, tzinfo=UTC)
-    history = [PastTransfer(now - timedelta(days=i), "DEBIT", 2_000_00, None) for i in range(1, 30)]
-    case = TransferInputs(1_800_00, "INR", now, now - timedelta(days=200), None, False, 0, history)
-    for _ in range(20):
-        score_transfer(scorer, case)  # warm-up, as the API loader does
-
-    def timed(_: int) -> float:
-        started = time.perf_counter()
-        score_transfer(scorer, case)
-        return (time.perf_counter() - started) * 1000
-
-    out: dict[str, Any] = {}
-    for workers in (1, 2, 4):
-        calls = 400
-        started = time.perf_counter()
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            timings = sorted(pool.map(timed, range(calls)))
-        elapsed = time.perf_counter() - started
-        out[f"threads_{workers}"] = {
-            "calls": calls,
-            "p50_ms": round(statistics.median(timings), 2),
-            "p95_ms": round(timings[int(calls * 0.95) - 1], 2),
-            "max_ms": round(timings[-1], 2),
-            "throughput_per_s": round(calls / elapsed, 1),
-        }
-    return out
 
 
 def main() -> None:
@@ -170,7 +136,7 @@ def main() -> None:
     fig.savefig(args.img / "fraud-cost-curve.png", dpi=120)
 
     if not args.skip_latency:
-        report["latency"] = _latency(scorer)
+        report["latency"] = latency_profile(scorer)
     args.json.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
 
 

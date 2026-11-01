@@ -14,8 +14,6 @@ Any model problem (not loaded, raises, too slow) returns the baseline result, ma
 ``+rules-only`` with a ``MODEL_UNAVAILABLE`` reason. The result is never ALLOW-all.
 """
 
-from __future__ import annotations
-
 import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
@@ -53,86 +51,33 @@ RULES_ONLY_SUFFIX = "+rules-only"
 _POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="fraud-model")
 
 
-def load_engine(settings: Settings) -> HybridScorer | None:
+def load_engine(settings: Settings) -> "HybridScorer | None":
     """Called once when the app is created. ``None`` means the rules decide alone.
 
-    Attempts to load the model dynamically from the MLflow Model Registry using the
-    champion alias (TASK-038). If the MLflow server is disconnected or unreachable,
-    it falls back to loading from local disk (settings.fraud_model_dir).
-    If both fail or are unconfigured, returns None (rules-only fail-safe, never crashes).
+    The model stack is imported here, not at module import: with ``FRAUD_SCORER=rules`` an API
+    process never loads scikit-learn (``test_training_code_stays_off_the_request_path``).
     """
     if settings.fraud_scorer != "hybrid":
         return None
-
-    engine: HybridScorer | None = None
-
-    # Step 1: Attempt dynamic load from MLflow Model Registry ('champion' alias)
-    if settings.fraud_registered_model_name and settings.mlflow_tracking_uri:
-        try:
-            from pbip_ml.fraud.inference import load_from_registry
-
-            cache_path = (
-                Path(settings.fraud_model_cache_dir) if settings.fraud_model_cache_dir else None
-            )
-            engine = load_from_registry(
-                registry_name=settings.fraud_registered_model_name,
-                alias=settings.fraud_model_alias,
-                tracking_uri=settings.mlflow_tracking_uri,
-                cache_dir=cache_path,
-            )
-            _logger.info(
-                "fraud_model_loaded_from_registry",
-                registry=settings.fraud_registered_model_name,
-                alias=settings.fraud_model_alias,
-                model_version=engine.params.model_version,
-            )
-        except Exception as exc:
-            _logger.warning(
-                "fraud_model_registry_fallback",
-                reason=type(exc).__name__,
-                detail=str(exc)[:200],
-            )
-            engine = None
-
-    # Step 2: Fallback to local disk if registry load failed or was not available
-    if engine is None and settings.fraud_model_dir:
-        try:
-            from pbip_ml.fraud.inference import load
-
-            engine = load(Path(settings.fraud_model_dir))
-            _logger.info(
-                "fraud_model_loaded_from_disk_fallback",
-                model_version=engine.params.model_version,
-                path=settings.fraud_model_dir,
-            )
-        except Exception as exc:
-            _logger.error(
-                "fraud_model_not_loaded",
-                reason=type(exc).__name__,
-                detail=str(exc)[:200],
-            )
-            return None
-
-    if engine is None:
-        _logger.error(
-            "fraud_model_not_loaded",
-            reason="Neither MLflow registry champion nor valid local disk fallback found",
-        )
+    if not settings.fraud_model_dir:
+        _logger.error("fraud_model_not_loaded", reason="FRAUD_MODEL_DIR is not set")
         return None
-
-    # Step 3: Warm-up score
+    # Anything here may fail: a missing native library (libgomp for LightGBM), a broken file, a
+    # bad pickle. The API must still start and serve the rules (fail safe), never crash.
     try:
-        from pbip_ml.fraud.inference import TransferInputs, score_transfer
+        from pbip_ml.fraud.inference import TransferInputs, load, score_transfer
 
+        engine = load(Path(settings.fraud_model_dir))
+        # One throw-away score warms LightGBM/sklearn/pandas, so the first customer's transfer
+        # is not the one that pays the cold start (34 ms vs a 15 ms median on the laptop).
         warm_up = TransferInputs(
             100_00, "INR", datetime(2026, 1, 1, tzinfo=UTC), None, None, False, 0, ()
         )
         score_transfer(engine, warm_up)
-    except Exception as exc:
+    except Exception as exc:  # fail safe: rules only, never a crashed API or ALLOW-all
         _logger.error("fraud_model_not_loaded", reason=type(exc).__name__, detail=str(exc)[:200])
         return None
-
-    _logger.info("fraud_model_ready", model_version=engine.params.model_version)
+    _logger.info("fraud_model_loaded", model_version=engine.params.model_version)
     return engine
 
 
@@ -140,7 +85,7 @@ class HybridFraudScorer:
     def __init__(
         self,
         session: Session,
-        engine: HybridScorer | None,
+        engine: "HybridScorer | None",
         budget_ms: int,
         counters: VelocityCounters | None = None,
     ) -> None:
@@ -183,7 +128,7 @@ class HybridFraudScorer:
             },
         )
 
-    def _inputs(self, context: TransactionContext, new_device: bool) -> TransferInputs:
+    def _inputs(self, context: TransactionContext, new_device: bool) -> "TransferInputs":
         from pbip_ml.fraud.inference import TransferInputs
 
         at = context.occurred_at

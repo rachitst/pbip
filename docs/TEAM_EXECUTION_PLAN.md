@@ -1222,7 +1222,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #61 | **Sprint:** 3 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Pranay (`pranaysanap`)
-- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** Sun 1 Nov (PR Closes #61) | **Status:** Done | **Risk:** Low (3.0 days of slack)
+- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged; PR #268) | **Status:** In Review | **Risk:** Low (3.0 days of slack)
 - **Depends on:** TASK-011 (#22, Krishna), TASK-029 (#52, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-029
 - **Goal:** Automated model promotion script tagging champion models in MLflow registry.
@@ -1239,7 +1239,6 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   - [x] Promotes winning model by setting alias 'champion' in MLflow Model Registry
   - [x] FastAPI service loads model at startup dynamically from 'champion' alias
   - [x] Includes local disk fallback if MLflow server is disconnected
-
 - **Definition of done (evidence):** Model promotion script tested with mock MLflow runs, offline fallback tested.
 - **Required checks:**
   - Automated: pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable; CI job or `scripts/dev.py` command exercised in tests; works from a fresh clone
