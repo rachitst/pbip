@@ -200,7 +200,7 @@ Re-evaluate the cost on the production hardware before go-live; the rehash-on-lo
 | Password change | Revokes **every** refresh-token family of the user (all sessions) | `test_password_change_revokes_all_sessions_across_families` |
 | CSRF guard | `csrf_guard` on the cookie endpoints (refresh, logout): custom header required + Origin allow-list | `test_refresh_requires_csrf_header_and_trusted_origin` |
 
-**Known simplifications:** concurrent refresh with the *same* token is treated as reuse (family revoked); in benign concurrent-tab scenarios this logs that session out, a trade-off accepted in ADR-0004. Access JWTs are not revocable before their 15-minute expiry. Device-binding of refresh tokens (COULD) and an access-token denylist (COULD) are open items.
+**Known simplifications:** concurrent refresh with the *same* token is treated as reuse (family revoked); in benign concurrent-tab scenarios this logs that session out, a trade-off accepted in ADR-0004. Access JWTs are checked on every request against the user's status and `token_version` (ADR-0021): disabling the account or changing the password ends every outstanding access token on the next request (`test_access_token_revocation.py`). Remaining: logging out does not end the access token used for it (it expires within 15 minutes); device-binding of refresh tokens (COULD) and a per-session `jti` denylist for that case (COULD) are open items.
 
 ---
 
@@ -390,6 +390,6 @@ are the origin of the UK rule. "Analogous" means PBIP mirrors the control object
 | F6 mule pass-through rule (ledger data available) | MUST (Blueprint §8) | #144 |
 | Customer PII encryption policy for email, full name and date of birth: ADR plus baseline evidence (TLS, disk/backup encryption, access control, logging); `phone_enc` currently has no write path | SHOULD | #145 |
 | Device-binding of refresh tokens | COULD | Backlog |
-| Access-token denylist (the 15-minute TTL is the current revocation bound) | COULD | Backlog |
+| Per-session access-token denylist for logout (disable and password change already revoke at once, ADR-0021) | COULD | Backlog |
 | Asymmetric JWT signing (EdDSA) with `kid` key rotation | COULD | Backlog |
 | Real KYC/AML screening and suspicious-activity reporting (production gate) | OUT OF SCOPE | Not a simulation task |
