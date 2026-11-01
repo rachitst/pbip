@@ -16,6 +16,11 @@ updates:
     directory: /
     schedule: { interval: weekly }
     labels: [type:chore, area:api]
+    ignore:
+      # statsforecast (TASK-050/043 forecasting) pins pandas<3.0.0 up to its latest release (2.1.1), so
+      # pandas 3 makes uv downgrade statsforecast to 2.0.1 (#254). Lift once statsforecast supports pandas 3.
+      - dependency-name: "pandas"
+        versions: [">=3.0.0"]
     groups:
       python-minor-patch:
         applies-to: version-updates
