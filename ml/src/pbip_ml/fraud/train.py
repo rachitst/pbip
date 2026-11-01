@@ -7,7 +7,8 @@ Usage::
     uv run python -m pbip_ml.fraud.train --data data/fraud --holdout data/holdout --out models/fraud
 
 Writes ``report.json`` (metrics on the time-split test set and on the held-out seed, latencies),
-``lightgbm.txt`` and ``isolation_forest.joblib``, and logs the run (params, metrics, artifacts)
+``lightgbm.txt``, ``isolation_forest.joblib``, ``hybrid_params.json`` and ``manifest.json``
+(SHA-256 of each, checked by the API loader), and logs the run (params, metrics, artifacts)
 to MLflow - the server if reachable, otherwise the local fallback store (``pbip_ml.tracking``).
 """
 
@@ -25,6 +26,7 @@ import pandas as pd
 from pbip_ml.fraud import hybrid as h
 from pbip_ml.fraud import training as t
 from pbip_ml.fraud.contract import FraudDecision
+from pbip_ml.fraud.inference import write_manifest
 from pbip_ml.fraud.rules import default_registry
 from pbip_ml.tracking import DEFAULT_LOCAL_DIR, configure_tracking, ensure_experiment
 
@@ -107,6 +109,7 @@ def run(data: Path, out: Path, holdout: Path | None = None) -> dict[str, Any]:
     booster.save_model(str(out / "lightgbm.txt"), num_iteration=booster.best_iteration)
     joblib.dump(anomaly, out / "isolation_forest.joblib")
     (out / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    write_manifest(out)  # SHA-256 per artifact: the API refuses files that do not match
     return report
 
 
@@ -125,6 +128,7 @@ def log_to_mlflow(report: dict[str, Any], out: Path, local_dir: Path) -> str:
             "lightgbm.txt",
             "isolation_forest.joblib",
             "hybrid_params.json",
+            "manifest.json",
         ):
             mlflow.log_artifact(str(out / name))
         return str(active.info.run_id)

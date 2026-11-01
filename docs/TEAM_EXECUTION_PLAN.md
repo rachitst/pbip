@@ -128,7 +128,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 | TASK-034 | Redis Real-Time Velocity & Frequency Counters | Sujal | Tue 27 Oct | Tue 27 Oct | - | Par | Low | #57 |
 | TASK-031 | Hybrid Fraud Decision Combiner & Threshold Calibration | Rachit | Tue 27 Oct | Wed 28 Oct | 025, 029, 030 | Seq | High | #54 |
 | TASK-032 | SHAP Explainability & Reason Code Generator | Rachit | Wed 28 Oct | Wed 28 Oct | 029, 031 | Seq | High | #55 |
-| TASK-033 | HybridFraudScorer Service Integration in Transfer Flow | Pranay | Wed 28 Oct | Thu 29 Oct | 031, 032 | Seq | High | #56 |
+| TASK-033 | HybridFraudScorer Service Integration in Transfer Flow | Rachit | Wed 28 Oct | Thu 29 Oct | 031, 032 | Seq | High | #56 |
 | TASK-038 | MLflow Model Registry Champion/Challenger Promotion Workflow | Pranay | Thu 29 Oct | Fri 30 Oct | 011, 029 | Seq | Low | #61 |
 | TASK-037 | Step-Up MFA Challenge Modal & Customer Transfer Confirmation | Kalpak | Thu 29 Oct | Thu 29 Oct | 033, 019 | Seq | Low | #60 |
 | TASK-035 | Fraud Telemetry & Risk Analytics Endpoints | Krishna | Fri 30 Oct | Fri 30 Oct | 033 | Seq | High | #58 |
@@ -1013,7 +1013,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #54 | **Sprint:** 3 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Rachit (`rachitst`), taken over from Pranay on Sun 1 Nov to unblock the fraud and AI chain
-- **Start:** Tue 27 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** - (Sun 1 Nov partial: hybrid.py combiner (isotonic calibration + stacked logistic weights fitted on validation, hard-rule floors, ALLOW/STEP_UP/REVIEW/BLOCK at 30/60/85, rules-only fail-safe); test recall 0.957 at REVIEW+, FPR 0.03%; missing: fraud_events persistence is shown only when TASK-033 wires the scorer in) | **Status:** In Progress | **Risk:** Medium (depends on TASK-033)
+- **Start:** Tue 27 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** Sun 1 Nov (combiner in #249; persistence proven when TASK-033 served it) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-025 (#48, Rachit), TASK-029 (#52, Rachit), TASK-030 (#53, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-025, TASK-029, TASK-030
 - **Goal:** Combiner algorithm integrating rule triggers, supervised probability, and anomaly scores.
@@ -1029,7 +1029,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   - [x] Computes unified risk score (0-100) using calibrated weights and hard-rule overrides
   - [x] Maps risk score to actions: ALLOW (<30), STEP_UP (30-59), REVIEW (60-84), BLOCK (>=85)
   - [x] Fails safe to rules-only mode if ML model is unavailable (never ALLOW-all)
-  - [ ] Persists feature snapshot and model version with every decision in fraud_events
+  - [x] Persists feature snapshot and model version with every decision in fraud_events (`test_hybrid_risk_drives_the_transfer_state_machine`, `test_real_artifacts_load_once_and_score_within_the_latency_budget`)
 - **Definition of done (evidence):** Behavioral regression tests prove fail-safe fallback and threshold accuracy.
 - **Required checks:**
   - Automated: pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable
@@ -1042,7 +1042,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #55 | **Sprint:** 3 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Rachit (`rachitst`), taken over from Pranay on Sun 1 Nov to unblock the fraud and AI chain
-- **Start:** Wed 28 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** - (Sun 1 Nov partial: exact TreeSHAP top-3 via LightGBM pred_contrib (p95 3.5 ms), plain-language templates, unified RULE/MODEL/ANOMALY reasons, F1-F6 reason tests; missing: customer/staff concealment is shown only when TASK-033 serves these reasons) | **Status:** In Progress | **Risk:** Medium (depends on TASK-033)
+- **Start:** Wed 28 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** Sun 1 Nov (reasons in #249; concealment proven when TASK-033 served them) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-029 (#52, Rachit), TASK-031 (#54, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-029, TASK-031
 - **Goal:** Explainability component mapping TreeSHAP feature contributions to human-readable sentences.
@@ -1058,7 +1058,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   - [x] Extracts top-3 SHAP contributors for supervised model prediction in < 30ms
   - [x] Translates raw feature contributions to natural language analyst explanations
   - [x] Combines rule trigger reasons and model SHAP reasons into unified reasons array
-  - [ ] Customer-facing API responses conceal reasons while staff endpoints expose full details
+  - [x] Customer-facing API responses conceal reasons while staff endpoints expose full details (`test_hybrid_risk_drives_the_transfer_state_machine`)
 - **Definition of done (evidence):** Unit tests verify reason string generation for all scenario types F1-F6.
 - **Required checks:**
   - Automated: pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable
@@ -1070,8 +1070,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-033 - HybridFraudScorer Service Integration in Transfer Flow
 
 - **Issue:** #56 | **Sprint:** 3 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Core Banking & Ledger
-- **Owner:** Pranay (`pranaysanap`)
-- **Start:** Wed 28 Oct | **Target deadline:** Thu 29 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
+- **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov; was Pranay)
+- **Start:** Wed 28 Oct | **Target deadline:** Thu 29 Oct | **Actual completion:** Sun 1 Nov (ADR-0019; behind `FRAUD_SCORER=hybrid`, default `rules` until #251) | **Status:** Done | **Risk:** Medium (served model over-flags new payees until #251)
 - **Depends on:** TASK-031 (#54, Rachit), TASK-032 (#55, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-031, TASK-032
 - **Goal:** Direct integration of HybridFraudScorer into POST /api/v1/transfers pipeline.
@@ -1084,10 +1084,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Triggers BLOCK declining transaction immediately and generating security alert
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #56`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Implements FraudScorer contract with p95 execution latency < 100ms
-  - [ ] Triggers STEP_UP for borderline transfers requiring customer TOTP confirmation
-  - [ ] Triggers REVIEW placing funds hold and raising fraud alert in staff queue
-  - [ ] Triggers BLOCK declining transaction immediately and generating security alert
+  - [x] Implements FraudScorer contract with p95 execution latency < 100ms (served p95 24.7 ms on the laptop, DB look-ups included; asserted in `test_real_artifacts_load_once_and_score_within_the_latency_budget`)
+  - [x] Triggers STEP_UP for borderline transfers requiring customer TOTP confirmation (`test_hybrid_step_up_requires_the_customers_totp`)
+  - [x] Triggers REVIEW placing funds hold and raising fraud alert in staff queue (`test_hybrid_risk_drives_the_transfer_state_machine[70-...]`)
+  - [x] Triggers BLOCK declining transaction immediately and generating security alert (HIGH fraud alert; `test_hybrid_risk_drives_the_transfer_state_machine[95-...]`)
 - **Definition of done (evidence):** Integration tests verify transfer state machine transitions across all 4 decisions.
 - **Required checks:**
   - Automated: pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths; pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable
@@ -3232,13 +3232,13 @@ decision in ADR-0015.
 | TASK-046 | Rachit | TASK-057 | Rachit | Wed 28 Oct | Wed 28 Oct |
 | TASK-042 | Rachit | TASK-050 | Kalpak | Wed 28 Oct | Thu 29 Oct |
 | TASK-043 | Krishna | TASK-050 | Kalpak | Wed 28 Oct | Thu 29 Oct |
-| TASK-033 | Pranay | TASK-037 | Kalpak | Thu 29 Oct | Thu 29 Oct |
-| TASK-033 | Pranay | TASK-078 | Rachit | Thu 29 Oct | Thu 29 Oct |
+| TASK-033 | Rachit | TASK-037 | Kalpak | Thu 29 Oct | Thu 29 Oct |
+| TASK-033 | Rachit | TASK-078 | Rachit | Thu 29 Oct | Thu 29 Oct |
 | TASK-045 | Rachit | TASK-051 | Kalpak | Wed 28 Oct | Thu 29 Oct |
 | TASK-047 | Sujal | TASK-051 | Kalpak | Thu 29 Oct | Thu 29 Oct |
-| TASK-033 | Pranay | TASK-035 | Krishna | Thu 29 Oct | Fri 30 Oct |
+| TASK-033 | Rachit | TASK-035 | Krishna | Thu 29 Oct | Fri 30 Oct |
 | TASK-030 | Rachit | TASK-039 | Pranay | Tue 27 Oct | Fri 30 Oct |
-| TASK-033 | Pranay | TASK-036 | Kalpak | Thu 29 Oct | Fri 30 Oct |
+| TASK-033 | Rachit | TASK-036 | Kalpak | Thu 29 Oct | Fri 30 Oct |
 | TASK-035 | Krishna | TASK-036 | Kalpak | Fri 30 Oct | Fri 30 Oct |
 | TASK-035 | Krishna | TASK-069 | Rachit | Fri 30 Oct | Fri 30 Oct |
 | TASK-019 | Kalpak | TASK-066 | Krishna | Mon 26 Oct | Sat 31 Oct |
