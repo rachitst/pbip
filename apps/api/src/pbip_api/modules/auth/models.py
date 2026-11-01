@@ -113,7 +113,10 @@ class UserRole(Base):
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
-    __table_args__ = (Index("ix_refresh_tokens_family_id", "family_id"),)
+    __table_args__ = (
+        Index("ix_refresh_tokens_family_id", "family_id"),
+        Index("ix_refresh_tokens_user_id", "user_id"),  # revoke-all-sessions; FK index (TASK-079)
+    )
 
     id: Mapped[UUID] = uuid_pk()
     user_id: Mapped[UUID] = mapped_column(
