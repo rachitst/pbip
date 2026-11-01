@@ -19,6 +19,9 @@ export type AlertSummary = components["schemas"]["AlertSummary"];
 export type AlertDetail = components["schemas"]["AlertDetail"];
 export type FraudStats = components["schemas"]["FraudStats"];
 export type SpendingBreakdownResponse = components["schemas"]["SpendingBreakdownResponse"];
+export type CustomerInsightsListResponse = components["schemas"]["CustomerInsightsListResponse"];
+export type CustomerInsightItem = components["schemas"]["CustomerInsightItem"];
+export type ChurnRiskLevel = components["schemas"]["ChurnRiskLevel"];
 export type CategorySpendingItem = components["schemas"]["CategorySpendingItem"];
 export type SpendingTrendsResponse = components["schemas"]["SpendingTrendsResponse"];
 export type MonthlySpendingSummary = components["schemas"]["MonthlySpendingSummary"];
@@ -257,6 +260,23 @@ export const api = {
     const params = new URLSearchParams({ account_id: accountId });
     return apiFetch<FinancialHealthScoreResponse>(
       `/api/v1/analytics/health-score?${params.toString()}`,
+    );
+  },
+  customerInsights: (options?: {
+    min_churn_risk?: number;
+    segment?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (options?.min_churn_risk !== undefined)
+      params.set("min_churn_risk", String(options.min_churn_risk));
+    if (options?.segment) params.set("segment", options.segment);
+    if (options?.limit !== undefined) params.set("limit", String(options.limit));
+    if (options?.offset !== undefined) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return apiFetch<CustomerInsightsListResponse>(
+      `/api/v1/insights/customers${qs ? `?${qs}` : ""}`,
     );
   },
   assistantHistory: (limit = 50) =>
