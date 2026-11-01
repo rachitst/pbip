@@ -186,13 +186,25 @@ export const api = {
   payees: () => apiFetch<PayeeOut[]>("/api/v1/payees"),
   /** One Idempotency-Key per user intent; reuse the SAME key when retrying the same submit. */
   transfer: (
-    body: { from_account_id: string; payee_id: string; amount_minor: number; reference?: string },
+    body: {
+      from_account_id: string;
+      payee_id: string;
+      amount_minor: number;
+      reference?: string | null;
+    },
     idempotencyKey: string,
   ) =>
     apiFetch<TransferOut>("/api/v1/transfers", {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(body),
+    }),
+  /** Complete a PENDING_STEP_UP transfer. 200 with POSTED, or PENDING_REVIEW after the third
+   * wrong code (the server escalates); 422 for a wrong code; 409 if it is no longer waiting. */
+  stepUp: (transferId: string, code: string) =>
+    apiFetch<TransferOut>(`/api/v1/transfers/${encodeURIComponent(transferId)}/step-up`, {
+      method: "POST",
+      body: JSON.stringify({ code }),
     }),
   notifications: (options?: { unread_only?: boolean; limit?: number; offset?: number }) => {
     const params = new URLSearchParams();

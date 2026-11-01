@@ -130,7 +130,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 | TASK-032 | SHAP Explainability & Reason Code Generator | Rachit | Wed 28 Oct | Wed 28 Oct | 029, 031 | Seq | High | #55 |
 | TASK-033 | HybridFraudScorer Service Integration in Transfer Flow | Rachit | Wed 28 Oct | Thu 29 Oct | 031, 032 | Seq | High | #56 |
 | TASK-038 | MLflow Model Registry Champion/Challenger Promotion Workflow | Pranay | Thu 29 Oct | Fri 30 Oct | 011, 029 | Seq | Low | #61 |
-| TASK-037 | Step-Up MFA Challenge Modal & Customer Transfer Confirmation | Kalpak | Thu 29 Oct | Thu 29 Oct | 033, 019 | Seq | Low | #60 |
+| TASK-037 | Step-Up MFA Challenge Modal & Customer Transfer Confirmation | Rachit | Thu 29 Oct | Thu 29 Oct | 033, 019 | Seq | Low | #60 |
 | TASK-035 | Fraud Telemetry & Risk Analytics Endpoints | Rachit | Fri 30 Oct | Fri 30 Oct | 033 | Seq | High | #58 |
 | TASK-039 | Fraud Engine Model Evaluation & Performance Report | Rachit | Fri 30 Oct | Sat 31 Oct | 029, 030, 031 | Seq | Low | #62 |
 | TASK-036 | Staff Fraud Operations Queue & Alert Detail UI | Rachit | Fri 30 Oct | Sun 01 Nov | 019, 033, 035 | Seq | High | #59 |
@@ -1190,8 +1190,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-037 - Step-Up MFA Challenge Modal & Customer Transfer Confirmation
 
 - **Issue:** #60 | **Sprint:** 3 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Frontend Web Application
-- **Owner:** Kalpak (`Patil-Kalpak`)
-- **Start:** Thu 29 Oct | **Target deadline:** Thu 29 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (3.2 days of slack)
+- **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov; was Kalpak)
+- **Start:** Thu 29 Oct | **Target deadline:** Thu 29 Oct | **Actual completion:** Sun 1 Nov (`SendMoney` review/confirm + step-up modal; server-side escalation after 3 wrong codes) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-033 (#56, Pranay), TASK-019 (#42, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-033, TASK-019
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; applies the enter -> review -> submit -> outcome pattern to send money once TASK-033 is merged (not before).
@@ -1205,10 +1205,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: On 3 failed attempts, escalates transfer to PENDING_REVIEW and closes modal
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #60`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Detects STEP_UP response from transfer API and displays MFA prompt modal
-  - [ ] Submits TOTP code to POST /api/v1/transfers/{id}/step-up
-  - [ ] On valid code, completes transfer, displays receipt, and updates balances
-  - [ ] On 3 failed attempts, escalates transfer to PENDING_REVIEW and closes modal
+  - [x] Detects STEP_UP response from transfer API and displays MFA prompt modal
+  - [x] Submits TOTP code to POST /api/v1/transfers/{id}/step-up
+  - [x] On valid code, completes transfer, displays receipt, and updates balances
+  - [x] On 3 failed attempts, escalates transfer to PENDING_REVIEW and closes modal (the SERVER counts the wrong codes per transfer and escalates: hold + alert; `test_three_wrong_step_up_codes_hand_the_transfer_to_an_analyst`)
 - **Definition of done (evidence):** React component tests verify happy path, invalid TOTP code, and escalation flow.
 - **Required checks:**
   - Automated: Vitest + Testing Library covering loading, empty, error and success states; Playwright journey for critical flows; types only from `schema.d.ts`
@@ -3232,7 +3232,7 @@ decision in ADR-0015.
 | TASK-046 | Rachit | TASK-057 | Rachit | Wed 28 Oct | Wed 28 Oct |
 | TASK-042 | Rachit | TASK-050 | Kalpak | Wed 28 Oct | Thu 29 Oct |
 | TASK-043 | Krishna | TASK-050 | Kalpak | Wed 28 Oct | Thu 29 Oct |
-| TASK-033 | Rachit | TASK-037 | Kalpak | Thu 29 Oct | Thu 29 Oct |
+| TASK-033 | Rachit | TASK-037 | Rachit | Thu 29 Oct | Thu 29 Oct |
 | TASK-033 | Rachit | TASK-078 | Rachit | Thu 29 Oct | Thu 29 Oct |
 | TASK-045 | Rachit | TASK-051 | Kalpak | Wed 28 Oct | Thu 29 Oct |
 | TASK-047 | Sujal | TASK-051 | Kalpak | Thu 29 Oct | Thu 29 Oct |
@@ -3245,7 +3245,7 @@ decision in ADR-0015.
 | TASK-060 | Rachit | TASK-061 | Rachit | Sat 31 Oct | Sun 01 Nov |
 | TASK-019 | Kalpak | TASK-077 | Rachit | Mon 26 Oct | Sun 01 Nov |
 | TASK-036 | Rachit | TASK-077 | Rachit | Sun 01 Nov | Sun 01 Nov |
-| TASK-037 | Kalpak | TASK-077 | Rachit | Thu 29 Oct | Sun 01 Nov |
+| TASK-037 | Rachit | TASK-077 | Rachit | Thu 29 Oct | Sun 01 Nov |
 | TASK-036 | Rachit | TASK-081 | Abbas | Sun 01 Nov | Sun 01 Nov |
 | TASK-080 | Pranay | TASK-081 | Abbas | Sat 31 Oct | Sun 01 Nov |
 | TASK-064 | Sujal | TASK-065 | Krishna | Sun 01 Nov | Mon 02 Nov |
