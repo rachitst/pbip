@@ -124,6 +124,32 @@ describe("routing, roles and the application shell (ADR-0016)", () => {
       );
     });
 
+    it("links security monitoring for analysts only; a customer gets not found", async () => {
+      me = analystMe;
+      const user = userEvent.setup();
+      const first = renderApp();
+      const nav = await screen.findByRole("navigation", { name: "Main" });
+      await user.click(within(nav).getByRole("link", { name: "Security monitoring" }));
+      expect(
+        await screen.findByRole("heading", { name: "Security monitoring" }),
+      ).toBeInTheDocument();
+      expect(window.location.pathname).toBe("/staff/monitoring");
+      expect(requested("/fraud/monitoring")).toBe(1);
+      first.unmount();
+
+      me = { ...analystMe, roles: ["COMPLIANCE_OFFICER"] };
+      const second = renderApp();
+      await screen.findByRole("heading", { name: "Security monitoring" });
+      expect(screen.queryByRole("link", { name: "Security monitoring" })).not.toBeInTheDocument();
+      expect(screen.getByText(/needs the Fraud Analyst or Administrator role/)).toBeInTheDocument();
+      second.unmount();
+
+      me = customerMe;
+      renderApp();
+      expect(await screen.findByRole("heading", { name: "Page not found" })).toBeInTheDocument();
+      expect(requested("/fraud/monitoring")).toBe(1);
+    });
+
     it("links both areas for a user who is a customer and staff", async () => {
       me = { ...customerMe, roles: ["CUSTOMER", "COMPLIANCE_OFFICER"] };
       const user = userEvent.setup();
