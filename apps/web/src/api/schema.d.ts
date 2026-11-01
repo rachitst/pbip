@@ -1070,6 +1070,18 @@ export interface components {
             role: "user" | "assistant";
             tool: components["schemas"]["ToolName"] | null;
         };
+        /**
+         * AssistantStreamFrames
+         * @description Documentation of the SSE stream: each frame's ``event:`` names one of these fields and its
+         *     ``data:`` line is that field's JSON. ``done`` carries the full ChatResponse.
+         */
+        AssistantStreamFrames: {
+            done?: components["schemas"]["ChatResponse"] | null;
+            error?: components["schemas"]["StreamError"] | null;
+            token?: components["schemas"]["StreamToken"] | null;
+            tool_call?: components["schemas"]["StreamToolCall"] | null;
+            tool_result?: components["schemas"]["StreamToolResult"] | null;
+        };
         /** AuditLogOut */
         AuditLogOut: {
             /** Action */
@@ -2349,6 +2361,46 @@ export interface components {
             code: string;
         };
         /**
+         * StreamError
+         * @description ``event: error`` - the stream failed; generic text only.
+         */
+        StreamError: {
+            /** Detail */
+            detail: string;
+        };
+        /**
+         * StreamToken
+         * @description ``event: token`` - the next chunk of the reply.
+         */
+        StreamToken: {
+            /** Text */
+            text: string;
+        };
+        /**
+         * StreamToolCall
+         * @description ``event: tool_call`` - the router chose a tool; it is about to run.
+         */
+        StreamToolCall: {
+            /**
+             * Engine
+             * @enum {string}
+             */
+            engine: "llm" | "rules";
+            tool: components["schemas"]["ToolName"];
+        };
+        /**
+         * StreamToolResult
+         * @description ``event: tool_result`` - ok, input (answered with guidance) or error.
+         */
+        StreamToolResult: {
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "ok" | "input" | "error";
+            tool: components["schemas"]["ToolName"];
+        };
+        /**
          * SupportedCurrency
          * @description Single-currency bank (blueprint section 7): the clearing account and every rail are INR.
          * @enum {string}
@@ -3026,12 +3078,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description text/event-stream: tool_call, tool_result, token..., then done (or error) */
+            /** @description text/event-stream: tool_call, tool_result, token..., then done (or error). Frame payloads are documented by AssistantStreamFrames. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["AssistantStreamFrames"];
                     "text/event-stream": {
                         /** @description JSON payload */
                         data: string;
