@@ -45,6 +45,11 @@ test("URLs, reload, back, role areas and the skip link", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Staff workspace" })).toHaveCount(0);
   await page.getByRole("link", { name: "Go to your home page" }).click();
   await expect(page.getByRole("heading", { name: "My accounts" })).toBeVisible();
+  // The security monitoring page (TASK-099) too, and its API needs a staff bearer token.
+  await page.goto("/staff/monitoring");
+  await expect(page.getByRole("heading", { name: "Page not found" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Security monitoring" })).toHaveCount(0);
+  expect((await page.request.get("/api/v1/fraud/monitoring")).status()).toBe(401);
 
   // Keyboard users can skip the header and navigation.
   await page.reload();

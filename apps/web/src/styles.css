@@ -1308,3 +1308,36 @@ a {
 .fraud-decision {
   margin-top: var(--space-4);
 }
+
+/* Security monitoring (TASK-099): panels flow two per row and stack on narrow screens; the
+   table-heavy panels take the full row. */
+.monitoring-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+  align-items: start;
+}
+.monitoring-wide {
+  grid-column: 1 / -1;
+}
+.fraud-panel h3 {
+  margin: var(--space-4) 0 var(--space-1);
+  font-size: var(--text-base);
+}
+.severity-list {
+  list-style: none;
+  margin: var(--space-3) 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.severity-list li {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: center;
+}
+.short-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--text-sm);
+}

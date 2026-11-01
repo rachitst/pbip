@@ -1,4 +1,5 @@
-from datetime import datetime
+from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import UUID
 
@@ -11,12 +12,17 @@ from pbip_api.core.db import get_session, utcnow
 from pbip_api.core.redis import get_redis
 from pbip_api.core.validation import Text
 from pbip_api.modules.accounts.service import mask_account_number
-from pbip_api.modules.auth.dependencies import Principal, get_request_meta, require_roles
+from pbip_api.modules.auth.dependencies import (
+    Principal,
+    get_clock,
+    get_request_meta,
+    require_roles,
+)
 from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.auth.service import RequestMeta
 from pbip_api.modules.bills.service import settle_reviewed_bill
 from pbip_api.modules.customers.models import Customer
-from pbip_api.modules.fraud import service, stats
+from pbip_api.modules.fraud import monitoring, service, stats
 from pbip_api.modules.fraud.models import AlertStatus, FraudAlert, FraudEvent
 from pbip_api.modules.ledger.models import Transaction
 from pbip_api.modules.payments.router import get_payments_service
@@ -101,6 +107,82 @@ class FraudStats(BaseModel):
     latency_p95_ms: float | None
 
 
+class HighRiskCustomer(BaseModel):
+    customer_id: UUID
+    flagged_events: int = Field(
+        description="REVIEW/BLOCK decisions, or decisions that opened an alert"
+    )
+    blocked: int
+    max_risk: int
+    open_alerts: int
+    last_flagged_at: datetime
+    alert_id: UUID | None = Field(description="Alert to open: newest open one, else newest")
+
+
+class OldestOpenAlert(BaseModel):
+    alert_id: UUID
+    severity: str
+    risk_score: int
+    created_at: datetime
+
+
+class OpenAlertsPanel(BaseModel):
+    total: int
+    by_severity: dict[str, int] = Field(description="Open alerts per severity (MEDIUM, HIGH)")
+    oldest_open_at: datetime | None
+    oldest_open_age_seconds: int | None = Field(description="Age of the oldest open alert")
+    oldest: list[OldestOpenAlert] = Field(description="The five longest-waiting open alerts")
+
+
+class LoginBurst(BaseModel):
+    user_id: UUID
+    failures: int
+    last_failure_at: datetime
+
+
+class Lockout(BaseModel):
+    user_id: UUID | None = Field(description="None if the user was deleted since")
+    locked_at: datetime
+
+
+class LoginAnomalies(BaseModel):
+    window_hours: int
+    burst_threshold: int = Field(description="Failed sign-ins in the window that make a burst")
+    counts: dict[str, int] = Field(description="Security events in the window, by type")
+    unknown_account_failures: int = Field(description="Failed sign-ins for unknown emails")
+    bursts: list[LoginBurst]
+    recent_lockouts: list[Lockout] = Field(description="The ten newest ACCOUNT_LOCKED events")
+
+
+class FlaggedEvent(BaseModel):
+    event_id: UUID
+    created_at: datetime
+    decision: str
+    risk_score: int
+    customer_id: UUID
+    alert_id: UUID | None
+    alert_status: str | None
+    amount_minor: int
+    currency: str
+    reason_codes: list[str]
+
+
+class FraudEventsPanel(BaseModel):
+    last_24h: dict[str, int] = Field(description="REVIEW and BLOCK decisions in 24 hours")
+    latest: list[FlaggedEvent] = Field(description="The ten newest flagged decisions")
+
+
+class SecurityMonitoring(BaseModel):
+    """UC-13 panels. Identifiers and aggregates only: no names, emails, account numbers or IPs."""
+
+    generated_at: datetime
+    high_risk_window_days: int
+    high_risk_customers: list[HighRiskCustomer]
+    open_alerts: OpenAlertsPanel
+    login_anomalies: LoginAnomalies
+    fraud_events: FraudEventsPanel
+
+
 class DecisionRequest(BaseModel):
     action: Literal["RELEASE", "REJECT"]
     note: Text | None = Field(default=None, max_length=1000)
@@ -133,6 +215,24 @@ def get_stats(
 ) -> FraudStats:
     """Aggregates only, cached in Redis for 60 seconds per window (TASK-035)."""
     return FraudStats.model_validate(stats.fraud_stats(session, redis_client, days, utcnow()))
+
+
+@router.get(
+    "/monitoring",
+    response_model=SecurityMonitoring,
+    summary="Security monitoring: high-risk customers, open alerts, login anomalies, fraud events",
+)
+def get_monitoring(
+    _analyst: Principal = Depends(analyst_gate),
+    session: Session = Depends(get_session),
+    redis_client: Redis = Depends(get_redis),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> SecurityMonitoring:
+    """UC-13 dashboard data (TASK-099), cached in Redis for 60 seconds."""
+    now = datetime.fromtimestamp(clock(), tz=UTC)
+    return SecurityMonitoring.model_validate(
+        monitoring.security_monitoring(session, redis_client, now)
+    )
 
 
 @router.get("/alerts", response_model=list[AlertSummary], summary="Alert queue (newest first)")
