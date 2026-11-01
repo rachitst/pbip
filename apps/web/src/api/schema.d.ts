@@ -673,6 +673,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fraud/demo-lab": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether the fraud demonstration lab (TASK-081) may run in this environment
+         * @description The lab drives real customer APIs with demo credentials. The web app only knows how it was
+         *     built, not where it is deployed, so the server's APP_ENV decides; production says no.
+         */
+        get: operations["get_demo_lab_status_api_v1_fraud_demo_lab_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fraud/monitoring": {
         parameters: {
             query?: never;
@@ -1620,6 +1641,14 @@ export interface components {
             action: "RELEASE" | "REJECT";
             /** Note */
             note?: string | null;
+        };
+        /** DemoLabStatus */
+        DemoLabStatus: {
+            /**
+             * Enabled
+             * @description False in production: the staff fraud demonstration lab must not run there
+             */
+            enabled: boolean;
         };
         /**
          * DeviceOut
@@ -4061,6 +4090,8 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["AlertStatus"] | null;
+                /** @description Only the alert raised for this transaction (at most one) */
+                transaction_id?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -4150,6 +4181,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_demo_lab_status_api_v1_fraud_demo_lab_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoLabStatus"];
                 };
             };
         };

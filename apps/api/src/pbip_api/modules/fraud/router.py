@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from redis import Redis
 from sqlalchemy.orm import Session
 
+from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.db import get_session, utcnow
 from pbip_api.core.redis import get_redis
 from pbip_api.core.validation import Text
@@ -183,6 +184,12 @@ class SecurityMonitoring(BaseModel):
     fraud_events: FraudEventsPanel
 
 
+class DemoLabStatus(BaseModel):
+    enabled: bool = Field(
+        description="False in production: the staff fraud demonstration lab must not run there"
+    )
+
+
 class DecisionRequest(BaseModel):
     action: Literal["RELEASE", "REJECT"]
     note: Text | None = Field(default=None, max_length=1000)
@@ -235,15 +242,33 @@ def get_monitoring(
     )
 
 
+@router.get(
+    "/demo-lab",
+    response_model=DemoLabStatus,
+    summary="Whether the fraud demonstration lab (TASK-081) may run in this environment",
+)
+def get_demo_lab_status(
+    _analyst: Principal = Depends(analyst_gate),
+    settings: Settings = Depends(get_settings),
+) -> DemoLabStatus:
+    """The lab drives real customer APIs with demo credentials. The web app only knows how it was
+    built, not where it is deployed, so the server's APP_ENV decides; production says no."""
+    return DemoLabStatus(enabled=settings.app_env != "production")
+
+
 @router.get("/alerts", response_model=list[AlertSummary], summary="Alert queue (newest first)")
 def list_alerts(
     alert_status: AlertStatus | None = Query(default=None, alias="status"),
+    transaction_id: UUID | None = Query(
+        default=None, description="Only the alert raised for this transaction (at most one)"
+    ),
     limit: int = Query(default=25, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=10_000),
     _analyst: Principal = Depends(analyst_gate),
     session: Session = Depends(get_session),
 ) -> list[AlertSummary]:
-    return [_summary(*row) for row in service.list_alerts(session, alert_status, limit, offset)]
+    rows = service.list_alerts(session, alert_status, limit, offset, transaction_id)
+    return [_summary(*row) for row in rows]
 
 
 @router.get(

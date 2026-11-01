@@ -1309,6 +1309,65 @@ a {
   margin-top: var(--space-4);
 }
 
+/* Fraud demo lab (TASK-081): scenario cards flow in a responsive grid; no inline styles (CSP). */
+.lab-form {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+}
+.lab-grid {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  align-items: stretch;
+}
+.lab-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.lab-card h3 {
+  margin: 0;
+}
+.lab-card p {
+  margin: 0;
+}
+.lab-sequence {
+  margin: 0;
+  padding-left: var(--space-5);
+  font-size: var(--text-sm);
+}
+.lab-card__action {
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+.lab-steps {
+  margin: var(--space-3) 0;
+  padding-left: var(--space-5);
+  display: grid;
+  gap: var(--space-2);
+}
+.lab-outcome {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-3);
+  margin-top: var(--space-3);
+}
+.lab-outcome h3 {
+  margin-top: 0;
+}
+.lab-outcome__verdict {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
 /* Security monitoring (TASK-099): panels flow two per row and stack on narrow screens; the
    table-heavy panels take the full row. */
 .monitoring-grid {

@@ -16,10 +16,12 @@ describe("routing, roles and the application shell (ADR-0016)", () => {
   const fetchMock = vi.fn<typeof fetch>();
   let me: unknown = customerMe;
   let meStatus = 200;
+  let labEnabled = true;
 
   beforeEach(() => {
     me = customerMe;
     meStatus = 200;
+    labEnabled = true;
     document.title = "";
     fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock);
@@ -37,6 +39,9 @@ describe("routing, roles and the application shell (ADR-0016)", () => {
       if (url.endsWith("/payees")) return Promise.resolve(json(200, []));
       if (url.endsWith("/customers/me")) return Promise.resolve(json(200, profile));
       if (url.endsWith("/customers/devices")) return Promise.resolve(json(200, []));
+      if (url.endsWith("/fraud/demo-lab")) {
+        return Promise.resolve(json(200, { enabled: labEnabled }));
+      }
       return Promise.resolve(json(404, { code: "not_found", title: "not found" }));
     });
   });
@@ -159,21 +164,34 @@ describe("routing, roles and the application shell (ADR-0016)", () => {
       expect(screen.getByRole("link", { name: "My banking" })).toHaveAttribute("href", "/accounts");
     });
 
-    it("renders Attack simulator link in staff navigation for fraud analyst in non-production, hides it in production", async () => {
-      process.env.APP_ENV = "local";
+    it("links the fraud demo lab only when the server says it may run (TASK-081)", async () => {
       me = analystMe;
+      labEnabled = true;
+      window.history.replaceState(null, "", "/staff");
       const { unmount } = renderApp();
-      expect(await screen.findByRole("link", { name: "Attack simulator" })).toHaveAttribute(
+      expect(await screen.findByRole("link", { name: "Fraud demo lab" })).toHaveAttribute(
         "href",
         "/staff/fraud-lab",
       );
       unmount();
 
-      process.env.APP_ENV = "production";
+      labEnabled = false; // APP_ENV=production on the server
       renderApp();
       await screen.findByRole("heading", { name: "Staff workspace" });
-      expect(screen.queryByRole("link", { name: "Attack simulator" })).not.toBeInTheDocument();
-      process.env.APP_ENV = "local";
+      await waitFor(() => {
+        expect(requested("/fraud/demo-lab")).toBe(2);
+      });
+      expect(screen.getByRole("link", { name: "Fraud alerts" })).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Fraud demo lab" })).not.toBeInTheDocument();
+    });
+
+    it("never asks about the lab for staff who cannot use it", async () => {
+      me = { ...customerMe, roles: ["COMPLIANCE_OFFICER"], mfa_verified_session: true };
+      window.history.replaceState(null, "", "/staff");
+      renderApp();
+      await screen.findByRole("heading", { name: "Staff workspace" });
+      expect(requested("/fraud/demo-lab")).toBe(0);
+      expect(screen.queryByRole("link", { name: "Fraud demo lab" })).not.toBeInTheDocument();
     });
   });
 

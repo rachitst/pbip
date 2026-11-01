@@ -48,6 +48,8 @@ class FraudAlert(Base):
         in_check("status", AlertStatus, "status_valid"),
         in_check("severity", AlertSeverity, "severity_valid"),
         Index("ix_fraud_alerts_status_created_at", "status", "created_at"),
+        # FK, and the alert queue's transaction_id filter (the demo lab finds its own alert)
+        Index("ix_fraud_alerts_transaction_id", "transaction_id"),
     )
 
     id: Mapped[UUID] = uuid_pk()

@@ -1,17 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AlertDetail, AlertSummary, UserOut } from "../../api/client";
+import type { AlertDetail, TransferOut, UserOut } from "../../api/client";
 import { MeContext } from "../../shell/MeContext";
 import { json, urlOf } from "../../test-utils";
 import { FraudDemoLab } from "./FraudDemoLab";
-import {
-  WRONG_PASSWORD_ATTEMPT,
-  generateIdempotencyKey,
-  secureRandom4Digits,
-} from "./fraudLabConfig";
 
 const analyst: UserOut = {
   id: "u-fa",
@@ -22,379 +17,422 @@ const analyst: UserOut = {
   created_at: "2026-01-01T00:00:00Z",
 };
 
-const customerOnly: UserOut = {
-  id: "u-cu",
-  email: "alice@demo.pbip",
-  roles: ["CUSTOMER"],
-  mfa_enabled: false,
-  mfa_verified_session: false,
-  created_at: "2026-01-01T00:00:00Z",
+const aliceAccount = {
+  id: "acc-alice",
+  account_number: "409443369528",
+  account_number_masked: "••••••••9528",
+  account_type: "SAVINGS",
+  currency: "INR",
+  status: "ACTIVE",
+  ledger_balance_minor: 25_000_000,
+  held_minor: 0,
+  available_minor: 25_000_000,
 };
+const bobAccount = { ...aliceAccount, id: "acc-bob", account_number: "409443361111" };
 
-const summary: AlertSummary = {
-  id: "al-lab-1",
+function payee(id: string, name: string, bank = "EXTB0001", status = "VERIFIED") {
+  return {
+    id,
+    name,
+    account_number_masked: "••••1234",
+    bank_code: bank,
+    nickname: null,
+    status,
+    created_at: "2026-11-01T10:00:00Z",
+    verified_at: status === "VERIFIED" ? "2026-11-01T10:00:00Z" : null,
+  };
+}
+
+function transferOut(id: string, status: TransferOut["status"], amount: number): TransferOut {
+  return {
+    id,
+    status,
+    amount_minor: amount,
+    currency: "INR",
+    from_account_id: "acc-alice",
+    to_account_id: null,
+    payee_id: "p-1",
+    reference: null,
+    created_at: "2026-11-01T10:00:00Z",
+    posted_at: status === "POSTED" ? "2026-11-01T10:00:00Z" : null,
+    step_up_required: false,
+    message: status === "POSTED" ? "Transfer completed" : "Transfer is under review",
+  };
+}
+
+const alert: AlertDetail = {
+  id: "al-77",
   status: "OPEN",
-  severity: "HIGH",
-  risk_score: 87,
+  severity: "MEDIUM",
+  risk_score: 77,
   decision: "REVIEW",
   amount_minor: 3_000_000,
   currency: "INR",
   transaction_status: "PENDING_REVIEW",
-  created_at: "2026-11-01T12:00:00Z",
-};
-
-const detail: AlertDetail = {
-  ...summary,
-  transaction_id: "tx-lab-1",
-  customer_id: "cu-alice-1",
-  customer: {
-    full_name: "Alice Demo",
-    kyc_status: "VERIFIED",
-    segment: "salaried",
-    risk_profile: null,
-    customer_since: "2025-01-01T00:00:00Z",
-  },
+  created_at: "2026-11-01T10:00:00Z",
+  transaction_id: "tx-1",
+  customer_id: "cu-1",
+  customer: null,
   transaction_type: "TRANSFER",
-  reference: "Simulated attack F1",
+  reference: "Lab F1 APP scam",
   reasons: [
     {
       code: "NEW_PAYEE_LARGE_AMOUNT",
-      message: "Payee added 3m ago and INR 30,000.00 is large",
+      message: "Payee was added 0 minutes ago and INR 30,000.00 is a large amount",
       source: "RULE",
       contribution: 45,
     },
-    {
-      code: "MODEL_PAYEE_AGE_SECONDS",
-      message: "Model: payee was added 3 minutes before the transfer",
-      source: "MODEL",
-      contribution: 2.4,
-    },
-    {
-      code: "ANOMALY",
-      message: "Unusual: ratio_to_avg_amount is 9.00, usually about 1.00",
-      source: "ANOMALY",
-      contribution: 0.85,
-    },
   ],
-  features: { payee_age_seconds: 180, ratio_to_avg_amount: 9.0 },
-  model_version: "hybrid-lgbm-iforest-1",
-  latency_ms: 19.2,
+  features: {},
+  model_version: "baseline-rules-0.3",
+  latency_ms: 3.1,
   resolution_note: null,
   resolved_at: null,
 };
 
-function renderLab(me: UserOut = analyst): ReturnType<typeof render> {
+interface Call {
+  method: string;
+  url: string;
+  headers: Headers;
+  credentials: RequestCredentials | undefined;
+  body: unknown;
+}
+
+/** A scripted server: each handler sees the call and returns a Response (or undefined = 404). */
+type Handler = (call: Call) => Response | undefined;
+
+let calls: Call[] = [];
+let handler: Handler = () => undefined;
+let labEnabled = true;
+
+function server(call: Call): Response {
+  if (call.url.endsWith("/api/v1/fraud/demo-lab")) return json(200, { enabled: labEnabled });
+  return handler(call) ?? json(404, { code: "not_found", title: "Not found" });
+}
+
+function customerCalls(): Call[] {
+  return calls.filter((c) => !c.url.includes("/fraud/"));
+}
+
+function renderLab(me: UserOut = analyst) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
       <MeContext.Provider value={me}>
-        <MemoryRouter initialEntries={["/staff/fraud-lab"]}>
-          <Routes>
-            <Route path="/staff/fraud-lab" element={<FraudDemoLab />} />
-            <Route
-              path="/staff/fraud/:alertId"
-              element={<div data-testid="alert-page">Alert Detail Page</div>}
-            />
-          </Routes>
+        <MemoryRouter>
+          <FraudDemoLab />
         </MemoryRouter>
       </MeContext.Provider>
     </QueryClientProvider>,
   );
 }
 
-describe("FraudDemoLab (TASK-081)", () => {
-  const fetchMock = vi.fn<typeof fetch>();
-  const originalAppEnv = process.env.APP_ENV;
+async function enterPassword() {
+  const user = userEvent.setup();
+  await user.type(await screen.findByLabelText("Customer password"), "demo-pass");
+  return user;
+}
 
-  beforeEach(() => {
-    process.env.APP_ENV = "local";
-    fetchMock.mockReset();
-    vi.stubGlobal("fetch", fetchMock);
+/** Login answers per email; everything else in a happy F1 world. */
+function happyServer(overrides: Handler = () => undefined): Handler {
+  return (call) => {
+    const custom = overrides(call);
+    if (custom) return custom;
+    const { method, url } = call;
+    if (url.endsWith("/auth/login")) {
+      const { email, password } = call.body as { email: string; password: string };
+      if (password !== "demo-pass") return json(401, { code: "unauthorized", title: "Invalid" });
+      return json(200, { access_token: `token-${email}`, mfa_required: false });
+    }
+    const bearer = call.headers.get("Authorization");
+    if (url.endsWith("/api/v1/accounts")) {
+      return json(200, [bearer === "Bearer token-bob@demo.pbip" ? bobAccount : aliceAccount]);
+    }
+    if (url.endsWith("/api/v1/payees") && method === "GET") return json(200, []);
+    if (url.endsWith("/api/v1/payees") && method === "POST") {
+      const body = call.body as { name: string; bank_code: string };
+      return json(201, payee("p-1", body.name, body.bank_code, "PENDING"));
+    }
+    if (url.endsWith("/verify")) {
+      return json(200, { payee: payee("p-1", "Urgent Investments"), name_match: "NOT_CHECKED" });
+    }
+    if (url.endsWith("/api/v1/customers/devices")) return json(201, {});
+    if (url.endsWith("/api/v1/transfers")) {
+      return json(202, transferOut("tx-1", "PENDING_REVIEW", 3_000_000));
+    }
+    if (url.includes("/api/v1/fraud/alerts?")) {
+      return json(200, url.includes("transaction_id=tx-1") ? [alert] : []);
+    }
+    if (url.endsWith("/api/v1/fraud/alerts/al-77")) return json(200, alert);
+    return undefined;
+  };
+}
 
-    fetchMock.mockImplementation((input, init) => {
-      const url = urlOf(input);
-      const method = init?.method ?? "GET";
-
-      if (url.endsWith("/api/v1/auth/login") && method === "POST") {
-        const body = JSON.parse((init?.body as string) || "{}") as {
-          email?: string;
-          password?: string;
-        };
-        if (body.password === WRONG_PASSWORD_ATTEMPT) {
-          // pragma: allowlist secret
-          return Promise.resolve(
-            json(401, { code: "INVALID_CREDENTIALS", title: "Invalid password" }),
-          );
-        }
-        return Promise.resolve(json(200, { accessToken: "tok-victim-alice" }));
-      }
-
-      if (url.endsWith("/api/v1/accounts") && method === "GET") {
-        return Promise.resolve(
-          json(200, [
-            {
-              id: "acc-alice-01",
-              account_number: "409443369528",
-              ledger_balance_minor: 25_000_000,
-            },
-          ]),
-        );
-      }
-
-      if (url.endsWith("/api/v1/payees") && method === "POST") {
-        return Promise.resolve(
-          json(201, {
-            id: "payee-sim-01",
-            name: "Investment Scam Co",
-            account_number: "999900001111",
-          }),
-        );
-      }
-
-      if (url.includes("/api/v1/payees/") && url.endsWith("/verify") && method === "POST") {
-        return Promise.resolve(json(200, { id: "payee-sim-01", verified: true }));
-      }
-
-      if (url.endsWith("/api/v1/transfers") && method === "POST") {
-        const body = JSON.parse((init?.body as string) || "{}") as { amount_minor: number };
-        return Promise.resolve(
-          json(202, {
-            id: "tx-lab-1",
-            status: "PENDING_REVIEW",
-            amount_minor: body.amount_minor,
-            currency: "INR",
-            from_account_id: "acc-alice-01",
-            to_account_id: null,
-            payee_id: "payee-sim-01",
-            reference: "Simulated attack",
-            created_at: "2026-11-01T12:00:00Z",
-            posted_at: null,
-            step_up_required: false,
-            message: "Transfer held for review",
-          }),
-        );
-      }
-
-      if (url.includes("/api/v1/fraud/alerts") && !url.includes("/al-lab-1")) {
-        return Promise.resolve(json(200, [summary]));
-      }
-
-      if (url.includes("/api/v1/fraud/alerts/al-lab-1")) {
-        return Promise.resolve(json(200, detail));
-      }
-
-      return Promise.resolve(json(404, { code: "NOT_FOUND", title: "not found" }));
-    });
+beforeEach(() => {
+  calls = [];
+  labEnabled = true;
+  handler = happyServer();
+  vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+    const raw = init?.body;
+    const call: Call = {
+      method: init?.method ?? "GET",
+      url: urlOf(input),
+      headers: new Headers(init?.headers),
+      credentials: init?.credentials,
+      body: typeof raw === "string" ? JSON.parse(raw) : undefined,
+    };
+    calls.push(call);
+    return Promise.resolve(server(call));
   });
+});
 
-  afterEach(() => {
-    process.env.APP_ENV = originalAppEnv;
-    vi.unstubAllGlobals();
-  });
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
-  it("1. renders UI cards for each scenario: Account Takeover, APP Scam, Mule Pass-Through, Velocity Burst, Impossible Travel, Amount Anomaly", () => {
+describe("fraud demo lab (TASK-081)", () => {
+  it("shows a card per scenario; F4 explains why it cannot run; runs wait for a password", async () => {
     renderLab();
-
-    expect(screen.getByRole("heading", { name: "Fraud attack simulator" })).toBeInTheDocument();
-
-    // Verify all 4 required scenarios from acceptance criteria are explicitly present:
-    expect(screen.getByTestId("scenario-card-F1")).toBeInTheDocument();
-    expect(screen.getByTestId("scenario-card-F2")).toBeInTheDocument();
-    expect(screen.getByTestId("scenario-card-F3")).toBeInTheDocument();
-    expect(screen.getByTestId("scenario-card-F6")).toBeInTheDocument();
-
-    // And verify F4 and F5 complete the F1-F6 suite:
-    expect(screen.getByTestId("scenario-card-F4")).toBeInTheDocument();
-    expect(screen.getByTestId("scenario-card-F5")).toBeInTheDocument();
-
-    // Check titles
-    expect(screen.getByRole("heading", { name: "APP Scam" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Velocity Burst" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Account Takeover" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Impossible Travel" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Amount Anomaly" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Mule Pass-Through" })).toBeInTheDocument();
-
-    // Verify each card has an Execute Attack button
-    const attackButtons = screen.getAllByRole("button", { name: /Execute Attack/i });
-    expect(attackButtons).toHaveLength(6);
+    await screen.findByLabelText("Customer password");
+    const cards = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(cards).toEqual([
+      "F1 APP scam",
+      "F2 Velocity burst",
+      "F3 Account takeover",
+      "F4 Impossible travel",
+      "F5 Amount anomaly",
+      "F6 Mule pass-through",
+    ]);
+    expect(screen.getAllByText("Run scenario")).toHaveLength(5); // every card but F4
+    expect(screen.getByText(/does not forge X-Forwarded-For/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run F1 APP scam" })).toBeDisabled();
+    await enterPassword();
+    expect(screen.getByRole("button", { name: "Run F1 APP scam" })).toBeEnabled();
+    expect(customerCalls()).toHaveLength(0);
   });
 
-  it("2. clicking 'Execute Attack' for F1 fires realistic sequence and displays live visual feedback (transfer held, alert raised, reasons)", async () => {
-    const user = userEvent.setup();
+  it("F1 dispatches the real API sequence and shows the server's decision and reasons", async () => {
     renderLab();
+    const user = await enterPassword();
+    await user.click(screen.getByRole("button", { name: "Run F1 APP scam" }));
 
-    const f1Card = screen.getByTestId("scenario-card-F1");
-    const executeBtn = within(f1Card).getByRole("button", { name: /Execute Attack/i });
+    expect(await screen.findByText("Risk 77/100")).toBeInTheDocument();
+    expect(screen.getByText("Held for review")).toBeInTheDocument();
+    expect(screen.getByText(/Payee was added 0 minutes ago/)).toBeInTheDocument();
+    expect(screen.getByText("Transfer is under review")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open the alert" })).toHaveAttribute(
+      "href",
+      "/staff/fraud/al-77",
+    );
 
-    await user.click(executeBtn);
+    expect(calls.map((c) => `${c.method} ${new URL(c.url, "http://x").pathname}`)).toEqual([
+      "GET /api/v1/fraud/demo-lab",
+      "POST /api/v1/auth/login",
+      "GET /api/v1/accounts",
+      "POST /api/v1/payees",
+      "POST /api/v1/payees/p-1/verify",
+      "POST /api/v1/transfers",
+      "GET /api/v1/fraud/alerts",
+      "GET /api/v1/fraud/alerts/al-77",
+    ]);
+    // Customer calls carry the customer's token and never the staff cookie.
+    for (const c of customerCalls().slice(1)) {
+      expect(c.credentials).toBe("omit");
+      expect(c.headers.get("Authorization")).toBe("Bearer token-alice@demo.pbip");
+    }
+    // The analyst reads the alert for THIS transfer, with the staff session.
+    const lookup = calls.find((c) => c.url.includes("/fraud/alerts?"));
+    expect(lookup?.url).toContain("transaction_id=tx-1");
+    expect(lookup?.credentials).toBe("include");
+    expect(lookup?.headers.get("Authorization")).not.toBe("Bearer token-alice@demo.pbip");
+    const sent = calls.find((c) => c.url.endsWith("/api/v1/transfers"));
+    expect(sent?.body).toMatchObject({ amount_minor: 3_000_000, from_account_id: "acc-alice" });
+    expect(sent?.headers.get("Idempotency-Key")).toMatch(/^lab-[0-9a-f-]{36}$/);
+  });
 
-    // Verify execution steps appear in aria-live container
-    await waitFor(() => {
-      expect(screen.getByText(/Authenticating target customer session/i)).toBeInTheDocument();
+  it("shows no score when the engine raised no alert (nothing is made up)", async () => {
+    handler = happyServer((call) =>
+      call.url.endsWith("/api/v1/transfers")
+        ? json(201, transferOut("tx-ok", "POSTED", 3_000_000))
+        : undefined,
+    );
+    renderLab();
+    const user = await enterPassword();
+    await user.click(screen.getByRole("button", { name: "Run F1 APP scam" }));
+    expect(await screen.findByText(/No alert: the engine did not hold/)).toBeInTheDocument();
+    expect(screen.getByText("Completed")).toBeInTheDocument();
+    expect(screen.queryByText(/Risk \d+\/100/)).not.toBeInTheDocument();
+    expect(calls.some((c) => c.url.includes("/fraud/alerts/"))).toBe(false);
+  });
+
+  it("F2 sends four transfers, each with its own idempotency key", async () => {
+    handler = happyServer((call) => {
+      if (call.url.endsWith("/api/v1/payees") && call.method === "GET") {
+        return json(200, [
+          { ...payee("p-lab", "PBIP Lab Merchant"), account_number_masked: "•••••0081" },
+        ]);
+      }
+      return undefined;
     });
-
-    // Verify outcomes rendered
-    const outcomeCard = await screen.findByTestId("attack-outcome-card");
-    expect(outcomeCard).toBeInTheDocument();
-
-    // Live visual feedback: transfer held
-    expect(within(outcomeCard).getByText("Under review")).toBeInTheDocument();
-    expect(within(outcomeCard).getByText("INR 30,000.00")).toBeInTheDocument();
-    expect(within(outcomeCard).getByText("tx-lab-1")).toBeInTheDocument();
-
-    // Live visual feedback: alert raised in staff queue with direct link
-    const alertLink = within(outcomeCard).getByRole("link", { name: /View alert in staff queue/i });
-    expect(alertLink).toBeInTheDocument();
-    expect(alertLink).toHaveAttribute("href", "/staff/fraud/al-lab-1");
-
-    // Live visual feedback: risk score and decision
-    expect(within(outcomeCard).getByText("Risk score: 87/100")).toBeInTheDocument();
-    expect(within(outcomeCard).getByText("Decision: Held for review")).toBeInTheDocument();
-
-    // Live visual feedback: reasons generated
-    expect(within(outcomeCard).getByText("Bank rule")).toBeInTheDocument();
+    renderLab();
+    const user = await enterPassword();
+    await user.click(screen.getByRole("button", { name: "Run F2 Velocity burst" }));
     expect(
-      within(outcomeCard).getByText(/Payee added 3m ago and INR 30,000.00 is large/i),
-    ).toBeInTheDocument();
-    expect(within(outcomeCard).getByText("+45 points")).toBeInTheDocument();
-
-    expect(within(outcomeCard).getByText("Model")).toBeInTheDocument();
-    expect(
-      within(outcomeCard).getByText(/Payee was added 3 minutes before the transfer/i),
-    ).toBeInTheDocument();
-    expect(within(outcomeCard).getByText("+2.40 (SHAP)")).toBeInTheDocument();
-
-    // Verify actual sequence of API calls
-    const calledPaths = fetchMock.mock.calls.map(([req]) => urlOf(req));
-    expect(calledPaths.some((p) => p.endsWith("/api/v1/auth/login"))).toBe(true);
-    expect(calledPaths.some((p) => p.endsWith("/api/v1/accounts"))).toBe(true);
-    expect(calledPaths.some((p) => p.endsWith("/api/v1/payees"))).toBe(true);
-    expect(calledPaths.some((p) => p.includes("/api/v1/payees/") && p.endsWith("/verify"))).toBe(
+      await screen.findByRole("heading", { name: /F2 Velocity burst: finished/ }),
+    ).toBeVisible();
+    const transfers = calls.filter((c) => c.url.endsWith("/api/v1/transfers"));
+    expect(transfers).toHaveLength(4);
+    expect(new Set(transfers.map((t) => t.headers.get("Idempotency-Key"))).size).toBe(4);
+    expect(transfers.every((t) => (t.body as { payee_id: string }).payee_id === "p-lab")).toBe(
       true,
     );
-    expect(calledPaths.some((p) => p.endsWith("/api/v1/transfers"))).toBe(true);
+    expect(calls.some((c) => c.url.endsWith("/api/v1/payees") && c.method === "POST")).toBe(false);
   });
 
-  it("3. clicking 'Execute Attack' for F2 (Velocity Burst) fires rapid burst of transfers", async () => {
-    const user = userEvent.setup();
+  it("F3 fails three sign-ins, then pays from a device that differs from the usual one", async () => {
     renderLab();
+    const user = await enterPassword();
+    await user.click(screen.getByRole("button", { name: "Run F3 Account takeover" }));
+    expect(await screen.findByText("Risk 77/100")).toBeInTheDocument();
+    const logins = calls.filter((c) => c.url.endsWith("/auth/login"));
+    expect(logins.map((c) => (c.body as { password: string }).password === "demo-pass")).toEqual([
+      true,
+      false,
+      false,
+      false,
+      true,
+    ]);
+    const usual = calls
+      .find((c) => c.url.endsWith("/customers/devices"))
+      ?.headers.get("X-Device-ID");
+    const used = calls.find((c) => c.url.endsWith("/api/v1/transfers"))?.headers.get("X-Device-ID");
+    expect(usual).toBeTruthy();
+    expect(used).toMatch(/^lab-attacker-/);
+    expect(used).not.toBe(usual);
+  });
 
-    const f2Card = screen.getByTestId("scenario-card-F2");
-    const executeBtn = within(f2Card).getByRole("button", { name: /Execute Attack/i });
-
-    await user.click(executeBtn);
-
-    await waitFor(() => {
-      expect(
-        screen.getByText(/Dispatching rapid burst of sequential transfers/i),
-      ).toBeInTheDocument();
+  it("F3 stops at a lockout instead of carrying on", async () => {
+    let failures = 0;
+    handler = happyServer((call) => {
+      if (!call.url.endsWith("/auth/login")) return undefined;
+      if ((call.body as { password: string }).password === "demo-pass") return undefined;
+      failures += 1;
+      return failures === 2
+        ? json(423, { code: "account_locked", title: "Account locked" })
+        : json(401, { code: "unauthorized", title: "Invalid" });
     });
-
-    const outcomeCard = await screen.findByTestId("attack-outcome-card");
-    expect(outcomeCard).toBeInTheDocument();
-
-    // Check multiple transfer calls were made
-    const transferCalls = fetchMock.mock.calls.filter(([req]) =>
-      urlOf(req).endsWith("/api/v1/transfers"),
-    );
-    expect(transferCalls.length).toBeGreaterThanOrEqual(4);
+    renderLab();
+    const user = await enterPassword();
+    await user.click(screen.getByRole("button", { name: "Run F3 Account takeover" }));
+    expect(await screen.findByRole("heading", { name: /stopped/ })).toBeInTheDocument();
+    expect(screen.getAllByText(/temporarily locked/).length).toBeGreaterThan(0);
+    expect(calls.some((c) => c.url.endsWith("/api/v1/transfers"))).toBe(false);
   });
 
-  it("4. clicking 'Execute Attack' for F3 (Account Takeover) simulates failed logins and new device ID", async () => {
-    const user = userEvent.setup();
-    renderLab();
-
-    const f3Card = screen.getByTestId("scenario-card-F3");
-    const executeBtn = within(f3Card).getByRole("button", { name: /Execute Attack/i });
-
-    await user.click(executeBtn);
-
-    await waitFor(() => {
-      expect(screen.getByText(/Simulating credential brute-force/i)).toBeInTheDocument();
+  it("F6 pays the mule from a second customer and forwards 95% only if it arrived", async () => {
+    let transfers = 0;
+    handler = happyServer((call) => {
+      if (call.url.endsWith("/api/v1/customers/me")) return json(200, { full_name: "Alice Demo" });
+      if (call.url.endsWith("/verify")) {
+        return json(200, { payee: payee("p-1", "x", "PBIP0001"), name_match: "MATCH" });
+      }
+      if (call.url.endsWith("/api/v1/transfers")) {
+        transfers += 1;
+        return transfers === 1
+          ? json(201, transferOut("tx-in", "POSTED", 2_400_000))
+          : json(202, transferOut("tx-1", "PENDING_REVIEW", 2_280_000));
+      }
+      return undefined;
     });
-
-    const outcomeCard = await screen.findByTestId("attack-outcome-card");
-    expect(outcomeCard).toBeInTheDocument();
-
-    // Verify failed login attempts were sent
-    const loginCalls = fetchMock.mock.calls.filter(([req]) =>
-      urlOf(req).endsWith("/api/v1/auth/login"),
+    renderLab();
+    const user = await enterPassword();
+    await user.click(screen.getByRole("button", { name: "Run F6 Mule pass-through" }));
+    expect(await screen.findByText("Risk 77/100")).toBeInTheDocument();
+    const [inbound, forward] = calls.filter((c) => c.url.endsWith("/api/v1/transfers"));
+    expect(inbound?.headers.get("Authorization")).toBe("Bearer token-bob@demo.pbip");
+    expect(inbound?.body).toMatchObject({ amount_minor: 2_400_000, from_account_id: "acc-bob" });
+    expect(forward?.headers.get("Authorization")).toBe("Bearer token-alice@demo.pbip");
+    expect(forward?.body).toMatchObject({ amount_minor: 2_280_000 });
+    const internal = calls.find(
+      (c) =>
+        c.method === "POST" &&
+        c.url.endsWith("/api/v1/payees") &&
+        c.headers.get("Authorization") === "Bearer token-bob@demo.pbip",
     );
-    expect(loginCalls.length).toBeGreaterThanOrEqual(4); // 3 failed + 1 successful
+    expect(internal?.body).toMatchObject({
+      name: "Alice Demo",
+      account_number: "409443369528",
+      bank_code: "PBIP0001",
+    });
   });
 
-  it("5. handles attack execution errors cleanly and surfaces the error alert", async () => {
-    const user = userEvent.setup();
-    fetchMock.mockImplementationOnce(() =>
-      Promise.resolve(json(500, { code: "SERVER_ERROR", title: "DB connection down" })),
-    );
-
+  it("F6 does not forward when the inbound payment was held", async () => {
+    handler = happyServer((call) => {
+      if (call.url.endsWith("/api/v1/customers/me")) return json(200, { full_name: "Alice Demo" });
+      return undefined;
+    });
     renderLab();
+    const user = await enterPassword();
+    await user.click(screen.getByRole("button", { name: "Run F6 Mule pass-through" }));
+    expect(
+      await screen.findByRole("heading", { name: /F6 Mule pass-through: finished/ }),
+    ).toBeVisible();
+    expect(calls.filter((c) => c.url.endsWith("/api/v1/transfers"))).toHaveLength(1);
+  });
 
-    const f1Card = screen.getByTestId("scenario-card-F1");
-    const executeBtn = within(f1Card).getByRole("button", { name: /Execute Attack/i });
+  it("a failed sign-in stops the run and says why; no money moves", async () => {
+    handler = happyServer((call) =>
+      call.url.endsWith("/auth/login")
+        ? json(401, { code: "unauthorized", title: "Invalid email or password" })
+        : undefined,
+    );
+    renderLab();
+    const user = await enterPassword();
+    await user.click(screen.getByRole("button", { name: "Run F1 APP scam" }));
+    expect(
+      await screen.findByRole("heading", { name: /F1 APP scam: stopped/ }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Invalid email or password").length).toBeGreaterThan(0);
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(calls.some((c) => c.url.endsWith("/api/v1/transfers"))).toBe(false);
+  });
 
-    await user.click(executeBtn);
+  it("refuses a customer with an authenticator instead of guessing a code", async () => {
+    handler = happyServer((call) =>
+      call.url.endsWith("/auth/login")
+        ? json(200, { mfa_required: true, mfa_token: "mfa" })
+        : undefined,
+    );
+    renderLab();
+    const user = await enterPassword();
+    await user.click(screen.getByRole("button", { name: "Run F1 APP scam" }));
+    expect((await screen.findAllByText(/has an authenticator enrolled/)).length).toBeGreaterThan(0);
+    expect(calls.some((c) => c.url.endsWith("/api/v1/accounts"))).toBe(false);
+  });
 
+  it("is switched off when the server is in production: no forms, no runs", async () => {
+    labEnabled = false;
+    renderLab();
+    expect(await screen.findByText(/switched off in this environment/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Run / })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Customer password")).not.toBeInTheDocument();
+    expect(customerCalls()).toHaveLength(0);
+  });
+
+  it("shows an error with retry when the lab status cannot be loaded", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(json(500, { title: "boom" }));
+    renderLab();
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      /Failed to authenticate target customer \(500\)/i,
+      "Could not check whether the lab may run here.",
     );
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });
 
-  it("6. clearly isolated with demo-only guardrail disabled in production environments (APP_ENV=production)", () => {
-    process.env.APP_ENV = "production";
-
-    renderLab();
-
-    // Production warning alert is displayed
-    expect(
-      screen.getByText(
-        /Interactive attack simulation is disabled in production environments \(APP_ENV=production\)/i,
-      ),
-    ).toBeInTheDocument();
-
-    // All Execute Attack buttons are disabled in production
-    const buttons = screen.getAllByRole("button", { name: /Execute Attack/i });
-    for (const btn of buttons) {
-      expect(btn).toBeDisabled();
-    }
-  });
-
-  it("7. enforces role authorization: non-analyst cannot access fraud lab", () => {
-    renderLab(customerOnly);
-
-    expect(
-      screen.getByText(
-        /Access restricted: the attack simulator requires the Fraud Analyst or Administrator role/i,
-      ),
-    ).toBeInTheDocument();
-    expect(screen.queryByTestId("scenario-card-F1")).not.toBeInTheDocument();
-  });
-
-  describe("fraudLabConfig security utilities", () => {
-    it("generateIdempotencyKey produces distinct valid keys matching API constraints", () => {
-      const regex = /^[A-Za-z0-9._:-]+$/;
-      const seen = new Set<string>();
-
-      for (let i = 0; i < 100; i++) {
-        const key = generateIdempotencyKey("test");
-        expect(key).toMatch(regex);
-        expect(key.length).toBeGreaterThanOrEqual(8);
-        expect(key.length).toBeLessThanOrEqual(128);
-        expect(seen.has(key)).toBe(false);
-        seen.add(key);
-      }
-    });
-
-    it("secureRandom4Digits returns a 4-digit numeric string in range [1000, 9999]", () => {
-      for (let i = 0; i < 100; i++) {
-        const digits = secureRandom4Digits();
-        expect(digits).toMatch(/^\d{4}$/);
-        const num = Number.parseInt(digits, 10);
-        expect(num).toBeGreaterThanOrEqual(1000);
-        expect(num).toBeLessThanOrEqual(9999);
-      }
+  it("is restricted to fraud analysts and admins and never asks the server", async () => {
+    renderLab({ ...analyst, roles: ["COMPLIANCE_OFFICER"] });
+    expect(await screen.findByText(/Access restricted/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(calls).toHaveLength(0);
     });
   });
 });

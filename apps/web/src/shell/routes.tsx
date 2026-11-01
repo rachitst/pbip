@@ -17,7 +17,7 @@ import { FraudAlert } from "../pages/staff/FraudAlert";
 import { FraudDemoLab } from "../pages/staff/FraudDemoLab";
 import { FraudQueue } from "../pages/staff/FraudQueue";
 import { canReviewFraud } from "../pages/staff/fraudFormat";
-import { isProductionEnv } from "../pages/staff/fraudLabConfig";
+import { useDemoLabStatus } from "../pages/staff/fraudLab";
 import { SecurityMonitoring } from "../pages/staff/SecurityMonitoring";
 import { StaffHome } from "../pages/staff/StaffHome";
 import { Alert } from "../ui/Alert";
@@ -42,14 +42,15 @@ function customerNav(me: UserOut): NavItem[] {
 }
 
 /** Staff tools are added here by their tasks (TASK-036, TASK-048, ...), each filtered by role. */
-function staffNav(me: UserOut): NavItem[] {
+function staffNav(me: UserOut, demoLabEnabled: boolean): NavItem[] {
   const items: NavItem[] = [{ to: "/staff", label: "Overview", end: true }];
   if (canReviewFraud(me)) {
     items.push({ to: "/staff/monitoring", label: "Security monitoring" });
     items.push({ to: "/staff/fraud", label: "Fraud alerts" });
   }
-  if (canReviewFraud(me) && !isProductionEnv()) {
-    items.push({ to: "/staff/fraud-lab", label: "Attack simulator" });
+  // TASK-081: only where the server says the lab may run (never in production).
+  if (canReviewFraud(me) && demoLabEnabled) {
+    items.push({ to: "/staff/fraud-lab", label: "Fraud demo lab" });
   }
   if (me.roles.includes("COMPLIANCE_OFFICER") || me.roles.includes("ADMIN")) {
     items.push({ to: "/staff/audit-log", label: "Audit log" });
@@ -74,9 +75,15 @@ function StaffSessionBar({ me }: { me: UserOut }) {
 
 function AreaLayout({ area, children }: { area: Area; children: ReactNode }) {
   const me = useCurrentUser();
+  const demoLab = useDemoLabStatus(
+    area === "staff" && canReviewFraud(me) && me.mfa_verified_session,
+  );
   if (area === "staff") {
     return (
-      <AppShell session={<StaffSessionBar me={me} />} nav={staffNav(me)}>
+      <AppShell
+        session={<StaffSessionBar me={me} />}
+        nav={staffNav(me, demoLab.data?.enabled === true)}
+      >
         {!me.mfa_verified_session && (
           <Alert tone="warning">
             Staff tools need a session verified with an authenticator code.{" "}

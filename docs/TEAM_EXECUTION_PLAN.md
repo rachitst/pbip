@@ -2473,6 +2473,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   - [x] Live visual feedback shows transfer held, alert raised in staff queue, and reasons generated
   - [x] Clearly isolated with demo-only guardrail disabled in production environments
 - **Definition of done (evidence):** Component tests test attack scenario dispatch, disabled when APP_ENV=production.
+- **Evidence (#273):** scenarios F1, F2, F3, F5, F6 run real customer API calls and show the server's alert for that transfer (`fraudLab.ts`); F4 explained as not runnable from a browser; `GET /api/v1/fraud/demo-lab` disables the lab when `APP_ENV=production`; `FraudDemoLab.test.tsx` (13), `routing.test.tsx`, `test_fraud_demo_lab.py` (5); real-stack screenshots in `pbip-screenshots/task-081/`.
 - **Required checks:**
   - Automated: Vitest + Testing Library covering loading, empty, error and success states; Playwright journey for critical flows; types only from `schema.d.ts`
   - Manual: click through the screen on the Docker stack (`python scripts/dev.py up`): keyboard-only navigation, narrow window, dark mode

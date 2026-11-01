@@ -19,6 +19,8 @@ export type AlertSummary = components["schemas"]["AlertSummary"];
 export type AlertDetail = components["schemas"]["AlertDetail"];
 export type FraudStats = components["schemas"]["FraudStats"];
 export type SecurityMonitoring = components["schemas"]["SecurityMonitoring"];
+export type DemoLabStatus = components["schemas"]["DemoLabStatus"];
+export type PayeeVerificationOut = components["schemas"]["PayeeVerificationOut"];
 export type SpendingBreakdownResponse = components["schemas"]["SpendingBreakdownResponse"];
 export type CategorySpendingItem = components["schemas"]["CategorySpendingItem"];
 export type SpendingTrendsResponse = components["schemas"]["SpendingTrendsResponse"];
@@ -102,6 +104,10 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}, retry = 
     accessToken = null;
     onSessionLost?.();
   }
+  return readBody<T>(path, response);
+}
+
+async function readBody<T>(path: string, response: Response): Promise<T> {
   // Transfer bodies for 202 (pending) and 403 (declined) carry state the UI must show. They are
   // plain JSON; a problem+json 403 (e.g. a non-customer token) is an error, not a transfer.
   const isTransferState =
@@ -110,6 +116,22 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}, retry = 
     !isProblem(response);
   if (!response.ok && !isTransferState) throw await toError(response);
   return (response.status === 204 ? undefined : await response.json()) as T;
+}
+
+/** A call made as ANOTHER principal with an explicit bearer token (the staff fraud demo lab,
+ * TASK-081, acting as a demo customer). Cookies are omitted both ways, so the signed-in staff
+ * session (memory token + HttpOnly refresh cookie) is neither sent nor replaced. No refresh:
+ * the token lives only for one scenario run. */
+export async function apiFetchAs<T>(
+  token: string | null,
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const headers = new Headers(init.headers);
+  if (init.body !== undefined) headers.set("Content-Type", "application/json");
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(path, { ...init, headers, credentials: "omit" });
+  return readBody<T>(path, response);
 }
 
 /** POST that returns the raw Response for streaming (SSE). Same auth and one refresh retry as
@@ -229,11 +251,13 @@ export const api = {
     return apiFetch<AuditLogOut[]>(`/api/v1/compliance/audit-logs?${params.toString()}`);
   },
   verifyAuditChain: () => apiFetch<ChainStatusOut>("/api/v1/compliance/audit-logs/verify"),
-  fraudAlerts: (status?: string) => {
+  fraudAlerts: (status?: string, transactionId?: string) => {
     const params = new URLSearchParams({ limit: "100" });
     if (status) params.set("status", status);
+    if (transactionId) params.set("transaction_id", transactionId);
     return apiFetch<AlertSummary[]>(`/api/v1/fraud/alerts?${params.toString()}`);
   },
+  fraudDemoLab: () => apiFetch<DemoLabStatus>("/api/v1/fraud/demo-lab"),
   fraudAlert: (alertId: string) =>
     apiFetch<AlertDetail>(`/api/v1/fraud/alerts/${encodeURIComponent(alertId)}`),
   decideAlert: (alertId: string, action: "RELEASE" | "REJECT", note: string) =>
