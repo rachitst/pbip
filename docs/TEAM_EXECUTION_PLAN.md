@@ -131,7 +131,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 | TASK-033 | HybridFraudScorer Service Integration in Transfer Flow | Rachit | Wed 28 Oct | Thu 29 Oct | 031, 032 | Seq | High | #56 |
 | TASK-038 | MLflow Model Registry Champion/Challenger Promotion Workflow | Pranay | Thu 29 Oct | Fri 30 Oct | 011, 029 | Seq | Low | #61 |
 | TASK-037 | Step-Up MFA Challenge Modal & Customer Transfer Confirmation | Kalpak | Thu 29 Oct | Thu 29 Oct | 033, 019 | Seq | Low | #60 |
-| TASK-035 | Fraud Telemetry & Risk Analytics Endpoints | Krishna | Fri 30 Oct | Fri 30 Oct | 033 | Seq | High | #58 |
+| TASK-035 | Fraud Telemetry & Risk Analytics Endpoints | Rachit | Fri 30 Oct | Fri 30 Oct | 033 | Seq | High | #58 |
 | TASK-039 | Fraud Engine Model Evaluation & Performance Report | Rachit | Fri 30 Oct | Sat 31 Oct | 029, 030, 031 | Seq | Low | #62 |
 | TASK-036 | Staff Fraud Operations Queue & Alert Detail UI | Kalpak | Fri 30 Oct | Sun 01 Nov | 019, 033, 035 | Seq | High | #59 |
 
@@ -1129,8 +1129,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-035 - Fraud Telemetry & Risk Analytics Endpoints
 
 - **Issue:** #58 | **Sprint:** 3 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
-- **Owner:** Krishna (`LetRock1`)
-- **Start:** Fri 30 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
+- **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov; was Krishna)
+- **Start:** Fri 30 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** Sun 1 Nov (`fraud/stats.py`, `GET /api/v1/fraud/stats`) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-033 (#56, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-033
 - **Goal:** Staff analytics endpoints providing fraud decision breakdown, hold rates, and rule triggers.
@@ -1143,10 +1143,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Responses cached in Redis with 60-second TTL to avoid database strain
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #58`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] GET /api/v1/fraud/stats returns decision counts (ALLOW, STEP_UP, REVIEW, BLOCK) over time
-  - [ ] Breakdown of most frequently triggered rules and high-risk payees
-  - [ ] Protected by require_roles([FRAUD_ANALYST, ADMIN], mfa=True)
-  - [ ] Responses cached in Redis with 60-second TTL to avoid database strain
+  - [x] GET /api/v1/fraud/stats returns decision counts (ALLOW, STEP_UP, REVIEW, BLOCK) over time (per UTC day, 1-90 day window, plus hold/block rates, model fallbacks, p95 latency)
+  - [x] Breakdown of most frequently triggered rules and high-risk payees (top 10 reason codes with source; destination accounts behind REVIEW/BLOCK, masked, counted across customers)
+  - [x] Protected by require_roles([FRAUD_ANALYST, ADMIN], mfa=True) (`test_stats_are_staff_only_and_need_mfa`, BOLA matrix)
+  - [x] Responses cached in Redis with 60-second TTL to avoid database strain (fail-open if Redis is down: `test_stats_are_cached_for_60_seconds_and_survive_redis_down`)
 - **Definition of done (evidence):** RBAC tests verify analyst authorization and MFA claim, response format verified.
 - **Required checks:**
   - Automated: pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths

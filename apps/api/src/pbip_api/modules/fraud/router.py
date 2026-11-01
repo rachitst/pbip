@@ -4,15 +4,18 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
+from redis import Redis
 from sqlalchemy.orm import Session
 
-from pbip_api.core.db import get_session
+from pbip_api.core.db import get_session, utcnow
+from pbip_api.core.redis import get_redis
 from pbip_api.core.validation import Text
 from pbip_api.modules.accounts.service import mask_account_number
 from pbip_api.modules.auth.dependencies import Principal, get_request_meta, require_roles
 from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.auth.service import RequestMeta
-from pbip_api.modules.fraud import service
+from pbip_api.modules.bills.service import settle_reviewed_bill
+from pbip_api.modules.fraud import service, stats
 from pbip_api.modules.fraud.models import AlertStatus, FraudAlert, FraudEvent
 from pbip_api.modules.ledger.models import Transaction
 from pbip_api.modules.payments.router import get_payments_service
@@ -46,6 +49,44 @@ class AlertDetail(AlertSummary):
     resolved_at: datetime | None
 
 
+class DayCounts(BaseModel):
+    day: str = Field(description="UTC date, YYYY-MM-DD")
+    ALLOW: int
+    STEP_UP: int
+    REVIEW: int
+    BLOCK: int
+
+
+class RuleCount(BaseModel):
+    code: str
+    source: str | None
+    count: int
+
+
+class RiskyPayee(BaseModel):
+    bank_code: str
+    account: str = Field(description="Masked: last four digits only")
+    flagged_transfers: int
+    customers: int = Field(description="Distinct customers who sent flagged money here")
+    max_risk: int
+
+
+class FraudStats(BaseModel):
+    window_days: int
+    generated_at: datetime
+    scored: int
+    totals: dict[str, int]
+    hold_rate: float = Field(description="Share of scored transactions held for REVIEW")
+    block_rate: float
+    by_day: list[DayCounts]
+    top_rules: list[RuleCount]
+    risky_payees: list[RiskyPayee]
+    model_fallbacks: int = Field(
+        description="Decisions served by the rules because the model failed"
+    )
+    latency_p95_ms: float | None
+
+
 class DecisionRequest(BaseModel):
     action: Literal["RELEASE", "REJECT"]
     note: Text | None = Field(default=None, max_length=1000)
@@ -63,6 +104,21 @@ def _summary(alert: FraudAlert, event: FraudEvent, txn: Transaction) -> AlertSum
         transaction_status=txn.status.value,
         created_at=alert.created_at,
     )
+
+
+@router.get(
+    "/stats",
+    response_model=FraudStats,
+    summary="Fraud telemetry: decisions over time, hold rate, top reasons, risky payees",
+)
+def get_stats(
+    days: int = Query(default=7, ge=1, le=90),
+    _analyst: Principal = Depends(analyst_gate),
+    session: Session = Depends(get_session),
+    redis_client: Redis = Depends(get_redis),
+) -> FraudStats:
+    """Aggregates only, cached in Redis for 60 seconds per window (TASK-035)."""
+    return FraudStats.model_validate(stats.fraud_stats(session, redis_client, days, utcnow()))
 
 
 @router.get("/alerts", response_model=list[AlertSummary], summary="Alert queue (newest first)")
@@ -119,6 +175,7 @@ def decide_alert(
         release=body.action == "RELEASE",
         note=body.note,
         meta=meta,
+        settle_other=settle_reviewed_bill,  # a held bill payment follows the decision too
     )
 
 
