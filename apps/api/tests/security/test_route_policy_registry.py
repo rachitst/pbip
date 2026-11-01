@@ -8,6 +8,7 @@ safety net behind object-level authorization (docs/PROJECT_BLUEPRINT.md section 
 import pytest
 from fastapi.routing import APIRoute
 from pbip_api.main import ROUTERS
+from pbip_api.modules.fraud.router import analyst_gate
 from pbip_test_support import build_app
 
 pytestmark = pytest.mark.security
@@ -62,3 +63,19 @@ def test_every_route_is_public_by_allow_list_or_authenticated() -> None:
 def test_public_allow_list_has_no_stale_entries() -> None:
     existing = {route.path for route in _all_api_routes()}
     assert existing >= PUBLIC_ROUTES, f"Stale allow-list entries: {PUBLIC_ROUTES - existing}"
+
+
+def test_every_fraud_route_is_behind_the_mfa_analyst_gate() -> None:
+    """Fraud data (alerts, stats, the security monitoring panels) is staff-only with MFA.
+
+    ``analyst_gate`` is ``require_roles(FRAUD_ANALYST, ADMIN, mfa=True)``; a new fraud route that
+    uses a weaker gate (or only authentication) fails here.
+    """
+    fraud_routes = [r for r in _all_api_routes() if r.path.startswith("/api/v1/fraud/")]
+    assert {"/api/v1/fraud/stats", "/api/v1/fraud/monitoring"} <= {r.path for r in fraud_routes}
+    offenders = [
+        f"{sorted(route.methods)} {route.path}"
+        for route in fraud_routes
+        if analyst_gate not in {d.call for d in route.dependant.dependencies}
+    ]
+    assert not offenders, f"Fraud routes without the MFA analyst gate: {offenders}"

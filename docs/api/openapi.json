@@ -1892,6 +1892,111 @@
         "title": "FinancialHealthScoreResponse",
         "type": "object"
       },
+      "FlaggedEvent": {
+        "properties": {
+          "alert_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alert Id"
+          },
+          "alert_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alert Status"
+          },
+          "amount_minor": {
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "decision": {
+            "title": "Decision",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "risk_score": {
+            "title": "Risk Score",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "event_id",
+          "created_at",
+          "decision",
+          "risk_score",
+          "customer_id",
+          "alert_id",
+          "alert_status",
+          "amount_minor",
+          "currency",
+          "reason_codes"
+        ],
+        "title": "FlaggedEvent",
+        "type": "object"
+      },
+      "FraudEventsPanel": {
+        "properties": {
+          "last_24h": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "REVIEW and BLOCK decisions in 24 hours",
+            "title": "Last 24H",
+            "type": "object"
+          },
+          "latest": {
+            "description": "The ten newest flagged decisions",
+            "items": {
+              "$ref": "#/components/schemas/FlaggedEvent"
+            },
+            "title": "Latest",
+            "type": "array"
+          }
+        },
+        "required": [
+          "last_24h",
+          "latest"
+        ],
+        "title": "FraudEventsPanel",
+        "type": "object"
+      },
       "FraudStats": {
         "properties": {
           "block_rate": {
@@ -2052,6 +2157,61 @@
         "title": "HealthScoreComponent",
         "type": "object"
       },
+      "HighRiskCustomer": {
+        "properties": {
+          "alert_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Alert to open: newest open one, else newest",
+            "title": "Alert Id"
+          },
+          "blocked": {
+            "title": "Blocked",
+            "type": "integer"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "flagged_events": {
+            "description": "REVIEW/BLOCK decisions, or decisions that opened an alert",
+            "title": "Flagged Events",
+            "type": "integer"
+          },
+          "last_flagged_at": {
+            "format": "date-time",
+            "title": "Last Flagged At",
+            "type": "string"
+          },
+          "max_risk": {
+            "title": "Max Risk",
+            "type": "integer"
+          },
+          "open_alerts": {
+            "title": "Open Alerts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "customer_id",
+          "flagged_events",
+          "blocked",
+          "max_risk",
+          "open_alerts",
+          "last_flagged_at",
+          "alert_id"
+        ],
+        "title": "HighRiskCustomer",
+        "type": "object"
+      },
       "InstalmentOut": {
         "properties": {
           "balance_after_minor": {
@@ -2152,6 +2312,34 @@
         "title": "LoanProductOut",
         "type": "object"
       },
+      "Lockout": {
+        "properties": {
+          "locked_at": {
+            "format": "date-time",
+            "title": "Locked At",
+            "type": "string"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "None if the user was deleted since",
+            "title": "User Id"
+          }
+        },
+        "required": [
+          "user_id",
+          "locked_at"
+        ],
+        "title": "Lockout",
+        "type": "object"
+      },
       "LockoutStatusOut": {
         "properties": {
           "failed_login_count": {
@@ -2200,6 +2388,82 @@
           "last_failure_at"
         ],
         "title": "LockoutStatusOut",
+        "type": "object"
+      },
+      "LoginAnomalies": {
+        "properties": {
+          "burst_threshold": {
+            "description": "Failed sign-ins in the window that make a burst",
+            "title": "Burst Threshold",
+            "type": "integer"
+          },
+          "bursts": {
+            "items": {
+              "$ref": "#/components/schemas/LoginBurst"
+            },
+            "title": "Bursts",
+            "type": "array"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Security events in the window, by type",
+            "title": "Counts",
+            "type": "object"
+          },
+          "recent_lockouts": {
+            "description": "The ten newest ACCOUNT_LOCKED events",
+            "items": {
+              "$ref": "#/components/schemas/Lockout"
+            },
+            "title": "Recent Lockouts",
+            "type": "array"
+          },
+          "unknown_account_failures": {
+            "description": "Failed sign-ins for unknown emails",
+            "title": "Unknown Account Failures",
+            "type": "integer"
+          },
+          "window_hours": {
+            "title": "Window Hours",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window_hours",
+          "burst_threshold",
+          "counts",
+          "unknown_account_failures",
+          "bursts",
+          "recent_lockouts"
+        ],
+        "title": "LoginAnomalies",
+        "type": "object"
+      },
+      "LoginBurst": {
+        "properties": {
+          "failures": {
+            "title": "Failures",
+            "type": "integer"
+          },
+          "last_failure_at": {
+            "format": "date-time",
+            "title": "Last Failure At",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "failures",
+          "last_failure_at"
+        ],
+        "title": "LoginBurst",
         "type": "object"
       },
       "LoginRequest": {
@@ -2457,6 +2721,36 @@
         "title": "NotificationsPage",
         "type": "object"
       },
+      "OldestOpenAlert": {
+        "properties": {
+          "alert_id": {
+            "format": "uuid",
+            "title": "Alert Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "risk_score": {
+            "title": "Risk Score",
+            "type": "integer"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alert_id",
+          "severity",
+          "risk_score",
+          "created_at"
+        ],
+        "title": "OldestOpenAlert",
+        "type": "object"
+      },
       "OpenAccountRequest": {
         "properties": {
           "account_type": {
@@ -2481,6 +2775,63 @@
         ],
         "title": "OpenAccountType",
         "type": "string"
+      },
+      "OpenAlertsPanel": {
+        "properties": {
+          "by_severity": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Open alerts per severity (MEDIUM, HIGH)",
+            "title": "By Severity",
+            "type": "object"
+          },
+          "oldest": {
+            "description": "The five longest-waiting open alerts",
+            "items": {
+              "$ref": "#/components/schemas/OldestOpenAlert"
+            },
+            "title": "Oldest",
+            "type": "array"
+          },
+          "oldest_open_age_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Age of the oldest open alert",
+            "title": "Oldest Open Age Seconds"
+          },
+          "oldest_open_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Open At"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "by_severity",
+          "oldest_open_at",
+          "oldest_open_age_seconds",
+          "oldest"
+        ],
+        "title": "OpenAlertsPanel",
+        "type": "object"
       },
       "PageDirection": {
         "enum": [
@@ -2919,6 +3270,46 @@
           "count"
         ],
         "title": "RuleCount",
+        "type": "object"
+      },
+      "SecurityMonitoring": {
+        "description": "UC-13 panels. Identifiers and aggregates only: no names, emails, account numbers or IPs.",
+        "properties": {
+          "fraud_events": {
+            "$ref": "#/components/schemas/FraudEventsPanel"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "high_risk_customers": {
+            "items": {
+              "$ref": "#/components/schemas/HighRiskCustomer"
+            },
+            "title": "High Risk Customers",
+            "type": "array"
+          },
+          "high_risk_window_days": {
+            "title": "High Risk Window Days",
+            "type": "integer"
+          },
+          "login_anomalies": {
+            "$ref": "#/components/schemas/LoginAnomalies"
+          },
+          "open_alerts": {
+            "$ref": "#/components/schemas/OpenAlertsPanel"
+          }
+        },
+        "required": [
+          "generated_at",
+          "high_risk_window_days",
+          "high_risk_customers",
+          "open_alerts",
+          "login_anomalies",
+          "fraud_events"
+        ],
+        "title": "SecurityMonitoring",
         "type": "object"
       },
       "SpendingBreakdownResponse": {
@@ -5680,6 +6071,33 @@
           }
         ],
         "summary": "RELEASE (false positive, posts the held transfer) or REJECT (confirmed fraud)",
+        "tags": [
+          "fraud"
+        ]
+      }
+    },
+    "/api/v1/fraud/monitoring": {
+      "get": {
+        "description": "UC-13 dashboard data (TASK-099), cached in Redis for 60 seconds.",
+        "operationId": "get_monitoring_api_v1_fraud_monitoring_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecurityMonitoring"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Security monitoring: high-risk customers, open alerts, login anomalies, fraud events",
         "tags": [
           "fraud"
         ]

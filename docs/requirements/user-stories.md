@@ -642,7 +642,7 @@ that potential fraud is addressed promptly.*
   customer profile, with release and reject actions. Staff without the analyst role never call the API.
 * ✓ Fraud statistics (decisions over time, top reasons, masked risky payees) are available to analysts with MFA.
 
-**Status:** Implemented. Charting the statistics belongs to the security dashboard (US-34, TASK-099).
+**Status:** Implemented. The statistics are not charted in the UI yet: the security dashboard (US-34, TASK-099) shows flagged events and open alerts, not the `/fraud/stats` trends.
 
 **Tests:**
 
@@ -754,14 +754,18 @@ open investigations on one dashboard, so that I can monitor threats effectively.
 
 **Acceptance criteria:**
 
-* ✗ A staff API (with MFA) and a dashboard show each of the five panels, with drill-down to the alert queue.
+* ✓ A staff API (fraud analyst or admin, with MFA) and a dashboard show each of the five views: high-risk customers,
+  active (open) alerts by severity with the oldest one's age, login anomalies (three or more failed sign-ins for a
+  user in 24 hours, lockouts), recent flagged fraud events, and the longest-waiting open investigations, with
+  drill-down to the alert queue and to each alert.
+* ✓ Identifiers and aggregates only: no names, emails, account numbers or IP addresses.
 
-**Status:** Planned. Partial data exists elsewhere: the fraud alert queue and statistics API, and the Grafana
-panels for fraud decisions and failed logins.
+**Status:** Implemented (`GET /api/v1/fraud/monitoring`, `/staff/monitoring`).
 
-**Tests:** none for the dashboard.
+**Tests:** `test_security_monitoring.py`, `test_rbac_bola.py`, `test_route_policy_registry.py`,
+`SecurityMonitoring.test.tsx`, `routing.test.tsx`, `e2e/shell.spec.ts`.
 
-**Tasks:** TASK-099 (Todo).
+**Tasks:** TASK-099 (Done).
 
 ## Compliance (section 5)
 
@@ -808,6 +812,6 @@ acknowledge and resolve, with indicators of overdue reviews.*
 
 | Status | Stories |
 |---|---|
-| Implemented | US-02, US-05, US-09, US-10, US-17, US-18, US-26, US-28, US-29, US-31, US-35 |
+| Implemented | US-02, US-05, US-09, US-10, US-17, US-18, US-26, US-28, US-29, US-31, US-34, US-35 |
 | Partial | US-01, US-03, US-04, US-06, US-07, US-11, US-13, US-14, US-19, US-20, US-23, US-24, US-27, US-30, US-32, US-33 |
-| Planned | US-08, US-12, US-15, US-16, US-21, US-22, US-25, US-34, US-36 |
+| Planned | US-08, US-12, US-15, US-16, US-21, US-22, US-25, US-36 |
