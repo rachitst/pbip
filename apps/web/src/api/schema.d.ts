@@ -1217,7 +1217,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "POSTED" | "DECLINED" | "REVERSED";
+            status: "POSTED" | "PENDING_REVIEW" | "DECLINED" | "REVERSED";
             /**
              * Transaction Id
              * Format: uuid
