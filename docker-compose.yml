@@ -8,7 +8,10 @@ x-api-env: &api-env
   REDIS_URL: redis://redis:6379/0
   JWT_SECRET: ${JWT_SECRET}
   FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY}
-  CORS_ORIGINS: ${CORS_ORIGINS}
+  # The stack's own HTTPS origin is always trusted: the CSRF guard on refresh/logout rejects any Origin not in
+  # this list, so without it session restore on https://localhost:8443 fails with 403 (existing .env files
+  # list only the old http://localhost:8080).
+  CORS_ORIGINS: ${CORS_ORIGINS},https://localhost:8443
   # The compose stack is served over HTTPS only (web :8443), so the refresh cookie is always Secure
   # and the API sends HSTS. `make dev-api` (Vite on http://localhost:5173) still reads .env.
   COOKIE_SECURE: "true"
