@@ -143,6 +143,7 @@ def test_f6_inflow_from_several_senders_passed_on_within_six_hours(
 def test_f7_multiple_deposits_just_below_reporting_threshold(
     data: LabelledTransfers,
 ) -> None:
+    """F7 Structuring: deposits just below configured synthetic reporting threshold (₹1,00,000)."""
     incidents = _incidents(data, "F7")
     assert len(incidents) > 0
     for incident in incidents:
@@ -205,14 +206,19 @@ def test_f8_dormancy_greater_than_180_days_and_maximum_transfers(
         assert priors, "Dormant account must have prior activity before dormancy"
         last_prior = priors[-1]
         gap = first_f8 - last_prior.occurred_at
-        assert gap > timedelta(days=DEFAULT_DORMANCY_DAYS)
+        assert (
+            timedelta(days=DEFAULT_DORMANCY_DAYS)
+            < gap
+            <= timedelta(days=DEFAULT_DORMANCY_DAYS + 61)
+        )
+        assert gap > timedelta(days=180)
 
         in_gap = [t for t in customer_txns if last_prior.occurred_at < t.occurred_at < first_f8]
         assert in_gap == []
 
 
 def test_f8_custom_dormancy_days_and_limit() -> None:
-    custom_dormancy = 90
+    custom_dormancy = 200  # must be at least 180 days
     custom_max_transfer = 15_000_000  # INR 1,50,000.00
     cfg = FraudConfig(
         rates=dict.fromkeys(SCENARIOS, 0.05),
@@ -235,7 +241,9 @@ def test_f8_custom_dormancy_days_and_limit() -> None:
         first_f8 = min(row.occurred_at for row in f8_rows)
         priors = [t for t in customer_txns if t.occurred_at < first_f8]
         assert priors
-        assert first_f8 - priors[-1].occurred_at > timedelta(days=custom_dormancy)
+        gap = first_f8 - priors[-1].occurred_at
+        assert gap > timedelta(days=custom_dormancy)
+        assert gap > timedelta(days=180)
 
 
 def test_ordinary_transfers_never_match_a_scenario_signature(data: LabelledTransfers) -> None:
@@ -257,7 +265,11 @@ def test_fraud_config_is_validated() -> None:
         FraudConfig(reporting_threshold_minor=0)
     with pytest.raises(ValueError, match=r"max_transfer_minor must be positive"):
         FraudConfig(max_transfer_minor=-100)
-    with pytest.raises(ValueError, match=r"dormancy_days must be positive"):
+    with pytest.raises(ValueError, match=r"dormancy_days must be at least 180"):
+        FraudConfig(dormancy_days=179)
+    with pytest.raises(ValueError, match=r"dormancy_days must be at least 180"):
+        FraudConfig(dormancy_days=90)
+    with pytest.raises(ValueError, match=r"dormancy_days must be at least 180"):
         FraudConfig(dormancy_days=0)
 
 

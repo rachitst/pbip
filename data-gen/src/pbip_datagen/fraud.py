@@ -14,7 +14,7 @@ customers, ONE injected incident of a scenario:
   payee.
 * F6 mule pass-through: 3-6 credits from unrelated senders, then 90-98% of the inflow sent out to a
   new payee within 6 hours.
-* F7 structuring: 3-6 deposits just beneath the mandatory reporting threshold.
+* F7 structuring: 3-6 deposits just beneath the configured synthetic reporting threshold.
 * F8 dormant account sudden activity: accounts dormant for > 180 days suddenly initiating
   maximum transfers.
 
@@ -70,7 +70,9 @@ DEFAULT_RATES: dict[Scenario, float] = {
     "F7": 0.01,
     "F8": 0.01,
 }
-DEFAULT_REPORTING_THRESHOLD_MINOR = 10_000_000  # ₹1,00,000.00 mandatory reporting threshold
+# Configured synthetic reporting threshold (₹1,00,000.00 minor units / paise; aligned with
+# LARGE_AMOUNT_MINOR in pbip_api.modules.fraud.baseline; not a statutory PMLA threshold).
+DEFAULT_REPORTING_THRESHOLD_MINOR = 10_000_000
 DEFAULT_MAX_TRANSFER_MINOR = 20_000_000  # ₹2,00,000.00 maximum allowed transfer
 DEFAULT_DORMANCY_DAYS = 180  # accounts dormant for > 180 days
 FOREIGN_COUNTRIES = ("AE", "SG", "GB", "US", "NG", "RU")
@@ -96,8 +98,8 @@ class FraudConfig:
             raise ValueError("reporting_threshold_minor must be positive")
         if self.max_transfer_minor <= 0:
             raise ValueError("max_transfer_minor must be positive")
-        if self.dormancy_days <= 0:
-            raise ValueError("dormancy_days must be positive")
+        if self.dormancy_days < 180:
+            raise ValueError("dormancy_days must be at least 180")
 
 
 @dataclass(frozen=True, slots=True)
@@ -295,6 +297,7 @@ def _f6(ctx: _Ctx) -> list[tuple[Transfer, str]]:
 
 
 def _f7(ctx: _Ctx) -> list[tuple[Transfer, str]]:
+    """F7 Structuring: 3-6 deposits just beneath the configured synthetic reporting threshold."""
     threshold = ctx.fraud_config.reporting_threshold_minor
     start = ctx.moment(timedelta(hours=24))
     count = int(ctx.rng.integers(3, 7))
@@ -309,6 +312,7 @@ def _f7(ctx: _Ctx) -> list[tuple[Transfer, str]]:
 
 
 def _f8(ctx: _Ctx) -> list[tuple[Transfer, str]]:
+    """F8 Dormant account sudden activity: > 180 days inactivity, then maximum transfer(s)."""
     dormancy_days = int(
         ctx.rng.integers(ctx.fraud_config.dormancy_days + 1, ctx.fraud_config.dormancy_days + 61)
     )
