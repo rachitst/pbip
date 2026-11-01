@@ -3,7 +3,7 @@
 **Audience:** whoever is on call for a PBIP staging/production stack (platform owner, security owner, fraud analyst
 lead). **Scope:** the stack defined by `infra/deploy/docker-compose.prod.yml` as deployed by
 `.github/workflows/deploy.yml`. Everything here was checked against the repository at the time of writing; where a
-step depends on infrastructure that the repository does not configure (TLS termination, WAL archive storage, host disk
+step depends on infrastructure that the repository does not configure (DNS and the certbot install, WAL archive storage, host disk
 encryption, off-host backup storage) it is marked **External** and must be set up and verified on the target host
 before it can be relied on.
 
@@ -23,12 +23,12 @@ pipeline is TASK-082 (#105).
 
 | Service | Image | Role | Restart | Data |
 |---|---|---|---|---|
-| `web` | `${IMAGE_PREFIX}/web:${IMAGE_TAG}` (nginx, unprivileged) | Static React build; proxies `/api/` to `api`; the only published port (`${PUBLIC_PORT:-80}` → 8080) | unless-stopped | none |
+| `web` | `${IMAGE_PREFIX}/web:${IMAGE_TAG}` (nginx, unprivileged) | Terminates TLS (`${PUBLIC_HTTPS_PORT:-443}` → 8443); HTTP (`${PUBLIC_PORT:-80}` → 8080) only redirects and answers ACME challenges; static React build; proxies `/api/` to `api`. The only published ports | unless-stopped | `./certs/web`, `./acme` (read-only) |
 | `api` | `${IMAGE_PREFIX}/api:${IMAGE_TAG}` | FastAPI (uvicorn) | unless-stopped | none |
 | `migrate` | same as `api` | One-shot `alembic upgrade head`; `api` waits for it to complete | no | none |
 | `worker` | same as `api` | Celery worker (outbox relay) | unless-stopped | none |
 | `beat` | same as `api` | Celery beat: `pbip.outbox.relay` every 10 s | unless-stopped | schedule file in `/tmp` |
-| `db` | `postgres:16-alpine` | PostgreSQL 16; not published | unless-stopped | volume `pgdata` |
+| `db` | `postgres:16-alpine` | PostgreSQL 16; not published; TLS required for every TCP client (`tls-entrypoint.sh`) | unless-stopped | volume `pgdata`, `./certs/db` (read-only) |
 | `redis` | `redis:7-alpine` (`--appendonly yes`) | Rate-limit counters, Celery broker/result backend | unless-stopped | volume `redisdata` |
 
 Images are built and pushed to GHCR by the `package` job of `deploy.yml` when a `v*` tag is pushed; the `deploy` job
@@ -46,7 +46,9 @@ runs only when the repository variable `DEPLOY_ENABLED` is `true` and uses the s
 | `CORS_ORIGINS` | api | Comma-separated browser origins; no `*` |
 | `COOKIE_SECURE` | api | Must be `true`; also enables HSTS on API responses |
 | `LOG_LEVEL` | api, worker, beat | `INFO` unless debugging |
-| `PUBLIC_PORT` | web | Host port published by `web` (default 80) |
+| `PUBLIC_PORT` | web | Host HTTP port (default 80): redirects to HTTPS, serves `/.well-known/acme-challenge/` |
+| `PUBLIC_HTTPS_PORT` | web | Host HTTPS port (default 443); also the port in the HTTP → HTTPS redirect |
+| `PUBLIC_HOSTNAME` | deploy.sh | Host name in the placeholder certificate until certbot issues the real one (§1.4) |
 | `IMAGE_PREFIX`, `IMAGE_TAG` | all app images | Set by the deploy job per release (`ghcr.io/<owner>/pbip`, `vX.Y.Z`); set them yourself for a manual deploy or rollback |
 | `DAILY_TRANSFER_LIMIT_MINOR` | api | Optional override of the per-customer daily transfer limit (default `50000000` = ₹5,00,000.00). Emergency lever in §5.1 |
 | `JWT_ACCESS_TTL_MINUTES` | api | Optional; default 15. Bounds how long a stolen access token stays valid (§5.2) |
@@ -61,20 +63,61 @@ runs only when the repository variable `DEPLOY_ENABLED` is `true` and uses the s
   Where the monitoring stack is deployed (`make up-all` locally; not part of the prod compose file), Alloy ships all
   container stdout to Loki and Grafana's Explore can query by container. Logs are redacted (`core/logging.py`): never
   expect to find tokens, passwords, emails or account numbers in them, and never add them.
-- Metrics: `/metrics` on the API container (not proxied by nginx: `infra/nginx/default.conf` returns 404). Prometheus
+- Metrics: `/metrics` on the API container (not proxied by nginx: `infra/nginx/default.conf.template` returns 404). Prometheus
   rules in `infra/prometheus/alerts.yml`: `ApiHighErrorRate`, `ApiSlowP95`, `FraudScoringSlow`, `LoginFailureSpike`,
   `CeleryBacklog`. Grafana dashboard `infra/grafana/dashboards/pbip-overview.json` ("PBIP - Overview").
 - Audit trail: `GET /api/v1/compliance/audit-logs` and `GET /api/v1/compliance/audit-logs/verify` (compliance officer
   or admin, MFA session) — the verify endpoint recomputes the hash chain.
 
-### 1.4 TLS termination (**External**)
+### 1.4 TLS (in the repository; certificate issuance is **External**)
 
-`web` listens on plain HTTP (nginx on 8080, published on `PUBLIC_PORT`). Nothing in the repository terminates TLS.
-Put a TLS-terminating reverse proxy or load balancer in front of `PUBLIC_PORT` (certificate from your CA or ACME),
-forward `X-Forwarded-Proto: https`, and keep `COOKIE_SECURE=true` so the refresh cookie is `Secure` and the API sends
-HSTS. Verify from outside: `curl -sI https://<host>/api/health/live | grep -i strict-transport-security` must print a
-header, and `curl -sI http://<host>/` should redirect to HTTPS at the proxy. Record the result on the deployment issue;
-the threat model lists TLS as a deployment requirement, not an implemented control.
+TLS is configured in code (NFR-02). What runs where:
+
+| Hop | Control | Where |
+|---|---|---|
+| Browser → `web` | nginx terminates TLS 1.2/1.3 (Mozilla intermediate ciphers, no session tickets) on 8443; port 8080 answers only `301` to `https://$host:${PUBLIC_HTTPS_PORT}` and ACME HTTP-01 challenges; HSTS `max-age=63072000; includeSubDomains` on static responses (nginx) and API responses (API, because `COOKIE_SECURE=true`) | `infra/nginx/default.conf.template`, `infra/nginx/security-headers.conf` |
+| Refresh cookie | `Secure`, `HttpOnly`, `SameSite=Strict`; staging/production refuse to boot with `COOKIE_SECURE=false` | `core/config.py`, `modules/auth/router.py` |
+| `api`/`worker`/`beat`/`migrate` → `db` | `sslmode=verify-full`: chain and host name `db` checked; PostgreSQL rejects plain TCP (`host ... reject`, only `hostssl` with SCRAM) | `DATABASE_URL` in the compose files, `infra/postgres/tls-entrypoint.sh` |
+| `web` → `api`, services → `redis` | Plain TCP on the internal compose network, not published. Accepted: single host, no untrusted workloads on that network (threat model §1) | — |
+
+**Staging host, first time** (needs DNS for `<host>` pointing at the host, ports 80 and 443 open, `PUBLIC_HOSTNAME`
+set in `~/pbip/.env`):
+
+1. Deploy normally. `deploy.sh` creates whatever is missing and never overwrites existing files:
+   `certs/db/server.{crt,key}` (self-signed PostgreSQL certificate for host `db`, 10 years; the API pins it as its
+   `sslrootcert`) and a 30-day placeholder `certs/web/tls.{crt,key}` for `PUBLIC_HOSTNAME`, so nginx can start and
+   answer the ACME challenge. `certs/` is `0700`; the web key is `0644` inside it because nginx runs as uid 101.
+2. Issue the real certificate with certbot's webroot plugin (nginx keeps serving; the challenge files go to
+   `~/pbip/acme`, which `web` serves read-only):
+
+   ```bash
+   sudo apt-get install -y certbot
+   sudo certbot certonly --webroot -w /home/<deploy-user>/pbip/acme -d <host> --agree-tos -m <ops-email> \
+     --deploy-hook "PBIP_DIR=/home/<deploy-user>/pbip bash /home/<deploy-user>/pbip/certbot-deploy-hook.sh"
+   ```
+
+   `certbot-deploy-hook.sh` copies `fullchain.pem`/`privkey.pem` to `certs/web/tls.{crt,key}`, runs `nginx -t` and
+   reloads nginx without downtime. certbot stores the hook in its renewal configuration, and the packaged
+   `certbot.timer` renews automatically; check with `sudo certbot renew --dry-run`.
+3. Verify from outside the host and record the output on the deployment issue (#198):
+
+   ```bash
+   curl -sI http://<host>/ | grep -iE '^(HTTP|location)'            # 301 to https://<host>:443/
+   curl -sI https://<host>/api/health/live | grep -i strict-transport  # HSTS present
+   python3 scripts/smoke_test.py https://<host>
+   ```
+
+**Rotating the database certificate:** delete `certs/db/*`, run the deploy again (new pair), then
+`docker compose -f docker-compose.prod.yml up -d --force-recreate db api worker beat`. Clients pin the new
+certificate as their root, so the old one stops working at once.
+
+**Local and CI:** `python scripts/dev_certs.py` (run by `make setup`, `make up`, `make up-all` and `make infra-up`)
+creates a throwaway local CA and leaf certificates in `infra/certs/` (git-ignored). The stack is at
+`https://localhost:8443`; `http://localhost:8080` redirects. Browsers warn because they do not trust the local CA;
+command-line clients pass `--cacert infra/certs/ca.crt` (curl) or `SSL_CERT_FILE=infra/certs/ca.crt` (Python; `make
+smoke` does this). Do not import the dev CA into your browser: with HSTS, the browser would then refuse plain HTTP to
+`localhost` for two years. `bash scripts/verify_tls.sh` proves the redirect, HSTS, TLS ≥ 1.2, that PostgreSQL rejects
+plain TCP and that every application connection to it is encrypted; CI runs it in the e2e job.
 
 ---
 
@@ -448,10 +491,9 @@ A fraud analyst, compliance officer or admin credential, TOTP secret, device or 
 (reports of actions the person did not take, `TOKEN_REUSE_DETECTED` on their user, logins from an unknown IP, admin
 unlocks they do not recognise, audit entries they deny).
 
-**Facts that shape the response** (from the code; threat model §5): access JWTs are validated by signature only — the
-API does not consult the database on each request (`auth/dependencies.py`) — so disabling a user stops their
-*refresh* and *login* immediately but a stolen access token keeps working until it expires (default 15 min,
-`JWT_ACCESS_TTL_MINUTES`). Refresh tokens live in `refresh_tokens` and can be revoked server-side. Staff routes also
+**Facts that shape the response** (from the code; threat model §5): every request with an access JWT checks the
+user's `status` and `token_version` in the database (ADR-0021, `auth/dependencies.py`), so disabling a user stops
+login, refresh **and** their outstanding access tokens on the next request. Refresh tokens live in `refresh_tokens` and can be revoked server-side. Staff routes also
 require `amr: otp`, so a stolen password alone is not enough; a stolen *session* is.
 
 **Steps.**
@@ -467,12 +509,13 @@ require `amr: otp`, so a stolen password alone is not enough; a stolen *session*
    UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = '<user_id>' AND revoked_at IS NULL;
    COMMIT;
    ```
-   Login and refresh now fail for this user (`UserStatus.DISABLED` is checked on both paths). Confirm:
+   Login, refresh **and every request with an existing access token** now fail for this user (`UserStatus.DISABLED`
+   is checked on all three paths; access tokens since ADR-0021). Confirm:
    `SELECT status FROM users WHERE id='<user_id>'; SELECT count(*) FROM refresh_tokens WHERE user_id='<user_id>' AND revoked_at IS NULL;` → `DISABLED`, `0`.
-3. **Bound the remaining exposure.** The attacker's current access token works for up to `JWT_ACCESS_TTL_MINUTES`
-   more. During that window, watch the audit log for the actor: `SELECT seq, created_at, action, resource_type, resource_id FROM audit_logs WHERE actor_user_id='<user_id>' AND created_at > now() - interval '30 minutes' ORDER BY seq;`
-4. **Kill switch when the window is unacceptable** (admin account, money-movement decisions in progress, or any
-   doubt): rotate `JWT_SECRET` now (§3.1). This invalidates *every* access token platform-wide within one rollout;
+3. **Confirm the session is dead.** A request with the attacker's token now returns 401 (ADR-0021). Watch the audit log
+   for anything the actor did before containment: `SELECT seq, created_at, action, resource_type, resource_id FROM audit_logs WHERE actor_user_id='<user_id>' AND created_at > now() - interval '30 minutes' ORDER BY seq;`
+4. **Kill switch** (only if the database check itself is in doubt, for example the users table was tampered with):
+   rotate `JWT_SECRET` now (§3.1). This invalidates *every* access token platform-wide within one rollout;
    other users recover transparently through refresh, the disabled user cannot.
 5. **Review what was done with the session.** Walk the exported `audit_logs`: fraud decisions (`RELEASE` of held
    transfers), admin unlocks, user creations. Reverse what can be reversed through the normal paths (a released
