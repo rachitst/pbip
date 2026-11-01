@@ -16,6 +16,7 @@ TRANSFER_DECLINED = "TRANSFER_DECLINED"
 TRANSFER_UNDER_REVIEW = "TRANSFER_UNDER_REVIEW"
 BILL_PAYMENT_POSTED = "BILL_PAYMENT_POSTED"
 BILL_PAYMENT_DECLINED = "BILL_PAYMENT_DECLINED"
+BILL_PAYMENT_UNDER_REVIEW = "BILL_PAYMENT_UNDER_REVIEW"
 # Security notifications for events the auth and customers modules already record (#45).
 PASSWORD_CHANGED = "PASSWORD_CHANGED"  # noqa: S105  # pragma: allowlist secret - an event type name
 MFA_ENABLED = "MFA_ENABLED"
@@ -27,6 +28,7 @@ _TRANSFER_TYPES = {
     TRANSFER_DECLINED,
     BILL_PAYMENT_POSTED,
     BILL_PAYMENT_DECLINED,
+    BILL_PAYMENT_UNDER_REVIEW,
 }
 _SECURITY_TEXT = {
     PASSWORD_CHANGED: (
@@ -72,6 +74,11 @@ def _transfer_text(event: OutboxEvent) -> tuple[str, str] | None:
     to_biller = f" to {name}" if isinstance(name, str) and name else ""
     if event.event_type == BILL_PAYMENT_POSTED:
         return "Bill payment completed", f"Your bill payment of {amount}{to_biller} was completed."
+    if event.event_type == BILL_PAYMENT_UNDER_REVIEW:
+        return (
+            "Bill payment under review",
+            f"Your bill payment of {amount}{to_biller} is being reviewed for your safety.",
+        )
     if event.event_type == BILL_PAYMENT_DECLINED:
         return (
             "Bill payment not completed",

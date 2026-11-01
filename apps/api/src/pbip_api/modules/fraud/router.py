@@ -12,6 +12,7 @@ from pbip_api.modules.accounts.service import mask_account_number
 from pbip_api.modules.auth.dependencies import Principal, get_request_meta, require_roles
 from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.auth.service import RequestMeta
+from pbip_api.modules.bills.service import settle_reviewed_bill
 from pbip_api.modules.fraud import service
 from pbip_api.modules.fraud.models import AlertStatus, FraudAlert, FraudEvent
 from pbip_api.modules.ledger.models import Transaction
@@ -119,6 +120,7 @@ def decide_alert(
         release=body.action == "RELEASE",
         note=body.note,
         meta=meta,
+        settle_other=settle_reviewed_bill,  # a held bill payment follows the decision too
     )
 
 
