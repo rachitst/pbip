@@ -2966,8 +2966,8 @@ decision in ADR-0015.
 ### TASK-099 - Security Monitoring Dashboard API and UI
 
 - **Issue:** #182 | **Sprint:** unscheduled | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Frontend Web Application
-- **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov)
+- **Start:** Sun 01 Nov | **Target deadline:** Sun 01 Nov | **Actual completion:** Sun 1 Nov (`GET /api/v1/fraud/monitoring`, `/staff/monitoring`; in review) | **Status:** In review | **Risk:** Low
 - **Depends on:** TASK-019 (#42, Kalpak), TASK-035 (#58, Krishna), TASK-036 (#59, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; lives in the staff route tree.
@@ -2980,9 +2980,9 @@ decision in ADR-0015.
   5. Implement and make the tests pass for: No customer PII beyond what the analyst role already sees; metrics labelled by route templates only
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #182`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Staff API (require_roles with MFA) returns high-risk customers, open alerts, login anomalies (failed-login bursts, lockouts) and recent fraud events
-  - [ ] Dashboard page renders each panel with counts and drill-down links to the alert queue
-  - [ ] No customer PII beyond what the analyst role already sees; metrics labelled by route templates only
+  - [x] Staff API (require_roles with MFA) returns high-risk customers, open alerts, login anomalies (failed-login bursts, lockouts) and recent fraud events
+  - [x] Dashboard page renders each panel with counts and drill-down links to the alert queue
+  - [x] No customer PII beyond what the analyst role already sees; metrics labelled by route templates only
 - **Definition of done (evidence):** API RBAC and MFA tests, component tests for each panel, Playwright check of the staff route.
 - **Required checks:**
   - Automated: Vitest component tests and, for journeys, Playwright; ESLint strict, no `any`
