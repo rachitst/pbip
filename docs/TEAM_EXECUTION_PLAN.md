@@ -2176,7 +2176,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #94 | **Sprint:** 5 | **Priority:** could | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (8.2 days of slack)
+- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** In Review (#261) | **Risk:** Low (8.2 days of slack)
 - **Depends on:** TASK-023 (#46, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-023
 - **Goal:** Data generator extension injecting Structuring (F7) and Dormant account sudden activity (F8).
@@ -2188,9 +2188,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Generates corresponding ground-truth scenario tags for evaluation
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #94`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] F7: Multiple deposits just beneath the mandatory reporting threshold
-  - [ ] F8: Accounts dormant for > 180 days suddenly initiating maximum transfers
-  - [ ] Generates corresponding ground-truth scenario tags for evaluation
+  - [x] F7: Multiple deposits just beneath the mandatory reporting threshold
+  - [x] F8: Accounts dormant for > 180 days suddenly initiating maximum transfers
+  - [x] Generates corresponding ground-truth scenario tags for evaluation
 - **Definition of done (evidence):** Unit tests verify scenario signature parameters and label generation.
 - **Required checks:**
   - Automated: pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable
