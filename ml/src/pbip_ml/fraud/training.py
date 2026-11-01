@@ -56,6 +56,9 @@ def build_dataset(transfers: pd.DataFrame, labels: pd.DataFrame) -> pd.DataFrame
     out["hour_ist"] = (df["occurred_at"] + pd.Timedelta(hours=5, minutes=30)).dt.hour
     out["new_device"] = df["new_device"].astype(int)
     out["is_debit"] = (df["direction"].astype(str) == "DEBIT").astype(int)
+    out["amount_minor"] = df["amount_minor"].astype(
+        "int64"
+    )  # for the rule layer (not a model input)
     out["occurred_at"] = df["occurred_at"]
     out["label"] = df["id"].isin(fraud_ids).astype(int)
     return out
@@ -205,13 +208,19 @@ def train_isolation_forest(split: Split, seed: int = 42) -> AnomalyModel:
     )
 
 
-def single_prediction_ms(fn: Any, row: pd.DataFrame, repeats: int = 200) -> dict[str, float]:
-    """p50/p95 latency of scoring ONE row in memory (what the request path would do)."""
+def single_prediction_ms(
+    fn: Any, row: pd.DataFrame, repeats: int = 200, clock: Any = time.perf_counter
+) -> dict[str, float]:
+    """p50/p95 latency of scoring ONE row in memory (what the request path would do).
+
+    Reports use wall time (``perf_counter``). Tests pass ``time.process_time`` - this process's
+    CPU time - so a busy machine running other test workers cannot make them flaky.
+    """
     timings = []
     for _ in range(repeats):
-        started = time.perf_counter()
+        started = clock()
         fn(row)
-        timings.append((time.perf_counter() - started) * 1000)
+        timings.append((clock() - started) * 1000)
     timings.sort()
     return {
         "p50_ms": round(timings[len(timings) // 2], 3),

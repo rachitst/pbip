@@ -71,3 +71,41 @@ The output is deterministic: two runs gave identical metrics. It writes `report.
 - **There is no location feature yet.** Hence the F4 misses. Adding a country-change feature means adding it to both feature paths and their parity test first.
 - **The test sets are small.** 115 fraud rows in the time-split test: one miss moves recall by about 0.9 points.
 - **The threshold is tuned for F1.** The serving thresholds (STEP_UP, REVIEW, BLOCK) will be calibrated in TASK-031.
+
+## Hybrid decision (TASK-031) and reason codes (TASK-032)
+
+Code: `ml/src/pbip_ml/fraud/hybrid.py` and `ml/tests/test_fraud_hybrid.py`. The training CLI also writes `hybrid_params.json`.
+
+1. The LightGBM probability is calibrated with isotonic regression, fitted on validation and stored as a lookup table.
+2. A logistic regression **stacks** the calibrated probability, the anomaly score and the rule points. Its weights are fitted on validation; that is what "calibrated weights" means here.
+3. Risk = round(100 × stacked probability).
+4. **Hard-rule overrides** set floors: RAPID_ATO_TRANSFER → at least REVIEW (60); NEW_PAYEE_LARGE_AMOUNT → at least STEP_UP (30).
+5. Actions: ALLOW < 30 ≤ STEP_UP < 60 ≤ REVIEW < 85 ≤ BLOCK.
+
+**Fitted weights** (same run as above): intercept −6.84, model 8.31, anomaly 1.97, rules 1.70.
+
+Time-split test (7,281 rows, 115 fraud):
+
+| Scorer | Decisions (ALLOW / STEP_UP / REVIEW / BLOCK) | Recall at REVIEW+ | FPR at REVIEW+ | Recall at BLOCK |
+|---|---|---|---|---|
+| Hybrid | 7,169 / 0 / 9 / 103 | 0.957 | 0.03% | 0.878 |
+| Rules only (fail-safe) | 7,123 / 141 / 10 / 7 | 0.148 | 0.00% | 0.061 |
+
+- Rules-only recall at STEP_UP+ is 0.635 (FPR 1.19%). A rules-only score still steps up, reviews and blocks: the fail-safe never allows everything.
+- **The hybrid does not beat LightGBM on this data.** The stacking regression gives the anomaly score only a small weight because validation fraud is already separated by the model. F4 and F5 recall stay at 5/8 and 4/6, and the scores are bimodal (no STEP_UP band in use).
+- Honest reading: on synthetic data with planted signatures the supervised model dominates. The anomaly and rule layers earn their place in the fail-safe path and in the explanations, not in the headline metrics. Re-fit the weights on real labelled data before relying on the bands.
+
+**Reasons:**
+- every triggered rule (RULE);
+- the top-3 positive TreeSHAP contributions of the LightGBM prediction, in words (MODEL). LightGBM's `pred_contrib` is exact (contributions sum to the raw score, tested), so no `shap` dependency is needed;
+- the Isolation Forest reason when its score ≥ 0.5 (ANOMALY).
+
+Example, a high-risk F5 transfer:
+- RULE: "Amount is 7.3x this customer's 30-day average"
+- MODEL: "Model: amount of INR 112,213.00"
+- MODEL: "Model: amount is 7.3x the customer's 30-day average"
+- ANOMALY: "Unusual: ratio_to_avg_amount is 7.32, usually about 1.00"
+
+**Latency** (laptop, wall time, one row): hybrid score p50 17.0 ms, p95 24.7 ms (the contract's limit is 100 ms); SHAP reasons p95 3.5 ms (target < 30 ms).
+
+**Not yet done:** the scorer is not on the request path. TASK-033 wires it into the transfer flow. That task must also show that `fraud_events` stores the snapshot and model version (the TASK-031 criterion) and that customer responses hide the reasons while staff endpoints show them (the TASK-032 criterion).

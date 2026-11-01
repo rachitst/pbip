@@ -22,10 +22,14 @@ import mlflow
 import numpy as np
 import pandas as pd
 
+from pbip_ml.fraud import hybrid as h
 from pbip_ml.fraud import training as t
+from pbip_ml.fraud.contract import FraudDecision
+from pbip_ml.fraud.rules import default_registry
 from pbip_ml.tracking import DEFAULT_LOCAL_DIR, configure_tracking, ensure_experiment
 
 EXPERIMENT = "pbip-fraud"
+HYBRID_VERSION = "hybrid-lgbm-iforest-1"
 
 
 def load_export(directory: Path) -> pd.DataFrame:
@@ -79,7 +83,27 @@ def run(data: Path, out: Path, holdout: Path | None = None) -> dict[str, Any]:
             threshold,
         ).as_dict()
 
+    rules = default_registry()
+    params = h.fit_params(split.validation, booster, anomaly, rules, HYBRID_VERSION)
+    full = h.HybridScorer(params, booster, anomaly, rules)
+    rules_only = h.HybridScorer(params, None, None, rules)
+    for name, scorer in (("hybrid", full), ("rules_only", rules_only)):
+        risk_int = h.batch_risk(scorer, split.test)
+        risk = risk_int / 100
+        report[name] = {
+            "decisions": {
+                d.value: int(sum(h.decide(int(r)) is d for r in risk_int)) for d in FraudDecision
+            },
+            "at_step_up": t.evaluate(y_test, risk, h.STEP_UP_AT / 100).as_dict(),
+            "at_review": t.evaluate(y_test, risk, h.REVIEW_AT / 100).as_dict(),
+        }
+    report["hybrid"]["params"] = json.loads(params.to_json()) | {
+        "calibration_x": f"{len(params.calibration_x)} points",
+        "calibration_y": f"{len(params.calibration_y)} points",
+    }
+
     out.mkdir(parents=True, exist_ok=True)
+    (out / "hybrid_params.json").write_text(params.to_json() + "\n", encoding="utf-8")
     booster.save_model(str(out / "lightgbm.txt"), num_iteration=booster.best_iteration)
     joblib.dump(anomaly, out / "isolation_forest.joblib")
     (out / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
@@ -96,7 +120,12 @@ def log_to_mlflow(report: dict[str, Any], out: Path, local_dir: Path) -> str:
             source = report["lightgbm" if model == "lgbm" else "isolation_forest"][section]
             for key in ("precision", "recall", "f1", "pr_auc", "fpr", "fnr"):
                 mlflow.log_metric(f"{model}_{key}", float(source[key]))
-        for name in ("report.json", "lightgbm.txt", "isolation_forest.joblib"):
+        for name in (
+            "report.json",
+            "lightgbm.txt",
+            "isolation_forest.joblib",
+            "hybrid_params.json",
+        ):
             mlflow.log_artifact(str(out / name))
         return str(active.info.run_id)
 
