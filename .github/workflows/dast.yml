@@ -1,0 +1,47 @@
+name: DAST
+
+# TASK-090: OWASP ZAP baseline (passive) scan of the running compose stack over HTTPS. Accepted findings are
+# listed with reasons in infra/zap/baseline-rules.tsv; any other warning fails the job. Nightly and on demand
+# (it needs the full stack, ~10 minutes), not a PR gate. The API itself is fuzzed nightly by fuzz.yml.
+on:
+  schedule:
+    - cron: "15 2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: dast-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  ZAP_IMAGE: ghcr.io/zaproxy/zaproxy:2.16.1
+
+jobs:
+  zap-baseline:
+    name: OWASP ZAP baseline against the full stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: { python-version: "${{ env.PYTHON_VERSION }}" }
+      - run: pip install cryptography
+      - run: python scripts/init_env.py
+      - run: python scripts/dev_certs.py
+      - run: docker compose up -d --build --wait
+      - name: ZAP baseline (fails on any finding not accepted in baseline-rules.tsv)
+        run: |
+          mkdir -p zap && chmod 777 zap
+          cp infra/zap/baseline-rules.tsv zap/
+          docker run --rm --network host -v "$PWD/zap:/zap/wrk:rw" "$ZAP_IMAGE" \
+            zap-baseline.py -t https://localhost:8443 -c baseline-rules.tsv -m 3 \
+            -J zap-baseline.json -r zap-baseline.html -w zap-baseline.md
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with: { name: zap-baseline, path: zap }
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=200 web api
