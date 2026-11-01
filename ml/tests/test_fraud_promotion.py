@@ -240,14 +240,17 @@ def test_export_refuses_artifacts_that_differ_from_what_the_gate_measured(
     assert [f.name for f in tmp_path.iterdir()] == ["fraud"]  # staging cleaned up
 
 
-def test_export_refuses_a_champion_that_did_not_pass_the_gate(registry: Registry) -> None:
+def test_export_refuses_a_champion_that_did_not_pass_the_gate(
+    registry: Registry, tmp_path: Path
+) -> None:
     rejected = _promote(registry, registry.bad_run, "promo-forced")
     client = _client(registry)
     client.set_registered_model_alias("promo-forced", "champion", rejected.version)  # by hand
     with pytest.raises(p.PromotionError, match="did not pass the gate"):
-        p.export_champion(registry.uri, Path("unused"), "promo-forced")
+        p.export_champion(registry.uri, tmp_path / "fraud", "promo-forced")
     with pytest.raises(p.PromotionError, match="has no champion alias"):
-        p.export_champion(registry.uri, Path("unused"), "no-such-model")
+        p.export_champion(registry.uri, tmp_path / "fraud", "no-such-model")
+    assert list(tmp_path.iterdir()) == []  # nothing written
 
 
 # --------------------------------------------------------------------------- CLI and inputs
