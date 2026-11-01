@@ -16,7 +16,12 @@ import {
   plainMessage,
   riskTone,
 } from "./fraudFormat";
-import { SCENARIOS, executeAttackScenario, isProductionEnv } from "./fraudLabConfig";
+import {
+  DEFAULT_DEMO_PASSWORD,
+  SCENARIOS,
+  executeAttackScenario,
+  isProductionEnv,
+} from "./fraudLabConfig";
 import type { AttackResult, AttackStep, ScenarioCode } from "./fraudLabConfig";
 
 export function FraudDemoLab() {
@@ -25,7 +30,7 @@ export function FraudDemoLab() {
   const isProd = isProductionEnv();
 
   const [victimEmail, setVictimEmail] = useState("alice@demo.pbip");
-  const [victimPassword, setVictimPassword] = useState("Demo-Password-2026!");
+  const [victimPassword, setVictimPassword] = useState(DEFAULT_DEMO_PASSWORD);
   const [activeScenario, setActiveScenario] = useState<ScenarioCode | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [steps, setSteps] = useState<AttackStep[]>([]);

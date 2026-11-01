@@ -7,6 +7,11 @@ import type { AlertDetail, AlertSummary, UserOut } from "../../api/client";
 import { MeContext } from "../../shell/MeContext";
 import { json, urlOf } from "../../test-utils";
 import { FraudDemoLab } from "./FraudDemoLab";
+import {
+  WRONG_PASSWORD_ATTEMPT,
+  generateIdempotencyKey,
+  secureRandom4Digits,
+} from "./fraudLabConfig";
 
 const analyst: UserOut = {
   id: "u-fa",
@@ -115,7 +120,8 @@ describe("FraudDemoLab (TASK-081)", () => {
           email?: string;
           password?: string;
         };
-        if (body.password === "Incorrect-Pass-123!") {
+        if (body.password === WRONG_PASSWORD_ATTEMPT) {
+          // pragma: allowlist secret
           return Promise.resolve(
             json(401, { code: "INVALID_CREDENTIALS", title: "Invalid password" }),
           );
@@ -364,5 +370,31 @@ describe("FraudDemoLab (TASK-081)", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("scenario-card-F1")).not.toBeInTheDocument();
+  });
+
+  describe("fraudLabConfig security utilities", () => {
+    it("generateIdempotencyKey produces distinct valid keys matching API constraints", () => {
+      const regex = /^[A-Za-z0-9._:-]+$/;
+      const seen = new Set<string>();
+
+      for (let i = 0; i < 100; i++) {
+        const key = generateIdempotencyKey("test");
+        expect(key).toMatch(regex);
+        expect(key.length).toBeGreaterThanOrEqual(8);
+        expect(key.length).toBeLessThanOrEqual(128);
+        expect(seen.has(key)).toBe(false);
+        seen.add(key);
+      }
+    });
+
+    it("secureRandom4Digits returns a 4-digit numeric string in range [1000, 9999]", () => {
+      for (let i = 0; i < 100; i++) {
+        const digits = secureRandom4Digits();
+        expect(digits).toMatch(/^\d{4}$/);
+        const num = Number.parseInt(digits, 10);
+        expect(num).toBeGreaterThanOrEqual(1000);
+        expect(num).toBeLessThanOrEqual(9999);
+      }
+    });
   });
 });

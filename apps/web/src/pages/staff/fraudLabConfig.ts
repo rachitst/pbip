@@ -126,6 +126,25 @@ export interface AttackResult {
   reasons: FraudReason[];
 }
 
+/** Default demo customer password matching scripts/seed_dev.py (local demo data only). */
+export const DEFAULT_DEMO_PASSWORD = "Demo-Password-2026!"; // pragma: allowlist secret
+
+/** Simulated incorrect password for credential brute-force testing (F3). */
+export const WRONG_PASSWORD_ATTEMPT = "Incorrect-Pass-123!"; // pragma: allowlist secret
+
+/** Generates a cryptographically secure 4-digit numeric string for demo account suffixes. */
+export function secureRandom4Digits(): string {
+  const bytes = new Uint16Array(1);
+  crypto.getRandomValues(bytes);
+  const val = bytes[0] ?? 0;
+  return String(1000 + (val % 9000));
+}
+
+/** Generates a cryptographically secure idempotency key conforming to ^[A-Za-z0-9._:-]+$ (min 8, max 128 chars). */
+export function generateIdempotencyKey(prefix: string): string {
+  return `${prefix}-${crypto.randomUUID()}`;
+}
+
 /** Check if current runtime environment is production (where simulator is strictly disabled). */
 export function isProductionEnv(): boolean {
   try {
@@ -185,7 +204,7 @@ export async function executeAttackScenario(options: RunOptions): Promise<Attack
   const {
     scenarioCode,
     victimEmail = "alice@demo.pbip",
-    victimPassword = "Demo-Password-2026!",
+    victimPassword = DEFAULT_DEMO_PASSWORD,
     onStepUpdate,
     staffAlertsQuery,
     staffAlertDetailQuery,
@@ -238,7 +257,7 @@ export async function executeAttackScenario(options: RunOptions): Promise<Attack
           method: "POST",
           credentials: "omit",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: victimEmail, password: "Incorrect-Pass-123!" }),
+          body: JSON.stringify({ email: victimEmail, password: WRONG_PASSWORD_ATTEMPT }),
         });
       }
       setCompleted(s0);
@@ -307,15 +326,15 @@ export async function executeAttackScenario(options: RunOptions): Promise<Attack
 
     const payeeName =
       scenarioCode === "F1"
-        ? `Investment Scam ${Date.now().toString().slice(-4)}`
+        ? `Investment Scam ${secureRandom4Digits()}`
         : scenarioCode === "F6"
-          ? `Mule Ring ${Date.now().toString().slice(-4)}`
+          ? `Mule Ring ${secureRandom4Digits()}`
           : "Demo Payee";
     const payeeAccNum =
       scenarioCode === "F1"
-        ? `99990000${Math.floor(1000 + Math.random() * 9000)}`
+        ? `99990000${secureRandom4Digits()}`
         : scenarioCode === "F6"
-          ? `88887777${Math.floor(1000 + Math.random() * 9000)}`
+          ? `88887777${secureRandom4Digits()}`
           : "1122334455";
 
     let payeeId: string;
@@ -365,7 +384,7 @@ export async function executeAttackScenario(options: RunOptions): Promise<Attack
       const sBurst = addStep("Dispatching rapid burst of sequential transfers");
       setRunning(sBurst);
       for (let i = 0; i < 4; i++) {
-        const key = `burst-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`;
+        const key = generateIdempotencyKey(`burst-${i}`);
         const res = await fetch("/api/v1/transfers", {
           method: "POST",
           credentials: "omit",
@@ -398,7 +417,7 @@ export async function executeAttackScenario(options: RunOptions): Promise<Attack
       const txHeaders: Record<string, string> = {
         "Content-Type": "application/json",
         Authorization: `Bearer ${victimToken}`,
-        "Idempotency-Key": `sim-${scenarioCode.toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        "Idempotency-Key": generateIdempotencyKey(`sim-${scenarioCode.toLowerCase()}`),
       };
 
       if (scenarioCode === "F3") {
