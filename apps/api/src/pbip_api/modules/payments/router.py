@@ -4,11 +4,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header
 from fastapi.responses import JSONResponse
 from pbip_ml.fraud.contract import FraudScorer
+from redis import Redis
 from sqlalchemy.orm import Session
 
 from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.db import get_session
 from pbip_api.core.geoip import CountryResolver
+from pbip_api.core.redis import get_redis
+from pbip_api.core.velocity import VelocityCounters
 from pbip_api.modules.auth.dependencies import (
     Principal,
     get_auth_service,
@@ -19,6 +22,7 @@ from pbip_api.modules.auth.service import AuthService, RequestMeta
 from pbip_api.modules.customers.dependencies import get_current_customer
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.fraud.dependencies import get_country_resolver, get_fraud_scorer
+from pbip_api.modules.fraud.signals import device_uuid
 from pbip_api.modules.payments.schemas import StepUpRequest, TransferOut, TransferRequest
 from pbip_api.modules.payments.service import PaymentsService, TransferCommand, TransferResult
 
@@ -42,8 +46,11 @@ def get_payments_service(
     scorer: FraudScorer = Depends(get_fraud_scorer),
     auth: AuthService = Depends(get_auth_service),
     countries: CountryResolver = Depends(get_country_resolver),
+    redis_client: Redis = Depends(get_redis),
 ) -> PaymentsService:
-    return PaymentsService(session, settings, scorer, auth, countries)
+    return PaymentsService(
+        session, settings, scorer, auth, countries, VelocityCounters(redis_client)
+    )
 
 
 def _respond(result: TransferResult) -> JSONResponse:
@@ -65,6 +72,12 @@ def create_transfer(
     customer: Customer = Depends(get_current_customer),
     service: PaymentsService = Depends(get_payments_service),
     meta: RequestMeta = Depends(get_request_meta),
+    x_device_id: str | None = Header(
+        default=None,
+        alias="X-Device-ID",
+        max_length=512,
+        description="Per-browser device id (lib/device.ts); only a derived id is used (ADR-0020)",
+    ),
 ) -> JSONResponse:
     result = service.create_transfer(
         user_id=principal.user_id,
@@ -79,6 +92,7 @@ def create_transfer(
         ),
         idempotency_key=idempotency_key,
         meta=meta,
+        device_id=device_uuid(x_device_id),
     )
     return _respond(result)
 

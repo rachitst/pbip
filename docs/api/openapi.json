@@ -4764,6 +4764,25 @@
               "title": "Idempotency-Key",
               "type": "string"
             }
+          },
+          {
+            "description": "Per-browser device id (lib/device.ts); only a derived id is used (ADR-0020)",
+            "in": "header",
+            "name": "X-Device-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 512,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Per-browser device id (lib/device.ts); only a derived id is used (ADR-0020)",
+              "title": "X-Device-Id"
+            }
           }
         ],
         "requestBody": {
@@ -6023,6 +6042,25 @@
               "pattern": "^[A-Za-z0-9._:-]+$",
               "title": "Idempotency-Key",
               "type": "string"
+            }
+          },
+          {
+            "description": "Per-browser device id (lib/device.ts); only a derived id is used (ADR-0020)",
+            "in": "header",
+            "name": "X-Device-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 512,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Per-browser device id (lib/device.ts); only a derived id is used (ADR-0020)",
+              "title": "X-Device-Id"
             }
           }
         ],

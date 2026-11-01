@@ -21,11 +21,15 @@ from sqlalchemy.orm import Session
 
 from pbip_api.core.db import utcnow
 from pbip_api.core.money import format_minor
+from pbip_api.core.velocity import VelocityCounters
+from pbip_api.modules.auth.models import SecurityEvent, SecurityEventType
+from pbip_api.modules.customers.models import Customer, Device
 from pbip_api.modules.fraud.models import FraudEvent
+from pbip_api.modules.fraud.signals import device_uuid_from_hash
 from pbip_api.modules.ledger.models import Transaction, TransactionStatus, TransactionType
 from pbip_api.modules.payees.models import Payee
 
-MODEL_VERSION = "baseline-rules-0.2"  # 0.2: NEW_COUNTRY (ADR-0014)
+MODEL_VERSION = "baseline-rules-0.3"  # 0.2: NEW_COUNTRY (ADR-0014); 0.3: TASK-095 signals
 
 NEW_PAYEE_WINDOW = timedelta(hours=24)
 NEW_PAYEE_LARGE_MINOR = 2_500_000  # 25,000.00
@@ -36,6 +40,11 @@ VELOCITY_WINDOW = timedelta(minutes=10)
 VELOCITY_COUNT = 4
 NEW_COUNTRY_POINTS = 20  # a signal, not a decision on its own (below STEP_UP_AT)
 COUNTRY_HISTORY_WINDOW = timedelta(days=180)
+LOGIN_FAILURE_WINDOW = timedelta(hours=24)
+LOGIN_FAILURES_MIN = 3
+LOGIN_FAILURES_POINTS = 20  # signals: each alone stays below STEP_UP_AT; together they reach it
+NEW_DEVICE_OR_NETWORK_POINTS = 15
+VOLUME_WINDOW = timedelta(hours=1)
 
 STEP_UP_AT = 30
 REVIEW_AT = 60
@@ -55,8 +64,9 @@ def decide(score: int) -> FraudDecision:
 class BaselineRulesScorer:
     model_version = MODEL_VERSION
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, counters: VelocityCounters | None = None) -> None:
         self.session = session
+        self.counters = counters  # Redis windows (TASK-034); None or unreachable -> PostgreSQL
 
     def score(self, context: TransactionContext) -> FraudScoreResult:
         started = time.perf_counter()
@@ -64,13 +74,7 @@ class BaselineRulesScorer:
         reasons: list[FraudReason] = []
         score = 0
 
-        payee_age_minutes: int | None = None
-        if context.payee_id is not None:
-            created = self.session.execute(
-                select(Payee.created_at).where(Payee.id == context.payee_id)
-            ).scalar_one_or_none()
-            if created is not None:
-                payee_age_minutes = int((now - created).total_seconds() // 60)
+        payee_age_minutes = self._payee_age_minutes(context, now)
 
         history_avg, history_count = self.session.execute(
             select(func.avg(Transaction.amount), func.count()).where(
@@ -82,14 +86,8 @@ class BaselineRulesScorer:
         ).one()
         average = float(history_avg) if history_avg is not None else 0.0
 
-        recent_count = self.session.execute(
-            select(func.count()).where(
-                Transaction.debit_account_id == context.account_id,
-                Transaction.type == TransactionType.TRANSFER,
-                Transaction.id != context.transaction_id,
-                Transaction.created_at >= now - VELOCITY_WINDOW,
-            )
-        ).scalar_one()
+        recent_count = self._recent_count(context, now)
+        volume_1h = self._volume_1h(context, now)
 
         amount_text = format_minor(context.amount_minor, context.currency)
         is_new_payee = payee_age_minutes is not None and (
@@ -156,6 +154,12 @@ class BaselineRulesScorer:
             score += NEW_COUNTRY_POINTS
             reasons.append(new_country)
 
+        failures = self._login_failures(context, now)
+        new_device, new_network = self._new_device_or_network(context, now)
+        for reason in _session_signals(failures, new_device, new_network, context.ip_network):
+            score += int(reason.contribution or 0)
+            reasons.append(reason)
+
         score = min(score, 100)
         return FraudScoreResult(
             risk_score=score,
@@ -169,9 +173,104 @@ class BaselineRulesScorer:
                 "avg_outgoing_90d_minor": round(average, 2),
                 "outgoing_count_90d": int(history_count),
                 "transfers_last_10m": int(recent_count),
+                "volume_1h_minor": volume_1h,
                 "ip_country": context.ip_country,
+                "ip_network": context.ip_network,
+                "device_id": str(context.device_id) if context.device_id else None,
+                "login_failures_24h": failures,
+                "new_device": new_device,
+                "new_network": new_network,
             },
         )
+
+    def _payee_age_minutes(self, context: TransactionContext, now: datetime) -> int | None:
+        if context.payee_id is None:
+            return None
+        created = self.session.execute(
+            select(Payee.created_at).where(Payee.id == context.payee_id)
+        ).scalar_one_or_none()
+        return None if created is None else int((now - created).total_seconds() // 60)
+
+    def _recent_count(self, context: TransactionContext, now: datetime) -> int:
+        """Transfers from this account in 10 minutes: Redis first, PostgreSQL if Redis is down."""
+        if self.counters is not None:
+            cached = self.counters.transfers_in_window(
+                context.account_id, now, exclude=context.transaction_id
+            )
+            if cached is not None:
+                return cached
+        return int(
+            self.session.execute(
+                select(func.count()).where(
+                    Transaction.debit_account_id == context.account_id,
+                    Transaction.type == TransactionType.TRANSFER,
+                    Transaction.id != context.transaction_id,
+                    Transaction.created_at >= now - VELOCITY_WINDOW,
+                )
+            ).scalar_one()
+        )
+
+    def _volume_1h(self, context: TransactionContext, now: datetime) -> int:
+        if self.counters is not None:
+            cached = self.counters.volume_in_window(
+                context.account_id, now, exclude=context.transaction_id
+            )
+            if cached is not None:
+                return cached
+        total = self.session.execute(
+            select(func.coalesce(func.sum(Transaction.amount), 0)).where(
+                Transaction.debit_account_id == context.account_id,
+                Transaction.type == TransactionType.TRANSFER,
+                Transaction.id != context.transaction_id,
+                Transaction.created_at >= now - VOLUME_WINDOW,
+            )
+        ).scalar_one()
+        return int(total)
+
+    def _login_failures(self, context: TransactionContext, now: datetime) -> int:
+        """Failed sign-ins on the customer's login in 24 hours (``security_events``)."""
+        user_id = (
+            select(Customer.user_id).where(Customer.id == context.customer_id).scalar_subquery()
+        )
+        count = self.session.execute(
+            select(func.count()).where(
+                SecurityEvent.user_id == user_id,
+                SecurityEvent.event_type == SecurityEventType.LOGIN_FAILURE,
+                SecurityEvent.created_at >= now - LOGIN_FAILURE_WINDOW,
+            )
+        ).scalar_one()
+        return int(count)
+
+    def _new_device_or_network(
+        self, context: TransactionContext, now: datetime
+    ) -> tuple[bool, bool]:
+        """Device / network never seen on this customer's scored transfers (180 days).
+
+        Like NEW_COUNTRY, a customer with no history yet, or a transfer with no device/network,
+        never adds risk: there is nothing to differ from. Registered devices count as seen.
+        """
+        if context.device_id is None and context.ip_network is None:
+            return False, False
+        rows = self.session.execute(
+            select(
+                FraudEvent.features["device_id"].astext, FraudEvent.features["ip_network"].astext
+            ).where(
+                FraudEvent.customer_id == context.customer_id,
+                FraudEvent.created_at >= now - COUNTRY_HISTORY_WINDOW,
+            )
+        ).all()
+        devices = {d for d, _ in rows if d}
+        networks = {n for _, n in rows if n}
+        registered = self.session.execute(
+            select(Device.fingerprint_hash).where(Device.customer_id == context.customer_id)
+        ).scalars()
+        devices |= {str(device_uuid_from_hash(h)) for h in registered}
+        device = str(context.device_id) if context.device_id else None
+        new_device = device is not None and bool(devices) and device not in devices
+        new_network = (
+            context.ip_network is not None and bool(networks) and context.ip_network not in networks
+        )
+        return new_device, new_network
 
     def _new_country(self, context: TransactionContext, now: datetime) -> FraudReason | None:
         """The transfer's IP country was not seen in this customer's scored transfers recently.
@@ -206,3 +305,35 @@ class BaselineRulesScorer:
             source=ReasonSource.RULE,
             contribution=NEW_COUNTRY_POINTS,
         )
+
+
+def _session_signals(
+    failures: int, new_device: bool, new_network: bool, network: str | None
+) -> list[FraudReason]:
+    """RECENT_LOGIN_FAILURES and NEW_DEVICE_OR_NETWORK (TASK-095): the UC-09 triggers "multiple
+    login failures" and "new location" read as a new device or network."""
+    reasons = []
+    if failures >= LOGIN_FAILURES_MIN:
+        reasons.append(
+            FraudReason(
+                code="RECENT_LOGIN_FAILURES",
+                message=f"{failures} failed sign-ins on this login in the last 24 hours",
+                source=ReasonSource.RULE,
+                contribution=LOGIN_FAILURES_POINTS,
+            )
+        )
+    if new_device or new_network:
+        parts = [
+            p for p, hit in (("a device", new_device), (f"network {network}", new_network)) if hit
+        ]
+        reasons.append(
+            FraudReason(
+                code="NEW_DEVICE_OR_NETWORK",
+                message=(
+                    f"Sent from {' and '.join(parts)} not seen on this customer's recent transfers"
+                ),
+                source=ReasonSource.RULE,
+                contribution=NEW_DEVICE_OR_NETWORK_POINTS,
+            )
+        )
+    return reasons

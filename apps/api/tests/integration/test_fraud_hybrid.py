@@ -238,7 +238,7 @@ def test_any_model_problem_falls_back_to_the_rules_never_allow_all(
         gate.set()  # release the slow call's worker thread
     assert response.json()["status"] == "PENDING_REVIEW"  # still caught, by the rules
     event = event_for(db, response.json()["id"])
-    assert event.model_version == "baseline-rules-0.2+rules-only"
+    assert event.model_version == "baseline-rules-0.3+rules-only"
     assert "MODEL_UNAVAILABLE" in {r["code"] for r in event.reasons}
     expected = {"missing": "NOT_LOADED", "raises": "RuntimeError", "too_slow": "TIMEOUT"}
     assert event.features["model_error"] == expected[problem]

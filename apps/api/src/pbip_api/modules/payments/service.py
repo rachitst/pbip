@@ -28,6 +28,7 @@ from pbip_api.core.metrics import (
     IDEMPOTENT_REPLAYS_TOTAL,
     TRANSFERS_TOTAL,
 )
+from pbip_api.core.velocity import VelocityCounters
 from pbip_api.modules.accounts.models import Account, AccountType
 from pbip_api.modules.accounts.policy import get_owned_account
 from pbip_api.modules.auth.models import User
@@ -36,6 +37,7 @@ from pbip_api.modules.compliance.service import AuditService
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.fraud import service as fraud_service
 from pbip_api.modules.fraud.models import AlertStatus, FraudAlert
+from pbip_api.modules.fraud.signals import ip_network
 from pbip_api.modules.ledger import service as ledger
 from pbip_api.modules.ledger.models import (
     IdempotencyKey,
@@ -88,12 +90,14 @@ class PaymentsService:
         scorer: FraudScorer,
         auth: AuthService,
         countries: CountryResolver | None = None,
+        counters: VelocityCounters | None = None,
     ) -> None:
         self.session = session
         self.settings = settings
         self.scorer = scorer
         self.auth = auth
         self.countries = countries or NoCountryResolver()
+        self.counters = counters
         self.audit = AuditService(session)
 
     # ----------------------------------------------------------------- creation
@@ -105,6 +109,7 @@ class PaymentsService:
         command: TransferCommand,
         idempotency_key: str,
         meta: RequestMeta,
+        device_id: UUID | None = None,
     ) -> TransferResult:
         if command.amount_minor > self.settings.max_transfer_minor:
             raise LimitExceededError("amount exceeds the per-transfer limit")
@@ -141,7 +146,9 @@ class PaymentsService:
                 currency=command.currency,
                 occurred_at=utcnow(),
                 payee_id=payee.id if payee else None,
+                device_id=device_id,
                 ip_country=self.countries.country(meta.ip),
+                ip_network=ip_network(meta.ip),
             )
         )
         FRAUD_INFERENCE_SECONDS.observe(result.latency_ms / 1000)
@@ -191,6 +198,8 @@ class PaymentsService:
         )
         self.session.commit()
         TRANSFERS_TOTAL.labels(transaction.status.value).inc()
+        if self.counters is not None:  # after commit: a rolled-back attempt is never counted
+            self.counters.record_transfer(source.id, transaction.id, transaction.amount, utcnow())
         return outcome
 
     # ---------------------------------------------------------------- idempotency
