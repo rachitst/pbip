@@ -90,6 +90,7 @@ class Settings(BaseSettings):
     max_transfer_minor: int = 20_000_000  # 2,00,000.00 per transfer
     daily_transfer_limit_minor: int = 50_000_000  # 5,00,000.00 per customer per UTC day
     idempotency_ttl_hours: int = 24
+    scheduled_transfers_batch_size: int = Field(default=100, ge=1, le=1000)
 
     cors_origins: str = "http://localhost:5173,http://localhost:8080"
     cookie_secure: bool = False

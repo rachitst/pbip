@@ -27,6 +27,11 @@ celery_app.conf.update(
     result_expires=3600,
     beat_schedule={
         "relay-outbox": {"task": "pbip.outbox.relay", "schedule": 10.0},
+        # TASK-015 / ADR-0021: recurring and scheduled transfer execution engine.
+        "execute-scheduled-transfers": {
+            "task": "pbip.transfers.execute_scheduled",
+            "schedule": 60.0,
+        },
         # TASK-052 / ADR-0011: one nightly spending job (no second materialisation job).
         "materialize-monthly-spending": {
             "task": "pbip.analytics.materialize_monthly_spending",

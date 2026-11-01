@@ -223,20 +223,61 @@ For an occurrence dated `D` that fails with insufficient funds:
   `next_run_date` and `status` are **not** changed. The failure notification is enqueued only when
   `last_failed_occurrence_date != D` (once per occurrence, not once per poll), then that is set to `D`.
 * While `today == D`, every poll retries `D`, so a top-up the same day executes the occurrence.
-* On the first poll with `today > D` and `D` still unresolved: the occurrence is **missed**. The customer
-  is notified, audit `SCHEDULED_TRANSFER_MISSED` is recorded, failure fields are reset, and
-  `next_run_date` advances to the next occurrence after `D`. No idempotency row exists for `D`, and `D` is
-  never executed later.
+* On the first poll with `today > D` and `D` still unresolved: the occurrence is **missed**. The engine
+  processes it through the atomic recovery path below (with `missed_count = 1`), records audit
+  `SCHEDULED_TRANSFER_MISSED`, enqueues a consolidated `SCHEDULED_TRANSFER_MISSED` notification, resets
+  failure fields, and advances `next_run_date` to the next occurrence after `D`. No idempotency row exists
+  for `D`, and `D` is never executed later.
 * There is no catch-up: missed occurrences are not paid in bulk later.
 
-**Worker/Beat Outage Policy (R12 - resolved in favor of approved D5):**
+**Worker/Beat Outage Policy (R12 - single atomic transaction recovery):**
 An occurrence can be attempted and retried **only during its own UTC calendar day**.
-If an infrastructure or Celery Beat outage occurs such that an occurrence `D` was never executed during
-its calendar date `D`, when the worker recovers and observes `today > D`, the expired occurrence `D` is
-**strictly marked missed without execution**. The engine records audit `SCHEDULED_TRANSFER_MISSED`, enqueues
-a `SCHEDULED_TRANSFER_MISSED` notification, resets failure tracking fields, and advances `next_run_date`
-to the next upcoming occurrence. A worker outage must **never** cause an expired occurrence to execute late,
-and there is strictly **no catch-up backlog**.
+If an infrastructure, network, or Celery Beat outage occurs, one or more scheduled occurrences expire
+without being executed. When the worker resumes and observes `instruction.status == ACTIVE` and
+`instruction.next_run_date < today_utc`:
+
+1. **Single atomic transaction boundary:** The entire missed-occurrence recovery for a scheduled instruction
+   executes inside **exactly one PostgreSQL transaction**. There is no partial state, no intermediate
+   batch commit, and no distributed multi-batch saga:
+   * *Locking & re-check:* Acquires the user advisory lock (`_lock_user`) and row lock (`SELECT ... FOR UPDATE`),
+     then verifies `status == ACTIVE` and `next_run_date < today_utc`. If the instruction was paused, cancelled,
+     or completed concurrently, execution stops with no changes.
+   * *Deterministic occurrence evaluation:* Using pure UTC recurrence rules from `start_date`, the engine
+     evaluates all expired occurrence dates strictly prior to `today_utc` up to `end_date`. Every expired date
+     is collected into an exact, non-truncated sequence of length $N$ (from `first_missed_date` to `last_missed_date`).
+     No occurrences are skipped or truncated.
+   * *Individual audit records:* Exactly $N$ distinct `SCHEDULED_TRANSFER_MISSED` audit entries are created
+     via `AuditService.record`, one per expired occurrence date. Audit entries are never truncated, skipped, or
+     coalesced. Conventions: `actor_user_id = None`, `action = "SCHEDULED_TRANSFER_MISSED"`, `resource_type = "scheduled_transfer"`,
+     `resource_id = str(instruction.id)`, and `details = {"actor": "scheduler", "channel": "SCHEDULED", "missed_date": D.isoformat(), "reason": "expired_without_execution"}`.
+   * *Consolidated customer notification:* Exactly **one consolidated** `SCHEDULED_TRANSFER_MISSED` outbox event
+     is enqueued into `outbox_events` in the same transaction, summarizing the entire recovery episode using
+     bounded summary fields: `missed_count` ($N$), `first_missed_date`, `last_missed_date`, `next_eligible_date`,
+     and `completed`.
+   * *Schedule advancement or completion:* `next_run_date` is advanced to `next_eligible_date` (the first occurrence
+     $\ge \text{today\_utc}$). If all occurrences through `end_date` have elapsed (or if `next_eligible_date` would exceed
+     `end_date`), the instruction transitions to `status = "COMPLETED"`, `completed = True`, and `next_eligible_date = None`.
+     Because `next_run_date` is non-nullable (`nullable=False`) in the database schema, it retains the final calculated
+     date while `status = 'COMPLETED'` permanently excludes it from active scheduler polling (`WHERE status = 'ACTIVE'`).
+   * *Failure state reset:* `failure_count` is reset to 0 and `last_failure_reason` is set to NULL. `last_failed_occurrence_date`
+     is **not** reused or overloaded as a recovery marker (it remains dedicated exclusively to same-day failure notification deduplication).
+   * *Single commit:* All audit entries, the outbox event, and the instruction state change **commit together**.
+
+2. **Atomicity and failure recovery guarantees:**
+   * *Rollback on failure:* If the worker crashes, encounters an error, or the database transaction aborts before commit,
+     PostgreSQL rolls back all audit entries, outbox events, and state mutations atomically. No orphan notification
+     is emitted and no partial audit record persists.
+   * *Safe retry:* On redelivery or worker restart, the next poll repeats the atomic recovery from `next_run_date` cleanly.
+   * *No customer interleaving:* Because recovery is a single transaction protected by user and row locks, customer
+     actions (`PAUSE`, `CANCEL`) cannot interleave halfway through an episode.
+   * *Zero lateness & no catch-up:* Expired occurrences are strictly recorded as missed; no money moves and no catch-up
+     backlog is created.
+
+3. **Open operational design question:** If a prolonged platform outage spans thousands of occurrences (e.g., an
+   instruction unexecuted for years), a single transaction writing thousands of audit records in one hash chain would
+   hold the global audit lock (`_AUDIT_LOCK_KEY = 724001`) for several tens of milliseconds. Any future throughput
+   ceiling or rate-limiting mechanism for extreme historical gaps remains an operational tuning consideration and
+   must not silently truncate or drop audit records.
 
 ### 8. Notifications and audit
 New outbox event types, rendered by `notifications._notification` (R13):
@@ -244,23 +285,40 @@ New outbox event types, rendered by `notifications._notification` (R13):
 | Event | When | Link |
 |---|---|---|
 | `SCHEDULED_TRANSFER_FAILED` | first insufficient-funds failure of an occurrence | `resource_type = NULL`, `account_id = from_account_id` (approved decision 4) |
-| `SCHEDULED_TRANSFER_MISSED` | occurrence missed (section 7) | same |
-| `SCHEDULED_TRANSFER_PAUSED` | engine paused the instruction after BLOCK | same |
+| `SCHEDULED_TRANSFER_MISSED` | occurrence missed (single same-day expiry or consolidated outage recovery; section 7) | same |
+| `SCHEDULED_TRANSFER_PAUSED` | engine paused the instruction after BLOCK or permanent invalidation | same |
 
 Successful, under-review and declined executions reuse the existing `TRANSFER_POSTED`,
 `TRANSFER_UNDER_REVIEW` and `TRANSFER_DECLINED` events (`resource_type = "transaction"`), which the
 transfer path already enqueues. Payloads contain ids, amount and currency only (no PII). The
-`resource_type` CHECK (`'transaction','security'`) and `NotificationOut` are **unchanged**.
+`resource_type` CHECK (`'transaction','security'`) and `NotificationOut` are **unchanged** (`resource_type = NULL` for all scheduled transfer events; `account_id = from_account_id`).
+
+**Notification payload conventions for scheduled transfer events:**
+* `SCHEDULED_TRANSFER_FAILED`:
+  `{"user_id": str, "account_id": str, "scheduled_transfer_id": str, "amount_minor": int, "currency": str, "failed_date": "YYYY-MM-DD", "reason": str}`
+* `SCHEDULED_TRANSFER_MISSED`:
+  `{"user_id": str, "account_id": str, "scheduled_transfer_id": str, "amount_minor": int, "currency": str, "missed_count": int, "first_missed_date": "YYYY-MM-DD", "last_missed_date": "YYYY-MM-DD", "next_eligible_date": "YYYY-MM-DD" | null, "completed": bool}`
+* `SCHEDULED_TRANSFER_PAUSED`:
+  `{"user_id": str, "account_id": str, "scheduled_transfer_id": str, "amount_minor": int, "currency": str, "reason": str}`
+
+**Notification rendering (`notifications._notification`):**
+* Single missed occurrence (`missed_count == 1`):
+  Title: `"Scheduled transfer missed"`
+  Body: summarizes that the scheduled transfer of `<amount>` on `<first_missed_date>` was missed, followed by next eligible occurrence or schedule completion.
+* Multiple missed occurrences (`missed_count > 1`):
+  Title: `"Scheduled transfers missed"`
+  Body: summarizes that the scheduled transfer of `<amount>` missed `<missed_count>` occurrences between `<first_missed_date>` and `<last_missed_date>`, followed by next eligible occurrence or schedule completion.
 
 Note: the web bell (`notificationDestination`) navigates only for `transaction` and `security`, so with
 `resource_type = NULL` these notifications are marked read without navigating, although `account_id` is
 present. Making them open the source account is a web change for TASK-021 (or a follow-up).
 
-Audit (`AuditService.record`, same transaction): `SCHEDULED_TRANSFER_CREATED`, `_CANCELLED`, `_PAUSED`,
-`_RESUMED` (customer actions with authenticated user id), plus the existing `TRANSFER_CREATED` for each
-execution and `SCHEDULED_TRANSFER_EXECUTION_FAILED`, `_MISSED`, `_AUTO_PAUSED` for engine actions.
-For engine-initiated audit entries (R14), `actor_user_id` is set to `None` with `details={"actor": "scheduler", "channel": "SCHEDULED"}`
-to accurately record automated background processing without spoofing user-interactive presence.
+Audit (`AuditService.record`, same transaction):
+* Customer actions (authenticated `user_id`): `SCHEDULED_TRANSFER_CREATED`, `SCHEDULED_TRANSFER_CANCELLED`, `SCHEDULED_TRANSFER_PAUSED`, `SCHEDULED_TRANSFER_RESUMED`.
+* Execution action: `TRANSFER_CREATED` for each executed transaction.
+* Engine automated actions (`actor_user_id = None`, `details={"actor": "scheduler", "channel": "SCHEDULED", ...}`): `SCHEDULED_TRANSFER_EXECUTION_FAILED`, `SCHEDULED_TRANSFER_MISSED`, `SCHEDULED_TRANSFER_AUTO_PAUSED`.
+
+For missed occurrences, every expired date receives its own 1:1 `SCHEDULED_TRANSFER_MISSED` audit entry containing `missed_date` in its details.
 
 ### 9. Concurrency, security and failure recovery
 * **Concurrent workers / duplicate deliveries:** the try-lock skips, the row re-check stops, the

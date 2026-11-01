@@ -17,6 +17,10 @@ TRANSFER_UNDER_REVIEW = "TRANSFER_UNDER_REVIEW"
 BILL_PAYMENT_POSTED = "BILL_PAYMENT_POSTED"
 BILL_PAYMENT_DECLINED = "BILL_PAYMENT_DECLINED"
 BILL_PAYMENT_UNDER_REVIEW = "BILL_PAYMENT_UNDER_REVIEW"
+# Scheduled transfer notifications (ADR-0021).
+SCHEDULED_TRANSFER_FAILED = "SCHEDULED_TRANSFER_FAILED"
+SCHEDULED_TRANSFER_MISSED = "SCHEDULED_TRANSFER_MISSED"
+SCHEDULED_TRANSFER_PAUSED = "SCHEDULED_TRANSFER_PAUSED"
 # Security notifications for events the auth and customers modules already record (#45).
 PASSWORD_CHANGED = "PASSWORD_CHANGED"  # noqa: S105  # pragma: allowlist secret - an event type name
 MFA_ENABLED = "MFA_ENABLED"
@@ -29,6 +33,11 @@ _TRANSFER_TYPES = {
     BILL_PAYMENT_POSTED,
     BILL_PAYMENT_DECLINED,
     BILL_PAYMENT_UNDER_REVIEW,
+}
+_SCHEDULED_TRANSFER_TYPES = {
+    SCHEDULED_TRANSFER_FAILED,
+    SCHEDULED_TRANSFER_MISSED,
+    SCHEDULED_TRANSFER_PAUSED,
 }
 _SECURITY_TEXT = {
     PASSWORD_CHANGED: (
@@ -87,6 +96,52 @@ def _transfer_text(event: OutboxEvent) -> tuple[str, str] | None:
     return None
 
 
+def _scheduled_transfer_text(event: OutboxEvent) -> tuple[str, str] | None:
+    amount = format_minor(int(event.payload["amount_minor"]), str(event.payload["currency"]))
+    if event.event_type == SCHEDULED_TRANSFER_FAILED:
+        failed_date = event.payload.get("failed_date", "")
+        return (
+            "Scheduled transfer failed",
+            f"Your scheduled transfer of {amount} on {failed_date} could not be completed.",
+        )
+    if event.event_type == SCHEDULED_TRANSFER_PAUSED:
+        return (
+            "Scheduled transfer paused",
+            (
+                f"Your scheduled transfer of {amount} was paused. "
+                "Action is required to resume transfers."
+            ),
+        )
+    if event.event_type == SCHEDULED_TRANSFER_MISSED:
+        missed_count = int(event.payload.get("missed_count", 1))
+        completed = bool(event.payload.get("completed", False))
+        next_date = event.payload.get("next_eligible_date")
+        next_suffix = (
+            " The schedule has completed."
+            if completed
+            else (f" Next scheduled transfer: {next_date}." if next_date else "")
+        )
+        if missed_count <= 1:
+            first_date = event.payload.get("first_missed_date", "")
+            return (
+                "Scheduled transfer missed",
+                (
+                    f"Your scheduled transfer of {amount} scheduled for "
+                    f"{first_date} was not executed.{next_suffix}"
+                ),
+            )
+        first_date = event.payload.get("first_missed_date", "")
+        last_date = event.payload.get("last_missed_date", "")
+        return (
+            "Scheduled transfers missed",
+            (
+                f"Your scheduled transfer of {amount} missed {missed_count} "
+                f"occurrences between {first_date} and {last_date}.{next_suffix}"
+            ),
+        )
+    return None
+
+
 def _uuid_or_none(value: object) -> UUID | None:
     return UUID(str(value)) if value else None
 
@@ -105,6 +160,19 @@ def _notification(event: OutboxEvent) -> Notification | None:
             resource_type="transaction",
             resource_id=_uuid_or_none(event.payload.get("transaction_id")),
             # events enqueued before #45 carry no account id: the link opens Accounts instead
+            account_id=_uuid_or_none(event.payload.get("account_id")),
+        )
+    if event.event_type in _SCHEDULED_TRANSFER_TYPES:
+        text = _scheduled_transfer_text(event)
+        if text is None:
+            return None
+        return Notification(
+            user_id=user_id,
+            type=event.event_type,
+            title=text[0],
+            body=text[1],
+            resource_type=None,
+            resource_id=_uuid_or_none(event.payload.get("scheduled_transfer_id")),
             account_id=_uuid_or_none(event.payload.get("account_id")),
         )
     if event.event_type in _SECURITY_TEXT:

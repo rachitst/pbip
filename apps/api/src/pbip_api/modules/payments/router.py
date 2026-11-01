@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import JSONResponse
 from pbip_ml.fraud.contract import FraudScorer
 from redis import Redis
@@ -23,7 +23,15 @@ from pbip_api.modules.customers.dependencies import get_current_customer
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.fraud.dependencies import get_country_resolver, get_fraud_scorer
 from pbip_api.modules.fraud.signals import device_uuid
-from pbip_api.modules.payments.schemas import StepUpRequest, TransferOut, TransferRequest
+from pbip_api.modules.payments.models import ScheduledTransferStatus
+from pbip_api.modules.payments.schemas import (
+    ScheduledTransferCreate,
+    ScheduledTransferOut,
+    StepUpRequest,
+    TransferOut,
+    TransferRequest,
+    to_scheduled_transfer_out,
+)
 from pbip_api.modules.payments.service import PaymentsService, TransferCommand, TransferResult
 
 router = APIRouter(prefix="/api/v1/transfers", tags=["payments"])
@@ -97,6 +105,134 @@ def create_transfer(
     return _respond(result)
 
 
+# ---------------------------------------------------------------------------
+# Scheduled Transfers (declared before /{transfer_id} to avoid UUID collisions)
+# ---------------------------------------------------------------------------
+@router.post(
+    "/scheduled",
+    response_model=ScheduledTransferOut,
+    status_code=201,
+    summary="Create a recurring transfer instruction",
+)
+def create_scheduled_transfer(
+    body: ScheduledTransferCreate,
+    principal: Principal = Depends(get_current_principal),
+    customer: Customer = Depends(get_current_customer),
+    service: PaymentsService = Depends(get_payments_service),
+    meta: RequestMeta = Depends(get_request_meta),
+) -> ScheduledTransferOut:
+    return to_scheduled_transfer_out(
+        service.create_scheduled_transfer(
+            customer=customer, user_id=principal.user_id, command=body, meta=meta
+        )
+    )
+
+
+@router.get(
+    "/scheduled",
+    response_model=list[ScheduledTransferOut],
+    summary="List my scheduled transfers",
+)
+def list_scheduled_transfers(
+    status: ScheduledTransferStatus | None = Query(default=None, description="Filter by status"),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=1_000_000),
+    customer: Customer = Depends(get_current_customer),
+    service: PaymentsService = Depends(get_payments_service),
+) -> list[ScheduledTransferOut]:
+    items = service.list_scheduled_transfers(customer.id, status=status, limit=limit, offset=offset)
+    return [to_scheduled_transfer_out(st) for st in items]
+
+
+@router.get(
+    "/scheduled/{scheduled_transfer_id}",
+    response_model=ScheduledTransferOut,
+    summary="Get one of my scheduled transfers",
+)
+def get_scheduled_transfer(
+    scheduled_transfer_id: UUID,
+    customer: Customer = Depends(get_current_customer),
+    service: PaymentsService = Depends(get_payments_service),
+) -> ScheduledTransferOut:
+    return to_scheduled_transfer_out(
+        service.get_scheduled_transfer(customer.id, scheduled_transfer_id)
+    )
+
+
+@router.post(
+    "/scheduled/{scheduled_transfer_id}/cancel",
+    response_model=ScheduledTransferOut,
+    summary="Cancel a scheduled transfer",
+)
+@router.delete(
+    "/scheduled/{scheduled_transfer_id}",
+    response_model=ScheduledTransferOut,
+    summary="Cancel a scheduled transfer (DELETE alias)",
+)
+def cancel_scheduled_transfer(
+    scheduled_transfer_id: UUID,
+    principal: Principal = Depends(get_current_principal),
+    customer: Customer = Depends(get_current_customer),
+    service: PaymentsService = Depends(get_payments_service),
+    meta: RequestMeta = Depends(get_request_meta),
+) -> ScheduledTransferOut:
+    return to_scheduled_transfer_out(
+        service.cancel_scheduled_transfer(
+            customer_id=customer.id,
+            user_id=principal.user_id,
+            scheduled_transfer_id=scheduled_transfer_id,
+            meta=meta,
+        )
+    )
+
+
+@router.post(
+    "/scheduled/{scheduled_transfer_id}/pause",
+    response_model=ScheduledTransferOut,
+    summary="Pause an active scheduled transfer",
+)
+def pause_scheduled_transfer(
+    scheduled_transfer_id: UUID,
+    principal: Principal = Depends(get_current_principal),
+    customer: Customer = Depends(get_current_customer),
+    service: PaymentsService = Depends(get_payments_service),
+    meta: RequestMeta = Depends(get_request_meta),
+) -> ScheduledTransferOut:
+    return to_scheduled_transfer_out(
+        service.pause_scheduled_transfer(
+            customer_id=customer.id,
+            user_id=principal.user_id,
+            scheduled_transfer_id=scheduled_transfer_id,
+            meta=meta,
+        )
+    )
+
+
+@router.post(
+    "/scheduled/{scheduled_transfer_id}/resume",
+    response_model=ScheduledTransferOut,
+    summary="Resume a paused scheduled transfer",
+)
+def resume_scheduled_transfer(
+    scheduled_transfer_id: UUID,
+    principal: Principal = Depends(get_current_principal),
+    customer: Customer = Depends(get_current_customer),
+    service: PaymentsService = Depends(get_payments_service),
+    meta: RequestMeta = Depends(get_request_meta),
+) -> ScheduledTransferOut:
+    return to_scheduled_transfer_out(
+        service.resume_scheduled_transfer(
+            customer=customer,
+            user_id=principal.user_id,
+            scheduled_transfer_id=scheduled_transfer_id,
+            meta=meta,
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
+# Interactive Single Transfers
+# ---------------------------------------------------------------------------
 @router.get("/{transfer_id}", response_model=TransferOut, summary="Get one of my transfers")
 def get_transfer(
     transfer_id: UUID,

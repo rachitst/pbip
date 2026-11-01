@@ -885,6 +885,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/transfers/scheduled": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List my scheduled transfers */
+        get: operations["list_scheduled_transfers_api_v1_transfers_scheduled_get"];
+        put?: never;
+        /** Create a recurring transfer instruction */
+        post: operations["create_scheduled_transfer_api_v1_transfers_scheduled_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/transfers/scheduled/{scheduled_transfer_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one of my scheduled transfers */
+        get: operations["get_scheduled_transfer_api_v1_transfers_scheduled__scheduled_transfer_id__get"];
+        put?: never;
+        post?: never;
+        /** Cancel a scheduled transfer (DELETE alias) */
+        delete: operations["cancel_scheduled_transfer_api_v1_transfers_scheduled__scheduled_transfer_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/transfers/scheduled/{scheduled_transfer_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel a scheduled transfer */
+        post: operations["cancel_scheduled_transfer_api_v1_transfers_scheduled__scheduled_transfer_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/transfers/scheduled/{scheduled_transfer_id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause an active scheduled transfer */
+        post: operations["pause_scheduled_transfer_api_v1_transfers_scheduled__scheduled_transfer_id__pause_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/transfers/scheduled/{scheduled_transfer_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume a paused scheduled transfer */
+        post: operations["resume_scheduled_transfer_api_v1_transfers_scheduled__scheduled_transfer_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/transfers/{transfer_id}": {
         parameters: {
             query?: never;
@@ -2262,6 +2349,112 @@ export interface components {
             /** Password */
             password: string;
         };
+        /**
+         * ScheduleFrequency
+         * @enum {string}
+         */
+        ScheduleFrequency: "DAILY" | "WEEKLY" | "MONTHLY";
+        /** ScheduledTransferCreate */
+        ScheduledTransferCreate: {
+            /**
+             * Amount Minor
+             * @description Integer minor units, e.g. paise
+             */
+            amount_minor: number;
+            /**
+             * Currency
+             * @default INR
+             */
+            currency: string;
+            /**
+             * End Date
+             * @description Optional terminal date (inclusive)
+             */
+            end_date?: string | null;
+            frequency: components["schemas"]["ScheduleFrequency"];
+            /**
+             * From Account Id
+             * Format: uuid
+             */
+            from_account_id: string;
+            /** Payee Id */
+            payee_id?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /**
+             * Start Date
+             * Format: date
+             * @description First scheduled date (UTC), must be on or after today
+             */
+            start_date: string;
+            /**
+             * To Account Id
+             * @description One of MY OWN other accounts
+             */
+            to_account_id?: string | null;
+        };
+        /** ScheduledTransferOut */
+        ScheduledTransferOut: {
+            /** Amount Minor */
+            amount_minor: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Customer Id
+             * Format: uuid
+             */
+            customer_id: string;
+            /** End Date */
+            end_date: string | null;
+            /** Failure Count */
+            failure_count: number;
+            frequency: components["schemas"]["ScheduleFrequency"];
+            /**
+             * From Account Id
+             * Format: uuid
+             */
+            from_account_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Last Failure Reason */
+            last_failure_reason: string | null;
+            /** Last Run Date */
+            last_run_date: string | null;
+            /** Last Transaction Id */
+            last_transaction_id: string | null;
+            /**
+             * Next Run Date
+             * Format: date
+             */
+            next_run_date: string;
+            /** Pause Reason */
+            pause_reason: string | null;
+            /** Payee Id */
+            payee_id: string | null;
+            /** Reference */
+            reference: string | null;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            status: components["schemas"]["ScheduledTransferStatus"];
+            /** To Account Id */
+            to_account_id: string | null;
+        };
+        /**
+         * ScheduledTransferStatus
+         * @enum {string}
+         */
+        ScheduledTransferStatus: "ACTIVE" | "PAUSED" | "CANCELLED" | "COMPLETED";
         /**
          * SpendingBreakdownResponse
          * @description Response containing categorized spending breakdown for an account.
@@ -4231,6 +4424,228 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TransferOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_scheduled_transfers_api_v1_transfers_scheduled_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by status */
+                status?: components["schemas"]["ScheduledTransferStatus"] | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledTransferOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_scheduled_transfer_api_v1_transfers_scheduled_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScheduledTransferCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledTransferOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_scheduled_transfer_api_v1_transfers_scheduled__scheduled_transfer_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scheduled_transfer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledTransferOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_scheduled_transfer_api_v1_transfers_scheduled__scheduled_transfer_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scheduled_transfer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledTransferOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_scheduled_transfer_api_v1_transfers_scheduled__scheduled_transfer_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scheduled_transfer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledTransferOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pause_scheduled_transfer_api_v1_transfers_scheduled__scheduled_transfer_id__pause_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scheduled_transfer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledTransferOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_scheduled_transfer_api_v1_transfers_scheduled__scheduled_transfer_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scheduled_transfer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledTransferOut"];
                 };
             };
             /** @description Validation Error */

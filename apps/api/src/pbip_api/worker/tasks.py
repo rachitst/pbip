@@ -49,3 +49,11 @@ def ensure_clickstream_partitions_task() -> list[str]:
 
     with session_scope() as session:
         return ensure_monthly_partitions(session, utcnow().date())
+
+
+@celery_app.task(name="pbip.transfers.execute_scheduled")
+def execute_scheduled_transfers_task() -> dict[str, int]:
+    """Execute due scheduled transfers and process missed recovery (60s beat; ADR-0021)."""
+    from pbip_api.modules.payments.scheduled_service import process_due_scheduled_transfers
+
+    return process_due_scheduled_transfers()

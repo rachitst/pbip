@@ -10,7 +10,7 @@ import hashlib
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import date, timedelta
 from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
@@ -31,7 +31,7 @@ from pbip_api.core.metrics import (
     TRANSFERS_TOTAL,
 )
 from pbip_api.core.velocity import VelocityCounters
-from pbip_api.modules.accounts.models import Account, AccountType
+from pbip_api.modules.accounts.models import Account, AccountStatus, AccountType
 from pbip_api.modules.accounts.policy import get_owned_account
 from pbip_api.modules.auth.models import User
 from pbip_api.modules.auth.service import AuthService, RequestMeta
@@ -50,6 +50,14 @@ from pbip_api.modules.ledger.models import (
 from pbip_api.modules.notifications import service as notifications
 from pbip_api.modules.payees.models import Payee, PayeeStatus
 from pbip_api.modules.payees.policy import get_owned_payee
+from pbip_api.modules.payments.models import (
+    ScheduledTransfer,
+    ScheduledTransferStatus,
+    SchedulePauseReason,
+)
+from pbip_api.modules.payments.policy import get_owned_scheduled_transfer
+from pbip_api.modules.payments.recurrence import UpcomingOccurrence, compute_next_occurrence
+from pbip_api.modules.payments.schemas import ScheduledTransferCreate
 
 
 class LimitExceededError(UnprocessableError):
@@ -549,3 +557,260 @@ class PaymentsService:
             details={"release": release, "transaction_id": str(transaction.id)},
         )
         self.session.commit()
+
+    # --------------------------------------------------- scheduled transfers
+    def create_scheduled_transfer(
+        self,
+        *,
+        customer: Customer,
+        user_id: UUID,
+        command: ScheduledTransferCreate,
+        meta: RequestMeta | None = None,
+    ) -> ScheduledTransfer:
+        """Create a scheduled transfer instruction (ADR-0021). Moves no money."""
+        today = utcnow().date()
+        if command.start_date < today:
+            raise UnprocessableError("start_date cannot be in the past")
+        if command.amount_minor > self.settings.max_transfer_minor:
+            raise LimitExceededError("amount exceeds the per-transfer limit")
+
+        source = get_owned_account(self.session, customer.id, command.from_account_id)
+        if source.status != AccountStatus.ACTIVE:
+            raise UnprocessableError("source account is not active")
+        if source.currency != command.currency:
+            raise UnprocessableError("currency does not match the source account")
+
+        cmd = TransferCommand(
+            from_account_id=command.from_account_id,
+            amount_minor=command.amount_minor,
+            currency=command.currency,
+            payee_id=command.payee_id,
+            to_account_id=command.to_account_id,
+            reference=command.reference,
+        )
+        self._resolve_destination(customer, cmd, source)
+
+        instruction = ScheduledTransfer(
+            customer_id=customer.id,
+            user_id=user_id,
+            from_account_id=command.from_account_id,
+            payee_id=command.payee_id,
+            to_account_id=command.to_account_id,
+            amount=command.amount_minor,
+            currency=command.currency,
+            reference=command.reference,
+            frequency=command.frequency,
+            status=ScheduledTransferStatus.ACTIVE,
+            start_date=command.start_date,
+            end_date=command.end_date,
+            next_run_date=command.start_date,
+            pause_reason=None,
+            failure_count=0,
+            last_failure_reason=None,
+            last_failed_occurrence_date=None,
+            last_run_date=None,
+            last_transaction_id=None,
+        )
+        self.session.add(instruction)
+        self.session.flush()
+
+        ip = meta.ip if meta is not None else None
+        request_id = meta.request_id if meta is not None else None
+        self.audit.record(
+            user_id,
+            "SCHEDULED_TRANSFER_CREATED",
+            "scheduled_transfer",
+            str(instruction.id),
+            ip=ip,
+            request_id=request_id,
+            details={
+                "from_account_id": str(instruction.from_account_id),
+                "amount_minor": instruction.amount,
+                "currency": instruction.currency,
+                "frequency": instruction.frequency.value,
+                "start_date": instruction.start_date.isoformat(),
+                "end_date": instruction.end_date.isoformat() if instruction.end_date else None,
+            },
+        )
+        self.session.commit()
+        return instruction
+
+    def list_scheduled_transfers(
+        self,
+        customer_id: UUID,
+        *,
+        status: ScheduledTransferStatus | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[ScheduledTransfer]:
+        """List instructions owned by authenticated customer (BOLA-safe)."""
+        query = select(ScheduledTransfer).where(ScheduledTransfer.customer_id == customer_id)
+        if status is not None:
+            query = query.where(ScheduledTransfer.status == status)
+        query = query.order_by(ScheduledTransfer.created_at.desc(), ScheduledTransfer.id.desc())
+        query = query.limit(limit).offset(offset)
+        return list(self.session.execute(query).scalars().all())
+
+    def get_scheduled_transfer(
+        self, customer_id: UUID, scheduled_transfer_id: UUID
+    ) -> ScheduledTransfer:
+        """Fetch a single owned instruction (404 for non-owned or non-existent)."""
+        return get_owned_scheduled_transfer(self.session, customer_id, scheduled_transfer_id)
+
+    def cancel_scheduled_transfer(
+        self,
+        *,
+        customer_id: UUID,
+        user_id: UUID,
+        scheduled_transfer_id: UUID,
+        meta: RequestMeta | None = None,
+    ) -> ScheduledTransfer:
+        """Cancel an owned scheduled transfer (terminal transition)."""
+        self._lock_user(user_id)
+        instruction = get_owned_scheduled_transfer(
+            self.session, customer_id, scheduled_transfer_id, for_update=True
+        )
+        if instruction.status == ScheduledTransferStatus.CANCELLED:
+            raise ConflictError("scheduled transfer is already cancelled")
+        if instruction.status == ScheduledTransferStatus.COMPLETED:
+            raise ConflictError("completed scheduled transfer cannot be cancelled")
+
+        prev_status = instruction.status.value
+        instruction.status = ScheduledTransferStatus.CANCELLED
+        instruction.pause_reason = None
+
+        ip = meta.ip if meta is not None else None
+        request_id = meta.request_id if meta is not None else None
+        self.audit.record(
+            user_id,
+            "SCHEDULED_TRANSFER_CANCELLED",
+            "scheduled_transfer",
+            str(instruction.id),
+            ip=ip,
+            request_id=request_id,
+            details={"previous_status": prev_status},
+        )
+        self.session.commit()
+        return instruction
+
+    def pause_scheduled_transfer(
+        self,
+        *,
+        customer_id: UUID,
+        user_id: UUID,
+        scheduled_transfer_id: UUID,
+        meta: RequestMeta | None = None,
+    ) -> ScheduledTransfer:
+        """Customer-initiated pause on an active instruction."""
+        self._lock_user(user_id)
+        instruction = get_owned_scheduled_transfer(
+            self.session, customer_id, scheduled_transfer_id, for_update=True
+        )
+        if instruction.status == ScheduledTransferStatus.PAUSED:
+            raise ConflictError("scheduled transfer is already paused")
+        if instruction.status == ScheduledTransferStatus.CANCELLED:
+            raise ConflictError("cancelled scheduled transfer cannot be paused")
+        if instruction.status == ScheduledTransferStatus.COMPLETED:
+            raise ConflictError("completed scheduled transfer cannot be paused")
+
+        instruction.status = ScheduledTransferStatus.PAUSED
+        instruction.pause_reason = SchedulePauseReason.CUSTOMER
+
+        ip = meta.ip if meta is not None else None
+        request_id = meta.request_id if meta is not None else None
+        self.audit.record(
+            user_id,
+            "SCHEDULED_TRANSFER_PAUSED",
+            "scheduled_transfer",
+            str(instruction.id),
+            ip=ip,
+            request_id=request_id,
+            details={"reason": "customer"},
+        )
+        self.session.commit()
+        return instruction
+
+    def resume_scheduled_transfer(
+        self,
+        *,
+        customer: Customer,
+        user_id: UUID,
+        scheduled_transfer_id: UUID,
+        meta: RequestMeta | None = None,
+    ) -> ScheduledTransfer:
+        """Customer-initiated resume on a paused instruction (R1/R4/R5)."""
+        self._lock_user(user_id)
+        instruction = get_owned_scheduled_transfer(
+            self.session, customer.id, scheduled_transfer_id, for_update=True
+        )
+        if instruction.status == ScheduledTransferStatus.ACTIVE:
+            raise ConflictError("scheduled transfer is already active")
+        if instruction.status == ScheduledTransferStatus.CANCELLED:
+            raise ConflictError("cancelled scheduled transfer cannot be resumed")
+        if instruction.status == ScheduledTransferStatus.COMPLETED:
+            raise ConflictError("completed scheduled transfer cannot be resumed")
+        if instruction.pause_reason == SchedulePauseReason.FRAUD_BLOCK:
+            raise ConflictError(
+                "Scheduled transfer is locked following a security decline "
+                "and requires fraud analyst clearance"
+            )
+
+        source = get_owned_account(self.session, customer.id, instruction.from_account_id)
+        if source.status != AccountStatus.ACTIVE:
+            raise UnprocessableError("source account is not active")
+
+        cmd = TransferCommand(
+            from_account_id=instruction.from_account_id,
+            amount_minor=instruction.amount,
+            currency=instruction.currency,
+            payee_id=instruction.payee_id,
+            to_account_id=instruction.to_account_id,
+            reference=instruction.reference,
+        )
+        self._resolve_destination(customer, cmd, source)
+
+        today = utcnow().date()
+        next_run: date | None = instruction.next_run_date
+        while next_run is not None and next_run < today:
+            next_run = compute_next_occurrence(
+                instruction.start_date,
+                next_run,
+                instruction.frequency,
+                instruction.end_date,
+            )
+
+        if next_run is None or (
+            instruction.end_date is not None and next_run > instruction.end_date
+        ):
+            instruction.status = ScheduledTransferStatus.COMPLETED
+        else:
+            instruction.status = ScheduledTransferStatus.ACTIVE
+            instruction.next_run_date = next_run
+
+        instruction.pause_reason = None
+        instruction.failure_count = 0
+        instruction.last_failure_reason = None
+
+        ip = meta.ip if meta is not None else None
+        request_id = meta.request_id if meta is not None else None
+        self.audit.record(
+            user_id,
+            "SCHEDULED_TRANSFER_RESUMED",
+            "scheduled_transfer",
+            str(instruction.id),
+            ip=ip,
+            request_id=request_id,
+            details={
+                "next_run_date": instruction.next_run_date.isoformat(),
+                "status": instruction.status.value,
+            },
+        )
+        self.session.commit()
+        return instruction
+
+    # ------------------------------------------------------------- projections
+    def upcoming_occurrences(self, customer_id: UUID, until: date) -> list[UpcomingOccurrence]:
+        """Project upcoming occurrences for customer's active instructions (R15)."""
+        from pbip_api.modules.payments.recurrence import upcoming_occurrences
+
+        return upcoming_occurrences(self.session, customer_id, until)

@@ -2660,6 +2660,283 @@
         "title": "RegisterRequest",
         "type": "object"
       },
+      "ScheduleFrequency": {
+        "enum": [
+          "DAILY",
+          "WEEKLY",
+          "MONTHLY"
+        ],
+        "title": "ScheduleFrequency",
+        "type": "string"
+      },
+      "ScheduledTransferCreate": {
+        "properties": {
+          "amount_minor": {
+            "description": "Integer minor units, e.g. paise",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "currency": {
+            "default": "INR",
+            "maxLength": 3,
+            "minLength": 3,
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency",
+            "type": "string"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional terminal date (inclusive)",
+            "title": "End Date"
+          },
+          "frequency": {
+            "$ref": "#/components/schemas/ScheduleFrequency"
+          },
+          "from_account_id": {
+            "format": "uuid",
+            "title": "From Account Id",
+            "type": "string"
+          },
+          "payee_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payee Id"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "maxLength": 140,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          },
+          "start_date": {
+            "description": "First scheduled date (UTC), must be on or after today",
+            "format": "date",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "to_account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One of MY OWN other accounts",
+            "title": "To Account Id"
+          }
+        },
+        "required": [
+          "from_account_id",
+          "amount_minor",
+          "frequency",
+          "start_date"
+        ],
+        "title": "ScheduledTransferCreate",
+        "type": "object"
+      },
+      "ScheduledTransferOut": {
+        "properties": {
+          "amount_minor": {
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "failure_count": {
+            "title": "Failure Count",
+            "type": "integer"
+          },
+          "frequency": {
+            "$ref": "#/components/schemas/ScheduleFrequency"
+          },
+          "from_account_id": {
+            "format": "uuid",
+            "title": "From Account Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Failure Reason"
+          },
+          "last_run_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run Date"
+          },
+          "last_transaction_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Transaction Id"
+          },
+          "next_run_date": {
+            "format": "date",
+            "title": "Next Run Date",
+            "type": "string"
+          },
+          "pause_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pause Reason"
+          },
+          "payee_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payee Id"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          },
+          "start_date": {
+            "format": "date",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ScheduledTransferStatus"
+          },
+          "to_account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Account Id"
+          }
+        },
+        "required": [
+          "id",
+          "customer_id",
+          "from_account_id",
+          "to_account_id",
+          "payee_id",
+          "amount_minor",
+          "currency",
+          "reference",
+          "frequency",
+          "status",
+          "start_date",
+          "end_date",
+          "next_run_date",
+          "last_run_date",
+          "last_transaction_id",
+          "failure_count",
+          "last_failure_reason",
+          "pause_reason",
+          "created_at"
+        ],
+        "title": "ScheduledTransferOut",
+        "type": "object"
+      },
+      "ScheduledTransferStatus": {
+        "enum": [
+          "ACTIVE",
+          "PAUSED",
+          "CANCELLED",
+          "COMPLETED"
+        ],
+        "title": "ScheduledTransferStatus",
+        "type": "string"
+      },
       "SpendingBreakdownResponse": {
         "description": "Response containing categorized spending breakdown for an account.",
         "properties": {
@@ -6123,6 +6400,372 @@
           }
         ],
         "summary": "Create a transfer (idempotent)",
+        "tags": [
+          "payments"
+        ]
+      }
+    },
+    "/api/v1/transfers/scheduled": {
+      "get": {
+        "operationId": "list_scheduled_transfers_api_v1_transfers_scheduled_get",
+        "parameters": [
+          {
+            "description": "Filter by status",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ScheduledTransferStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by status",
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 1000000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ScheduledTransferOut"
+                  },
+                  "title": "Response List Scheduled Transfers Api V1 Transfers Scheduled Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List my scheduled transfers",
+        "tags": [
+          "payments"
+        ]
+      },
+      "post": {
+        "operationId": "create_scheduled_transfer_api_v1_transfers_scheduled_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduledTransferCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledTransferOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create a recurring transfer instruction",
+        "tags": [
+          "payments"
+        ]
+      }
+    },
+    "/api/v1/transfers/scheduled/{scheduled_transfer_id}": {
+      "delete": {
+        "operationId": "cancel_scheduled_transfer_api_v1_transfers_scheduled__scheduled_transfer_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scheduled_transfer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Scheduled Transfer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledTransferOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel a scheduled transfer (DELETE alias)",
+        "tags": [
+          "payments"
+        ]
+      },
+      "get": {
+        "operationId": "get_scheduled_transfer_api_v1_transfers_scheduled__scheduled_transfer_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scheduled_transfer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Scheduled Transfer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledTransferOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get one of my scheduled transfers",
+        "tags": [
+          "payments"
+        ]
+      }
+    },
+    "/api/v1/transfers/scheduled/{scheduled_transfer_id}/cancel": {
+      "post": {
+        "operationId": "cancel_scheduled_transfer_api_v1_transfers_scheduled__scheduled_transfer_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scheduled_transfer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Scheduled Transfer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledTransferOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel a scheduled transfer",
+        "tags": [
+          "payments"
+        ]
+      }
+    },
+    "/api/v1/transfers/scheduled/{scheduled_transfer_id}/pause": {
+      "post": {
+        "operationId": "pause_scheduled_transfer_api_v1_transfers_scheduled__scheduled_transfer_id__pause_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scheduled_transfer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Scheduled Transfer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledTransferOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Pause an active scheduled transfer",
+        "tags": [
+          "payments"
+        ]
+      }
+    },
+    "/api/v1/transfers/scheduled/{scheduled_transfer_id}/resume": {
+      "post": {
+        "operationId": "resume_scheduled_transfer_api_v1_transfers_scheduled__scheduled_transfer_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scheduled_transfer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Scheduled Transfer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledTransferOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Resume a paused scheduled transfer",
         "tags": [
           "payments"
         ]

@@ -27,3 +27,13 @@ IDEMPOTENT_REPLAYS_TOTAL = Counter(
     "idempotent_replays_total", "Requests answered from a stored idempotent response"
 )
 LOGIN_FAILURES_TOTAL = Counter("login_failures_total", "Failed login attempts", ["reason"])
+SCHEDULED_TRANSFERS_TOTAL = Counter(
+    "scheduled_transfers_total", "Scheduled transfer executions by outcome", ["outcome"]
+)
+SCHEDULED_MISSED_OCCURRENCES_TOTAL = Counter(
+    "scheduled_missed_occurrences_total", "Missed scheduled occurrences recorded"
+)
+SCHEDULED_WORKER_DURATION_SECONDS = Histogram(
+    "scheduled_worker_duration_seconds",
+    "Duration of scheduled transfer processing loop in seconds",
+)
