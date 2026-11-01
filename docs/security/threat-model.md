@@ -381,7 +381,7 @@ are the origin of the UK rule. "Analogous" means PBIP mirrors the control object
 |---|---|---|
 | TLS termination (and WAF) in the production deployment | MUST | TASK-075 (Sprint 5), TASK-082 (Sprint 6) |
 | Schemathesis contract fuzzing in CI | MUST | TASK-070 (Sprint 5) |
-| AI assistant: meet the 2.5 s LLM latency target (needs a GPU or a smaller model; TASK-058) | SHOULD | TASK-058 |
+| AI assistant: LLM-path latency under 2.5 s (routed questions already meet it, ADR-0018 amendment; unclear questions need faster hardware than the reference laptop) | SHOULD | hardware |
 | ML fraud scorer with rules-only fallback (§7.1, AGENTS.md §8) | MUST | TASK-029–031, TASK-033 (Sprint 3) |
 | Structuring (F7) and dormant-account (F8) detection | SHOULD | TASK-071 (Sprint 5) |
 | F4 impossible-travel rule (needs a location source: ADR, then populate `ip_country`/geo in `TransactionContext`) | MUST (Blueprint §8) | #143 |

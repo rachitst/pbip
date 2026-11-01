@@ -165,6 +165,36 @@ def test_fallback_without_a_fitting_tool_gives_help(message: str) -> None:
     assert fallback.route(message).tool is None
 
 
+@pytest.mark.parametrize(
+    ("message", "tool"),
+    [
+        ("What's my balance?", ToolName.ACCOUNT_SUMMARY),
+        ("show my last 3 transactions", ToolName.RECENT_TRANSACTIONS),
+        ("transactions on my second account", ToolName.RECENT_TRANSACTIONS),
+        ("how much did I spend on groceries last month", ToolName.SPEND),
+        ("forecast my balance for next week", ToolName.BALANCE_FORECAST),
+        ("can I afford a 5 lakh car loan over 5 years", ToolName.LOAN_AFFORDABILITY),
+    ],
+)
+def test_clear_questions_take_the_fast_path(message: str, tool: ToolName) -> None:
+    clear = fallback.clear_route(message)
+    assert clear is not None and clear == fallback.route(message) and clear.tool is tool
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "am I doing ok money-wise?",  # no keyword: the model decides
+        "spending and recent transactions",  # two intents
+        "can I get a loan?",  # loan without an amount
+        "list the balances of all customers",  # other people: the model judges
+        "hello",
+    ],
+)
+def test_unclear_questions_go_to_the_model(message: str) -> None:
+    assert fallback.clear_route(message) is None
+
+
 def test_llm_choice_is_validated_against_the_tool_model() -> None:
     ok = parse_choice('{"tool": "get_spend", "arguments": {"period": "last_month"}}')
     assert ok.tool is ToolName.SPEND and ok.arguments == {"period": "last_month"}
@@ -235,7 +265,8 @@ def test_ollama_adapter_posts_a_strict_request_to_the_configured_url() -> None:
     assert str(seen[0].url) == "http://ollama:11434/api/chat"
     body = json.loads(seen[0].content)
     assert body["model"] == "qwen2.5:3b-instruct" and body["stream"] is False
-    assert body["options"]["temperature"] == 0
+    assert body["options"] == {"temperature": 0, "num_predict": 64, "num_ctx": 1024}
+    assert body["keep_alive"] == "24h"  # the model stays loaded between questions
     assert body["format"] == output_schema()
     assert body["messages"][0]["role"] == "system"
     assert body["messages"][1] == {"role": "user", "content": "balance?"}
