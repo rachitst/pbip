@@ -18,8 +18,9 @@ STATE_PREVIOUS=.previous_tag
 STATE_PENDING=.deployed_tag.pending
 WAIT_TIMEOUT="${DEPLOY_WAIT_TIMEOUT:-180}"
 
-env_value() { # <name>: a value from the host .env (compose reads the same file)
-  sed -n "s/^$1=//p" .env 2>/dev/null | tail -n 1
+env_value() { # <name>: a value from the host .env (compose reads the same file); empty if unset
+  [ -f .env ] || return 0
+  sed -n "s/^$1=//p" .env | tail -n 1
 }
 
 # TLS material the stack refuses to start without (runbook 1.4). Never overwrites existing files:
