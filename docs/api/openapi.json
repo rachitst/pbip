@@ -92,6 +92,55 @@
         "title": "AdminCreateUserRequest",
         "type": "object"
       },
+      "AlertCustomer": {
+        "description": "What an analyst needs to judge the alert; no contact details or date of birth.",
+        "properties": {
+          "customer_since": {
+            "format": "date-time",
+            "title": "Customer Since",
+            "type": "string"
+          },
+          "full_name": {
+            "title": "Full Name",
+            "type": "string"
+          },
+          "kyc_status": {
+            "title": "Kyc Status",
+            "type": "string"
+          },
+          "risk_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Profile"
+          },
+          "segment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment"
+          }
+        },
+        "required": [
+          "full_name",
+          "kyc_status",
+          "segment",
+          "risk_profile",
+          "customer_since"
+        ],
+        "title": "AlertCustomer",
+        "type": "object"
+      },
       "AlertDetail": {
         "properties": {
           "amount_minor": {
@@ -106,6 +155,16 @@
           "currency": {
             "title": "Currency",
             "type": "string"
+          },
+          "customer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AlertCustomer"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "customer_id": {
             "format": "uuid",
@@ -141,6 +200,17 @@
             },
             "title": "Reasons",
             "type": "array"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
           },
           "resolution_note": {
             "anyOf": [
@@ -185,6 +255,10 @@
           "transaction_status": {
             "title": "Transaction Status",
             "type": "string"
+          },
+          "transaction_type": {
+            "title": "Transaction Type",
+            "type": "string"
           }
         },
         "required": [
@@ -199,6 +273,9 @@
           "created_at",
           "transaction_id",
           "customer_id",
+          "customer",
+          "transaction_type",
+          "reference",
           "reasons",
           "features",
           "model_version",

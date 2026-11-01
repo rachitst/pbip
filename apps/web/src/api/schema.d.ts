@@ -981,6 +981,25 @@ export interface components {
             /** Roles */
             roles: string[];
         };
+        /**
+         * AlertCustomer
+         * @description What an analyst needs to judge the alert; no contact details or date of birth.
+         */
+        AlertCustomer: {
+            /**
+             * Customer Since
+             * Format: date-time
+             */
+            customer_since: string;
+            /** Full Name */
+            full_name: string;
+            /** Kyc Status */
+            kyc_status: string;
+            /** Risk Profile */
+            risk_profile: string | null;
+            /** Segment */
+            segment: string | null;
+        };
         /** AlertDetail */
         AlertDetail: {
             /** Amount Minor */
@@ -992,6 +1011,7 @@ export interface components {
             created_at: string;
             /** Currency */
             currency: string;
+            customer: components["schemas"]["AlertCustomer"] | null;
             /**
              * Customer Id
              * Format: uuid
@@ -1016,6 +1036,8 @@ export interface components {
             reasons: {
                 [key: string]: unknown;
             }[];
+            /** Reference */
+            reference: string | null;
             /** Resolution Note */
             resolution_note: string | null;
             /** Resolved At */
@@ -1033,6 +1055,8 @@ export interface components {
             transaction_id: string;
             /** Transaction Status */
             transaction_status: string;
+            /** Transaction Type */
+            transaction_type: string;
         };
         /**
          * AlertStatus

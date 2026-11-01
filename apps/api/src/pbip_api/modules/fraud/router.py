@@ -14,6 +14,7 @@ from pbip_api.modules.accounts.service import mask_account_number
 from pbip_api.modules.auth.dependencies import Principal, get_request_meta, require_roles
 from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.auth.service import RequestMeta
+from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.fraud import service, stats
 from pbip_api.modules.fraud.models import AlertStatus, FraudAlert, FraudEvent
 from pbip_api.modules.ledger.models import Transaction
@@ -37,9 +38,22 @@ class AlertSummary(BaseModel):
     created_at: datetime
 
 
+class AlertCustomer(BaseModel):
+    """What an analyst needs to judge the alert; no contact details or date of birth."""
+
+    full_name: str
+    kyc_status: str
+    segment: str | None
+    risk_profile: str | None
+    customer_since: datetime
+
+
 class AlertDetail(AlertSummary):
     transaction_id: UUID
     customer_id: UUID
+    customer: AlertCustomer | None
+    transaction_type: str
+    reference: str | None
     reasons: list[dict[str, Any]]
     features: dict[str, Any]
     model_version: str
@@ -143,10 +157,22 @@ def get_alert(
 ) -> AlertDetail:
     alert, event, txn = service.get_alert(session, alert_id)
     base = _summary(alert, event, txn)
+    customer = session.get(Customer, event.customer_id)
     return AlertDetail(
         **base.model_dump(),
         transaction_id=txn.id,
         customer_id=event.customer_id,
+        customer=AlertCustomer(
+            full_name=customer.full_name,
+            kyc_status=customer.kyc_status.value,
+            segment=customer.segment,
+            risk_profile=customer.risk_profile,
+            customer_since=customer.created_at,
+        )
+        if customer is not None
+        else None,
+        transaction_type=txn.type.value,
+        reference=txn.reference,
         reasons=event.reasons,
         features=dict(event.features),
         model_version=event.model_version,
