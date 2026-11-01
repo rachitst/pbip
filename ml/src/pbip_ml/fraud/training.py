@@ -56,6 +56,9 @@ def build_dataset(transfers: pd.DataFrame, labels: pd.DataFrame) -> pd.DataFrame
     out["hour_ist"] = (df["occurred_at"] + pd.Timedelta(hours=5, minutes=30)).dt.hour
     out["new_device"] = df["new_device"].astype(int)
     out["is_debit"] = (df["direction"].astype(str) == "DEBIT").astype(int)
+    out["amount_minor"] = df["amount_minor"].astype(
+        "int64"
+    )  # for the rule layer (not a model input)
     out["occurred_at"] = df["occurred_at"]
     out["label"] = df["id"].isin(fraud_ids).astype(int)
     return out

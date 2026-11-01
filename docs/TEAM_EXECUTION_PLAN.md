@@ -126,8 +126,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 | TASK-029 | LightGBM Supervised Fraud Classifier Training Pipeline | Rachit | Mon 26 Oct | Tue 27 Oct | 023, 024 | Seq | High | #52 |
 | TASK-030 | Isolation Forest Anomaly Detection Engine | Rachit | Mon 26 Oct | Tue 27 Oct | 024 | Seq | Low | #53 |
 | TASK-034 | Redis Real-Time Velocity & Frequency Counters | Sujal | Tue 27 Oct | Tue 27 Oct | - | Par | Low | #57 |
-| TASK-031 | Hybrid Fraud Decision Combiner & Threshold Calibration | Pranay | Tue 27 Oct | Wed 28 Oct | 025, 029, 030 | Seq | High | #54 |
-| TASK-032 | SHAP Explainability & Reason Code Generator | Pranay | Wed 28 Oct | Wed 28 Oct | 029, 031 | Seq | High | #55 |
+| TASK-031 | Hybrid Fraud Decision Combiner & Threshold Calibration | Rachit | Tue 27 Oct | Wed 28 Oct | 025, 029, 030 | Seq | High | #54 |
+| TASK-032 | SHAP Explainability & Reason Code Generator | Rachit | Wed 28 Oct | Wed 28 Oct | 029, 031 | Seq | High | #55 |
 | TASK-033 | HybridFraudScorer Service Integration in Transfer Flow | Pranay | Wed 28 Oct | Thu 29 Oct | 031, 032 | Seq | High | #56 |
 | TASK-038 | MLflow Model Registry Champion/Challenger Promotion Workflow | Pranay | Thu 29 Oct | Fri 30 Oct | 011, 029 | Seq | Low | #61 |
 | TASK-037 | Step-Up MFA Challenge Modal & Customer Transfer Confirmation | Kalpak | Thu 29 Oct | Thu 29 Oct | 033, 019 | Seq | Low | #60 |
@@ -1012,8 +1012,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-031 - Hybrid Fraud Decision Combiner & Threshold Calibration
 
 - **Issue:** #54 | **Sprint:** 3 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
-- **Owner:** Pranay (`pranaysanap`)
-- **Start:** Tue 27 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
+- **Owner:** Rachit (`rachitst`), taken over from Pranay on Sun 1 Nov to unblock the fraud and AI chain
+- **Start:** Tue 27 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** - (Sun 1 Nov partial: hybrid.py combiner (isotonic calibration + stacked logistic weights fitted on validation, hard-rule floors, ALLOW/STEP_UP/REVIEW/BLOCK at 30/60/85, rules-only fail-safe); test recall 0.957 at REVIEW+, FPR 0.03%; missing: fraud_events persistence is shown only when TASK-033 wires the scorer in) | **Status:** In Progress | **Risk:** Medium (depends on TASK-033)
 - **Depends on:** TASK-025 (#48, Rachit), TASK-029 (#52, Rachit), TASK-030 (#53, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-025, TASK-029, TASK-030
 - **Goal:** Combiner algorithm integrating rule triggers, supervised probability, and anomaly scores.
@@ -1026,9 +1026,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Persists feature snapshot and model version with every decision in fraud_events
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #54`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Computes unified risk score (0-100) using calibrated weights and hard-rule overrides
-  - [ ] Maps risk score to actions: ALLOW (<30), STEP_UP (30-59), REVIEW (60-84), BLOCK (>=85)
-  - [ ] Fails safe to rules-only mode if ML model is unavailable (never ALLOW-all)
+  - [x] Computes unified risk score (0-100) using calibrated weights and hard-rule overrides
+  - [x] Maps risk score to actions: ALLOW (<30), STEP_UP (30-59), REVIEW (60-84), BLOCK (>=85)
+  - [x] Fails safe to rules-only mode if ML model is unavailable (never ALLOW-all)
   - [ ] Persists feature snapshot and model version with every decision in fraud_events
 - **Definition of done (evidence):** Behavioral regression tests prove fail-safe fallback and threshold accuracy.
 - **Required checks:**
@@ -1041,9 +1041,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-032 - SHAP Explainability & Reason Code Generator
 
 - **Issue:** #55 | **Sprint:** 3 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
-- **Owner:** Pranay (`pranaysanap`)
-- **Start:** Wed 28 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
-- **Depends on:** TASK-029 (#52, Rachit), TASK-031 (#54, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Owner:** Rachit (`rachitst`), taken over from Pranay on Sun 1 Nov to unblock the fraud and AI chain
+- **Start:** Wed 28 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** - (Sun 1 Nov partial: exact TreeSHAP top-3 via LightGBM pred_contrib (p95 3.5 ms), plain-language templates, unified RULE/MODEL/ANOMALY reasons, F1-F6 reason tests; missing: customer/staff concealment is shown only when TASK-033 serves these reasons) | **Status:** In Progress | **Risk:** Medium (depends on TASK-033)
+- **Depends on:** TASK-029 (#52, Rachit), TASK-031 (#54, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-029, TASK-031
 - **Goal:** Explainability component mapping TreeSHAP feature contributions to human-readable sentences.
 - **Implementation steps:**
@@ -1055,9 +1055,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Customer-facing API responses conceal reasons while staff endpoints expose full details
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #55`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Extracts top-3 SHAP contributors for supervised model prediction in < 30ms
-  - [ ] Translates raw feature contributions to natural language analyst explanations
-  - [ ] Combines rule trigger reasons and model SHAP reasons into unified reasons array
+  - [x] Extracts top-3 SHAP contributors for supervised model prediction in < 30ms
+  - [x] Translates raw feature contributions to natural language analyst explanations
+  - [x] Combines rule trigger reasons and model SHAP reasons into unified reasons array
   - [ ] Customer-facing API responses conceal reasons while staff endpoints expose full details
 - **Definition of done (evidence):** Unit tests verify reason string generation for all scenario types F1-F6.
 - **Required checks:**
@@ -1072,7 +1072,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Issue:** #56 | **Sprint:** 3 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Core Banking & Ledger
 - **Owner:** Pranay (`pranaysanap`)
 - **Start:** Wed 28 Oct | **Target deadline:** Thu 29 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
-- **Depends on:** TASK-031 (#54, Pranay), TASK-032 (#55, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Depends on:** TASK-031 (#54, Rachit), TASK-032 (#55, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-031, TASK-032
 - **Goal:** Direct integration of HybridFraudScorer into POST /api/v1/transfers pipeline.
 - **Implementation steps:**
@@ -1252,7 +1252,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Issue:** #62 | **Sprint:** 3 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Pranay (`pranaysanap`)
 - **Start:** Fri 30 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (3.7 days of slack)
-- **Depends on:** TASK-029 (#52, Rachit), TASK-030 (#53, Rachit), TASK-031 (#54, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Depends on:** TASK-029 (#52, Rachit), TASK-030 (#53, Rachit), TASK-031 (#54, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-029, TASK-030, TASK-031
 - **Goal:** Formal evaluation report documenting model performance, PR-AUC, FPR, and synthetic limitations.
 - **Implementation steps:**
@@ -2425,7 +2425,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Issue:** #103 | **Sprint:** 6 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Pranay (`pranaysanap`)
 - **Start:** Sat 31 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Medium (1.1 days of slack before downstream work is delayed)
-- **Depends on:** TASK-031 (#54, Pranay), TASK-033 (#56, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
+- **Depends on:** TASK-031 (#54, Rachit), TASK-033 (#56, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-031, TASK-033
 - **Goal:** Strict regression test suite verifying that known fraud scenarios never score below thresholds.
 - **Implementation steps:**
@@ -3224,7 +3224,7 @@ decision in ADR-0015.
 | TASK-014 | Sujal | TASK-027 | Rachit | Mon 26 Oct | Tue 27 Oct |
 | TASK-015 | Sujal | TASK-027 | Rachit | Mon 26 Oct | Tue 27 Oct |
 | TASK-015 | Sujal | TASK-021 | Kalpak | Mon 26 Oct | Tue 27 Oct |
-| TASK-030 | Rachit | TASK-031 | Pranay | Tue 27 Oct | Tue 27 Oct |
+| TASK-030 | Rachit | TASK-031 | Rachit | Tue 27 Oct | Tue 27 Oct |
 | TASK-041 | Krishna | TASK-046 | Rachit | Sun 25 Oct | Wed 28 Oct |
 | TASK-015 | Sujal | TASK-043 | Krishna | Mon 26 Oct | Wed 28 Oct |
 | TASK-040 | Krishna | TASK-057 | Rachit | Sun 25 Oct | Wed 28 Oct |

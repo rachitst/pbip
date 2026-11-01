@@ -91,7 +91,9 @@ def test_cli_run_writes_artifacts_and_logs_to_mlflow(exported: Path, tmp_path: P
         "report.json",
         "lightgbm.txt",
         "isolation_forest.joblib",
+        "hybrid_params.json",
     }
     assert report["lightgbm"]["test"]["pr_auc"] > 0 and "holdout_seed" in report["lightgbm"]
+    assert report["hybrid"]["at_review"]["recall"] >= report["rules_only"]["at_review"]["recall"]
     run_id = log_to_mlflow(report, out, tmp_path / "mlruns")
     assert run_id and any((tmp_path / "mlruns").rglob("lightgbm.txt"))
