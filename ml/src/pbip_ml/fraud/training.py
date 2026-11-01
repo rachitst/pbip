@@ -46,7 +46,15 @@ LGBM_PARAMS: dict[str, Any] = {
 
 
 def build_dataset(transfers: pd.DataFrame, labels: pd.DataFrame) -> pd.DataFrame:
-    """Features + label per transfer. ``labels``: transaction_id, fraudulent (True = fraud leg)."""
+    """Features + label per OUTGOING transfer. ``labels``: transaction_id, fraudulent.
+
+    The API scores only outgoing transfers, so incoming rows (F6 inbound legs, F7 deposits) are
+    dropped here, the one place training and evaluation both build their rows: training on them
+    was train/serve skew (with no legitimate credits, "credit" labels itself fraud and shifted the
+    debit model - TASK-071). Features are computed on ALL rows first, because a debit's history
+    window includes the credits before it, exactly as online. The index keeps each row's position
+    in ``transfers``.
+    """
     df = transfers.reset_index(drop=True).copy()
     df["occurred_at"] = pd.to_datetime(df["occurred_at"], utc=True)
     features = offline_features(df)
@@ -61,7 +69,7 @@ def build_dataset(transfers: pd.DataFrame, labels: pd.DataFrame) -> pd.DataFrame
     )  # for the rule layer (not a model input)
     out["occurred_at"] = df["occurred_at"]
     out["label"] = df["id"].isin(fraud_ids).astype(int)
-    return out
+    return out[out["is_debit"] == 1]
 
 
 @dataclass(frozen=True)
