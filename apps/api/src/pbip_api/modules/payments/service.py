@@ -11,6 +11,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
+from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -76,6 +77,27 @@ class TransferResult:
     replayed: bool = False
 
 
+class TransferChannel(StrEnum):
+    """Where a transfer originated. Stored on ``transactions.channel`` (String(10))."""
+
+    WEB = "WEB"
+    SCHEDULED = "SCHEDULED"
+
+
+@dataclass(frozen=True, slots=True)
+class TransferExecution:
+    """Outcome of ``_execute_transfer``: nothing here has been committed yet.
+
+    ``transaction`` is the new transaction, or the ORIGINAL one when ``replayed`` is true (an
+    idempotent replay writes nothing). The caller owns the commit, and must call
+    ``PaymentsService.record_committed`` afterwards for a non-replayed execution.
+    """
+
+    outcome: TransferResult
+    transaction: Transaction
+    replayed: bool
+
+
 _PENDING_OR_DONE = (
     TransactionStatus.POSTED,
     TransactionStatus.PENDING_REVIEW,
@@ -112,14 +134,66 @@ class PaymentsService:
         meta: RequestMeta,
         device_id: UUID | None = None,
     ) -> TransferResult:
+        """Interactive transfer: one use case, one commit."""
+        execution = self._execute_transfer(
+            user_id=user_id,
+            customer=customer,
+            command=command,
+            idempotency_key=idempotency_key,
+            meta=meta,
+            device_id=device_id,
+            channel=TransferChannel.WEB,
+            interactive=True,
+        )
+        if execution.replayed:
+            return execution.outcome  # a replay wrote nothing, so there is nothing to commit
+        self.session.commit()
+        self.record_committed(execution)
+        return execution.outcome
+
+    def record_committed(self, execution: TransferExecution) -> None:
+        """Metrics and Redis counters for an execution whose transaction has been committed.
+
+        Kept out of ``_execute_transfer`` so a rolled-back attempt is never counted.
+        """
+        if execution.replayed:
+            return
+        transaction = execution.transaction
+        TRANSFERS_TOTAL.labels(transaction.status.value).inc()
+        if self.counters is not None and transaction.debit_account_id is not None:
+            self.counters.record_transfer(
+                transaction.debit_account_id, transaction.id, transaction.amount, utcnow()
+            )
+
+    def _execute_transfer(
+        self,
+        *,
+        user_id: UUID,
+        customer: Customer,
+        command: TransferCommand,
+        idempotency_key: str,
+        meta: RequestMeta | None,
+        device_id: UUID | None,
+        channel: TransferChannel,
+        interactive: bool,
+    ) -> TransferExecution:
+        """The transfer use case WITHOUT committing or rolling back.
+
+        The caller owns the transaction boundary, so a scheduled run can update its own state in
+        the same commit. ``meta`` is None for background work: nothing is invented, the IP-derived
+        signals are simply unknown and the audit row carries no IP/request id. ``interactive`` is
+        False when nobody can answer a step-up challenge: STEP_UP then becomes REVIEW.
+        """
         if command.amount_minor > self.settings.max_transfer_minor:
             raise LimitExceededError("amount exceeds the per-transfer limit")
+        ip = meta.ip if meta is not None else None
+        request_id = meta.request_id if meta is not None else None
 
         self._lock_user(user_id)
         request_hash = self._request_hash(user_id, command)
         idem_id, replay = self._begin_idempotent(user_id, idempotency_key, request_hash)
         if replay is not None:
-            return replay
+            return TransferExecution(replay, self._replayed_transaction(idem_id), True)
 
         source = get_owned_account(self.session, customer.id, command.from_account_id)
         if source.currency != command.currency:
@@ -136,8 +210,11 @@ class PaymentsService:
             initiated_by_user_id=user_id,
             payee_id=payee.id if payee else None,
             reference=command.reference,
+            channel=channel.value,
         )
 
+        # The scorer contract only knows WEB/MOBILE/API (changing it needs an ADR), so the
+        # context keeps its default channel; the real channel is on the transaction and audit row.
         result = self.scorer.score(
             TransactionContext(
                 transaction_id=transaction.id,
@@ -148,8 +225,8 @@ class PaymentsService:
                 occurred_at=utcnow(),
                 payee_id=payee.id if payee else None,
                 device_id=device_id,
-                ip_country=self.countries.country(meta.ip),
-                ip_network=ip_network(meta.ip),
+                ip_country=self.countries.country(ip),
+                ip_network=ip_network(ip),
             )
         )
         FRAUD_INFERENCE_SECONDS.observe(result.latency_ms / 1000)
@@ -158,10 +235,11 @@ class PaymentsService:
 
         decision = result.decision
         user = self.session.get(User, user_id)
-        if decision == FraudDecision.STEP_UP and (user is None or not user.mfa_enabled):
-            decision = (
-                FraudDecision.REVIEW
-            )  # cannot step up without a second factor: hold for review
+        if decision == FraudDecision.STEP_UP and (
+            not interactive or user is None or not user.mfa_enabled
+        ):
+            # cannot step up without a person and a second factor: hold for review
+            decision = FraudDecision.REVIEW
 
         if decision == FraudDecision.ALLOW:
             self._enforce_daily_limit(user_id, transaction)
@@ -188,20 +266,28 @@ class PaymentsService:
             "TRANSFER_CREATED",
             "transaction",
             str(transaction.id),
-            ip=meta.ip,
-            request_id=meta.request_id,
+            ip=ip,
+            request_id=request_id,
             details={
                 "status": transaction.status.value,
                 "decision": result.decision.value,
                 "risk_score": result.risk_score,
                 "amount_minor": transaction.amount,
+                "channel": channel.value,
             },
         )
-        self.session.commit()
-        TRANSFERS_TOTAL.labels(transaction.status.value).inc()
-        if self.counters is not None:  # after commit: a rolled-back attempt is never counted
-            self.counters.record_transfer(source.id, transaction.id, transaction.amount, utcnow())
-        return outcome
+        return TransferExecution(outcome, transaction, False)
+
+    def _replayed_transaction(self, idem_id: UUID) -> Transaction:
+        row = self.session.get(IdempotencyKey, idem_id)
+        transaction = (
+            self.session.get(Transaction, row.transaction_id)
+            if row is not None and row.transaction_id is not None
+            else None
+        )
+        if transaction is None:
+            raise RuntimeError("idempotent replay without its transaction")
+        return transaction
 
     # ---------------------------------------------------------------- idempotency
     @staticmethod
