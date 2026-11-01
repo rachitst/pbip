@@ -45,7 +45,7 @@ class BillPaymentOut(BaseModel):
     consumer_reference: str
     amount_minor: int
     currency: str
-    status: Literal["POSTED", "DECLINED", "REVERSED"]
+    status: Literal["POSTED", "PENDING_REVIEW", "DECLINED", "REVERSED"]
     reference: str
     new_balance_minor: int
     created_at: datetime

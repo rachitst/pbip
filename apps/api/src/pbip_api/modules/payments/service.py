@@ -8,6 +8,7 @@ safely retry with the same Idempotency-Key.
 
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -409,7 +410,10 @@ class PaymentsService:
         release: bool,
         note: str | None,
         meta: RequestMeta,
+        settle_other: Callable[[Session, Transaction], bool] | None = None,
     ) -> None:
+        """Resolve an alert. ``settle_other`` lets another module (bill payments) mirror the
+        outcome on its own record in this same transaction; it returns True if it did."""
         alert = self.session.execute(
             select(FraudAlert)
             .where(FraudAlert.id == alert_id)
@@ -440,7 +444,8 @@ class PaymentsService:
         alert.assigned_to_user_id = analyst_id
         alert.resolved_at = utcnow()
 
-        if transaction.initiated_by_user_id is not None:
+        handled = settle_other is not None and settle_other(self.session, transaction)
+        if transaction.initiated_by_user_id is not None and not handled:
             self._enqueue(
                 notifications.TRANSFER_POSTED
                 if transaction.status == TransactionStatus.POSTED
