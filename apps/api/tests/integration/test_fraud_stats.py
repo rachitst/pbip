@@ -15,7 +15,7 @@ from pbip_ml.fraud.contract import FraudDecision
 from pbip_ml.fraud.testing import FixedDecisionScorer
 from pbip_test_support import Actor, age_payee
 from redis import Redis
-from sqlalchemy import Engine
+from sqlalchemy import Engine, text
 
 pytestmark = pytest.mark.integration
 
@@ -133,3 +133,32 @@ def test_stats_are_cached_for_60_seconds_and_survive_redis_down(
     app.dependency_overrides[get_redis] = lambda: down
     fresh = client.get("/api/v1/fraud/stats", headers=analyst.headers)
     assert fresh.status_code == 200 and fresh.json()["scored"] == first["scored"] + 1
+
+
+def test_stats_only_count_events_inside_the_lookback_window(
+    client: TestClient,
+    make_staff: Callable[..., Actor],
+    migrated_engine: Engine,
+    traffic: dict[str, Any],
+) -> None:
+    """Every aggregate honours ``days``: totals, trend, rule counts and risky payees alike."""
+    with migrated_engine.begin() as connection:  # the rule-flagged and the BLOCKed decision
+        connection.execute(
+            text(
+                "UPDATE fraud_events SET created_at = now() - interval '10 days' "
+                "WHERE decision IN ('STEP_UP', 'BLOCK')"
+            )
+        )
+    analyst = make_staff(RoleName.FRAUD_ANALYST)
+    week = client.get("/api/v1/fraud/stats?days=7", headers=analyst.headers).json()
+    assert week["scored"] == 2
+    assert week["totals"] == {"ALLOW": 2, "STEP_UP": 0, "REVIEW": 0, "BLOCK": 0}
+    assert week["block_rate"] == 0.0
+    assert sum(d["STEP_UP"] + d["BLOCK"] for d in week["by_day"]) == 0
+    assert "NEW_PAYEE_LARGE_AMOUNT" not in {r["code"] for r in week["top_rules"]}
+    assert week["risky_payees"] == []
+    month = client.get("/api/v1/fraud/stats?days=30", headers=analyst.headers).json()
+    assert month["scored"] == 4 and month["totals"]["BLOCK"] == 1
+    assert len(month["by_day"]) == len(week["by_day"]) + 1
+    assert "NEW_PAYEE_LARGE_AMOUNT" in {r["code"] for r in month["top_rules"]}
+    assert len(month["risky_payees"]) == 1
