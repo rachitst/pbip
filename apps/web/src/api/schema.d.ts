@@ -673,6 +673,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fraud/monitoring": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Security monitoring: high-risk customers, open alerts, login anomalies, fraud events
+         * @description UC-13 dashboard data (TASK-099), cached in Redis for 60 seconds.
+         */
+        get: operations["get_monitoring_api_v1_fraud_monitoring_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fraud/stats": {
         parameters: {
             query?: never;
@@ -1885,6 +1905,53 @@ export interface components {
              */
             window_months: number;
         };
+        /** FlaggedEvent */
+        FlaggedEvent: {
+            /** Alert Id */
+            alert_id: string | null;
+            /** Alert Status */
+            alert_status: string | null;
+            /** Amount Minor */
+            amount_minor: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Customer Id
+             * Format: uuid
+             */
+            customer_id: string;
+            /** Decision */
+            decision: string;
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /** Reason Codes */
+            reason_codes: string[];
+            /** Risk Score */
+            risk_score: number;
+        };
+        /** FraudEventsPanel */
+        FraudEventsPanel: {
+            /**
+             * Last 24H
+             * @description REVIEW and BLOCK decisions in 24 hours
+             */
+            last_24h: {
+                [key: string]: number;
+            };
+            /**
+             * Latest
+             * @description The ten newest flagged decisions
+             */
+            latest: components["schemas"]["FlaggedEvent"][];
+        };
         /** FraudStats */
         FraudStats: {
             /** Block Rate */
@@ -1963,6 +2030,35 @@ export interface components {
              */
             weight_percentage: number;
         };
+        /** HighRiskCustomer */
+        HighRiskCustomer: {
+            /**
+             * Alert Id
+             * @description Alert to open: newest open one, else newest
+             */
+            alert_id: string | null;
+            /** Blocked */
+            blocked: number;
+            /**
+             * Customer Id
+             * Format: uuid
+             */
+            customer_id: string;
+            /**
+             * Flagged Events
+             * @description REVIEW/BLOCK decisions, or decisions that opened an alert
+             */
+            flagged_events: number;
+            /**
+             * Last Flagged At
+             * Format: date-time
+             */
+            last_flagged_at: string;
+            /** Max Risk */
+            max_risk: number;
+            /** Open Alerts */
+            open_alerts: number;
+        };
         /** InstalmentOut */
         InstalmentOut: {
             /** Balance After Minor */
@@ -2010,6 +2106,19 @@ export interface components {
             /** Tenures Months */
             tenures_months: number[];
         };
+        /** Lockout */
+        Lockout: {
+            /**
+             * Locked At
+             * Format: date-time
+             */
+            locked_at: string;
+            /**
+             * User Id
+             * @description None if the user was deleted since
+             */
+            user_id: string | null;
+        };
         /** LockoutStatusOut */
         LockoutStatusOut: {
             /** Failed Login Count */
@@ -2020,6 +2129,50 @@ export interface components {
             last_failure_at: string | null;
             /** Locked Until */
             locked_until: string | null;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /** LoginAnomalies */
+        LoginAnomalies: {
+            /**
+             * Burst Threshold
+             * @description Failed sign-ins in the window that make a burst
+             */
+            burst_threshold: number;
+            /** Bursts */
+            bursts: components["schemas"]["LoginBurst"][];
+            /**
+             * Counts
+             * @description Security events in the window, by type
+             */
+            counts: {
+                [key: string]: number;
+            };
+            /**
+             * Recent Lockouts
+             * @description The ten newest ACCOUNT_LOCKED events
+             */
+            recent_lockouts: components["schemas"]["Lockout"][];
+            /**
+             * Unknown Account Failures
+             * @description Failed sign-ins for unknown emails
+             */
+            unknown_account_failures: number;
+            /** Window Hours */
+            window_hours: number;
+        };
+        /** LoginBurst */
+        LoginBurst: {
+            /** Failures */
+            failures: number;
+            /**
+             * Last Failure At
+             * Format: date-time
+             */
+            last_failure_at: string;
             /**
              * User Id
              * Format: uuid
@@ -2155,6 +2308,23 @@ export interface components {
              */
             unread_count: number;
         };
+        /** OldestOpenAlert */
+        OldestOpenAlert: {
+            /**
+             * Alert Id
+             * Format: uuid
+             */
+            alert_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Risk Score */
+            risk_score: number;
+            /** Severity */
+            severity: string;
+        };
         /** OpenAccountRequest */
         OpenAccountRequest: {
             account_type: components["schemas"]["OpenAccountType"];
@@ -2166,6 +2336,30 @@ export interface components {
          * @enum {string}
          */
         OpenAccountType: "SAVINGS" | "CHECKING" | "CURRENT";
+        /** OpenAlertsPanel */
+        OpenAlertsPanel: {
+            /**
+             * By Severity
+             * @description Open alerts per severity (MEDIUM, HIGH)
+             */
+            by_severity: {
+                [key: string]: number;
+            };
+            /**
+             * Oldest
+             * @description The five longest-waiting open alerts
+             */
+            oldest: components["schemas"]["OldestOpenAlert"][];
+            /**
+             * Oldest Open Age Seconds
+             * @description Age of the oldest open alert
+             */
+            oldest_open_age_seconds: number | null;
+            /** Oldest Open At */
+            oldest_open_at: string | null;
+            /** Total */
+            total: number;
+        };
         /**
          * PageDirection
          * @enum {string}
@@ -2385,6 +2579,24 @@ export interface components {
             count: number;
             /** Source */
             source: string | null;
+        };
+        /**
+         * SecurityMonitoring
+         * @description UC-13 panels. Identifiers and aggregates only: no names, emails, account numbers or IPs.
+         */
+        SecurityMonitoring: {
+            fraud_events: components["schemas"]["FraudEventsPanel"];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** High Risk Customers */
+            high_risk_customers: components["schemas"]["HighRiskCustomer"][];
+            /** High Risk Window Days */
+            high_risk_window_days: number;
+            login_anomalies: components["schemas"]["LoginAnomalies"];
+            open_alerts: components["schemas"]["OpenAlertsPanel"];
         };
         /**
          * SpendingBreakdownResponse
@@ -3938,6 +4150,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_monitoring_api_v1_fraud_monitoring_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityMonitoring"];
                 };
             };
         };
