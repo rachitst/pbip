@@ -18,6 +18,7 @@ export type ChainStatusOut = components["schemas"]["ChainStatusOut"];
 export type AlertSummary = components["schemas"]["AlertSummary"];
 export type AlertDetail = components["schemas"]["AlertDetail"];
 export type FraudStats = components["schemas"]["FraudStats"];
+export type SecurityMonitoring = components["schemas"]["SecurityMonitoring"];
 export type SpendingBreakdownResponse = components["schemas"]["SpendingBreakdownResponse"];
 export type CustomerInsightsListResponse = components["schemas"]["CustomerInsightsListResponse"];
 export type CustomerInsightItem = components["schemas"]["CustomerInsightItem"];
@@ -244,6 +245,7 @@ export const api = {
       body: JSON.stringify({ action, note: note.trim() === "" ? null : note.trim() }),
     }),
   fraudStats: (days: number) => apiFetch<FraudStats>(`/api/v1/fraud/stats?days=${days}`),
+  securityMonitoring: () => apiFetch<SecurityMonitoring>("/api/v1/fraud/monitoring"),
   spendingBreakdown: (accountId: string, year?: number, month?: number) => {
     const params = new URLSearchParams({ account_id: accountId });
     if (year !== undefined) params.set("year", String(year));

@@ -18,6 +18,7 @@ import { FraudQueue } from "../pages/staff/FraudQueue";
 import { canReviewFraud } from "../pages/staff/fraudFormat";
 import { RMInsights } from "../pages/staff/RMInsights";
 import { canAccessRMInsights } from "../pages/staff/rmInsightsFormat";
+import { SecurityMonitoring } from "../pages/staff/SecurityMonitoring";
 import { StaffHome } from "../pages/staff/StaffHome";
 import { Alert } from "../ui/Alert";
 import { ErrorState, LoadingState } from "../ui/States";
@@ -43,7 +44,10 @@ function customerNav(me: UserOut): NavItem[] {
 /** Staff tools are added here by their tasks (TASK-036, TASK-048, ...), each filtered by role. */
 function staffNav(me: UserOut): NavItem[] {
   const items: NavItem[] = [{ to: "/staff", label: "Overview", end: true }];
-  if (canReviewFraud(me)) items.push({ to: "/staff/fraud", label: "Fraud alerts" });
+  if (canReviewFraud(me)) {
+    items.push({ to: "/staff/monitoring", label: "Security monitoring" });
+    items.push({ to: "/staff/fraud", label: "Fraud alerts" });
+  }
   if (canAccessRMInsights(me)) items.push({ to: "/staff/insights", label: "RM Insights" });
   if (me.roles.includes("COMPLIANCE_OFFICER") || me.roles.includes("ADMIN")) {
     items.push({ to: "/staff/audit-log", label: "Audit log" });
@@ -188,6 +192,7 @@ export const routes: RouteObject[] = [
           { path: "audit-log", element: <AuditLog /> },
           { path: "fraud", element: <FraudQueue /> },
           { path: "fraud/:alertId", element: <FraudAlert /> },
+          { path: "monitoring", element: <SecurityMonitoring /> },
           { path: "insights", element: <RMInsights /> },
         ],
       },
