@@ -48,7 +48,7 @@ Last reviewed against `main` on 2026-10-30 (local verification run recorded in
 | Wealth: fixed deposits, mutual funds, stocks and bonds | Missing | 063, 064, 065 (Todo) | |
 | Wealth: insurance products | Missing | **096 #179 (new)** | No task covered insurance |
 | Wealth: product comparison | Missing | **098 #181 (new)** | No task covered comparison |
-| Fraud monitoring dashboard | Missing (UI) | 035 #58, 036 #59 (Todo) | |
+| Fraud monitoring dashboard | Partial (API verified) | 035 #58 (Done: `GET /api/v1/fraud/stats`, analyst+MFA, 60 s Redis cache, `test_fraud_stats.py`), 036 #59 (Done: `/staff/fraud` queue and alert detail with plain-language reasons and SHAP bars, release/reject) | Stats charts not in the UI yet (TASK-099 dashboard) |
 | Behavioural analytics dashboard: segmentation, spend patterns, product affinity, engagement | Partial (segmentation API) | 044 (Done), 056 #79, 066 #89 (Todo), **101 #184 (new)** | Product affinity and engagement metrics had no task |
 | Compliance and risk dashboard: audit history, system alerts, exceptions, regulatory monitoring | Partial (audit API) | 048 #71 (Todo), **100 #183 (new)** | Alerts, exception management and monitoring had no task |
 

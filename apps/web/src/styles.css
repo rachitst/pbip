@@ -1248,3 +1248,63 @@ a {
     justify-content: center;
   }
 }
+
+/* Fraud analyst views (TASK-036) */
+.filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.fraud-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  align-items: start;
+}
+.fraud-stack {
+  display: grid;
+  gap: var(--space-4);
+}
+@media (max-width: 760px) {
+  .fraud-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.reason-list {
+  list-style: none;
+  margin: var(--space-3) 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.reason__head {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.reason__bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+}
+/* Panels inside the analyst views sit in a grid: no centring, no width cap. */
+.fraud-panel {
+  max-width: none;
+  margin: 0;
+}
+.fraud-panel h2 {
+  margin-top: 0;
+}
+.fraud-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.fraud-decision {
+  margin-top: var(--space-4);
+}

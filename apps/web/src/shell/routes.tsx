@@ -13,6 +13,9 @@ import { Accounts } from "../pages/Accounts";
 import { NotFound } from "../pages/NotFound";
 import { Profile } from "../pages/Profile";
 import { AuditLog } from "../pages/staff/AuditLog";
+import { FraudAlert } from "../pages/staff/FraudAlert";
+import { FraudQueue } from "../pages/staff/FraudQueue";
+import { canReviewFraud } from "../pages/staff/fraudFormat";
 import { StaffHome } from "../pages/staff/StaffHome";
 import { Alert } from "../ui/Alert";
 import { ErrorState, LoadingState } from "../ui/States";
@@ -38,6 +41,7 @@ function customerNav(me: UserOut): NavItem[] {
 /** Staff tools are added here by their tasks (TASK-036, TASK-048, ...), each filtered by role. */
 function staffNav(me: UserOut): NavItem[] {
   const items: NavItem[] = [{ to: "/staff", label: "Overview", end: true }];
+  if (canReviewFraud(me)) items.push({ to: "/staff/fraud", label: "Fraud alerts" });
   if (me.roles.includes("COMPLIANCE_OFFICER") || me.roles.includes("ADMIN")) {
     items.push({ to: "/staff/audit-log", label: "Audit log" });
   }
@@ -179,6 +183,8 @@ export const routes: RouteObject[] = [
         children: [
           { index: true, element: <StaffHome /> },
           { path: "audit-log", element: <AuditLog /> },
+          { path: "fraud", element: <FraudQueue /> },
+          { path: "fraud/:alertId", element: <FraudAlert /> },
         ],
       },
       { path: "*", element: <OutsideArea /> },
