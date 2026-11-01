@@ -2120,7 +2120,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #92 | **Sprint:** 5 | **Priority:** should | **Size:** S (0.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Fri 30 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (3.9 days of slack)
+- **Start:** Fri 30 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** Sun 1 Nov (#289, 0af8016: dashboards as code incl. p50/p95/p99 per route template and the four fraud decisions, alert rules in infra/prometheus/alerts.yml; every panel rendered data on a running compose stack with the monitoring profile, laptop) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-035 (#58, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-035
 - **Goal:** Provisioned Grafana dashboards tracking API throughput, latency percentiles, and fraud decisions.
@@ -2367,7 +2367,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #101 | **Sprint:** 6 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (4.0 days of slack)
+- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (suite merged in #288, 4c5d2d5; laptop: 0% errors, 0 deadlocks/overdrafts, money conserved; NOT met: p95 within budget and 10,000 requests in one run on the 2-CPU laptop, staging #198) | **Status:** In Progress | **Risk:** High (needs staging hardware)
 - **Depends on:** TASK-012 (#23, Rachit), TASK-033 (#56, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-033
 - **Goal:** Load testing suite verifying p95 latency < 500ms under 500 concurrent virtual users.
@@ -2396,7 +2396,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #102 | **Sprint:** 6 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Fri 30 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (4.0 days of slack)
+- **Start:** Fri 30 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (indexes + pool settings merged in #288, 4c5d2d5; fraud-feature query 4.46 -> 0.54 ms under load, 76.6 -> 0.26 ms at 500k rows; NOT met: DB p95 < 15 ms at 200 connections, not measurable on the laptop) | **Status:** In Progress | **Risk:** High (needs staging hardware)
 - **Depends on:** TASK-078 (#101, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-078
 - **Goal:** PostgreSQL query profiling and connection pool tuning eliminating slow queries.
@@ -2515,7 +2515,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #106 | **Sprint:** 6 | **Priority:** could | **Size:** M (1.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Wed 28 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (6.0 days of slack)
+- **Start:** Wed 28 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** Sun 1 Nov (#293, 91bf750: gpg-encrypted pg_dump with manifest, restore drill into a temporary DB; drill on the laptop matched 39 tables/775,226 rows, ledger totals and the 151-row audit chain; tampering rejected) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-001 (#12, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Parallel: can start immediately
 - **Goal:** Automated script performing PostgreSQL pg_dump with encryption and automated restore test.
@@ -2708,7 +2708,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #113 | **Sprint:** 7 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Identity & Core Banking
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Sun 01 Nov | **Target deadline:** Sun 01 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (2.0 days of slack)
+- **Start:** Sun 01 Nov | **Target deadline:** Sun 01 Nov | **Actual completion:** Sun 1 Nov (#290, 1690365: Bandit 0 high/medium, pip-audit clean, npm production 0, gitleaks over all refs 16 false positives, audit chain valid; OWASP ZAP baseline 6 WARN -> 0 after the CORP/COEP fix; nightly dast.yml; report docs/security/security-audit-2026-11.md) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-067 (#90, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-067
 - **Goal:** Comprehensive pre-ship security verification pass ensuring flawless compliance.
@@ -3051,7 +3051,7 @@ decision in ADR-0015.
 
 - **Issue:** #185 | **Sprint:** unscheduled | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (merged in #288, 4c5d2d5; laptop browser: page loads 913-1,665 ms, login 2,102 ms, all within budget; API p95 budget not met under 50 VUs on the laptop; first nightly perf.yml run on a GitHub runner pending) | **Status:** In Progress | **Risk:** Medium
 - **Depends on:** TASK-012 (#23, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **Goal:** Measured evidence for the section 8 targets: page load < 2 s, API response < 500 ms, login < 3 s.
@@ -3078,7 +3078,7 @@ decision in ADR-0015.
 
 - **Issue:** #186 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (mechanism merged in #289, 0af8016: blackbox probes, 30-day availability rule, AvailabilityBelow99, error tracking in Loki; NOT met: one week on a deployed test environment, #198) | **Status:** In Progress | **Risk:** High (no staging host)
 - **Depends on:** TASK-082 (#105, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **Goal:** Evidence for '99% availability in test environment' and 'error tracking' (section 8).
