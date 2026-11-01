@@ -1,5 +1,6 @@
 """TASK-029/030: time split, LightGBM and Isolation Forest on labelled synthetic data."""
 
+import time
 from pathlib import Path
 
 import numpy as np
@@ -71,7 +72,8 @@ def test_isolation_forest_scores_are_normalised_explained_and_fast(dataset: pd.D
     worst = split.test.iloc[[int(np.argmax(scores))]]
     reason = anomaly.explain(worst.iloc[0])
     assert reason.split(" is ")[0] in t.ANOMALY_FEATURES and "usually about" in reason
-    assert t.single_prediction_ms(anomaly.score, worst, repeats=50)["p95_ms"] < 25
+    cpu = t.single_prediction_ms(anomaly.score, worst, repeats=50, clock=time.process_time)
+    assert cpu["p95_ms"] < 25
 
 
 def test_training_is_deterministic(dataset: pd.DataFrame) -> None:

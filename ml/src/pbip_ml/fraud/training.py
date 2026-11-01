@@ -205,13 +205,19 @@ def train_isolation_forest(split: Split, seed: int = 42) -> AnomalyModel:
     )
 
 
-def single_prediction_ms(fn: Any, row: pd.DataFrame, repeats: int = 200) -> dict[str, float]:
-    """p50/p95 latency of scoring ONE row in memory (what the request path would do)."""
+def single_prediction_ms(
+    fn: Any, row: pd.DataFrame, repeats: int = 200, clock: Any = time.perf_counter
+) -> dict[str, float]:
+    """p50/p95 latency of scoring ONE row in memory (what the request path would do).
+
+    Reports use wall time (``perf_counter``). Tests pass ``time.process_time`` - this process's
+    CPU time - so a busy machine running other test workers cannot make them flaky.
+    """
     timings = []
     for _ in range(repeats):
-        started = time.perf_counter()
+        started = clock()
         fn(row)
-        timings.append((time.perf_counter() - started) * 1000)
+        timings.append((clock() - started) * 1000)
     timings.sort()
     return {
         "p50_ms": round(timings[len(timings) // 2], 3),
