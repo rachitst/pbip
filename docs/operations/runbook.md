@@ -452,10 +452,9 @@ A fraud analyst, compliance officer or admin credential, TOTP secret, device or 
 (reports of actions the person did not take, `TOKEN_REUSE_DETECTED` on their user, logins from an unknown IP, admin
 unlocks they do not recognise, audit entries they deny).
 
-**Facts that shape the response** (from the code; threat model §5): access JWTs are validated by signature only — the
-API does not consult the database on each request (`auth/dependencies.py`) — so disabling a user stops their
-*refresh* and *login* immediately but a stolen access token keeps working until it expires (default 15 min,
-`JWT_ACCESS_TTL_MINUTES`). Refresh tokens live in `refresh_tokens` and can be revoked server-side. Staff routes also
+**Facts that shape the response** (from the code; threat model §5): every request with an access JWT checks the
+user's `status` and `token_version` in the database (ADR-0021, `auth/dependencies.py`), so disabling a user stops
+login, refresh **and** their outstanding access tokens on the next request. Refresh tokens live in `refresh_tokens` and can be revoked server-side. Staff routes also
 require `amr: otp`, so a stolen password alone is not enough; a stolen *session* is.
 
 **Steps.**
@@ -471,12 +470,13 @@ require `amr: otp`, so a stolen password alone is not enough; a stolen *session*
    UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = '<user_id>' AND revoked_at IS NULL;
    COMMIT;
    ```
-   Login and refresh now fail for this user (`UserStatus.DISABLED` is checked on both paths). Confirm:
+   Login, refresh **and every request with an existing access token** now fail for this user (`UserStatus.DISABLED`
+   is checked on all three paths; access tokens since ADR-0021). Confirm:
    `SELECT status FROM users WHERE id='<user_id>'; SELECT count(*) FROM refresh_tokens WHERE user_id='<user_id>' AND revoked_at IS NULL;` → `DISABLED`, `0`.
-3. **Bound the remaining exposure.** The attacker's current access token works for up to `JWT_ACCESS_TTL_MINUTES`
-   more. During that window, watch the audit log for the actor: `SELECT seq, created_at, action, resource_type, resource_id FROM audit_logs WHERE actor_user_id='<user_id>' AND created_at > now() - interval '30 minutes' ORDER BY seq;`
-4. **Kill switch when the window is unacceptable** (admin account, money-movement decisions in progress, or any
-   doubt): rotate `JWT_SECRET` now (§3.1). This invalidates *every* access token platform-wide within one rollout;
+3. **Confirm the session is dead.** A request with the attacker's token now returns 401 (ADR-0021). Watch the audit log
+   for anything the actor did before containment: `SELECT seq, created_at, action, resource_type, resource_id FROM audit_logs WHERE actor_user_id='<user_id>' AND created_at > now() - interval '30 minutes' ORDER BY seq;`
+4. **Kill switch** (only if the database check itself is in doubt, for example the users table was tampered with):
+   rotate `JWT_SECRET` now (§3.1). This invalidates *every* access token platform-wide within one rollout;
    other users recover transparently through refresh, the disabled user cannot.
 5. **Review what was done with the session.** Walk the exported `audit_logs`: fraud decisions (`RELEASE` of held
    transfers), admin unlocks, user creations. Reverse what can be reversed through the normal paths (a released
