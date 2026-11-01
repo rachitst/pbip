@@ -413,3 +413,18 @@ def test_up_waits_for_healthy_services(capsys: pytest.CaptureFixture[str]) -> No
         dev_mod.cmd_up_all([])
         assert "--wait" in mock_run.call_args[0][0]
     assert "http://localhost:8080" in capsys.readouterr().out
+
+
+def test_promotion_commands_default_to_the_trained_export_and_the_served_directory() -> None:
+    """TASK-038: promote-model measures the newest run on data/fraud; fraud-champion writes
+    models/fraud, the directory the API loads at startup. Arguments replace the defaults."""
+    with patch("scripts.dev._run", return_value=0) as mock_run:
+        dev_mod.cmd_promote_model([])
+        cmd = mock_run.call_args[0][0]
+        assert cmd[-5:-2] == ["pbip_ml.fraud.promotion", "promote", "--latest-run"]
+        assert cmd[-2:] == ["--data", str(dev_mod.ROOT / "data" / "fraud")]
+        dev_mod.cmd_fraud_champion([])
+        cmd = mock_run.call_args[0][0]
+        assert cmd[-3:] == ["export-champion", "--out", str(dev_mod.ROOT / "models" / "fraud")]
+        dev_mod.cmd_promote_model(["--run-id", "abc", "--data", "d"])
+        assert mock_run.call_args[0][0][-5:] == ["promote", "--run-id", "abc", "--data", "d"]

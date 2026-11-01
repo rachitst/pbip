@@ -407,6 +407,22 @@ def cmd_fraud_model(args: list[str]) -> int:
     )  # fmt: skip
 
 
+def cmd_promote_model(args: list[str]) -> int:
+    """Measure a fraud training run and promote it to ``champion`` if it passes the gate (TASK-038).
+
+    Default: the newest run in the ``pbip-fraud`` experiment, measured on ``data/fraud`` (the export
+    ``fraud-model`` trains on). Arguments replace the defaults (``--run-id``, ``--holdout``, gates).
+    """
+    rest = args or ["--latest-run", "--data", str(ROOT / "data" / "fraud")]
+    return _run(["uv", "run", "python", "-m", "pbip_ml.fraud.promotion", "promote", *rest])
+
+
+def cmd_fraud_champion(args: list[str]) -> int:
+    """Copy the registry's ``champion`` into ``models/fraud`` (checksums verified) for the API."""
+    rest = args or ["--out", str(ROOT / "models" / "fraud")]
+    return _run(["uv", "run", "python", "-m", "pbip_ml.fraud.promotion", "export-champion", *rest])
+
+
 def cmd_notebooks(args: list[str]) -> int:
     """Execute ml/notebooks/*.ipynb head-to-tail and save outputs (``--check`` to only verify)."""
     return _run(["uv", "run", "python", "scripts/run_notebooks.py", *args])
@@ -791,6 +807,8 @@ COMMANDS = {
     "notebooks": "Execute the EDA notebooks head-to-tail (--check: verify only)",
     "datagen": "Generate + COPY-load the synthetic ML dataset (seed 42, 1,000 customers)",
     "fraud-model": "Train the fraud models into models/fraud (needed for FRAUD_SCORER=hybrid)",
+    "promote-model": "Measure the newest fraud run; promote it to MLflow 'champion' if it passes",
+    "fraud-champion": "Export the MLflow 'champion' fraud model into models/fraud (for the API)",
     "dev-api": "Run FastAPI backend on :8000 with auto-reload",
     "dev-worker": "Run Celery worker + beat (Windows: solo pool, beat as a second process)",
     "dev-web": "Run Vite React frontend on :5173",

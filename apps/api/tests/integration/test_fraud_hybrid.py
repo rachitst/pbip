@@ -265,15 +265,23 @@ def test_bill_payments_get_the_same_hybrid_score(
 
 # --------------------------------------------------------------------------- real artifacts
 @pytest.fixture(scope="session")
-def model_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Train the real pipeline on a small labelled export (seeded) and write the artifacts."""
+def fraud_data(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A small labelled export (seeded)."""
     from pbip_datagen.__main__ import _export_fraud
     from pbip_datagen.generator import GeneratorConfig
+
+    data = tmp_path_factory.mktemp("fraud-data")
+    _export_fraud(GeneratorConfig(seed=42, customers=600, months=4), data)
+    return data
+
+
+@pytest.fixture(scope="session")
+def model_dir(tmp_path_factory: pytest.TempPathFactory, fraud_data: Path) -> Path:
+    """Train the real pipeline on the small export and write the artifacts."""
     from pbip_ml.fraud.train import run
 
-    data, out = tmp_path_factory.mktemp("fraud-data"), tmp_path_factory.mktemp("fraud-model")
-    _export_fraud(GeneratorConfig(seed=42, customers=600, months=4), data)
-    run(data, out)
+    out = tmp_path_factory.mktemp("fraud-model")
+    run(fraud_data, out)
     return out
 
 
@@ -338,3 +346,39 @@ def test_a_broken_model_stack_never_stops_the_api_from_starting(
     from pbip_api.main import create_app
 
     assert create_app(configured).state.fraud_engine is None  # the app still builds
+
+
+def test_champion_exported_from_the_registry_is_what_the_api_loads_at_startup(
+    settings: Settings,
+    fraud_data: Path,
+    model_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """TASK-038: training run -> measured gate -> MLflow 'champion' -> export-champion -> the API's
+    unchanged startup loader (checksums verified) serves it. The API itself never calls MLflow."""
+    import json
+
+    import mlflow
+    from pbip_api.main import create_app
+    from pbip_ml.fraud.promotion import MetricsGate, export_champion, promote
+    from pbip_ml.fraud.train import log_to_mlflow
+    from pbip_ml.tracking import TRACKING_URI_ENV, ensure_experiment, local_target
+
+    target = local_target(tmp_path / "mlflow")
+    ensure_experiment("pbip-fraud", target)
+    monkeypatch.setenv(TRACKING_URI_ENV, target.uri)
+    previous = mlflow.get_tracking_uri()
+    served = tmp_path / "models" / "fraud"
+    try:
+        report = json.loads((model_dir / "report.json").read_text(encoding="utf-8"))
+        run_id = log_to_mlflow(report, model_dir, tmp_path / "mlflow")
+        gate = MetricsGate(min_pr_auc=0.6, max_latency_p95_ms=1_000.0)
+        result = promote(target.uri, run_id, fraud_data, gate=gate, latency_calls=20)
+        assert result.promoted and result.champion_version == result.version
+        export_champion(target.uri, served)
+    finally:
+        mlflow.set_tracking_uri(previous)
+    configured = settings.model_copy(update={"fraud_model_dir": str(served)})
+    engine = create_app(configured).state.fraud_engine
+    assert engine is not None and engine.params.model_version == "hybrid-lgbm-iforest-1"
