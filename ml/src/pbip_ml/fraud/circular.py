@@ -2,12 +2,21 @@
 
 Detects circular fund loops between mule accounts using directed transaction graphs
 and NetworkX. Evaluates simple directed cycles of length 3-5 with high funds retention
-(strictly > 90%), and produces risk score boosts for participating accounts.
+(strictly > 90%), verifying causal temporal progression and flow compatibility.
 
 Architecture:
 - Pure graph analysis operating on directed fund movements.
 - Bounded to `pbip_ml.fraud` without depending on the API monolith (import-linter contract).
 - Deterministic, side-effect free, and auditable.
+
+Limitation & Provenance Notice:
+In retail banking, account balances are fungible liabilities. The Transfer contract does not
+carry cryptographic coin provenance or parent transaction IDs linking incoming credits to
+outgoing debits. This module implements Causal Temporal Progression and Flow Compatibility
+(CTP-FC): it verifies that funds could causally circulate by checking strict forward temporal
+ordering (t_in <= t_out across consecutive hops), maximum hop delays, and amount retention
+compatibility across the cycle. It does not prove that funds were not commingled with other
+account balance.
 """
 
 from collections import defaultdict
@@ -23,8 +32,18 @@ from pbip_datagen.fraud import Transfer
 DEFAULT_MIN_CYCLE_LENGTH = 3
 DEFAULT_MAX_CYCLE_LENGTH = 5
 DEFAULT_MIN_RETENTION = 0.90
+DEFAULT_MAX_HOP_DELAY = timedelta(days=7)
 DEFAULT_RISK_BOOST = 35
 MAX_SCORE = 100
+
+
+@dataclass(frozen=True, slots=True)
+class EdgeTransfer:
+    """Individual transfer recorded along a directed graph edge."""
+
+    id: UUID
+    amount_minor: int
+    occurred_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,8 +59,21 @@ class CycleEdge:
 
 
 @dataclass(frozen=True, slots=True)
+class CausalFlowResult:
+    """Evidence of causally ordered, amount-compatible fund movement around a cycle."""
+
+    is_valid: bool
+    retention_ratio: float
+    bottleneck_minor: int
+    peak_minor: int
+    start_node: UUID
+    chronological_tx_ids: tuple[UUID, ...]
+    hop_timestamps: tuple[datetime, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class CircularLoop:
-    """A detected simple cycle in the transaction graph satisfying length and retention criteria."""
+    """A detected simple cycle in the transaction graph satisfying causal flow and retention."""
 
     nodes: tuple[UUID, ...]
     length: int
@@ -50,6 +82,8 @@ class CircularLoop:
     peak_minor: int
     transaction_ids: tuple[UUID, ...]
     edges: tuple[CycleEdge, ...]
+    chronological_start_node: UUID
+    hop_timestamps: tuple[datetime, ...]
 
     @property
     def node_set(self) -> frozenset[UUID]:
@@ -126,11 +160,15 @@ def _add_edge_record(
     occurred_at: datetime,
     tx_id: UUID,
 ) -> None:
-    """Add or accumulate a directed transaction along edge src -> tgt."""
+    """Add or accumulate a directed transaction along edge src -> tgt with replay prevention."""
+    tx_entry = EdgeTransfer(id=tx_id, amount_minor=amt, occurred_at=occurred_at)
     if graph.has_edge(src, tgt):
         edge_data = graph[src][tgt]
+        if tx_id in edge_data["transaction_ids"]:
+            return  # Duplicate transaction replay protection
         edge_data["amount_minor"] += amt
         edge_data["transaction_ids"].append(tx_id)
+        edge_data["transfers"].append(tx_entry)
         if occurred_at < edge_data["first_occurred_at"]:
             edge_data["first_occurred_at"] = occurred_at
         if occurred_at > edge_data["last_occurred_at"]:
@@ -141,6 +179,7 @@ def _add_edge_record(
             tgt,
             amount_minor=amt,
             transaction_ids=[tx_id],
+            transfers=[tx_entry],
             first_occurred_at=occurred_at,
             last_occurred_at=occurred_at,
         )
@@ -197,11 +236,164 @@ def _normalize_cycle(cycle: Sequence[UUID]) -> tuple[UUID, ...]:
     return tup[min_idx:] + tup[:min_idx]
 
 
+def _find_single_tx_causal_path(
+    leg_transfers: list[list[EdgeTransfer]],
+    max_hop_delay: timedelta,
+    min_retention: float,
+) -> tuple[float, int, int, list[UUID], list[datetime]] | None:
+    """Search for a single-transfer chronological path forward in time across legs."""
+    best_result: tuple[float, int, int, list[UUID], list[datetime]] | None = None
+    best_retention = 0.0
+
+    def dfs(
+        step: int,
+        prev_time: datetime | None,
+        chosen: list[EdgeTransfer],
+    ) -> None:
+        nonlocal best_result, best_retention
+        if step == len(leg_transfers):
+            amounts = [tx.amount_minor for tx in chosen]
+            b_min, p_max = min(amounts), max(amounts)
+            if p_max > 0:
+                ret = float(b_min) / float(p_max)
+                if ret > min_retention and ret > best_retention:
+                    best_retention = ret
+                    best_result = (
+                        ret,
+                        b_min,
+                        p_max,
+                        [tx.id for tx in chosen],
+                        [tx.occurred_at for tx in chosen],
+                    )
+            return
+
+        for tx in leg_transfers[step]:
+            if prev_time is not None:
+                if tx.occurred_at < prev_time:
+                    continue
+                if tx.occurred_at - prev_time > max_hop_delay:
+                    continue
+            chosen.append(tx)
+            dfs(step + 1, tx.occurred_at, chosen)
+            chosen.pop()
+
+    dfs(0, None, [])
+    return best_result
+
+
+def _find_bundle_causal_flow(
+    legs: list[tuple[UUID, UUID]],
+    graph: nx.DiGraph,
+    max_hop_delay: timedelta,
+    min_retention: float,
+) -> tuple[float, int, int, list[UUID], list[datetime]] | None:
+    """Verify aggregated leg bundling where each entire leg completes before next leg starts."""
+    leg_totals: list[int] = []
+    leg_starts: list[datetime] = []
+    leg_ends: list[datetime] = []
+    all_tx_ids: list[UUID] = []
+
+    for u, v in legs:
+        edge = graph[u][v]
+        txs: list[EdgeTransfer] = edge["transfers"]
+        if not txs:
+            return None
+        leg_totals.append(int(edge["amount_minor"]))
+        leg_starts.append(edge["first_occurred_at"])
+        leg_ends.append(edge["last_occurred_at"])
+        all_tx_ids.extend(edge["transaction_ids"])
+
+    # Check that leg j completes at or before leg j+1 starts
+    for j in range(len(legs) - 1):
+        if leg_ends[j] > leg_starts[j + 1]:
+            return None
+        if leg_starts[j + 1] - leg_ends[j] > max_hop_delay:
+            return None
+
+    b_min = min(leg_totals)
+    p_max = max(leg_totals)
+    if p_max <= 0:
+        return None
+
+    ret = float(b_min) / float(p_max)
+    if ret <= min_retention:
+        return None
+
+    return (ret, b_min, p_max, all_tx_ids, leg_starts)
+
+
+def _verify_rotation(
+    legs: list[tuple[UUID, UUID]],
+    graph: nx.DiGraph,
+    max_hop_delay: timedelta,
+    min_retention: float,
+) -> tuple[float, int, int, list[UUID], list[datetime]] | None:
+    """Evaluate both single-transfer and bundled multi-transfer flows for a rotation."""
+    leg_transfers: list[list[EdgeTransfer]] = [
+        sorted(graph[u][v]["transfers"], key=lambda tx: tx.occurred_at) for u, v in legs
+    ]
+
+    single_res = _find_single_tx_causal_path(leg_transfers, max_hop_delay, min_retention)
+    bundle_res = _find_bundle_causal_flow(legs, graph, max_hop_delay, min_retention)
+
+    if single_res is None:
+        return bundle_res
+    if bundle_res is None:
+        return single_res
+
+    return single_res if single_res[0] >= bundle_res[0] else bundle_res
+
+
+def verify_causal_cycle_flow(
+    cycle: Sequence[UUID],
+    graph: nx.DiGraph,
+    *,
+    min_retention: float = DEFAULT_MIN_RETENTION,
+    max_hop_delay: timedelta = DEFAULT_MAX_HOP_DELAY,
+) -> CausalFlowResult | None:
+    """Verify that a cycle exhibits forward chronological progression with high retention.
+
+    Tests all cycle rotations to determine if funds could causally circulate around the ring.
+    """
+    n_nodes = len(cycle)
+    if n_nodes < 2:
+        return None
+
+    cycle_edges = [(cycle[i], cycle[(i + 1) % n_nodes]) for i in range(n_nodes)]
+    for u, v in cycle_edges:
+        if not graph.has_edge(u, v):
+            return None
+
+    best_flow: tuple[float, int, int, list[UUID], list[datetime], UUID] | None = None
+    best_ret = 0.0
+
+    for start_idx in range(n_nodes):
+        rotated_legs = [cycle_edges[(start_idx + j) % n_nodes] for j in range(n_nodes)]
+        res = _verify_rotation(rotated_legs, graph, max_hop_delay, min_retention)
+        if res is not None and res[0] > best_ret:
+            best_ret = res[0]
+            start_node = cycle[start_idx]
+            best_flow = (res[0], res[1], res[2], res[3], res[4], start_node)
+
+    if best_flow is None:
+        return None
+
+    return CausalFlowResult(
+        is_valid=True,
+        retention_ratio=best_flow[0],
+        bottleneck_minor=best_flow[1],
+        peak_minor=best_flow[2],
+        start_node=best_flow[5],
+        chronological_tx_ids=tuple(best_flow[3]),
+        hop_timestamps=tuple(best_flow[4]),
+    )
+
+
 def calculate_cycle_retention(
     cycle: Sequence[UUID],
     graph: nx.DiGraph,
 ) -> tuple[float, int, int]:
-    """Calculate funds retention ratio for a directed cycle.
+    """Calculate funds retention ratio for a directed cycle based on leg volumes.
 
     Formula:
         retention = min_leg_volume / max_leg_volume
@@ -259,8 +451,9 @@ def detect_circular_loops(
     min_length: int = DEFAULT_MIN_CYCLE_LENGTH,
     max_length: int = DEFAULT_MAX_CYCLE_LENGTH,
     min_retention: float = DEFAULT_MIN_RETENTION,
+    max_hop_delay: timedelta = DEFAULT_MAX_HOP_DELAY,
 ) -> list[CircularLoop]:
-    """Detect simple directed cycles of length 3-5 with retention strictly > min_retention."""
+    """Detect simple directed cycles of length 3-5 with verified causal flow and retention > 90%."""
     if graph.number_of_nodes() < min_length or graph.number_of_edges() < min_length:
         return []
 
@@ -278,25 +471,31 @@ def detect_circular_loops(
             continue
         seen_cycles.add(normalized)
 
-        ratio, bottleneck, peak = calculate_cycle_retention(normalized, graph)
-        # Strict inequality: retention must be GREATER than threshold (not >=)
-        if ratio > min_retention:
-            edge_details = _build_cycle_edges(normalized, graph)
-            all_tx_ids: list[UUID] = []
-            for edge in edge_details:
-                all_tx_ids.extend(edge.transaction_ids)
+        # Causal temporal progression and amount compatibility verification
+        causal_flow = verify_causal_cycle_flow(
+            normalized,
+            graph,
+            min_retention=min_retention,
+            max_hop_delay=max_hop_delay,
+        )
+        if causal_flow is None:
+            continue  # Broken causality or insufficient retention
 
-            qualifying_loops.append(
-                CircularLoop(
-                    nodes=normalized,
-                    length=cycle_len,
-                    retention_ratio=ratio,
-                    bottleneck_minor=bottleneck,
-                    peak_minor=peak,
-                    transaction_ids=tuple(all_tx_ids),
-                    edges=edge_details,
-                )
+        edge_details = _build_cycle_edges(normalized, graph)
+
+        qualifying_loops.append(
+            CircularLoop(
+                nodes=normalized,
+                length=cycle_len,
+                retention_ratio=causal_flow.retention_ratio,
+                bottleneck_minor=causal_flow.bottleneck_minor,
+                peak_minor=causal_flow.peak_minor,
+                transaction_ids=causal_flow.chronological_tx_ids,
+                edges=edge_details,
+                chronological_start_node=causal_flow.start_node,
+                hop_timestamps=causal_flow.hop_timestamps,
             )
+        )
 
     return qualifying_loops
 
@@ -387,16 +586,17 @@ def _generate_ground_truth_rings(
     node_id_fn: Any,
     tx_id_fn: Any,
 ) -> tuple[list[Transfer], set[frozenset[UUID]]]:
-    """Generate ground truth circular rings of lengths 3, 4, and 5 with > 90% retention."""
+    """Generate ground truth circular rings with strictly forward chronological ordering."""
     transfers: list[Transfer] = []
     ground_truth_rings: set[frozenset[UUID]] = set()
 
-    # Ring 1: 3-Node Ring (96% retention)
+    # Ring 1: 3-Node Ring (96% retention, forward hops: +3h each)
     r1_nodes = [node_id_fn(f"r1_{i}") for i in range(3)]
     ground_truth_rings.add(frozenset(r1_nodes))
     r1_amounts = [10_000_000, 9_800_000, 9_600_000]
+    r1_base = now - timedelta(days=4)
     for i in range(3):
-        t_time = now - timedelta(days=2, hours=3 * i)
+        t_time = r1_base + timedelta(hours=3 * i)
         transfers.append(
             _make_synth_transfer(
                 tx_id_fn(f"r1_leg_{i}"),
@@ -407,12 +607,13 @@ def _generate_ground_truth_rings(
             )
         )
 
-    # Ring 2: 4-Node Ring (94% retention)
+    # Ring 2: 4-Node Ring (94% retention, forward hops: +2h each)
     r2_nodes = [node_id_fn(f"r2_{i}") for i in range(4)]
     ground_truth_rings.add(frozenset(r2_nodes))
     r2_amounts = [5_000_000, 4_900_000, 4_800_000, 4_700_000]
+    r2_base = now - timedelta(days=5)
     for i in range(4):
-        t_time = now - timedelta(days=3, hours=2 * i)
+        t_time = r2_base + timedelta(hours=2 * i)
         transfers.append(
             _make_synth_transfer(
                 tx_id_fn(f"r2_leg_{i}"),
@@ -423,12 +624,13 @@ def _generate_ground_truth_rings(
             )
         )
 
-    # Ring 3: 5-Node Ring (92.5% retention)
+    # Ring 3: 5-Node Ring (92.5% retention, forward hops: +4h each)
     r3_nodes = [node_id_fn(f"r3_{i}") for i in range(5)]
     ground_truth_rings.add(frozenset(r3_nodes))
     r3_amounts = [20_000_000, 19_500_000, 19_000_000, 18_800_000, 18_500_000]
+    r3_base = now - timedelta(days=6)
     for i in range(5):
-        t_time = now - timedelta(days=4, hours=4 * i)
+        t_time = r3_base + timedelta(hours=4 * i)
         transfers.append(
             _make_synth_transfer(
                 tx_id_fn(f"r3_leg_{i}"),
@@ -439,16 +641,17 @@ def _generate_ground_truth_rings(
             )
         )
 
-    # Ring 4: 3-Node Ring with multiple transfers on leg 0 (95% retention)
+    # Ring 4: 3-Node Ring with multiple transfers on leg 0 (95% retention, forward causal order)
     r4_nodes = [node_id_fn(f"r4_{i}") for i in range(3)]
     ground_truth_rings.add(frozenset(r4_nodes))
+    r4_base = now - timedelta(days=2)
     transfers.append(
         _make_synth_transfer(
             tx_id_fn("r4_leg_0a"),
             r4_nodes[0],
             r4_nodes[1],
             6_000_000,
-            now - timedelta(days=1, hours=6),
+            r4_base + timedelta(hours=1),
         )
     )
     transfers.append(
@@ -457,7 +660,7 @@ def _generate_ground_truth_rings(
             r4_nodes[0],
             r4_nodes[1],
             4_000_000,
-            now - timedelta(days=1, hours=5),
+            r4_base + timedelta(hours=2),
         )
     )
     transfers.append(
@@ -466,7 +669,7 @@ def _generate_ground_truth_rings(
             r4_nodes[1],
             r4_nodes[2],
             9_700_000,
-            now - timedelta(days=1, hours=4),
+            r4_base + timedelta(hours=5),
         )
     )
     transfers.append(
@@ -475,7 +678,7 @@ def _generate_ground_truth_rings(
             r4_nodes[2],
             r4_nodes[0],
             9_500_000,
-            now - timedelta(days=1, hours=3),
+            r4_base + timedelta(hours=8),
         )
     )
 
@@ -487,7 +690,7 @@ def _generate_distractor_transfers(
     node_id_fn: Any,
     tx_id_fn: Any,
 ) -> list[Transfer]:
-    """Generate distractor transaction structures that must not be flagged as circular loops."""
+    """Generate distractor transaction structures including adversarial negative cases."""
     transfers: list[Transfer] = []
 
     # Distractor 1: Low-retention 3-node cycle (50% retention)
@@ -500,7 +703,7 @@ def _generate_distractor_transfers(
                 d1_nodes[i],
                 d1_nodes[(i + 1) % 3],
                 d1_amounts[i],
-                now - timedelta(days=2),
+                now - timedelta(days=2) + timedelta(hours=2 * i),
             )
         )
 
@@ -514,7 +717,7 @@ def _generate_distractor_transfers(
                 d2_nodes[i],
                 d2_nodes[(i + 1) % 3],
                 d2_amounts[i],
-                now - timedelta(days=2),
+                now - timedelta(days=2) + timedelta(hours=2 * i),
             )
         )
 
@@ -540,7 +743,7 @@ def _generate_distractor_transfers(
                 d4_nodes[i],
                 d4_nodes[(i + 1) % 6],
                 10_000_000,
-                now - timedelta(days=2),
+                now - timedelta(days=3) + timedelta(hours=i),
             )
         )
 
@@ -553,7 +756,7 @@ def _generate_distractor_transfers(
                 d5_nodes[i],
                 d5_nodes[(i + 1) % 3],
                 10_000_000,
-                now - timedelta(days=45),
+                now - timedelta(days=45) + timedelta(hours=i),
             )
         )
 
@@ -566,7 +769,7 @@ def _generate_distractor_transfers(
                 d6_nodes[i],
                 d6_nodes[i + 1],
                 8_000_000,
-                now - timedelta(days=1),
+                now - timedelta(days=1) + timedelta(hours=i),
             )
         )
 
@@ -583,6 +786,70 @@ def _generate_distractor_transfers(
                 now - timedelta(days=3),
             )
         )
+
+    # Distractor 8 (Adversarial): Reversed chronological order (broken causality)
+    # Total volume on each leg is 10,000,000, but timestamps flow BACKWARDS in time!
+    d8_nodes = [node_id_fn(f"d8_{i}") for i in range(3)]
+    transfers.append(
+        _make_synth_transfer(
+            tx_id_fn("d8_leg_0"), d8_nodes[0], d8_nodes[1], 10_000_000, now - timedelta(days=1)
+        )
+    )
+    transfers.append(
+        _make_synth_transfer(
+            tx_id_fn("d8_leg_1"), d8_nodes[1], d8_nodes[2], 10_000_000, now - timedelta(days=5)
+        )
+    )
+    transfers.append(
+        _make_synth_transfer(
+            tx_id_fn("d8_leg_2"), d8_nodes[2], d8_nodes[0], 10_000_000, now - timedelta(days=10)
+        )
+    )
+
+    # Distractor 9 (Adversarial): Unrelated parallel transactions with similar total volume
+    # Leg 0 has 10 transfers of 1,000,000 (total 10,000,000)
+    # Leg 1 has 1 transfer of 10,000,000
+    # Leg 2 has 2 transfers of 5,000,000
+    # Amounts per individual transfer do not match across legs (ratio 10% on single-tx path)
+    # and timestamps on Leg 0 are scattered after Leg 1.
+    d9_nodes = [node_id_fn(f"d9_{i}") for i in range(3)]
+    for i in range(10):
+        transfers.append(
+            _make_synth_transfer(
+                tx_id_fn(f"d9_leg_0_{i}"),
+                d9_nodes[0],
+                d9_nodes[1],
+                1_000_000,
+                now - timedelta(days=2) + timedelta(hours=i),
+            )
+        )
+    transfers.append(
+        _make_synth_transfer(
+            tx_id_fn("d9_leg_1"),
+            d9_nodes[1],
+            d9_nodes[2],
+            10_000_000,
+            now - timedelta(days=2, hours=5),
+        )
+    )
+    transfers.append(
+        _make_synth_transfer(
+            tx_id_fn("d9_leg_2_0"),
+            d9_nodes[2],
+            d9_nodes[0],
+            5_000_000,
+            now - timedelta(days=3),
+        )
+    )
+    transfers.append(
+        _make_synth_transfer(
+            tx_id_fn("d9_leg_2_1"),
+            d9_nodes[2],
+            d9_nodes[0],
+            5_000_000,
+            now - timedelta(days=3, hours=2),
+        )
+    )
 
     return transfers
 
@@ -617,6 +884,7 @@ def evaluate_circular_detection(
     min_length: int = DEFAULT_MIN_CYCLE_LENGTH,
     max_length: int = DEFAULT_MAX_CYCLE_LENGTH,
     min_retention: float = DEFAULT_MIN_RETENTION,
+    max_hop_delay: timedelta = DEFAULT_MAX_HOP_DELAY,
 ) -> dict[str, Any]:
     """Evaluate circular loop detection against known ground truth."""
     graph = build_transaction_graph(transfers, lookback_window=lookback_window, as_of=as_of)
@@ -625,6 +893,7 @@ def evaluate_circular_detection(
         min_length=min_length,
         max_length=max_length,
         min_retention=min_retention,
+        max_hop_delay=max_hop_delay,
     )
 
     detected_sets = {detected.node_set for detected in detected_loops}

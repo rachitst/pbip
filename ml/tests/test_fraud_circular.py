@@ -58,7 +58,6 @@ def test_build_graph_directed_fund_movement() -> None:
 
     # Test CREDIT direction: counterparty sent to customer
     u3, u4 = uuid4(), uuid4()
-    # In _make_transfer with CREDIT, counterparty is u3 and customer is u4, so fund flow u3 -> u4
     t_credit = _make_transfer(u3, u4, 25_000_00, direction="CREDIT")
     graph2 = c.build_transaction_graph([t_credit])
     assert graph2.has_edge(u3, u4)
@@ -77,6 +76,20 @@ def test_build_graph_accumulates_multiple_transfers_on_same_edge() -> None:
     assert edge["transaction_ids"] == [t1.id, t2.id]
     assert edge["first_occurred_at"] == t1.occurred_at
     assert edge["last_occurred_at"] == t2.occurred_at
+    assert len(edge["transfers"]) == 2
+
+
+def test_build_graph_ignores_duplicate_transaction_replay() -> None:
+    u1, u2 = uuid4(), uuid4()
+    fixed_id = uuid4()
+    t1 = _make_transfer(u1, u2, 5_000_00, BASE_TIME, tx_id=fixed_id)
+    t2 = _make_transfer(u1, u2, 5_000_00, BASE_TIME, tx_id=fixed_id)  # Exact duplicate replay
+
+    graph = c.build_transaction_graph([t1, t2])
+    edge = graph[u1][u2]
+    assert edge["amount_minor"] == 5_000_00  # Not double-counted
+    assert len(edge["transaction_ids"]) == 1
+    assert len(edge["transfers"]) == 1
 
 
 def test_build_graph_lookback_window_filtering() -> None:
@@ -84,7 +97,6 @@ def test_build_graph_lookback_window_filtering() -> None:
     recent_tx = _make_transfer(u1, u2, 1_000_00, BASE_TIME - timedelta(days=2))
     old_tx = _make_transfer(u1, u2, 9_000_00, BASE_TIME - timedelta(days=20))
 
-    # Window of 7 days: old_tx should be excluded
     graph = c.build_transaction_graph(
         [recent_tx, old_tx], lookback_window=timedelta(days=7), as_of=BASE_TIME
     )
@@ -122,33 +134,58 @@ def test_build_graph_supports_dict_records() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 2. Cycle Detection Tests
+# 2. Cycle Detection Tests (Lengths 3, 4, 5 and Chronology)
 # ---------------------------------------------------------------------------
 
 
 def test_detect_cycles_lengths_3_4_5() -> None:
-    # 3-node cycle
+    # 3-node cycle with forward chronological progression (+2h per hop)
     nodes3 = [uuid4() for _ in range(3)]
-    txs3 = [_make_transfer(nodes3[i], nodes3[(i + 1) % 3], 10_000_00) for i in range(3)]
+    txs3 = [
+        _make_transfer(
+            nodes3[i],
+            nodes3[(i + 1) % 3],
+            10_000_00,
+            BASE_TIME + timedelta(hours=2 * i),
+        )
+        for i in range(3)
+    ]
     graph3 = c.build_transaction_graph(txs3)
     loops3 = c.detect_circular_loops(graph3)
     assert len(loops3) == 1
     assert loops3[0].length == 3
     assert loops3[0].node_set == frozenset(nodes3)
     assert loops3[0].retention_ratio == 1.0
+    assert loops3[0].chronological_start_node == nodes3[0]
 
-    # 4-node cycle
+    # 4-node cycle (+2h per hop)
     nodes4 = [uuid4() for _ in range(4)]
-    txs4 = [_make_transfer(nodes4[i], nodes4[(i + 1) % 4], 10_000_00) for i in range(4)]
+    txs4 = [
+        _make_transfer(
+            nodes4[i],
+            nodes4[(i + 1) % 4],
+            10_000_00,
+            BASE_TIME + timedelta(hours=2 * i),
+        )
+        for i in range(4)
+    ]
     graph4 = c.build_transaction_graph(txs4)
     loops4 = c.detect_circular_loops(graph4)
     assert len(loops4) == 1
     assert loops4[0].length == 4
     assert loops4[0].node_set == frozenset(nodes4)
 
-    # 5-node cycle
+    # 5-node cycle (+2h per hop)
     nodes5 = [uuid4() for _ in range(5)]
-    txs5 = [_make_transfer(nodes5[i], nodes5[(i + 1) % 5], 10_000_00) for i in range(5)]
+    txs5 = [
+        _make_transfer(
+            nodes5[i],
+            nodes5[(i + 1) % 5],
+            10_000_00,
+            BASE_TIME + timedelta(hours=2 * i),
+        )
+        for i in range(5)
+    ]
     graph5 = c.build_transaction_graph(txs5)
     loops5 = c.detect_circular_loops(graph5)
     assert len(loops5) == 1
@@ -159,15 +196,23 @@ def test_detect_cycles_lengths_3_4_5() -> None:
 def test_detect_cycles_rejects_lengths_1_2_and_6() -> None:
     # Length 2 reciprocal mutual transfer
     u1, u2 = uuid4(), uuid4()
-    t1 = _make_transfer(u1, u2, 10_000_00)
-    t2 = _make_transfer(u2, u1, 10_000_00)
+    t1 = _make_transfer(u1, u2, 10_000_00, BASE_TIME)
+    t2 = _make_transfer(u2, u1, 10_000_00, BASE_TIME + timedelta(hours=1))
     graph2 = c.build_transaction_graph([t1, t2])
     loops2 = c.detect_circular_loops(graph2)
     assert len(loops2) == 0
 
     # Length 6 cycle
     nodes6 = [uuid4() for _ in range(6)]
-    txs6 = [_make_transfer(nodes6[i], nodes6[(i + 1) % 6], 10_000_00) for i in range(6)]
+    txs6 = [
+        _make_transfer(
+            nodes6[i],
+            nodes6[(i + 1) % 6],
+            10_000_00,
+            BASE_TIME + timedelta(hours=i),
+        )
+        for i in range(6)
+    ]
     graph6 = c.build_transaction_graph(txs6)
     loops6 = c.detect_circular_loops(graph6)
     assert len(loops6) == 0
@@ -176,29 +221,25 @@ def test_detect_cycles_rejects_lengths_1_2_and_6() -> None:
 def test_detect_cycles_canonical_deduplication() -> None:
     u1, u2, u3 = uuid4(), uuid4(), uuid4()
     txs = [
-        _make_transfer(u1, u2, 10_000_00),
-        _make_transfer(u2, u3, 10_000_00),
-        _make_transfer(u3, u1, 10_000_00),
+        _make_transfer(u1, u2, 10_000_00, BASE_TIME),
+        _make_transfer(u2, u3, 10_000_00, BASE_TIME + timedelta(hours=2)),
+        _make_transfer(u3, u1, 10_000_00, BASE_TIME + timedelta(hours=4)),
     ]
     graph = c.build_transaction_graph(txs)
     loops = c.detect_circular_loops(graph)
-    # Must report exactly 1 loop, not 3 rotations
     assert len(loops) == 1
     assert loops[0].nodes == c._normalize_cycle([u1, u2, u3])
 
 
 def test_detect_cycles_handles_overlapping_rings() -> None:
-    # A shared node between two distinct 3-node rings:
-    # Ring A: u1 -> u2 -> u3 -> u1
-    # Ring B: u1 -> u4 -> u5 -> u1
     u1, u2, u3, u4, u5 = [uuid4() for _ in range(5)]
     txs = [
-        _make_transfer(u1, u2, 10_000_00),
-        _make_transfer(u2, u3, 10_000_00),
-        _make_transfer(u3, u1, 10_000_00),
-        _make_transfer(u1, u4, 10_000_00),
-        _make_transfer(u4, u5, 10_000_00),
-        _make_transfer(u5, u1, 10_000_00),
+        _make_transfer(u1, u2, 10_000_00, BASE_TIME),
+        _make_transfer(u2, u3, 10_000_00, BASE_TIME + timedelta(hours=2)),
+        _make_transfer(u3, u1, 10_000_00, BASE_TIME + timedelta(hours=4)),
+        _make_transfer(u1, u4, 10_000_00, BASE_TIME + timedelta(hours=1)),
+        _make_transfer(u4, u5, 10_000_00, BASE_TIME + timedelta(hours=3)),
+        _make_transfer(u5, u1, 10_000_00, BASE_TIME + timedelta(hours=5)),
     ]
     graph = c.build_transaction_graph(txs)
     loops = c.detect_circular_loops(graph)
@@ -209,17 +250,85 @@ def test_detect_cycles_handles_overlapping_rings() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. Funds Retention Tests
+# 3. Adversarial Chronological Negative Tests
+# ---------------------------------------------------------------------------
+
+
+def test_adversarial_rejected_when_timestamps_are_reversed() -> None:
+    """Equal total volume on all edges (100% volume ratio), but timestamps flow backwards in time.
+
+    A -> B on Day 10, B -> C on Day 5, C -> A on Day 1.
+    Must NOT be detected as a circular fund loop.
+    """
+    u1, u2, u3 = uuid4(), uuid4(), uuid4()
+    txs = [
+        _make_transfer(u1, u2, 10_000_000, BASE_TIME - timedelta(days=1)),
+        _make_transfer(u2, u3, 10_000_000, BASE_TIME - timedelta(days=5)),
+        _make_transfer(u3, u1, 10_000_000, BASE_TIME - timedelta(days=10)),
+    ]
+    graph = c.build_transaction_graph(txs)
+    loops = c.detect_circular_loops(graph)
+    assert len(loops) == 0  # Broken causality: C paid A before B paid C
+
+
+def test_adversarial_rejected_when_same_day_hours_are_reversed() -> None:
+    """Same day, but reverse hour ordering prevents causal forwarding."""
+    u1, u2, u3 = uuid4(), uuid4(), uuid4()
+    txs = [
+        _make_transfer(u1, u2, 10_000_000, BASE_TIME.replace(hour=16)),
+        _make_transfer(u2, u3, 10_000_000, BASE_TIME.replace(hour=10)),  # 6h before receipt
+        _make_transfer(u3, u1, 10_000_000, BASE_TIME.replace(hour=20)),
+    ]
+    graph = c.build_transaction_graph(txs)
+    loops = c.detect_circular_loops(graph)
+    assert len(loops) == 0
+
+
+def test_adversarial_rejected_hop_delay_exceeds_maximum() -> None:
+    """Transfers in forward order but hop delay exceeds configured limit (unrelated payments)."""
+    u1, u2, u3 = uuid4(), uuid4(), uuid4()
+    txs = [
+        _make_transfer(u1, u2, 10_000_000, BASE_TIME - timedelta(days=20)),
+        _make_transfer(u2, u3, 10_000_000, BASE_TIME - timedelta(days=10)),  # 10 days delay (> 7d)
+        _make_transfer(u3, u1, 10_000_000, BASE_TIME - timedelta(days=2)),
+    ]
+    graph = c.build_transaction_graph(txs)
+    loops = c.detect_circular_loops(graph, max_hop_delay=timedelta(days=7))
+    assert len(loops) == 0
+
+
+def test_adversarial_rejected_unrelated_scattered_transfers_with_equal_aggregate_volume() -> None:
+    """Edge totals are all ₹1,00,000, but transaction amounts and timestamps are scattered."""
+    u1, u2, u3 = uuid4(), uuid4(), uuid4()
+    txs = []
+    # Leg 1: 10 transactions of ₹10,000
+    for i in range(10):
+        txs.append(
+            _make_transfer(u1, u2, 1_000_000, BASE_TIME - timedelta(days=2) + timedelta(hours=i))
+        )
+    # Leg 2: 1 transaction of ₹1,00,000
+    txs.append(_make_transfer(u2, u3, 10_000_000, BASE_TIME - timedelta(days=2, hours=4)))
+    # Leg 3: 2 transactions of ₹50,000
+    txs.append(_make_transfer(u3, u1, 5_000_000, BASE_TIME - timedelta(days=3)))
+    txs.append(_make_transfer(u3, u1, 5_000_000, BASE_TIME - timedelta(days=3, hours=2)))
+
+    graph = c.build_transaction_graph(txs)
+    loops = c.detect_circular_loops(graph)
+    assert len(loops) == 0
+
+
+# ---------------------------------------------------------------------------
+# 4. Funds Retention Tests
 # ---------------------------------------------------------------------------
 
 
 def test_retention_above_90_qualifies() -> None:
     u1, u2, u3 = uuid4(), uuid4(), uuid4()
-    # 95% retention: ₹1,00,000 -> ₹98,000 -> ₹95,000
+    # 95% retention with chronological progression: ₹1,00,000 -> ₹98,000 -> ₹95,000
     txs = [
-        _make_transfer(u1, u2, 10_000_000),
-        _make_transfer(u2, u3, 9_800_000),
-        _make_transfer(u3, u1, 9_500_000),
+        _make_transfer(u1, u2, 10_000_000, BASE_TIME),
+        _make_transfer(u2, u3, 9_800_000, BASE_TIME + timedelta(hours=2)),
+        _make_transfer(u3, u1, 9_500_000, BASE_TIME + timedelta(hours=4)),
     ]
     graph = c.build_transaction_graph(txs)
     loops = c.detect_circular_loops(graph)
@@ -233,9 +342,9 @@ def test_retention_exactly_90_is_rejected() -> None:
     u1, u2, u3 = uuid4(), uuid4(), uuid4()
     # Exact 90.0%: 9_000_000 / 10_000_000 = 0.9000 -> strictly > 0.90 required
     txs = [
-        _make_transfer(u1, u2, 10_000_000),
-        _make_transfer(u2, u3, 9_500_000),
-        _make_transfer(u3, u1, 9_000_000),
+        _make_transfer(u1, u2, 10_000_000, BASE_TIME),
+        _make_transfer(u2, u3, 9_500_000, BASE_TIME + timedelta(hours=2)),
+        _make_transfer(u3, u1, 9_000_000, BASE_TIME + timedelta(hours=4)),
     ]
     graph = c.build_transaction_graph(txs)
     loops = c.detect_circular_loops(graph, min_retention=0.90)
@@ -246,9 +355,9 @@ def test_retention_below_90_is_rejected() -> None:
     u1, u2, u3 = uuid4(), uuid4(), uuid4()
     # 89.9%: 8_990_000 / 10_000_000 = 0.899
     txs = [
-        _make_transfer(u1, u2, 10_000_000),
-        _make_transfer(u2, u3, 9_500_000),
-        _make_transfer(u3, u1, 8_990_000),
+        _make_transfer(u1, u2, 10_000_000, BASE_TIME),
+        _make_transfer(u2, u3, 9_500_000, BASE_TIME + timedelta(hours=2)),
+        _make_transfer(u3, u1, 8_990_000, BASE_TIME + timedelta(hours=4)),
     ]
     graph = c.build_transaction_graph(txs)
     loops = c.detect_circular_loops(graph, min_retention=0.90)
@@ -259,9 +368,9 @@ def test_retention_boundary_slightly_above_90_qualifies() -> None:
     u1, u2, u3 = uuid4(), uuid4(), uuid4()
     # 90.01%: 9_001_000 / 10_000_000 = 0.9001 > 0.90
     txs = [
-        _make_transfer(u1, u2, 10_000_000),
-        _make_transfer(u2, u3, 9_500_000),
-        _make_transfer(u3, u1, 9_001_000),
+        _make_transfer(u1, u2, 10_000_000, BASE_TIME),
+        _make_transfer(u2, u3, 9_500_000, BASE_TIME + timedelta(hours=2)),
+        _make_transfer(u3, u1, 9_001_000, BASE_TIME + timedelta(hours=4)),
     ]
     graph = c.build_transaction_graph(txs)
     loops = c.detect_circular_loops(graph, min_retention=0.90)
@@ -270,7 +379,7 @@ def test_retention_boundary_slightly_above_90_qualifies() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 4. Risk Scoring Tests
+# 5. Risk Scoring Tests
 # ---------------------------------------------------------------------------
 
 
@@ -278,9 +387,9 @@ def test_risk_boost_applied_only_to_participating_accounts() -> None:
     u1, u2, u3 = uuid4(), uuid4(), uuid4()
     unrelated = uuid4()
     txs = [
-        _make_transfer(u1, u2, 10_000_000),
-        _make_transfer(u2, u3, 9_800_000),
-        _make_transfer(u3, u1, 9_500_000),
+        _make_transfer(u1, u2, 10_000_000, BASE_TIME),
+        _make_transfer(u2, u3, 9_800_000, BASE_TIME + timedelta(hours=2)),
+        _make_transfer(u3, u1, 9_500_000, BASE_TIME + timedelta(hours=4)),
     ]
     graph = c.build_transaction_graph(txs)
     loops = c.detect_circular_loops(graph)
@@ -298,21 +407,19 @@ def test_risk_boost_applied_only_to_participating_accounts() -> None:
 
 
 def test_risk_boost_overlapping_loops_single_boost_prevent_duplicate() -> None:
-    # Node u1 participates in 2 overlapping rings
     u1, u2, u3, u4, u5 = [uuid4() for _ in range(5)]
     txs = [
-        _make_transfer(u1, u2, 10_000_000),
-        _make_transfer(u2, u3, 9_800_000),
-        _make_transfer(u3, u1, 9_500_000),  # 95% retention
-        _make_transfer(u1, u4, 5_000_000),
-        _make_transfer(u4, u5, 4_900_000),
-        _make_transfer(u5, u1, 4_800_000),  # 96% retention
+        _make_transfer(u1, u2, 10_000_000, BASE_TIME),
+        _make_transfer(u2, u3, 9_800_000, BASE_TIME + timedelta(hours=2)),
+        _make_transfer(u3, u1, 9_500_000, BASE_TIME + timedelta(hours=4)),  # 95% retention
+        _make_transfer(u1, u4, 5_000_000, BASE_TIME + timedelta(hours=1)),
+        _make_transfer(u4, u5, 4_900_000, BASE_TIME + timedelta(hours=3)),
+        _make_transfer(u5, u1, 4_800_000, BASE_TIME + timedelta(hours=5)),  # 96% retention
     ]
     graph = c.build_transaction_graph(txs)
     loops = c.detect_circular_loops(graph)
     boosts = c.calculate_risk_boosts(loops, base_boost=35)
 
-    # u1 must receive single non-duplicated boost of 35, with loop_count 2
     assert boosts[u1].risk_boost == 35
     assert boosts[u1].loop_count == 2
     assert boosts[u1].highest_retention == pytest.approx(0.96, rel=1e-5)
@@ -331,13 +438,11 @@ def test_circular_mule_ring_rule_adapter() -> None:
     )
     rule = c.CircularMuleRingRule(known_boosts={u1: boost})
 
-    # Participating account triggers rule
     triggered, weight, reason = rule.evaluate(u1)
     assert triggered is True
     assert weight == 35
     assert "95.0%" in reason
 
-    # Non-participating account does not trigger
     triggered_clean, weight_clean, reason_clean = rule.evaluate(uuid4())
     assert triggered_clean is False
     assert weight_clean == 0
@@ -345,7 +450,7 @@ def test_circular_mule_ring_rule_adapter() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 5. Ground-Truth Evaluation & 100% Precision Tests
+# 6. Ground-Truth Evaluation & 100% Precision Tests
 # ---------------------------------------------------------------------------
 
 
@@ -379,14 +484,19 @@ def test_evaluation_with_large_background_transfers() -> None:
     """Inject circular rings into a larger set of random non-circular transfers."""
     base_transfers, gt_rings = c.generate_circular_ring_evaluation_dataset(seed=999)
 
-    # Add 200 random non-circular background transfers between distinct customers
+    # Add 40 random non-circular background transfers between distinct customers
     rng_nodes = [uuid5(UUID(int=12345), f"bg_cust_{i}") for i in range(50)]
     bg_transfers = []
     for i in range(40):
         src = rng_nodes[i % 50]
         tgt = rng_nodes[(i + 13) % 50]
         bg_transfers.append(
-            _make_transfer(src, tgt, 2_000_00 + i * 100_00, BASE_TIME - timedelta(days=i % 10))
+            _make_transfer(
+                src,
+                tgt,
+                2_000_00 + i * 100_00,
+                BASE_TIME - timedelta(days=i % 10),
+            )
         )
 
     all_transfers = list(base_transfers) + bg_transfers
