@@ -32,6 +32,35 @@ def test_split_is_chronological_with_no_overlap(dataset: pd.DataFrame) -> None:
     assert all(part["label"].sum() > 0 for part in (split.train, split.validation, split.test))
 
 
+def test_dataset_holds_outgoing_transfers_only_with_features_from_all_rows() -> None:
+    """TASK-071: the API scores debits only, so training/evaluation rows exclude credits."""
+    at = pd.Timestamp("2025-03-01 10:00", tz="UTC")
+    device = "d1"
+    rows = [  # a debit, a big credit (e.g. an F7 deposit), then a debit
+        ("a", at, "DEBIT", 1_000_00),
+        ("b", at + pd.Timedelta(hours=1), "CREDIT", 99_500_00),
+        ("c", at + pd.Timedelta(hours=2), "DEBIT", 2_000_00),
+    ]
+    transfers = pd.DataFrame(
+        {
+            "id": [r[0] for r in rows],
+            "customer_id": "c1",
+            "occurred_at": [r[1] for r in rows],
+            "direction": [r[2] for r in rows],
+            "amount_minor": [r[3] for r in rows],
+            "payee_added_at": [at - pd.Timedelta(days=90), pd.NaT, at - pd.Timedelta(days=90)],
+            "device_id": device,
+            "new_device": False,
+            "failed_logins_24h": 0,
+        }
+    )
+    labels = pd.DataFrame({"transaction_id": ["b"], "fraudulent": [True]})
+    data = t.build_dataset(transfers, labels)
+    assert list(data.index) == [0, 2]  # the credit is gone; positions in the export are kept
+    assert data["is_debit"].eq(1).all() and data["label"].eq(0).all()
+    assert data.loc[2, "ratio_to_avg_amount"] == 2.0  # history (the earlier debit) still counts
+
+
 def test_metrics_from_a_known_confusion_matrix() -> None:
     m = t.evaluate(np.array([1, 1, 0, 0, 0]), np.array([0.9, 0.2, 0.8, 0.1, 0.1]), 0.5)
     assert (m.tp, m.fn, m.fp, m.tn) == (1, 1, 1, 2)
