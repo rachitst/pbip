@@ -48,7 +48,7 @@ actors table say only that an RM "reviews customer insights and recommendations"
 
 ## Consequences
 - An additive v1 contract change: `make openapi` regenerates the web types, and no existing field changes.
-- One new table and migration `0011` (up and down tested by CI).
+- One new table and migration `0012` (up and down tested by CI).
 - RM notes are stored server-side and appear in the audit trail. Nothing is stored in the browser.
 - The churn "probability" stays the rule-based score from TASK-056 (55% balance decline + 45% inactivity). The UI
   labels it as a rule-based score, not a calibrated probability.
