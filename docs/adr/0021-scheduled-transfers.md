@@ -1,4 +1,4 @@
-# ADR 0018: Scheduled and recurring transfers engine
+# ADR 0021: Scheduled and recurring transfers engine
 - Status: Proposed (refined draft for final review)
 - Date: 2026-10-31
 - Deciders: Architecture Team (TASK-015 / #38, Core Banking & Ledger)
@@ -33,7 +33,7 @@ Existing building blocks this design reuses (on `main` at `89ec2d6`):
 
 ## Decision
 
-### 1. Data model (`modules/payments/models.py`, new; migration `0008`, down revision `0007`)
+### 1. Data model (`modules/payments/models.py`, new; migration `0011`, down revision `0010`)
 `scheduled_transfers`, following AGENTS.md section 6 (UUID PK, `created_at timestamptz`, explicit FKs
 with `ondelete`, CHECK constraints for enums and ranges, an index for every FK and filter):
 

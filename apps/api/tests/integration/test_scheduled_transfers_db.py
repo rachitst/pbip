@@ -132,7 +132,7 @@ def test_scheduled_transfer_persists_valid_row_and_enforces_check_constraints(
 def test_advisory_lock_two_int_and_single_bigint_keyspaces_never_collide(
     migrated_engine: Engine,
 ) -> None:
-    """ADR-0018 R9: prove in real PostgreSQL that (int4, int4) and (bigint) locks do not collide."""
+    """ADR-0021 R9: prove in real PostgreSQL that (int4, int4) and (bigint) locks do not collide."""
     namespace = 1346521424  # 0x50424950 ("PBIP")
     key_lo = 42
     combined_bigint = (namespace << 32) | key_lo
