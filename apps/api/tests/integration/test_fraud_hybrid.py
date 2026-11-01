@@ -371,7 +371,7 @@ def test_champion_exported_from_the_registry_is_what_the_api_loads_at_startup(
     served = tmp_path / "models" / "fraud"
     try:
         report = json.loads((model_dir / "report.json").read_text(encoding="utf-8"))
-        run_id = log_to_mlflow(report, model_dir, tmp_path / "mlflow")
+        run_id = log_to_mlflow(report, model_dir, tmp_path / "mlflow", target)
         gate = MetricsGate(min_pr_auc=0.6, max_latency_p95_ms=1_000.0)
         result = promote(target.uri, run_id, fraud_data, gate=gate, latency_calls=20)
         assert result.promoted and result.champion_version == result.version

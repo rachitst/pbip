@@ -28,7 +28,13 @@ from pbip_ml.fraud import promotion as p
 from pbip_ml.fraud import training as t
 from pbip_ml.fraud.evaluation import served_metrics
 from pbip_ml.fraud.train import load_export, log_to_mlflow, run
-from pbip_ml.tracking import TRACKING_URI_ENV, configure_tracking, ensure_experiment, local_target
+from pbip_ml.tracking import (
+    TRACKING_URI_ENV,
+    TrackingTarget,
+    configure_tracking,
+    ensure_experiment,
+    local_target,
+)
 
 pytestmark = [pytest.mark.unit, pytest.mark.timeout(240)]
 
@@ -64,12 +70,14 @@ def tracking_at(uri: str) -> Iterator[None]:
             mlflow.set_tracking_uri(None)  # type: ignore[arg-type]  # None = unset (mlflow source)
 
 
-def _train_and_log(data: Path, out: Path, local_dir: Path, claim: float | None = None) -> str:
+def _train_and_log(
+    data: Path, out: Path, target: TrackingTarget, claim: float | None = None
+) -> str:
     report = run(data, out)
     if claim is not None:  # the run lies about itself: the gate must not care
         report["lightgbm"]["test"]["pr_auc"] = claim
         (out / "report.json").write_text(json.dumps(report), encoding="utf-8")
-    return log_to_mlflow(report, out, local_dir)
+    return log_to_mlflow(report, out, Path(), target)  # pinned: never a live server
 
 
 @pytest.fixture(scope="module")
@@ -86,8 +94,8 @@ def registry(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Registry]:
     labels.to_csv(bad_data / "fraud_labels.csv", index=False)
     with tracking_at(target.uri):
         good_dir = tmp_path_factory.mktemp("good-model")
-        good = _train_and_log(data, good_dir, root)
-        bad = _train_and_log(bad_data, tmp_path_factory.mktemp("bad-model"), root, claim=0.99)
+        good = _train_and_log(data, good_dir, target)
+        bad = _train_and_log(bad_data, tmp_path_factory.mktemp("bad-model"), target, claim=0.99)
         yield Registry(target.uri, data, good, good_dir, bad)
 
 
