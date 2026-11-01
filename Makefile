@@ -3,7 +3,7 @@
 # On Windows, use dev.ps1 or dev.cmd instead of make.
 .DEFAULT_GOAL := help
 .PHONY: help doctor setup env infra-up infra-down up up-all down logs migrate seed \
-	datagen notebooks ml-up mlflow-smoke dev-api dev-worker dev-web lint fmt typecheck imports security openapi \
+	datagen fraud-model notebooks ml-up mlflow-smoke dev-api dev-worker dev-web lint fmt typecheck imports security openapi \
 	test test-unit test-int test-web test-e2e smoke perf fuzz check clean
 
 PYTHON ?= python3
@@ -46,6 +46,9 @@ seed: ## Seed demo users, accounts and MFA-enrolled staff (local only)
 
 datagen: ## Generate + COPY-load the synthetic ML dataset (seed 42, 1,000 customers)
 	@$(PYTHON) scripts/dev.py datagen
+
+fraud-model: ## Train the fraud models into models/fraud (needed for FRAUD_SCORER=hybrid)
+	@$(PYTHON) scripts/dev.py fraud-model
 
 notebooks: ## Execute the EDA notebooks head-to-tail and save outputs
 	@$(PYTHON) scripts/dev.py notebooks

@@ -290,7 +290,11 @@ def test_real_artifacts_load_once_and_score_within_the_latency_budget(
     use_engine(engine)
     alice, _bob, payee = pair
     latencies = []
-    for _ in range(25):
+    first = send(client, alice, payee, 1_000)  # #251: an ordinary transfer to a 2-day-old payee
+    first_event = event_for(db, first.json()["id"])
+    assert first.json()["status"] == "POSTED", first_event.features
+    assert first_event.risk_score < 30 and first_event.model_version == "hybrid-lgbm-iforest-1"
+    for _ in range(24):
         response = send(client, alice, payee, 1_000)  # small: the daily limit never bites
         event = event_for(db, response.json()["id"])
         assert event.model_version == "hybrid-lgbm-iforest-1", event.features.get("model_error")

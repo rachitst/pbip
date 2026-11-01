@@ -386,6 +386,27 @@ def cmd_datagen(args: list[str]) -> int:
     return _run(["uv", "run", "python", "-m", "pbip_datagen", sub, *rest], env=env)
 
 
+def cmd_fraud_model(args: list[str]) -> int:
+    """Train the fraud models into ``models/fraud`` (seed 42, 3,000 customers x 6 months).
+
+    The API loads them when ``FRAUD_SCORER=hybrid`` and ``FRAUD_MODEL_DIR=models/fraud`` (the local
+    and demo setting in ``.env.example``); without them it serves the rules only. Takes a few
+    minutes on a laptop. Extra arguments go to the training CLI.
+    """
+    data = ROOT / "data" / "fraud"
+    status = _run(
+        ["uv", "run", "python", "-m", "pbip_datagen", "export", "--seed", "42",
+         "--customers", "3000", "--months", "6", "--out", str(data)]
+    )  # fmt: skip
+    if status != 0:
+        return status
+    out = ROOT / "models" / "fraud"
+    return _run(
+        ["uv", "run", "python", "-m", "pbip_ml.fraud.train", "--data", str(data),
+         "--out", str(out), *args]
+    )  # fmt: skip
+
+
 def cmd_notebooks(args: list[str]) -> int:
     """Execute ml/notebooks/*.ipynb head-to-tail and save outputs (``--check`` to only verify)."""
     return _run(["uv", "run", "python", "scripts/run_notebooks.py", *args])
@@ -769,6 +790,7 @@ COMMANDS = {
     "mlflow-smoke": "Log + read back a dummy MLflow run (--require-server to forbid fallback)",
     "notebooks": "Execute the EDA notebooks head-to-tail (--check: verify only)",
     "datagen": "Generate + COPY-load the synthetic ML dataset (seed 42, 1,000 customers)",
+    "fraud-model": "Train the fraud models into models/fraud (needed for FRAUD_SCORER=hybrid)",
     "dev-api": "Run FastAPI backend on :8000 with auto-reload",
     "dev-worker": "Run Celery worker + beat (Windows: solo pool, beat as a second process)",
     "dev-web": "Run Vite React frontend on :5173",
