@@ -8,6 +8,7 @@ uploaded such a log until TASK-085's follow-up).
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -23,15 +24,23 @@ _THIS_FILE = Path(__file__).resolve()
 _COMMAND_END = re.compile(r"[\])]|(?<![\\,])\n")
 
 
+def _git(*args: str, cwd: Path) -> bytes:
+    """Runs git on ``cwd`` only. Git exports GIT_DIR, GIT_INDEX_FILE and friends to its hooks, and
+    this test runs inside the pre-push hook: inherited, they point every git call (even ``git init``
+    in a temporary directory) at the developer's real repository. So every ``GIT_*`` is dropped."""
+    git = shutil.which("git")
+    assert git is not None, "the scan lists the repository's tracked files with git"
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    return subprocess.run(  # noqa: S603 - fixed git subcommands chosen by this test
+        [git, *args], cwd=cwd, env=env, capture_output=True, check=True
+    ).stdout
+
+
 def _text_files(root: Path = ROOT) -> list[Path]:
     """The repository's tracked files only (``git ls-files``). Walking the directory also read
     untracked copies of the code: git worktrees that tooling creates under ``.claude/worktrees/``,
     mutmut's ``mutants/`` and virtualenvs, and reported their files as offenders (#329)."""
-    git = shutil.which("git")
-    assert git is not None, "the scan lists the repository's tracked files with git"
-    listed = subprocess.run(  # noqa: S603 - fixed git command on the repository root
-        [git, "ls-files", "-z"], cwd=root, capture_output=True, check=True
-    ).stdout.decode("utf-8")
+    listed = _git("ls-files", "-z", cwd=root).decode("utf-8")
     files: list[Path] = []
     for name in filter(None, listed.split("\0")):
         path = root / name
@@ -93,16 +102,30 @@ def test_every_uvicorn_launch_disables_its_access_log() -> None:
     assert offenders == []
 
 
-def test_scan_reads_only_tracked_files_not_worktree_copies(tmp_path: Path) -> None:
+def test_scan_reads_only_tracked_files_not_worktree_copies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """#329: a git worktree under ``.claude/worktrees/`` holds untracked copies of every launch file,
-    which the directory walk reported as offenders. Only the repository's own files are scanned."""
-    git = shutil.which("git")
-    assert git is not None
-    subprocess.run([git, "init", "-q"], cwd=tmp_path, check=True)  # noqa: S603 - fixed command
-    (tmp_path / "Dockerfile").write_text('CMD ["uvicorn", "m:app", "--no-access-log"]\n')
-    subprocess.run([git, "add", "Dockerfile"], cwd=tmp_path, check=True)  # noqa: S603 - fixed
-    copy = tmp_path / ".claude" / "worktrees" / "agent-1"
+    which the directory walk reported as offenders. Only the repository's own files are scanned.
+
+    It runs as if inside a git hook, with GIT_DIR and GIT_INDEX_FILE pointing at another repository
+    (the developer's checkout in real life), which must stay untouched."""
+    outer = tmp_path / "outer"
+    outer.mkdir()
+    _git("init", "-q", cwd=outer)
+    outer_config = (outer / ".git" / "config").read_text()
+    monkeypatch.setenv("GIT_DIR", str(outer / ".git"))
+    monkeypatch.setenv("GIT_INDEX_FILE", str(outer / ".git" / "index"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(outer))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git("init", "-q", cwd=repo)
+    (repo / "Dockerfile").write_text('CMD ["uvicorn", "m:app", "--no-access-log"]\n')
+    _git("add", "Dockerfile", cwd=repo)
+    copy = repo / ".claude" / "worktrees" / "agent-1"
     copy.mkdir(parents=True)
     (copy / "Dockerfile").write_text('CMD ["uvicorn", "m:app"]\n')
 
-    assert _text_files(tmp_path) == [tmp_path / "Dockerfile"]
+    assert _text_files(repo) == [repo / "Dockerfile"]
+    assert (outer / ".git" / "config").read_text() == outer_config
+    assert not (outer / ".git" / "index").exists()  # nothing was staged in the other repository
