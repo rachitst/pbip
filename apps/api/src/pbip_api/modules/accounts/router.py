@@ -1,3 +1,4 @@
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
@@ -16,6 +17,10 @@ from pbip_api.modules.auth.dependencies import get_request_meta
 from pbip_api.modules.auth.service import RequestMeta
 from pbip_api.modules.customers.dependencies import get_current_customer
 from pbip_api.modules.customers.models import Customer
+from pbip_api.modules.ledger.models import EntryDirection
+
+MAX_AMOUNT = 9_223_372_036_854_775_807  # BIGINT: the column's own bound
+SEARCH_PATTERN = r"^[^\x00-\x1f\x7f]+$"  # printable text only: no control characters
 
 router = APIRouter(prefix="/api/v1/accounts", tags=["accounts"])
 
@@ -92,8 +97,31 @@ def list_my_account_entries(
         default=PageDirection.OLDER,
         description="older: newest first, walking back; newer: oldest first, walking forward",
     ),
+    start_date: date | None = Query(default=None, description="First bank day (IST)"),
+    end_date: date | None = Query(default=None, description="To this bank day (IST), inclusive"),
+    min_amount: int | None = Query(
+        default=None, ge=1, le=MAX_AMOUNT, description="Paise, inclusive"
+    ),
+    max_amount: int | None = Query(
+        default=None, ge=1, le=MAX_AMOUNT, description="Paise, inclusive"
+    ),
+    entry_direction: EntryDirection | None = Query(
+        default=None, alias="type", description="DEBIT (money out) or CREDIT (money in)"
+    ),
+    search: str | None = Query(
+        default=None,
+        min_length=1,
+        max_length=64,
+        pattern=SEARCH_PATTERN,
+        description="Case-insensitive text in the payment reference",
+    ),
     customer: Customer = Depends(get_current_customer),
     session: Session = Depends(get_session),
 ) -> EntriesPage:
+    """Filters keep the same keyset cursor: send the same filters with ``cursor`` for the next
+    page of the filtered list (TASK-017)."""
     account = policy.get_owned_account(session, customer.id, account_id)
-    return service.list_entries_page(session, account, limit, cursor, direction)
+    filters = service.entry_filters(
+        start_date, end_date, min_amount, max_amount, entry_direction, search
+    )
+    return service.list_entries_page(session, account, limit, cursor, direction, filters)
