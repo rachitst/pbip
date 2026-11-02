@@ -615,6 +615,13 @@
             "title": "Lower 95 Minor",
             "type": "integer"
           },
+          "obligations_minor": {
+            "default": 0,
+            "description": "Known scheduled debits due this day (standing orders, loan EMIs), already subtracted from the projection",
+            "minimum": 0.0,
+            "title": "Obligations Minor",
+            "type": "integer"
+          },
           "predicted_minor": {
             "description": "Predicted, not exact: the model's central estimate",
             "title": "Predicted Minor",
@@ -652,6 +659,17 @@
             "title": "Currency",
             "type": "string"
           },
+          "end_of_month": {
+            "$ref": "#/components/schemas/EndOfMonthProjection"
+          },
+          "history": {
+            "description": "Actual end-of-day balances of the last 30 days before the first point",
+            "items": {
+              "$ref": "#/components/schemas/BalanceHistoryPoint"
+            },
+            "title": "History",
+            "type": "array"
+          },
           "history_days": {
             "description": "Days of balance history the forecast used",
             "title": "History Days",
@@ -677,7 +695,16 @@
             "title": "Model Version",
             "type": "string"
           },
+          "obligations": {
+            "description": "Known upcoming debits to the later of the horizon end and the month end",
+            "items": {
+              "$ref": "#/components/schemas/ForecastObligation"
+            },
+            "title": "Obligations",
+            "type": "array"
+          },
           "points": {
+            "description": "Model forecast of everything except scheduled debits, minus the known obligations (TASK-043)",
             "items": {
               "$ref": "#/components/schemas/BalanceForecastPoint"
             },
@@ -692,9 +719,32 @@
           "model_version",
           "history_days",
           "horizon_days",
-          "points"
+          "points",
+          "history",
+          "obligations",
+          "end_of_month"
         ],
         "title": "BalanceForecastResponse",
+        "type": "object"
+      },
+      "BalanceHistoryPoint": {
+        "description": "A past end-of-day ledger balance: actual, not predicted.",
+        "properties": {
+          "balance_minor": {
+            "title": "Balance Minor",
+            "type": "integer"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "balance_minor"
+        ],
+        "title": "BalanceHistoryPoint",
         "type": "object"
       },
       "BillPaymentOut": {
@@ -1769,6 +1819,65 @@
         "title": "EmiRequest",
         "type": "object"
       },
+      "EndOfMonthProjection": {
+        "description": "The projected balance on the running month's last day (TASK-043). Predicted, not exact.",
+        "properties": {
+          "alert_threshold_minor": {
+            "description": "INR 1,000.00 above the lowest allowed balance (0 minus the overdraft limit)",
+            "title": "Alert Threshold Minor",
+            "type": "integer"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "low_balance": {
+            "description": "True when the predicted month-end balance is at or below the threshold",
+            "title": "Low Balance",
+            "type": "boolean"
+          },
+          "lower_80_minor": {
+            "title": "Lower 80 Minor",
+            "type": "integer"
+          },
+          "lower_95_minor": {
+            "title": "Lower 95 Minor",
+            "type": "integer"
+          },
+          "obligations_minor": {
+            "description": "Known scheduled debits from today to the month end, included above",
+            "minimum": 0.0,
+            "title": "Obligations Minor",
+            "type": "integer"
+          },
+          "predicted_minor": {
+            "title": "Predicted Minor",
+            "type": "integer"
+          },
+          "upper_80_minor": {
+            "title": "Upper 80 Minor",
+            "type": "integer"
+          },
+          "upper_95_minor": {
+            "title": "Upper 95 Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "predicted_minor",
+          "lower_80_minor",
+          "upper_80_minor",
+          "lower_95_minor",
+          "upper_95_minor",
+          "obligations_minor",
+          "alert_threshold_minor",
+          "low_balance"
+        ],
+        "title": "EndOfMonthProjection",
+        "type": "object"
+      },
       "EntriesPage": {
         "properties": {
           "has_more": {
@@ -2113,6 +2222,66 @@
           "reason_codes"
         ],
         "title": "FlaggedEvent",
+        "type": "object"
+      },
+      "ForecastObligation": {
+        "description": "A known upcoming debit: one occurrence of an ACTIVE scheduled instruction (TASK-043).",
+        "properties": {
+          "amount_minor": {
+            "exclusiveMinimum": 0.0,
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "date": {
+            "description": "Day the engine will collect it (overdue EMIs: today)",
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "SCHEDULED_TRANSFER",
+              "LOAN_EMI"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "loan_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loan Id"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          },
+          "scheduled_transfer_id": {
+            "format": "uuid",
+            "title": "Scheduled Transfer Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "amount_minor",
+          "kind",
+          "scheduled_transfer_id"
+        ],
+        "title": "ForecastObligation",
         "type": "object"
       },
       "FraudEventsPanel": {
@@ -5768,7 +5937,7 @@
     },
     "/api/v1/analytics/forecast": {
       "get": {
-        "description": "Daily balance projection of an owned account. Predicted, not exact.",
+        "description": "Daily balance projection of an owned account with its known scheduled payments and the\nmonth-end figure (TASK-043). Predicted, not exact. May add one low-balance notification.",
         "operationId": "get_balance_forecast_api_v1_analytics_forecast_get",
         "parameters": [
           {
@@ -5825,7 +5994,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Projected end-of-day balance with 80% and 95% intervals (Predicted, not exact)",
+        "summary": "Projected balance, intervals, scheduled payments, month end (Predicted, not exact)",
         "tags": [
           "analytics"
         ]

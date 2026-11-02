@@ -24,6 +24,8 @@ class UpcomingOccurrence:
     amount_minor: int
     currency: str
     occurrence_date: date
+    loan_id: UUID | None = None  # set for a loan's repayment instruction (ADR-0024)
+    reference: str | None = None
 
 
 def compute_next_occurrence(
@@ -120,6 +122,8 @@ def upcoming_occurrences(
                     amount_minor=inst.amount,
                     currency=inst.currency,
                     occurrence_date=cur,
+                    loan_id=inst.loan_id,
+                    reference=inst.reference,
                 )
             )
             cur = compute_next_occurrence(inst.start_date, cur, inst.frequency, inst.end_date)

@@ -57,7 +57,11 @@ from pbip_api.modules.payments.models import (
     SchedulePauseReason,
 )
 from pbip_api.modules.payments.policy import get_owned_scheduled_transfer
-from pbip_api.modules.payments.recurrence import UpcomingOccurrence, compute_next_occurrence
+from pbip_api.modules.payments.recurrence import (
+    UpcomingOccurrence,
+    compute_next_occurrence,
+    upcoming_occurrences,
+)
 from pbip_api.modules.payments.schemas import ScheduledTransferCreate, to_scheduled_transfer_out
 
 # Wrong step-up codes for ONE transfer before it goes to an analyst instead (TASK-037).
@@ -972,9 +976,24 @@ class PaymentsService:
     # ------------------------------------------------------------- projections
     def upcoming_occurrences(self, customer_id: UUID, until: date) -> list[UpcomingOccurrence]:
         """Project upcoming occurrences for customer's active instructions (R15)."""
-        from pbip_api.modules.payments.recurrence import upcoming_occurrences
-
         return upcoming_occurrences(self.session, customer_id, until)
+
+
+def upcoming_account_occurrences(
+    session: Session, customer_id: UUID, account_id: UUID, until: date
+) -> list[UpcomingOccurrence]:
+    """Occurrences up to ``until`` of the customer's ACTIVE instructions that debit ``account_id``.
+
+    Read-only (no locks, no writes), for the balance projection (TASK-043). Only the authenticated
+    customer's own instructions are read: the caller has already checked it owns the account.
+    Occurrences before today are included as the engine stores them; the caller decides what they
+    mean (a missed transfer is skipped, an overdue loan instalment is still collected).
+    """
+    return [
+        o
+        for o in upcoming_occurrences(session, customer_id, until)
+        if o.from_account_id == account_id
+    ]
 
 
 def _refuse_loan_instruction(instruction: ScheduledTransfer) -> None:

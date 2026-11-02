@@ -2,7 +2,7 @@
 
 import uuid
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -10,7 +10,13 @@ from fastapi.testclient import TestClient
 from pbip_api.core.db import utcnow
 from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.notifications.models import Notification
-from pbip_test_support import PASSWORD, Actor
+from pbip_api.modules.payments.models import (
+    ScheduledTransfer,
+    ScheduledTransferStatus,
+    ScheduleFrequency,
+)
+from pbip_test_support import PASSWORD, Actor, FakeClock
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 pytestmark = [pytest.mark.integration, pytest.mark.security]
@@ -485,6 +491,50 @@ def test_bola_loans_are_only_visible_to_their_borrower(
     assert client.get("/api/v1/loans", headers=h).json() == []
     own = client.get(f"/api/v1/accounts/{alice.account_id}", headers=alice.headers).json()
     assert own["ledger_balance_minor"] == 2_00_000_00  # income + one loan, nothing from Mallory
+
+
+def test_bola_forecast_neither_reads_nor_alerts_for_another_customers_account(
+    client: TestClient,
+    db: Session,
+    clock: FakeClock,
+    make_customer: Callable[..., Actor],
+    make_verified_payee: Callable[..., dict[str, Any]],
+) -> None:
+    """TASK-043: the projection reads obligations and sends its alert only for the AUTHENTICATED
+    customer's own account; for anyone else's it is the same 404 as a missing account."""
+    alice, mallory = make_customer(funds=2_000_00), make_customer(funds=2_000_00)
+    payee = make_verified_payee(alice, mallory)
+    clock.advance(20 * 24 * 3600)  # history for the forecast
+    today = datetime.fromtimestamp(clock(), tz=UTC).date()
+    db.add(
+        ScheduledTransfer(
+            customer_id=alice.customer_id,
+            user_id=alice.user_id,
+            from_account_id=alice.account_id,
+            payee_id=uuid.UUID(payee["id"]),
+            amount=1_900_00,  # leaves INR 100 at the month end: a low-balance alert for Alice
+            currency="INR",
+            reference="Victim rent",
+            frequency=ScheduleFrequency.MONTHLY,
+            status=ScheduledTransferStatus.ACTIVE,
+            start_date=today,
+            next_run_date=today,
+        )
+    )
+    db.commit()
+    url = f"/api/v1/analytics/forecast?account_id={alice.account_id}"
+
+    stolen = client.get(url, headers=mallory.headers)
+    assert stolen.status_code == 404 and "Victim rent" not in stolen.text
+    own = client.get(
+        f"/api/v1/analytics/forecast?account_id={mallory.account_id}", headers=mallory.headers
+    ).json()
+    assert own["obligations"] == []  # Alice's standing order is not projected on Mallory's account
+    alerts = select(Notification).where(Notification.type == "PROJECTED_LOW_BALANCE")
+    assert db.execute(alerts).scalars().all() == []
+
+    assert client.get(url, headers=alice.headers).json()["end_of_month"]["low_balance"] is True
+    assert [n.user_id for n in db.execute(alerts).scalars()] == [alice.user_id]
 
 
 def test_listings_only_contain_the_callers_own_objects(

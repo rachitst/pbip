@@ -21,6 +21,7 @@ const NOTIFICATION_TYPES: Record<string, { label: string | null; tone: Tone }> =
   PASSWORD_CHANGED: { label: "Security", tone: "warning" },
   MFA_ENABLED: { label: "Security", tone: "warning" },
   DEVICE_REGISTERED: { label: "Security", tone: "warning" },
+  PROJECTED_LOW_BALANCE: { label: "Low balance ahead", tone: "warning" },
 };
 
 /** A type the API adds later is shown neutrally. */
@@ -29,9 +30,11 @@ export function notificationKind(type: string): { label: string | null; tone: To
 }
 
 /** Where a notification leads, from its link target: a transfer opens its account's transactions
- * with that transaction highlighted, a security event opens Profile & security. Without a link
+ * with that transaction highlighted, a security event opens Profile & security, a low-balance
+ * forecast opens Insights. Without a link
  * target (an unknown type) it is only marked read: no destination is guessed. */
 export function notificationDestination(item: NotificationOut): string | null {
+  if (item.type === "PROJECTED_LOW_BALANCE") return "/insights"; // the forecast chart (TASK-043)
   if (item.resource_type === "security") return "/profile";
   if (item.resource_type === "transaction") {
     if (!item.account_id || !item.resource_id) return "/accounts"; // sent before links existed

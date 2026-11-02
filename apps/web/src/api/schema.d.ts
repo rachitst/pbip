@@ -170,8 +170,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Projected end-of-day balance with 80% and 95% intervals (Predicted, not exact)
-         * @description Daily balance projection of an owned account. Predicted, not exact.
+         * Projected balance, intervals, scheduled payments, month end (Predicted, not exact)
+         * @description Daily balance projection of an owned account with its known scheduled payments and the
+         *     month-end figure (TASK-043). Predicted, not exact. May add one low-balance notification.
          */
         get: operations["get_balance_forecast_api_v1_analytics_forecast_get"];
         put?: never;
@@ -1429,6 +1430,12 @@ export interface components {
             /** Lower 95 Minor */
             lower_95_minor: number;
             /**
+             * Obligations Minor
+             * @description Known scheduled debits due this day (standing orders, loan EMIs), already subtracted from the projection
+             * @default 0
+             */
+            obligations_minor: number;
+            /**
              * Predicted Minor
              * @description Predicted, not exact: the model's central estimate
              */
@@ -1450,6 +1457,12 @@ export interface components {
             account_id: string;
             /** Currency */
             currency: string;
+            end_of_month: components["schemas"]["EndOfMonthProjection"];
+            /**
+             * History
+             * @description Actual end-of-day balances of the last 30 days before the first point
+             */
+            history: components["schemas"]["BalanceHistoryPoint"][];
             /**
              * History Days
              * @description Days of balance history the forecast used
@@ -1471,8 +1484,29 @@ export interface components {
             method: string;
             /** Model Version */
             model_version: string;
-            /** Points */
+            /**
+             * Obligations
+             * @description Known upcoming debits to the later of the horizon end and the month end
+             */
+            obligations: components["schemas"]["ForecastObligation"][];
+            /**
+             * Points
+             * @description Model forecast of everything except scheduled debits, minus the known obligations (TASK-043)
+             */
             points: components["schemas"]["BalanceForecastPoint"][];
+        };
+        /**
+         * BalanceHistoryPoint
+         * @description A past end-of-day ledger balance: actual, not predicted.
+         */
+        BalanceHistoryPoint: {
+            /** Balance Minor */
+            balance_minor: number;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
         };
         /** BillPaymentOut */
         BillPaymentOut: {
@@ -2048,6 +2082,42 @@ export interface components {
             /** Tenure Months */
             tenure_months: number;
         };
+        /**
+         * EndOfMonthProjection
+         * @description The projected balance on the running month's last day (TASK-043). Predicted, not exact.
+         */
+        EndOfMonthProjection: {
+            /**
+             * Alert Threshold Minor
+             * @description INR 1,000.00 above the lowest allowed balance (0 minus the overdraft limit)
+             */
+            alert_threshold_minor: number;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * Low Balance
+             * @description True when the predicted month-end balance is at or below the threshold
+             */
+            low_balance: boolean;
+            /** Lower 80 Minor */
+            lower_80_minor: number;
+            /** Lower 95 Minor */
+            lower_95_minor: number;
+            /**
+             * Obligations Minor
+             * @description Known scheduled debits from today to the month end, included above
+             */
+            obligations_minor: number;
+            /** Predicted Minor */
+            predicted_minor: number;
+            /** Upper 80 Minor */
+            upper_80_minor: number;
+            /** Upper 95 Minor */
+            upper_95_minor: number;
+        };
         /** EntriesPage */
         EntriesPage: {
             /** Has More */
@@ -2226,6 +2296,34 @@ export interface components {
             reason_codes: string[];
             /** Risk Score */
             risk_score: number;
+        };
+        /**
+         * ForecastObligation
+         * @description A known upcoming debit: one occurrence of an ACTIVE scheduled instruction (TASK-043).
+         */
+        ForecastObligation: {
+            /** Amount Minor */
+            amount_minor: number;
+            /**
+             * Date
+             * Format: date
+             * @description Day the engine will collect it (overdue EMIs: today)
+             */
+            date: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "SCHEDULED_TRANSFER" | "LOAN_EMI";
+            /** Loan Id */
+            loan_id?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /**
+             * Scheduled Transfer Id
+             * Format: uuid
+             */
+            scheduled_transfer_id: string;
         };
         /** FraudEventsPanel */
         FraudEventsPanel: {
