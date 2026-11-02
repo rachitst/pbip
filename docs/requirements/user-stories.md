@@ -514,8 +514,12 @@ compare them, so that I can invest sensibly.*
   level; funds state no yield because PBIP has no market data (TASK-063, ADR-0025).
 * ✓ I can book a fixed deposit from my account with an exact maturity preview, see it with a maturity countdown in
   my portfolio, and withdraw it at maturity or close it early at the penalty rate (TASK-064, TASK-065).
-* ✗ Insurance products are listed.
-* ✗ Two to four products can be compared side by side.
+* ✓ Insurance products are listed: term life and health, with cover range, an indicative annual premium for a stated
+  reference profile and entry-age hints, from a migration-seeded catalogue; nothing about me is read and no
+  underwriting is done (TASK-096, ADR-0028).
+* ✓ Two to four products (investments and insurance) can be compared side by side on `/wealth/compare`: yield, tenure
+  or policy term, lock-in, risk level, minimum amount, cover, premium and entry age, with "Not applicable" where a
+  field does not apply (TASK-098).
 
 **Status:** Partial.
 
@@ -524,9 +528,10 @@ compare them, so that I can invest sensibly.*
 `test_catalogue_filters_by_risk_level`, `test_booking_posts_one_balanced_entry_and_stores_the_deposit`,
 `test_premature_closure_pays_the_penalty_rate_and_balances`,
 `test_maturity_is_computed_on_read_and_pays_exactly_the_projected_amount`; `test_wealth_deposit_math.py`;
-`Wealth.test.tsx`.
+`Wealth.test.tsx`; `test_insurance.py`, `test_wealth_insurance.py`, `WealthCompare.test.tsx`.
 
-**Tasks:** TASK-054 (In Progress); TASK-063, TASK-064, TASK-065 (In review); TASK-096, TASK-097, TASK-098 (Todo).
+**Tasks:** TASK-054 (In Progress); TASK-063, TASK-064, TASK-065 (In review); TASK-097 (Done); TASK-096, TASK-098
+(In Review).
 
 ## UC-08 AI assistant interaction
 

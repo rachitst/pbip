@@ -1704,3 +1704,52 @@ input[type="range"] {
   flex-wrap: wrap;
   gap: var(--space-2);
 }
+
+/* ---- Wealth: product comparison (TASK-098) ------------------------------------------------- */
+.compare-pickers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: var(--space-4);
+}
+.compare-picker {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-width: 0;
+}
+.compare-picker legend {
+  padding: 0 var(--space-1);
+  font-weight: var(--weight-medium);
+}
+.compare-picker__option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  overflow-wrap: anywhere;
+}
+.compare-picker__option input {
+  margin-top: 0.2em;
+  flex: none;
+}
+.compare-status {
+  margin: var(--space-3) 0;
+}
+.compare-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.compare-table caption {
+  text-align: left;
+  font-weight: var(--weight-medium);
+  padding-bottom: var(--space-2);
+}
+.compare-table th[scope="col"],
+.compare-table td {
+  min-width: 10rem;
+  vertical-align: top;
+}
+.compare-table th[scope="row"] {
+  white-space: nowrap;
+}

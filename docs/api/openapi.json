@@ -136,6 +136,32 @@
         "title": "AgeBand",
         "type": "string"
       },
+      "AgeBandHintOut": {
+        "properties": {
+          "age_band": {
+            "enum": [
+              "18-25",
+              "26-35",
+              "36-50",
+              "51-59",
+              "60+"
+            ],
+            "title": "Age Band",
+            "type": "string"
+          },
+          "whole_band_eligible": {
+            "description": "False when only some ages in the band are inside the entry ages",
+            "title": "Whole Band Eligible",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "age_band",
+          "whole_band_eligible"
+        ],
+        "title": "AgeBandHintOut",
+        "type": "object"
+      },
       "AlertCustomer": {
         "description": "What an analyst needs to judge the alert; no contact details or date of birth.",
         "properties": {
@@ -3552,6 +3578,39 @@
         "title": "HighRiskCustomer",
         "type": "object"
       },
+      "IndicativePremiumOut": {
+        "description": "ONE illustrative figure at a stated reference profile, never a quote for this customer\n(PBIP does no underwriting, ADR-0028).",
+        "properties": {
+          "annual_premium_minor": {
+            "description": "Indicative, simulated annual premium (paise)",
+            "title": "Annual Premium Minor",
+            "type": "integer"
+          },
+          "reference_age": {
+            "description": "Age at entry the premium is stated for",
+            "title": "Reference Age",
+            "type": "integer"
+          },
+          "reference_cover_minor": {
+            "description": "Cover the premium is stated for",
+            "title": "Reference Cover Minor",
+            "type": "integer"
+          },
+          "reference_term_years": {
+            "description": "Policy term the premium is stated for",
+            "title": "Reference Term Years",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "annual_premium_minor",
+          "reference_cover_minor",
+          "reference_age",
+          "reference_term_years"
+        ],
+        "title": "IndicativePremiumOut",
+        "type": "object"
+      },
       "InstalmentOut": {
         "properties": {
           "balance_after_minor": {
@@ -3584,6 +3643,138 @@
         ],
         "title": "InstalmentOut",
         "type": "object"
+      },
+      "InsuranceEligibilityOut": {
+        "description": "Hints from the product's own rules only: the customer's data is not read.",
+        "properties": {
+          "age_bands": {
+            "description": "Profile age bands that can apply",
+            "items": {
+              "$ref": "#/components/schemas/AgeBandHintOut"
+            },
+            "title": "Age Bands",
+            "type": "array"
+          },
+          "max_cover_age": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cover ends at this age; None: renewable for life",
+            "title": "Max Cover Age"
+          },
+          "max_entry_age": {
+            "title": "Max Entry Age",
+            "type": "integer"
+          },
+          "min_entry_age": {
+            "title": "Min Entry Age",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "min_entry_age",
+          "max_entry_age",
+          "max_cover_age",
+          "age_bands"
+        ],
+        "title": "InsuranceEligibilityOut",
+        "type": "object"
+      },
+      "InsuranceProductOut": {
+        "properties": {
+          "catalogue_version": {
+            "title": "Catalogue Version",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "cover_max_minor": {
+            "description": "Largest cover offered",
+            "title": "Cover Max Minor",
+            "type": "integer"
+          },
+          "cover_min_minor": {
+            "description": "Smallest cover (sum insured/assured) offered",
+            "title": "Cover Min Minor",
+            "type": "integer"
+          },
+          "currency": {
+            "const": "INR",
+            "title": "Currency",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "eligibility": {
+            "$ref": "#/components/schemas/InsuranceEligibilityOut"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "indicative_premium": {
+            "$ref": "#/components/schemas/IndicativePremiumOut"
+          },
+          "insurance_type": {
+            "enum": [
+              "TERM_LIFE",
+              "HEALTH"
+            ],
+            "title": "Insurance Type",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "title": "Notes",
+            "type": "string"
+          },
+          "policy_terms_years": {
+            "description": "Terms offered; [1] for yearly renewal",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Policy Terms Years",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "insurance_type",
+          "name",
+          "description",
+          "currency",
+          "cover_min_minor",
+          "cover_max_minor",
+          "policy_terms_years",
+          "indicative_premium",
+          "eligibility",
+          "notes",
+          "catalogue_version"
+        ],
+        "title": "InsuranceProductOut",
+        "type": "object"
+      },
+      "InsuranceType": {
+        "enum": [
+          "TERM_LIFE",
+          "HEALTH"
+        ],
+        "title": "InsuranceType",
+        "type": "string"
       },
       "InteractionChannel": {
         "enum": [
@@ -11792,6 +11983,66 @@
           }
         ],
         "summary": "Close one of my fixed deposits: maturity payout, or premature with the penalty rate",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/insurance": {
+      "get": {
+        "operationId": "list_insurance_api_v1_wealth_insurance_get",
+        "parameters": [
+          {
+            "description": "Only this type",
+            "in": "query",
+            "name": "insurance_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/InsuranceType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this type",
+              "title": "Insurance Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InsuranceProductOut"
+                  },
+                  "title": "Response List Insurance Api V1 Wealth Insurance Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Insurance catalogue: term life and health, with indicative premiums (no underwriting)",
         "tags": [
           "wealth"
         ]

@@ -186,3 +186,71 @@ class FixedDeposit(Base):
     closed_on: Mapped[date | None] = mapped_column(Date)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = created_at_col()
+
+
+class InsuranceType(StrEnum):
+    TERM_LIFE = "TERM_LIFE"
+    HEALTH = "HEALTH"
+
+
+class InsuranceProduct(Base):
+    """Insurance catalogue (TASK-096, ADR-0028): reference data seeded by migration 0019.
+
+    A separate table from ``wealth_products`` because insurance is protection, not investment: it
+    has a cover range, entry ages and a premium the customer pays, and no yield, lock-in or risk
+    level. The premium is ONE indicative figure for the stated reference cover, age and term; PBIP
+    does no underwriting, so nothing here is a quote for a particular customer.
+    """
+
+    __tablename__ = "insurance_products"
+    __table_args__ = (
+        in_check("insurance_type", InsuranceType, "insurance_type_valid"),
+        CheckConstraint("min_cover_minor > 0", name="min_cover_positive"),
+        CheckConstraint("max_cover_minor >= min_cover_minor", name="max_cover_at_least_min"),
+        CheckConstraint(
+            "min_entry_age >= 18 AND max_entry_age >= min_entry_age AND max_entry_age <= 120",
+            name="entry_ages_valid",
+        ),
+        CheckConstraint(
+            "max_cover_age IS NULL OR max_cover_age > max_entry_age", name="max_cover_age_valid"
+        ),
+        CheckConstraint(
+            "cardinality(policy_terms_years) > 0 AND 0 < ALL(policy_terms_years)",
+            name="policy_terms_positive",
+        ),
+        CheckConstraint(
+            "reference_cover_minor BETWEEN min_cover_minor AND max_cover_minor",
+            name="reference_cover_in_range",
+        ),
+        CheckConstraint(
+            "reference_age BETWEEN min_entry_age AND max_entry_age", name="reference_age_eligible"
+        ),
+        CheckConstraint(
+            "reference_term_years = ANY(policy_terms_years)", name="reference_term_offered"
+        ),
+        CheckConstraint(
+            "max_cover_age IS NULL OR reference_age + reference_term_years <= max_cover_age",
+            name="reference_term_within_cover_age",
+        ),
+        CheckConstraint("indicative_annual_premium_minor > 0", name="indicative_premium_positive"),
+        Index("ix_insurance_products_insurance_type", "insurance_type"),
+    )
+
+    id: Mapped[UUID] = uuid_pk()
+    code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    insurance_type: Mapped[InsuranceType] = mapped_column(str_enum(InsuranceType), nullable=False)
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    description: Mapped[str] = mapped_column(String(300), nullable=False)
+    min_cover_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    max_cover_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    min_entry_age: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_entry_age: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_cover_age: Mapped[int | None] = mapped_column(Integer)  # None: renewable for life
+    policy_terms_years: Mapped[list[int]] = mapped_column(ARRAY(Integer), nullable=False)
+    reference_cover_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    reference_age: Mapped[int] = mapped_column(Integer, nullable=False)
+    reference_term_years: Mapped[int] = mapped_column(Integer, nullable=False)
+    indicative_annual_premium_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    notes: Mapped[str] = mapped_column(String(300), nullable=False)
+    catalogue_version: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_at: Mapped[datetime] = created_at_col()

@@ -2887,8 +2887,8 @@ decision in ADR-0015.
 ### TASK-096 - Insurance Products Catalogue API
 
 - **Issue:** #179 | **Sprint:** unscheduled | **Priority:** should | **Size:** S (0.5 person-days estimate) | **Epic:** Core Banking & Ledger
-- **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Owner:** Rachit (`rachitst`)
+- **Start:** Mon 02 Nov | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** In Review (TASK-096 and TASK-098 in one PR; ADR-0028 awaits owner approval) | **Risk:** Unscheduled
 - **Depends on:** TASK-063 (#86, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **Goal:** Read-only catalogue of insurance products so the wealth scope and recommendation outputs include insurance.
@@ -2941,8 +2941,8 @@ decision in ADR-0015.
 ### TASK-098 - Wealth and Insurance Product Comparison UI
 
 - **Issue:** #181 | **Sprint:** unscheduled | **Priority:** could | **Size:** M (1.5 person-days estimate) | **Epic:** Frontend Web Application
-- **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Owner:** Rachit (`rachitst`)
+- **Start:** Mon 02 Nov | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** In Review (TASK-096 and TASK-098 in one PR; ADR-0028 awaits owner approval) | **Risk:** Unscheduled
 - **Depends on:** TASK-019 (#42, Kalpak), TASK-063 (#86, Sujal), TASK-096 (#179, unassigned). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout.
