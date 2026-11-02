@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from pbip_api.core.errors import NotFoundError
+from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.fraud.models import AlertSeverity, AlertStatus, FraudAlert, FraudEvent
 from pbip_api.modules.ledger.models import Transaction
 
@@ -46,18 +47,20 @@ def open_alert(session: Session, event: FraudEvent) -> FraudAlert:
 
 def list_alerts(
     session: Session, status: AlertStatus | None, limit: int, offset: int
-) -> list[tuple[FraudAlert, FraudEvent, Transaction]]:
+) -> list[tuple[FraudAlert, FraudEvent, Transaction, str | None]]:
+    """Queue rows with the customer's name, so an analyst can triage without opening each."""
     stmt = (
-        select(FraudAlert, FraudEvent, Transaction)
+        select(FraudAlert, FraudEvent, Transaction, Customer.full_name)
         .join(FraudEvent, FraudEvent.id == FraudAlert.fraud_event_id)
         .join(Transaction, Transaction.id == FraudAlert.transaction_id)
+        .outerjoin(Customer, Customer.id == FraudEvent.customer_id)
         .order_by(FraudAlert.created_at.desc())
         .limit(limit)
         .offset(offset)
     )
     if status is not None:
         stmt = stmt.where(FraudAlert.status == status)
-    return [(a, e, t) for a, e, t in session.execute(stmt).all()]
+    return [(a, e, t, name) for a, e, t, name in session.execute(stmt).all()]
 
 
 def get_alert(session: Session, alert_id: UUID) -> tuple[FraudAlert, FraudEvent, Transaction]:
