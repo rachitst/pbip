@@ -5,7 +5,7 @@
 | Task | TASK-053 (#76) |
 | Scope | System boundaries, C4 context and container views, components, data stores, API and ML inference contracts, security, scalability, observability, production roadmap |
 | Verified against | `main` at `2e65b87` (1 Nov 2026): code, compose files, workflows and tests, not earlier documents |
-| Related | [Blueprint](../PROJECT_BLUEPRINT.md) (engineering rules), [ER diagram](er-diagram.md) (generated from the schema), [threat model](../security/threat-model.md), [AI assistant security](../security/ai-assistant-security.md), [runbook](../operations/runbook.md), [traceability](../requirements/traceability.md) |
+| Related | [Blueprint](../PROJECT_BLUEPRINT.md) (engineering rules), [LLD](LLD.md) (tables, state machines, lock order), [ER diagram](er-diagram.md) (generated from the schema), [threat model](../security/threat-model.md), [AI assistant security](../security/ai-assistant-security.md), [runbook](../operations/runbook.md), [traceability](../requirements/traceability.md) |
 
 **Status labels used throughout.** Each capability is marked with one of three labels:
 
@@ -13,7 +13,8 @@
 * **Partial**: part of it is on `main`. The text says what is missing and which task owns the rest.
 * **Planned**: it is not on `main`. The owning task is named. "No task" means nobody has been assigned the work yet.
 
-The low-level design (TASK-027) and the user manual (TASK-092) are separate deliverables and are not covered here.
+The low-level design is a separate document: [LLD.md](LLD.md) (TASK-027: schema reference, state machines, lock-order
+and idempotency sequences). The user manual (TASK-092) is also separate and is not covered here.
 
 ---
 
