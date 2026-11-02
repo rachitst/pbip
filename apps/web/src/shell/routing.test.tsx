@@ -116,11 +116,15 @@ describe("routing, roles and the application shell (ADR-0016)", () => {
       expect(warning).toHaveTextContent("Sign out and sign in again");
     });
 
-    it("tells a staff user without an authenticator to ask for enrolment", async () => {
+    it("sends a staff user without an authenticator to set one up (#201)", async () => {
       me = { ...analystMe, mfa_enabled: false, mfa_verified_session: false };
       renderApp();
       expect(await screen.findByText(/Staff tools need a session verified/)).toHaveTextContent(
-        "ask an administrator",
+        "set one up under Sign-in security",
+      );
+      expect(screen.getByRole("link", { name: "Sign-in security" })).toHaveAttribute(
+        "href",
+        "/staff/security",
       );
     });
 
