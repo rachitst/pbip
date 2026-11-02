@@ -45,6 +45,7 @@ def test_scheduled_transfer_columns_and_enums() -> None:
         "from_account_id": False,
         "payee_id": True,
         "to_account_id": True,
+        "loan_id": True,  # a loan's repayment instruction (ADR-0024)
         "amount": False,
         "currency": False,
         "reference": True,
@@ -61,7 +62,7 @@ def test_scheduled_transfer_columns_and_enums() -> None:
         "pause_reason": True,
         "created_at": False,
     }
-    assert len(table.columns) == 21
+    assert len(table.columns) == 22
     assert {col.name: col.nullable for col in table.columns} == expected_nullability
     assert "last_evaluated_date" not in table.columns
     assert getattr(table.columns["currency"].default, "arg", None) == "INR"
@@ -103,6 +104,11 @@ def test_scheduled_transfer_check_constraints_and_foreign_keys() -> None:
         "OR (status <> 'PAUSED' AND pause_reason IS NULL)"
     )
 
+    # exactly one destination: payee, own account or loan (ADR-0024)
+    assert checks["ck_scheduled_transfers_destination_xor"] == (
+        "num_nonnulls(payee_id, to_account_id, loan_id) = 1"
+    )
+
     fk_ondelete = {fk.parent.name: fk.ondelete for fk in table.foreign_keys}
     assert fk_ondelete == {
         "customer_id": "RESTRICT",
@@ -110,6 +116,7 @@ def test_scheduled_transfer_check_constraints_and_foreign_keys() -> None:
         "from_account_id": "RESTRICT",
         "payee_id": "RESTRICT",
         "to_account_id": "RESTRICT",
+        "loan_id": "RESTRICT",
         "last_transaction_id": "SET NULL",
     }
 
