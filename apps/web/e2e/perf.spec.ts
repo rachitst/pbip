@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { Page, TestInfo } from "@playwright/test";
+import { newPassword } from "./support";
 
 // TASK-102: page-load and login budgets from the use case document, section 8, measured in a real
 // browser against the full stack. Fails the job when a budget is missed; every measurement is
@@ -15,7 +16,7 @@ const PAGE_BUDGET_MS = 2000;
 // number, instead of failing on Playwright's 5 s default with no timing at all.
 const WAIT = { timeout: 20_000 };
 const LOGIN_BUDGET_MS = 3000;
-const PASSWORD = `${crypto.randomUUID()}Aa1!`;
+const PASSWORD = newPassword();
 const EMAIL = `e2e-perf-${Date.now().toString(36)}@example.com`;
 
 type Measurement = { name: string; ms: number; budgetMs: number; navigationMs?: number };
