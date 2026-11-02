@@ -149,14 +149,26 @@ class Encryption:
         return [*self._base(), "--decrypt", str(source)]
 
 
-def check_passphrase_file(path: Path) -> None:
-    """Refuse a missing or group/world-readable passphrase file (it unlocks every backup)."""
+def check_passphrase_file(path: Path, *, posix: bool = os.name == "posix") -> None:
+    """Refuse a missing or group/world-readable passphrase file (it unlocks every backup).
+
+    Privacy is only verifiable on POSIX. On Windows ``st_mode`` is synthesised from the read-only
+    attribute (always 0o666 or 0o444), so it says nothing about who can read the file under the
+    NTFS ACL: enforcing it would refuse every file, and passing it would claim a check that never
+    happened. Windows therefore gets an explicit warning to restrict the ACL by hand (runbook 4.1).
+    """
     try:
         mode = path.stat().st_mode
     except OSError as exc:
         raise BackupError(f"passphrase file not readable: {path}") from exc
     if not stat.S_ISREG(mode):
         raise BackupError(f"passphrase file is not a regular file: {path}")
+    if not posix:
+        sys.stderr.write(
+            "warning: passphrase file permissions are NOT verified on Windows; make sure its ACL "
+            f"grants access to your account only (see runbook 4.1): {path}\n"
+        )
+        return
     if mode & 0o077:
         raise BackupError(f"passphrase file must be chmod 600 (is {stat.S_IMODE(mode):o}): {path}")
 

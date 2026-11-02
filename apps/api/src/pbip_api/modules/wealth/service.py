@@ -33,11 +33,13 @@ from pbip_api.modules.ledger import service as ledger
 from pbip_api.modules.ledger.models import IdempotencyKey
 from pbip_api.modules.notifications import service as notifications
 from pbip_api.modules.payments.service import IdempotencyKeyReuseError
-from pbip_api.modules.wealth import deposit_math
+from pbip_api.modules.wealth import deposit_math, insurance
 from pbip_api.modules.wealth.models import (
     ClosureKind,
     FixedDeposit,
     FixedDepositStatus,
+    InsuranceProduct,
+    InsuranceType,
     ProductType,
     RiskLevel,
     WealthProduct,
@@ -45,11 +47,15 @@ from pbip_api.modules.wealth.models import (
 )
 from pbip_api.modules.wealth.policy import get_owned_fixed_deposit, list_owned_fixed_deposits
 from pbip_api.modules.wealth.schemas import (
+    AgeBandHintOut,
     AllocationSlice,
     DepositBookRequest,
     DepositQuoteOut,
     DepositTermsRequest,
     FixedDepositOut,
+    IndicativePremiumOut,
+    InsuranceEligibilityOut,
+    InsuranceProductOut,
     PortfolioOut,
     WealthProductOut,
 )
@@ -107,6 +113,49 @@ def list_products(session: Session, risk_level: RiskLevel | None) -> list[Wealth
     if risk_level is not None:
         stmt = stmt.where(WealthProduct.risk_level == risk_level)
     return [_product_out(p) for p in session.execute(stmt).scalars()]
+
+
+def _insurance_out(product: InsuranceProduct) -> InsuranceProductOut:
+    hints = insurance.eligible_age_bands(product.min_entry_age, product.max_entry_age)
+    return InsuranceProductOut(
+        id=product.id,
+        code=product.code,
+        insurance_type=product.insurance_type.value,
+        name=product.name,
+        description=product.description,
+        currency="INR",
+        cover_min_minor=product.min_cover_minor,
+        cover_max_minor=product.max_cover_minor,
+        policy_terms_years=list(product.policy_terms_years),
+        indicative_premium=IndicativePremiumOut(
+            annual_premium_minor=product.indicative_annual_premium_minor,
+            reference_cover_minor=product.reference_cover_minor,
+            reference_age=product.reference_age,
+            reference_term_years=product.reference_term_years,
+        ),
+        eligibility=InsuranceEligibilityOut(
+            min_entry_age=product.min_entry_age,
+            max_entry_age=product.max_entry_age,
+            max_cover_age=product.max_cover_age,
+            age_bands=[
+                AgeBandHintOut(age_band=h.age_band.value, whole_band_eligible=h.whole_band_eligible)
+                for h in hints
+            ],
+        ),
+        notes=product.notes,
+        catalogue_version=product.catalogue_version,
+    )
+
+
+def list_insurance_products(
+    session: Session, insurance_type: InsuranceType | None
+) -> list[InsuranceProductOut]:
+    """The seeded insurance catalogue (ADR-0028). Same answer for every customer: nothing about
+    the caller is read, so no consent is needed and no underwriting happens."""
+    stmt = select(InsuranceProduct).order_by(InsuranceProduct.insurance_type, InsuranceProduct.code)
+    if insurance_type is not None:
+        stmt = stmt.where(InsuranceProduct.insurance_type == insurance_type)
+    return [_insurance_out(p) for p in session.execute(stmt).scalars()]
 
 
 @dataclass(frozen=True, slots=True)

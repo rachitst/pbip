@@ -1,7 +1,7 @@
 """Fixed-deposit maturity payout: the held-payout marker and the poll index (issue #332).
 
-Revision ID: 0020
-Revises: 0019
+Revision ID: 0021
+Revises: 0020
 Create Date: 2026-11-03
 
 ADR-0029. ``payout_held_at`` records that the automatic payout found the source account not active
@@ -15,8 +15,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0020"
-down_revision: str | None = "0019"
+revision: str = "0021"
+down_revision: str | None = "0020"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
