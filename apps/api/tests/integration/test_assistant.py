@@ -2,19 +2,26 @@
 
 import json
 import re
+import uuid
 from collections.abc import Callable, Iterator, Mapping
+from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import UUID
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pbip_api.core.config import Settings
+from pbip_api.core.money import format_minor
 from pbip_api.modules.assistant import tools
 from pbip_api.modules.assistant.dependencies import get_chat_model
 from pbip_api.modules.assistant.llm import LLMUnavailableError, OllamaChatModel
+from pbip_api.modules.auth.models import SecurityEvent, SecurityEventType
 from pbip_api.modules.compliance.models import AuditLog
 from pbip_api.modules.ledger.models import Transaction
-from pbip_test_support import Actor, FakeClock
+from pbip_api.modules.loans import emi as emi_math
+from pbip_api.modules.loans.catalogue import PRODUCTS, LoanType
+from pbip_test_support import Actor, FakeClock, age_payee, month_start, post_spend_at
 from sqlalchemy import Engine, func, select, text
 from sqlalchemy.orm import Session
 
@@ -104,11 +111,16 @@ def test_llm_engine_chooses_the_tool_and_the_server_writes_the_reply(
 def test_a_loan_amount_the_customer_never_wrote_is_not_answered(
     client: TestClient, make_customer: Callable[..., Actor], use_model: Callable[[object], None]
 ) -> None:
+    """The model's invented 1 lakh / 12 months is dropped; FR-38 answers for no amount instead."""
     alice = make_customer(funds=5_000_00)
     invented = {"loan_type": "PERSONAL", "amount_rupees": 100000, "tenure_months": 12}
-    use_model(FakeModel(json.dumps({"tool": "get_loan_affordability", "arguments": invented})))
-    body = _chat(client, alice, "can I get a loan?")  # what qwen2.5:1.5b really returned
-    assert body["outcome"] == "help" and body["tool"] is None and "lakh" in body["reply"]
+    model = FakeModel(json.dumps({"tool": "get_loan_affordability", "arguments": invented}))
+    use_model(model)
+    body = _chat(client, alice, "could I get some finance?")  # no keyword the rules know
+    assert model.messages == ["could I get some finance?"]
+    assert body["engine"] == "llm" and body["tool"] == "get_loan_affordability"
+    assert "1,00,000.00" not in body["reply"] and "12 months" not in body["reply"]
+    assert "over 36 months" in body["reply"]  # the product's default tenure, not the model's
 
 
 def test_clear_questions_are_answered_without_calling_the_model(
@@ -361,3 +373,179 @@ def test_chat_and_stream_share_the_per_user_limit(
         "/api/v1/assistant/chat/stream", headers=alice.headers, json={"message": "hi"}
     )
     assert over.status_code == 429
+
+
+# ---------------------------------------------------------------- TASK-110 unusual expenses
+
+
+def _seed_unusual_history(engine: Engine, account_id: UUID, now: datetime) -> None:
+    """Three baseline months (groceries INR 3,000, shopping INR 2,000, dining INR 500 in two)
+    and last month: normal groceries, a big shopping payment, a first travel spend, a dining
+    bump below the INR 1,000 floor."""
+    for back in (2, 3, 4):
+        day = month_start(now, back) + timedelta(days=9, hours=12)
+        post_spend_at(engine, account_id, 3_000_00, "BigBasket groceries", day)
+        post_spend_at(engine, account_id, 2_000_00, "Amazon order", day)
+        if back != 4:
+            post_spend_at(engine, account_id, 500_00, "Swiggy dinner", day)
+    last = month_start(now, 1)
+    post_spend_at(engine, account_id, 3_500_00, "BigBasket groceries", last + timedelta(days=2))
+    post_spend_at(engine, account_id, 2_000_00, "Amazon order", last + timedelta(days=3))
+    post_spend_at(engine, account_id, 12_000_00, "Amazon order", last + timedelta(days=19))
+    post_spend_at(engine, account_id, 5_000_00, "MakeMyTrip hotel", last + timedelta(days=21))
+    post_spend_at(engine, account_id, 600_00, "Swiggy dinner", last + timedelta(days=22))
+
+
+_MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August",
+           "September", "October", "November", "December")  # fmt: skip
+
+
+def _name(moment: datetime) -> str:
+    return f"{_MONTHS[moment.month - 1]} {moment.year}"
+
+
+def test_unusual_expenses_lists_exactly_the_items_outside_the_own_baseline(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    use_model: Callable[[object], None],
+    migrated_engine: Engine,
+    clock: FakeClock,
+    db: Session,
+) -> None:
+    alice = make_customer(funds=1_00_000_00)
+    now = datetime.fromtimestamp(clock.now, UTC)
+    _seed_unusual_history(migrated_engine, alice.account_id, now)
+    model = FakeModel('{"tool": "get_account_summary", "arguments": {}}')
+    use_model(model)
+    body = _chat(client, alice, "any unusual expenses last month?")
+    assert body["engine"] == "rules" and model.messages == []  # rules path, no LLM
+    assert body["tool"] == "get_unusual_expenses" and body["outcome"] == "answered"
+    assert body["link"] == "/insights"
+    last, big_day = month_start(now, 1), month_start(now, 1) + timedelta(days=19)
+    label = f"Savings \u2022\u2022{alice.account_number[-4:]}"
+    assert body["reply"].split("\n") == [
+        f"Unusual spending in {_name(last)} on {label}, compared with "
+        f"{_name(month_start(now, 4))} to {_name(month_start(now, 2))}:",
+        "Categories above your usual level:",
+        "- Shopping: INR 14,000.00 (2 payment(s)) against a usual INR 2,000.00 a month - 7.0x, "
+        "INR 12,000.00 more.",
+        "- Travel: INR 5,000.00 (1 payment(s)); nothing in the previous 3 months.",
+        "Unusually large payments:",
+        f"- {big_day:%d %b}: INR 12,000.00 \u201cAmazon order\u201d (shopping) - 6.0x your usual "
+        "shopping payment of INR 2,000.00 (median of 3).",
+        "Unusual means a category at least 1.5x your monthly average of the previous 3 months, "
+        "or a single payment at least 3.0x your usual payment in that category - and in both "
+        "cases at least INR 1,000.00 more.",
+    ]
+    rows = _audit(db, alice)
+    assert [(r.action, r.details) for r in rows] == [
+        (
+            "assistant.tool_call",
+            {"tool": "get_unusual_expenses", "outcome": "ok", "engine": "rules"},
+        )
+    ]
+
+
+def test_unusual_expenses_when_nothing_stands_out_or_history_is_short(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    migrated_engine: Engine,
+    clock: FakeClock,
+) -> None:
+    alice = make_customer(funds=1_00_000_00)
+    now = datetime.fromtimestamp(clock.now, UTC)
+    short = _chat(client, alice, "unusual expenses last month")
+    assert short["outcome"] == "answered" and short["tool"] == "get_unusual_expenses"
+    assert "at least 2 of the 3 months before this one" in short["reply"]
+    for back in (2, 3, 4):
+        day = month_start(now, back) + timedelta(days=4)
+        post_spend_at(migrated_engine, alice.account_id, 3_000_00, "BigBasket groceries", day)
+    post_spend_at(
+        migrated_engine, alice.account_id, 3_200_00, "BigBasket groceries",
+        month_start(now, 1) + timedelta(days=4),
+    )  # fmt: skip
+    calm = _chat(client, alice, "unusual expenses last month")
+    assert calm["reply"].startswith(f"Nothing unusual in {_name(month_start(now, 1))} on Savings")
+
+
+# ---------------------------------------------------------------- FR-38 loan without an amount
+
+
+def test_a_loan_without_an_amount_suggests_the_largest_eligible_one(
+    client: TestClient, make_customer: Callable[..., Actor], use_model: Callable[[object], None]
+) -> None:
+    alice = make_customer(funds=1_00_000_00)  # INR 1,00,000 income, no repayments
+    model = FakeModel('{"tool": "get_account_summary", "arguments": {}}')
+    use_model(model)
+    body = _chat(client, alice, "Can I afford a loan?")
+    assert body["engine"] == "rules" and model.messages == []
+    assert body["tool"] == "get_loan_affordability" and body["outcome"] == "answered"
+    personal = next(p for p in PRODUCTS if p.loan_type == LoanType.PERSONAL)
+    # 50% of income is the EMI budget; the catalogue caps a personal loan at INR 15 lakh.
+    amount = min(emi_math.max_principal(50_000_00, 1_150, 36), personal.max_amount_minor)
+    emi = emi_math.emi(amount, 1_150, 36)
+    assert body["reply"].startswith(
+        "You didn't name an amount, so here is the most you could borrow: a personal loan of up "
+        f"to {format_minor(amount)} over 36 months, an EMI of {format_minor(emi)} at the "
+        "catalogue rate from 11.50% a year."
+    )
+    assert "within the 50% limit" in body["reply"] and "not an offer" in body["reply"]
+
+    car = _chat(client, alice, "how much can I borrow for a car over 4 years?")
+    car_amount = emi_math.max_principal(50_000_00, 925, 48)
+    assert f"a car loan of up to {format_minor(car_amount)} over 48 months" in car["reply"]
+    assert "from 9.25% a year" in car["reply"]
+
+
+def test_a_too_short_tenure_moves_the_suggestion_to_the_next_tenure_that_fits(
+    client: TestClient, make_customer: Callable[..., Actor]
+) -> None:
+    """INR 4,000 income: INR 2,000 a month buys less than the INR 25,000 minimum over 12 months,
+    so the suggestion is the shortest offered tenure that reaches it (24 months)."""
+    bob = make_customer(funds=4_000_00)
+    assert emi_math.max_principal(2_000_00, 1_150, 12) < 25_000_00
+    body = _chat(client, bob, "can I get a personal loan over 1 year?")
+    amount = emi_math.max_principal(2_000_00, 1_150, 24)
+    assert f"a personal loan of up to {format_minor(amount)} over 24 months" in body["reply"]
+
+
+def test_a_loan_without_an_amount_asks_for_one_when_eligibility_cannot_be_computed(
+    client: TestClient, make_customer: Callable[..., Actor], db: Session
+) -> None:
+    no_income = make_customer()
+    body = _chat(client, no_income, "can I get a loan?")
+    assert body["outcome"] == "answered" and body["tool"] == "get_loan_affordability"
+    assert body["reply"].startswith("I can't suggest a personal loan amount right now: We could")
+    assert "regular income" in body["reply"] and "Tell me the amount" in body["reply"]
+
+    locked = make_customer(funds=1_00_000_00)
+    db.add(SecurityEvent(user_id=locked.user_id, event_type=SecurityEventType.ACCOUNT_LOCKED))
+    db.commit()
+    body = _chat(client, locked, "can I get a loan?")
+    assert "locked after repeated failed sign-ins" in body["reply"]
+    assert "Tell me the amount" in body["reply"] and "INR" not in body["reply"]
+
+
+def test_a_loan_without_an_amount_when_repayments_leave_no_room(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_verified_payee: Callable[..., dict[str, Any]],
+    migrated_engine: Engine,
+) -> None:
+    alice, lender = make_customer(funds=1_00_000_00), make_customer()
+    payee = make_verified_payee(alice, lender)
+    age_payee(migrated_engine, payee["id"], 48)
+    resp = client.post(
+        "/api/v1/transfers",
+        headers={**alice.headers, "Idempotency-Key": uuid.uuid4().hex},
+        json={
+            "from_account_id": str(alice.account_id),
+            "amount_minor": 60_000_00,
+            "payee_id": payee["id"],
+            "reference": "Home loan EMI",
+        },
+    )
+    assert resp.status_code in (201, 202), resp.text
+    body = _chat(client, alice, "can I take a personal loan?")
+    assert body["reply"].startswith("A personal loan isn't affordable right now.")
+    assert "already take 60% of your income of INR 1,00,000.00" in body["reply"]

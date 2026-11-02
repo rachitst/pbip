@@ -346,7 +346,10 @@ tool for the authenticated customer and writes the answer ([ADR-0018](../adr/001
 4. Ollama `qwen2.5:1.5b-instruct` with grammar-constrained JSON and a 4 s timeout, only for unclear questions;
 5. deterministic rules if the model fails.
 
-**Tools:** `get_account_summary`, `get_recent_transactions`, `get_spend`, `get_balance_forecast`, `get_loan_affordability`.
+**Tools:** `get_account_summary`, `get_recent_transactions`, `get_spend`, `get_balance_forecast`,
+`get_loan_affordability` (amount optional: without one it suggests the largest eligible amount, FR-38), and
+`get_unusual_expenses(account, period)` (TASK-110: categories and single payments well above the customer's own
+3-month baseline; rule in `analytics/unusual.py`).
 
 The details and the adversarial suite are in [ai-assistant-security.md](../security/ai-assistant-security.md).
 

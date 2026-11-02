@@ -7,6 +7,8 @@ and the share of it already going to loan repayments (health score). The rules, 
 3. Otherwise the largest affordable amount per tenor keeps total repayments within 50% of income.
 Every result explains itself with the figures it used. "Existing repayments" also include the
 EMIs of the customer's active PBIP loans, so loans cannot be stacked before the first EMI posts.
+Without an amount (FR-38, the assistant's "can I afford a loan?"), :func:`suggest_loan` offers
+the rule-3 maximum, or says why it cannot.
 
 Applying (TASK-047, ADR-0024) re-runs eligibility under the per-user lock and, in ONE database
 transaction, disburses through the ledger, stores the loan and its full schedule and creates the
@@ -18,7 +20,7 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select, text
@@ -217,6 +219,88 @@ def check_eligibility(
         max_eligible_amount_minor=at_tenure if eligible or not lockouts else 0,
         tenor_options=options if not lockouts else [],
         reasons=reasons,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class LoanSuggestion:
+    """FR-38: the answer to "can I afford a loan?" when the customer names no amount.
+
+    ``SUGGESTED``: the largest amount eligibility allows at ``tenure_months`` (``reasons`` are the
+    eligibility check's own, run again for that amount). ``ASK_AMOUNT``: eligibility cannot be
+    computed (no income history, or a recent lockout); ``reasons`` say which. ``NOT_AFFORDABLE``:
+    it was computed and no amount of this product fits within the 50% limit.
+    """
+
+    status: Literal["SUGGESTED", "ASK_AMOUNT", "NOT_AFFORDABLE"]
+    product: LoanProduct
+    tenure_months: int
+    amount_minor: int  # 0 unless SUGGESTED
+    emi_minor: int  # 0 unless SUGGESTED
+    reasons: list[str]
+
+
+def suggest_loan(
+    session: Session,
+    *,
+    customer_id: UUID,
+    user_id: UUID,
+    product_id: UUID,
+    tenure_months: int,
+    now: datetime,
+) -> LoanSuggestion:
+    """Read-only. Same rules and figures as :func:`check_eligibility`; no amount is invented: the
+    suggestion is the TASK-046 maximum for this tenure (or, if none fits there, the shortest
+    offered tenure that has one), from the catalogue rate."""
+    product = get_product(product_id)
+    if product is None:
+        raise NotFoundError("loan product not found")
+    _product(product.id, product.min_amount_minor, tenure_months)  # tenure offered, or 422
+    if recent_lockouts(session, user_id, now - LOCKOUT_LOOKBACK):
+        reason = (
+            "Your account was locked after repeated failed sign-ins in the last 90 days, so I "
+            "can't work out a loan amount for you until 90 days after the last lockout."
+        )
+        return LoanSuggestion("ASK_AMOUNT", product, tenure_months, 0, 0, [reason])
+    income, existing = _income_and_debt(session, customer_id, now)
+    if income == 0:
+        reason = "We could not find regular income in your account history to base an amount on."
+        return LoanSuggestion("ASK_AMOUNT", product, tenure_months, 0, 0, [reason])
+    options = _tenor_options(product, max(int(income * MAX_DTI) - existing, 0))
+    pick = next((o for o in options if o.tenure_months == tenure_months), None)
+    pick = pick or next((o for o in options if o.tenure_months > tenure_months), None)
+    if pick is None:
+        return LoanSuggestion(
+            "NOT_AFFORDABLE", product, tenure_months, 0, 0, [_no_room(product, income, existing)]
+        )
+    check = check_eligibility(
+        session,
+        customer_id=customer_id,
+        user_id=user_id,
+        product_id=product.id,
+        amount_minor=pick.max_amount_minor,
+        tenure_months=pick.tenure_months,
+        now=now,
+    )
+    if check.status != "ELIGIBLE":  # cannot happen with the same figures; never suggest anyway
+        return LoanSuggestion("NOT_AFFORDABLE", product, tenure_months, 0, 0, check.reasons)
+    return LoanSuggestion(
+        "SUGGESTED",
+        product,
+        pick.tenure_months,
+        pick.max_amount_minor,
+        pick.emi_at_max_minor,
+        check.reasons,
+    )
+
+
+def _no_room(product: LoanProduct, income: int, existing: int) -> str:
+    share = existing / income
+    return (
+        f"Loan repayments already take {share:.0%} of your income of "
+        f"{format_minor(income, 'INR')} a month, which leaves no room for the smallest "
+        f"{product.name.lower()} ({format_minor(product.min_amount_minor, 'INR')}) within the "
+        "50% limit."
     )
 
 
