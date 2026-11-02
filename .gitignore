@@ -63,3 +63,6 @@ infra/certs/
 
 # mutmut work tree (TASK-086, docs/testing/mutation-report.md)
 apps/api/mutants/
+
+# k6 summaries and invariants from local load runs
+perf-results/

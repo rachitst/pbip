@@ -2120,7 +2120,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #92 | **Sprint:** 5 | **Priority:** should | **Size:** S (0.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Fri 30 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (3.9 days of slack)
+- **Start:** Fri 30 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** Sun 1 Nov (#289, 0af8016: dashboards as code incl. p50/p95/p99 per route template and the four fraud decisions, alert rules in infra/prometheus/alerts.yml; every panel rendered data on a running compose stack with the monitoring profile, laptop) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-035 (#58, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-035
 - **Goal:** Provisioned Grafana dashboards tracking API throughput, latency percentiles, and fraud decisions.
@@ -2367,7 +2367,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #101 | **Sprint:** 6 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (4.0 days of slack)
+- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (suite merged in #288, 4c5d2d5; laptop: 0% errors, 0 deadlocks/overdrafts, money conserved; NOT met: p95 within budget and 10,000 requests in one run on the 2-CPU laptop, staging #198) | **Status:** In Progress | **Risk:** High (needs staging hardware)
 - **Depends on:** TASK-012 (#23, Rachit), TASK-033 (#56, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-033
 - **Goal:** Load testing suite verifying p95 latency < 500ms under 500 concurrent virtual users.
@@ -2396,7 +2396,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #102 | **Sprint:** 6 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Fri 30 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (4.0 days of slack)
+- **Start:** Fri 30 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (indexes + pool settings merged in #288, 4c5d2d5; fraud-feature query 4.46 -> 0.54 ms under load, 76.6 -> 0.26 ms at 500k rows; NOT met: DB p95 < 15 ms at 200 connections, not measurable on the laptop) | **Status:** In Progress | **Risk:** High (needs staging hardware)
 - **Depends on:** TASK-078 (#101, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-078
 - **Goal:** PostgreSQL query profiling and connection pool tuning eliminating slow queries.
@@ -2515,7 +2515,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #106 | **Sprint:** 6 | **Priority:** could | **Size:** M (1.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Wed 28 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (6.0 days of slack)
+- **Start:** Wed 28 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** Sun 1 Nov (#293, 91bf750: gpg-encrypted pg_dump with manifest, restore drill into a temporary DB; drill on the laptop matched 39 tables/775,226 rows, ledger totals and the 151-row audit chain; tampering rejected) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-001 (#12, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Parallel: can start immediately
 - **Goal:** Automated script performing PostgreSQL pg_dump with encryption and automated restore test.
@@ -2708,7 +2708,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #113 | **Sprint:** 7 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Identity & Core Banking
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Sun 01 Nov | **Target deadline:** Sun 01 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (2.0 days of slack)
+- **Start:** Sun 01 Nov | **Target deadline:** Sun 01 Nov | **Actual completion:** Sun 1 Nov (#290, 1690365: Bandit 0 high/medium, pip-audit clean, npm production 0, gitleaks over all refs 16 false positives, audit chain valid; OWASP ZAP baseline 6 WARN -> 0 after the CORP/COEP fix; nightly dast.yml; report docs/security/security-audit-2026-11.md) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-067 (#90, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-067
 - **Goal:** Comprehensive pre-ship security verification pass ensuring flawless compliance.
@@ -3051,7 +3051,7 @@ decision in ADR-0015.
 
 - **Issue:** #185 | **Sprint:** unscheduled | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (merged in #288, 4c5d2d5; laptop browser: page loads 913-1,665 ms, login 2,102 ms, all within budget; API p95 budget not met under 50 VUs on the laptop; first nightly perf.yml run on a GitHub runner pending) | **Status:** In Progress | **Risk:** Medium
 - **Depends on:** TASK-012 (#23, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **Goal:** Measured evidence for the section 8 targets: page load < 2 s, API response < 500 ms, login < 3 s.
@@ -3078,7 +3078,7 @@ decision in ADR-0015.
 
 - **Issue:** #186 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (mechanism merged in #289, 0af8016: blackbox probes, 30-day availability rule, AvailabilityBelow99, error tracking in Loki; NOT met: one week on a deployed test environment, #198) | **Status:** In Progress | **Risk:** High (no staging host)
 - **Depends on:** TASK-082 (#105, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **Goal:** Evidence for '99% availability in test environment' and 'error tracking' (section 8).
@@ -3208,6 +3208,86 @@ decision in ADR-0015.
   - Security: no secrets; AGENTS.md section 5 items that apply
   - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
 - **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
+
+### Requirement-gap tasks added 2026-11-01 (TASK-108 to TASK-112)
+
+Added by tracing use case document v0.2 section 5 and the requirements specification again: each covers a
+requirement with "no task" (FR-05 administration and configuration, FR-08 total balance, FR-39 unusual expenses,
+FR-55 held products, FR-50 web clickstream). Unassigned, no dates, Todo on the board. Registration/MFA screens stay
+with #201 and TLS was delivered in #280, so neither is repeated here.
+
+### TASK-108 - Administration Screens and Application Configuration
+
+- **Issue:** #282 | **Sprint:** unscheduled | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Identity & Core Banking
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-007.
+- **Mode:** Unscheduled
+- **Goal:** FR-05 / section 5 administration: an ADMIN can manage staff users and view or change the application settings that are safe to change at runtime, from the web app.
+- **Expected end result / acceptance criteria:**
+  - [ ] Staff web screens (ADMIN, MFA session) to create staff users with explicit roles and to inspect and clear a lockout, using the existing admin API
+  - [ ] A documented allow-list of runtime-configurable settings (for example the daily transfer limit) with typed, bounded validation; secrets and security settings are never configurable from the UI
+  - [ ] Every configuration change is audited (who, old and new value, reason) in the hash-chained audit log
+  - [ ] Non-admin roles get 403 on every admin route and screen (RBAC tests), and the route-policy registry covers the new routes
+- **Definition of done (evidence):** Component and E2E tests for the screens; API tests for validation, RBAC and audit; threat model updated for the new configuration surface.
+
+### TASK-109 - Total Balance Overview on the Customer Dashboard
+
+- **Issue:** #283 | **Sprint:** unscheduled | **Priority:** should | **Size:** S (0.5 person-days estimate) | **Epic:** Frontend Web Application
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-019.
+- **Mode:** Unscheduled
+- **Goal:** FR-08 / section 5 'total balance overview': the dashboard shows the total balance across the customer's own accounts.
+- **Expected end result / acceptance criteria:**
+  - [ ] Dashboard shows the total available and ledger balance across the authenticated customer's accounts, in integer minor units formatted by lib/money.ts
+  - [ ] The total is computed server-side from the customer's own accounts only (policy function; another customer's accounts never contribute)
+  - [ ] Loading, error and empty (no accounts) states are handled
+- **Definition of done (evidence):** API test (ownership, multiple accounts, zero accounts) and component test; OpenAPI regenerated if the API changes.
+
+### TASK-110 - Assistant Intent: Show Unusual Expenses
+
+- **Issue:** #284 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** AI Assistant & Security
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-057, TASK-059.
+- **Mode:** Unscheduled
+- **Goal:** FR-39 / UC-08 example 'Show unusual expenses': a read-only assistant tool that lists the customer's spending that is unusual for them, with the reason.
+- **Expected end result / acceptance criteria:**
+  - [ ] Approved read-only tool in the assistant registry; customer_id is injected server-side and is not part of the tool schema; arguments are bounded enums (period)
+  - [ ] Unusual means outside the customer's own baseline (for example category spend or single transactions well above their usual amount); the rule and threshold are documented and each item states why it is unusual
+  - [ ] Merchant names and references in the result are treated as untrusted data (delimited, length-capped, control characters stripped)
+  - [ ] Routed intent answers without the LLM; adversarial tests cover cross-customer requests and prompt injection through a merchant name
+- **Definition of done (evidence):** Unit tests for the anomaly rule with known inputs; assistant integration and adversarial tests; tool call audited.
+
+### TASK-111 - Held Products as a Recommendation Input
+
+- **Issue:** #285 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-054.
+- **Mode:** Unscheduled
+- **Goal:** FR-55 / UC-12: recommendations take the products a customer already holds into account.
+- **Expected end result / acceptance criteria:**
+  - [ ] Recommendation input includes the customer's held products (accounts, loans and, once they exist, deposits and investments), read through the owning modules' service functions
+  - [ ] A product the customer already holds is not recommended again unless the rule explains why (for example a top-up), and the reason says so
+  - [ ] The recommendation contract change is recorded in an ADR if pbip_ml contract.py changes
+- **Definition of done (evidence):** Unit tests with known holdings proving exclusion and explained exceptions; contract/ADR updated if changed.
+
+### TASK-112 - Web Clickstream Instrumentation
+
+- **Issue:** #286 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-055.
+- **Mode:** Unscheduled
+- **Goal:** FR-50 / UC-11: the web app sends page-visit and interaction events to the existing clickstream ingestion API (TASK-055).
+- **Expected end result / acceptance criteria:**
+  - [ ] Page visits (route template, never raw ids or query strings) and a defined list of key interactions are sent in batches to the ingestion API
+  - [ ] No personal data, amounts, account numbers or free text in events; a test asserts the event payload shape
+  - [ ] Sending never blocks or breaks the UI: failures are dropped silently and batches are size- and rate-bounded
+  - [ ] Instrumentation respects the analytics consent decision recorded for the customer, if one exists
+- **Definition of done (evidence):** Component tests for the event hook and batching; an E2E check that a page visit reaches the ingestion API; privacy review noted in the threat model.
 
 ## 7. Cross-owner handoffs
 
