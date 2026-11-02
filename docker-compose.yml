@@ -89,7 +89,8 @@ services:
   worker:
     build: *api-build
     environment: *api-env
-    command: ["celery", "-A", "pbip_api.worker.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    # -E: emit task events so celery-exporter (monitoring profile) can count runs, failures and runtimes.
+    command: ["celery", "-A", "pbip_api.worker.celery_app", "worker", "--loglevel=INFO", "--concurrency=2", "-E"]
     volumes: [*dev-ca]
     depends_on:
       migrate: { condition: service_completed_successfully }
@@ -144,9 +145,15 @@ services:
   prometheus:
     profiles: [monitoring]
     image: prom/prometheus:v3.5.0
+    # 35 days of retention on a volume: the availability SLO is reported per calendar month (TASK-103).
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=35d
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./infra/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus:/prometheus
     ports: ["127.0.0.1:9090:9090"]
 
   grafana:
@@ -160,6 +167,23 @@ services:
       - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana:/var/lib/grafana
     ports: ["127.0.0.1:3000:3000"]
+
+  # Availability probes (TASK-103): HTTP checks of the health endpoints, the same path users take.
+  blackbox-exporter:
+    profiles: [monitoring]
+    image: prom/blackbox-exporter:v0.27.0
+    command: ["--config.file=/etc/blackbox/blackbox.yml"]
+    volumes:
+      - ./infra/prometheus/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+      - ./infra/certs/ca.crt:/etc/blackbox/ca.crt:ro
+
+  # Celery task metrics from worker events (needs the worker's -E). MIT-licensed, pinned by digest.
+  celery-exporter:
+    profiles: [monitoring]
+    image: danihodovic/celery-exporter:0.12.2@sha256:91e0b314cb5d62f0b2cd0ccdd059178d2d26f816ae0df2a4eeeb6b3c6feb5937
+    command: ["--broker-url=redis://redis:6379/0", "--retry-interval=5"]
+    depends_on:
+      redis: { condition: service_healthy }
 
   redis-exporter:
     profiles: [monitoring]
@@ -188,6 +212,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
 volumes:
+  prometheus:
   pgdata:
   redisdata:
   mlflow:

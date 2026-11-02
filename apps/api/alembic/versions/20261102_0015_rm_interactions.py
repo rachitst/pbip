@@ -1,8 +1,8 @@
 """Relationship Manager outreach log (TASK-066, ADR-0022).
 
-Revision ID: 0012
-Revises: 0011
-Create Date: 2026-11-01
+Revision ID: 0015
+Revises: 0014
+Create Date: 2026-11-02
 """
 
 from collections.abc import Sequence
@@ -10,8 +10,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0012"
-down_revision: str | None = "0011"
+revision: str = "0015"
+down_revision: str | None = "0014"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

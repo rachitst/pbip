@@ -424,6 +424,22 @@ def cmd_fraud_model(args: list[str]) -> int:
     )  # fmt: skip
 
 
+def cmd_promote_model(args: list[str]) -> int:
+    """Measure a fraud training run and promote it to ``champion`` if it passes the gate (TASK-038).
+
+    Default: the newest run in the ``pbip-fraud`` experiment, measured on ``data/fraud`` (the export
+    ``fraud-model`` trains on). Arguments replace the defaults (``--run-id``, ``--holdout``, gates).
+    """
+    rest = args or ["--latest-run", "--data", str(ROOT / "data" / "fraud")]
+    return _run(["uv", "run", "python", "-m", "pbip_ml.fraud.promotion", "promote", *rest])
+
+
+def cmd_fraud_champion(args: list[str]) -> int:
+    """Copy the registry's ``champion`` into ``models/fraud`` (checksums verified) for the API."""
+    rest = args or ["--out", str(ROOT / "models" / "fraud")]
+    return _run(["uv", "run", "python", "-m", "pbip_ml.fraud.promotion", "export-champion", *rest])
+
+
 def cmd_notebooks(args: list[str]) -> int:
     """Execute ml/notebooks/*.ipynb head-to-tail and save outputs (``--check`` to only verify)."""
     return _run(["uv", "run", "python", "scripts/run_notebooks.py", *args])
@@ -457,7 +473,7 @@ def build_k6_command(
         return ["k6", "run", f"infra/k6/{script}", *extra], {"BASE_URL": url}
     url = base_url or ("http://localhost:8000" if linux else "http://host.docker.internal:8000")
     cmd = ["docker", "run", "--rm", "-i", "-e", f"BASE_URL={url}"]
-    for name in ("VUS", "DURATION", "THINK_SECONDS"):
+    for name in ("VUS", "DURATION", "THINK_SECONDS", "USERS"):
         if os.environ.get(name):
             cmd += ["-e", f"{name}={os.environ[name]}"]
     if linux:
@@ -472,6 +488,43 @@ def cmd_perf(args: list[str]) -> int:
     cmd, env = build_k6_command(
         "baseline.js", os.environ.get("BASE_URL"), _find_tool("k6") is not None, args
     )
+    return _run(cmd, env=env)
+
+
+PERF_RESULTS = ROOT / "perf-results"
+
+
+def build_load_command(
+    base_url: str | None, has_native_k6: bool, extra: list[str]
+) -> tuple[list[str], dict[str, str]]:
+    """k6 load suite (infra/k6/load.js): like ``perf``, plus a writable /results mount for
+    ``--summary-export /results/...`` and trust in the local dev CA for ``https://localhost``."""
+    cmd, env = build_k6_command("load.js", base_url, has_native_k6, extra)
+    url = base_url or ""
+    local_tls = url.startswith(("https://localhost", "https://127.0.0.1")) and DEV_CA.exists()
+    if has_native_k6:
+        if local_tls:
+            env["SSL_CERT_FILE"] = str(DEV_CA)  # Go's crypto/x509 honours it on Linux and macOS
+        cmd = [part.replace("/results/", f"{PERF_RESULTS.as_posix()}/") for part in cmd]
+        return cmd, env
+    PERF_RESULTS.mkdir(exist_ok=True)
+    image_at = cmd.index(K6_IMAGE)
+    mounts = ["-v", f"{PERF_RESULTS.as_posix()}:/results"]
+    if hasattr(os, "getuid"):  # POSIX: the image's own user cannot write to a host-owned bind mount
+        mounts += ["--user", f"{os.getuid()}:{os.getgid()}"]
+    if local_tls:
+        mounts += [
+            "-v",
+            f"{DEV_CA.as_posix()}:/certs/ca.crt:ro",
+            "-e",
+            "SSL_CERT_FILE=/certs/ca.crt",
+        ]
+    return [*cmd[:image_at], *mounts, *cmd[image_at:]], env
+
+
+def cmd_load(args: list[str]) -> int:
+    """Run the k6 load suite (infra/k6/load.js, TASK-078) against a running, seeded stack."""
+    cmd, env = build_load_command(os.environ.get("BASE_URL"), _find_tool("k6") is not None, args)
     return _run(cmd, env=env)
 
 
@@ -811,6 +864,8 @@ COMMANDS = {
     "notebooks": "Execute the EDA notebooks head-to-tail (--check: verify only)",
     "datagen": "Generate + COPY-load the synthetic ML dataset (seed 42, 1,000 customers)",
     "fraud-model": "Train the fraud models into models/fraud (needed for FRAUD_SCORER=hybrid)",
+    "promote-model": "Measure the newest fraud run; promote it to MLflow 'champion' if it passes",
+    "fraud-champion": "Export the MLflow 'champion' fraud model into models/fraud (for the API)",
     "dev-api": "Run FastAPI backend on :8000 with auto-reload",
     "dev-worker": "Run Celery worker + beat (Windows: solo pool, beat as a second process)",
     "dev-web": "Run Vite React frontend on :5173",
@@ -827,6 +882,7 @@ COMMANDS = {
     "test-web": "Run Vitest frontend tests",
     "test-e2e": "Run Playwright end-to-end tests",
     "perf": "k6 baseline: health endpoints at 50 VUs, p95 < 50 ms (needs a running API)",
+    "load": "k6 load suite (TASK-078): banking mix with NFR thresholds (seeded stack)",
     "smoke": "Run smoke test against https://localhost:8443 or custom URL",
     "fuzz": "Run property-based API fuzzing with Schemathesis",
     "check": "Run full CI verification suite locally",

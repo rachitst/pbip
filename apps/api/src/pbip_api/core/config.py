@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     # libpq waits forever by default; a stalled connect then blocks a request or Celery task (and a
     # worker's warm shutdown) indefinitely. libpq treats values below 2 as 2.
     database_connect_timeout_seconds: int = Field(default=5, ge=2, le=60)
+    # SQLAlchemy pool per API process (TASK-079). Sync endpoints run on a 40-thread pool, so size +
+    # overflow bounds how many requests hold a connection at once; the rest wait up to the timeout.
+    db_pool_size: int = Field(default=10, ge=1, le=100)
+    db_max_overflow: int = Field(default=10, ge=0, le=100)
+    db_pool_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
 
     jwt_secret: SecretStr = SecretStr(_DEV_JWT_SECRET)
     jwt_access_ttl_minutes: int = 15
@@ -90,6 +95,9 @@ class Settings(BaseSettings):
     max_transfer_minor: int = 20_000_000  # 2,00,000.00 per transfer
     daily_transfer_limit_minor: int = 50_000_000  # 5,00,000.00 per customer per UTC day
     idempotency_ttl_hours: int = 24
+    scheduled_transfers_batch_size: int = Field(default=100, ge=1, le=1000)
+    # Live (ACTIVE or PAUSED) standing orders one customer may hold (ADR-0023 R6).
+    max_active_scheduled_transfers_per_customer: int = Field(default=20, ge=1, le=1000)
 
     cors_origins: str = "http://localhost:5173,http://localhost:8080"
     cookie_secure: bool = False
@@ -105,6 +113,11 @@ class Settings(BaseSettings):
     @property
     def docs_enabled(self) -> bool:
         return not self.is_deployed
+
+    @property
+    def fraud_demo_lab_enabled(self) -> bool:
+        """The staff fraud demo lab (TASK-081) moves money as demo customers: local/test only."""
+        return self.app_env in ("local", "test")
 
     @model_validator(mode="after")
     def _reject_unsafe_deployed_config(self) -> "Settings":

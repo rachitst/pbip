@@ -24,9 +24,12 @@ pytestmark = pytest.mark.unit
 @pytest.fixture(autouse=True)
 def _restore_global_tracking_uri(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.delenv(TRACKING_URI_ENV, raising=False)
-    previous = mlflow.get_tracking_uri()
     yield
-    mlflow.set_tracking_uri(previous)
+    # Not ``set_tracking_uri(previous)``: that also WRITES MLFLOW_TRACKING_URI, and with the env
+    # unset ``previous`` is MLflow's resolved default (sqlite:///<cwd>/mlflow.db), which later
+    # tests then take as an explicit local store (the #268 CI failure). None clears both; the
+    # monkeypatch then restores the original env value, if there was one.
+    mlflow.set_tracking_uri(None)  # type: ignore[arg-type]  # None = unset (mlflow source)
 
 
 def _stub_server(status: int) -> tuple[HTTPServer, str]:

@@ -28,6 +28,8 @@ class FraudEvent(Base):
     __table_args__ = (
         Index("ix_fraud_events_transaction_id", "transaction_id"),
         Index("ix_fraud_events_decision_created_at", "decision", "created_at"),
+        # Read on every scored payment (recent decisions) and by the monitoring API (TASK-079).
+        Index("ix_fraud_events_customer_id_created_at", "customer_id", "created_at"),
     )
 
     id: Mapped[UUID] = uuid_pk()
@@ -48,6 +50,8 @@ class FraudAlert(Base):
         in_check("status", AlertStatus, "status_valid"),
         in_check("severity", AlertSeverity, "severity_valid"),
         Index("ix_fraud_alerts_status_created_at", "status", "created_at"),
+        # FK, and the alert queue's transaction_id filter (the demo lab finds its own alert)
+        Index("ix_fraud_alerts_transaction_id", "transaction_id"),
     )
 
     id: Mapped[UUID] = uuid_pk()
