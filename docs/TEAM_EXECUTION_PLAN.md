@@ -1237,8 +1237,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Expected end result / acceptance criteria:**
   - [x] Script evaluates candidate model against baseline metrics gate (PR-AUC, latency)
   - [x] Promotes winning model by setting alias 'champion' in MLflow Model Registry
-  - [x] FastAPI service loads model at startup dynamically from 'champion' alias
-  - [x] Includes local disk fallback if MLflow server is disconnected
+  - [x] FastAPI service loads model at startup dynamically from 'champion' alias (as built: `export-champion` writes the champion's checksummed files into `FRAUD_MODEL_DIR`, which the API's unchanged startup loader reads; the API never calls MLflow, ADR-0019)
+  - [x] Includes local disk fallback if MLflow server is disconnected (the last exported champion stays on disk and keeps being served; promote/export refuse to run rather than fall back to another registry)
 - **Definition of done (evidence):** Model promotion script tested with mock MLflow runs, offline fallback tested.
 - **Required checks:**
   - Automated: pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable; CI job or `scripts/dev.py` command exercised in tests; works from a fresh clone
