@@ -226,7 +226,7 @@ describe("fraud demo lab (TASK-081)", () => {
 
     expect(await screen.findByText("Risk 77/100")).toBeInTheDocument();
     expect(screen.getByText("Held for review")).toBeInTheDocument();
-    expect(screen.getByText(/Payee was added 0 minutes ago/)).toBeInTheDocument();
+    expect(screen.getByText(/Payee was added less than a minute ago/)).toBeInTheDocument();
     expect(screen.getByText("Transfer is under review")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open the alert" })).toHaveAttribute(
       "href",
