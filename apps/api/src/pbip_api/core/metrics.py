@@ -4,7 +4,10 @@ Label values must be low-cardinality and free of personal data: use route templa
 (``/api/v1/accounts/{account_id}``), never raw paths, user ids or account numbers.
 """
 
-from prometheus_client import Counter, Histogram
+from collections.abc import Iterable
+
+from pbip_ml.monitoring.psi import PsiResult
+from prometheus_client import Counter, Gauge, Histogram
 
 HTTP_REQUESTS_TOTAL = Counter(
     "http_requests_total", "Total HTTP requests", ["method", "route", "status"]
@@ -42,3 +45,15 @@ UNHANDLED_ERRORS_TOTAL = Counter(
     "Unhandled exceptions answered with a generic 500 (error tracking, TASK-103)",
     ["route", "error_type"],
 )
+FEATURE_PSI = Gauge(
+    "pbip_feature_psi",
+    "Population Stability Index of a fraud-model input feature, current vs reference window "
+    "(TASK-068; < 0.1 stable, > 0.1 warning, > 0.25 critical)",
+    ["feature"],
+)
+
+
+def record_feature_psi(results: Iterable[PsiResult]) -> None:
+    """Publish PSI results as ``pbip_feature_psi{feature=...}``; labels are feature names only."""
+    for result in results:
+        FEATURE_PSI.labels(feature=result.feature).set(result.psi)

@@ -31,7 +31,7 @@ test("customer opens an account, registers a device and rotates their password",
   // TASK-005: open a checking (current) account.
   await page.getByLabel("Account type").selectOption("CHECKING");
   await page.getByRole("button", { name: "Open account", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("opened");
+  await expect(page.getByRole("status").filter({ hasText: "opened" })).toBeVisible();
   await expect(page.getByText("Current (checking)").first()).toBeVisible();
 
   // TASK-008: transaction history (a new account has no entries).
@@ -56,7 +56,9 @@ test("customer opens an account, registers a device and rotates their password",
   await page.getByLabel("Current password").fill(PASSWORD);
   await page.getByRole("button", { name: "Change password" }).click();
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
-  await expect(page.getByRole("status")).toContainText("All your sessions were signed out");
+  await expect(
+    page.getByRole("status").filter({ hasText: "All your sessions were signed out" }),
+  ).toBeVisible();
 
   await signIn(page, email, PASSWORD);
   await expect(page.getByRole("alert")).toBeVisible(); // old password no longer works

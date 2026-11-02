@@ -35,7 +35,9 @@ test("a scheduled transfer is created and listed as upcoming", async ({ page, re
   const nextPayment = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(
     new Date(firstPayment),
   );
-  await expect(page.getByRole("status")).toContainText(`The first payment is on`);
+  await expect(
+    page.getByRole("status").filter({ hasText: "The first payment is on" }),
+  ).toBeVisible();
   const row = page
     .getByRole("table", { name: "Upcoming scheduled transfers" })
     .getByRole("row")

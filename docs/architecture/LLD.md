@@ -39,7 +39,7 @@ and is never joined to the operational schema ([ADR-0009](../adr/0009-synthetic-
 
 ## 2. Table inventory
 
-35 tables: 32 in `public`, 3 in `synthetic` (the same count as `er-diagram.md`). Partitions of
+36 tables: 33 in `public`, 3 in `synthetic` (the same count as `er-diagram.md`). Partitions of
 `clickstream_events` and `alembic_version` are not counted.
 
 | # | Table | Owning module (`models.py`) | Created in | Purpose |
@@ -68,17 +68,18 @@ and is never joined to the operational schema ([ADR-0009](../adr/0009-synthetic-
 | 22 | `loan_instalments` | `loans` | 0016 | The repayment schedule, one row per EMI |
 | 23 | `wealth_products` | `wealth` | 0018 | Wealth catalogue (seeded reference data, ADR-0025) |
 | 24 | `fixed_deposits` | `wealth` | 0018 | A booked fixed deposit with its contract snapshot |
-| 25 | `notifications` | `notifications` | 0001, 0007 | In-app notification inbox |
-| 26 | `outbox_events` | `notifications` | 0001 | Transactional outbox, relayed into notifications |
-| 27 | `audit_logs` | `compliance` | 0001 | Hash-chained, append-only audit trail |
-| 28 | `monthly_category_spending` | `analytics` | 0003 | Nightly spending aggregates per account, month and category |
-| 29 | `customer_segments` | `analytics` | 0004 | Weekly rule-based customer segment |
-| 30 | `clickstream_events` | `events` | 0006 | Web behaviour events, range-partitioned by month |
-| 31 | `assistant_messages` | `assistant` | 0009 | AI assistant conversation history |
-| 32 | `rm_interactions` | `insights` | 0015 | Relationship manager outreach log |
-| 33 | `synthetic.generation_runs` | none (`pbip_datagen`) | 0002 | One seeded generator run |
-| 34 | `synthetic.customers` | none (`pbip_datagen`) | 0002 | Synthetic customers of a run |
-| 35 | `synthetic.transactions` | none (`pbip_datagen`) | 0002 | Synthetic transactions of a run (ML training data) |
+| 25 | `insurance_products` | `wealth` | 0020 | Insurance catalogue (seeded reference data, ADR-0028) |
+| 26 | `notifications` | `notifications` | 0001, 0007 | In-app notification inbox |
+| 27 | `outbox_events` | `notifications` | 0001 | Transactional outbox, relayed into notifications |
+| 28 | `audit_logs` | `compliance` | 0001 | Hash-chained, append-only audit trail |
+| 29 | `monthly_category_spending` | `analytics` | 0003 | Nightly spending aggregates per account, month and category |
+| 30 | `customer_segments` | `analytics` | 0004 | Weekly rule-based customer segment |
+| 31 | `clickstream_events` | `events` | 0006 | Web behaviour events, range-partitioned by month |
+| 32 | `assistant_messages` | `assistant` | 0009 | AI assistant conversation history |
+| 33 | `rm_interactions` | `insights` | 0015 | Relationship manager outreach log |
+| 34 | `synthetic.generation_runs` | none (`pbip_datagen`) | 0002 | One seeded generator run |
+| 35 | `synthetic.customers` | none (`pbip_datagen`) | 0002 | Synthetic customers of a run |
+| 36 | `synthetic.transactions` | none (`pbip_datagen`) | 0002 | Synthetic transactions of a run (ML training data) |
 
 ---
 
@@ -342,7 +343,7 @@ authenticated customer id.
 * "Overdue" is not stored: it is derived as `DUE` and `due_date` before today (`loans/service.py` `_status`,
   ADR-0024).
 
-### 3.8a Wealth (`api/modules/wealth/models.py`, TASK-063/064, ADR-0025)
+### 3.8a Wealth (`api/modules/wealth/models.py`, TASK-063/064/096, ADR-0025, ADR-0028)
 
 **`wealth_products`** (0018)
 * Purpose: the wealth catalogue, seeded by migration 0018 (eight products, `catalogue_version` `2026-11-v1`);
@@ -369,6 +370,22 @@ authenticated customer id.
   `ix_fixed_deposits_product_id`.
 * "Matured" is not stored: it is `ACTIVE` with `maturity_date` on or before today (IST), derived on read like
   loan arrears.
+
+**`insurance_products`** (0020, TASK-096, ADR-0028)
+* Purpose: the insurance catalogue, seeded by migration 0020 (two term-life and two health plans,
+  `catalogue_version` `2026-11-v1`); a premium or limit change is a new migration. Fixed ids
+  `30000000-0000-4000-a000-00000000000N`. Nothing references it (insurance is listed, not sold), and the
+  endpoint reads no customer data: PBIP does no underwriting.
+* Key columns: `code` (unique), `insurance_type` (`TERM_LIFE`, `HEALTH`), `min_cover_minor`, `max_cover_minor`,
+  `min_entry_age`, `max_entry_age`, `max_cover_age` (NULL: renewable for life), `policy_terms_years INTEGER[]`,
+  and ONE indicative premium: `indicative_annual_premium_minor` for `reference_cover_minor`, `reference_age`,
+  `reference_term_years`; `notes`.
+* CHECK: type enum; positive minimum cover, maximum at least the minimum; entry ages 18 to 120 and ordered;
+  `max_cover_age` above the oldest entry age; non-empty positive terms; the reference cover inside the cover
+  range, the reference age inside the entry ages, the reference term one of the offered terms and ending by the
+  maximum cover age; positive premium. Index `ix_insurance_products_insurance_type`.
+* Age-band hints are derived on read (`wealth/insurance.py` with `customers.demographics.band_for_age`), not
+  stored.
 
 ### 3.9 Notifications and outbox (`api/modules/notifications/models.py`)
 
@@ -483,6 +500,7 @@ fire on `TRUNCATE`; no `public` table has a TRUNCATE guard.
 | 0017 | `20261102_0017_customer_risk_profile_and_consent.py` | `customers` risk-tolerance columns (band, answers, score, questionnaire version, assessed at) and the ADR-0015 recommendations consent (timestamp, policy version); nothing backfilled (TASK-097, TASK-107) |
 | 0018 | `20261102_0018_wealth_catalogue_and_fixed_deposits.py` | `wealth_products` (seeded), `fixed_deposits`, `SYS-FIXED-DEPOSITS`, deposit transaction types (ADR-0025). Its downgrade fails on purpose if deposit transactions exist |
 | 0019 | `20261102_0019_assistant_unusual_expenses_tool.py` | Widens the `assistant_messages.tool_name` CHECK for `get_unusual_expenses` (TASK-110); no new table |
+| 0020 | `20261102_0020_insurance_catalogue.py` | `insurance_products` (seeded, ADR-0028); the downgrade drops it (nothing references it) |
 
 Every migration has a downgrade; CI runs up, down, up and `alembic check`. One head is enforced by
 `tests/unit/test_migration_heads.py`.

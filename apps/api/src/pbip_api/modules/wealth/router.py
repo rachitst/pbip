@@ -22,12 +22,13 @@ from pbip_api.modules.auth.service import RequestMeta
 from pbip_api.modules.customers.dependencies import get_current_customer
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.wealth import service
-from pbip_api.modules.wealth.models import RiskLevel
+from pbip_api.modules.wealth.models import InsuranceType, RiskLevel
 from pbip_api.modules.wealth.schemas import (
     DepositBookRequest,
     DepositQuoteOut,
     DepositTermsRequest,
     FixedDepositOut,
+    InsuranceProductOut,
     PortfolioOut,
     WealthProductOut,
 )
@@ -66,6 +67,19 @@ def list_products(
     session: Session = Depends(get_session),
 ) -> list[WealthProductOut]:
     return service.list_products(session, risk_level)
+
+
+@router.get(
+    "/insurance",
+    response_model=list[InsuranceProductOut],
+    summary="Insurance catalogue: term life and health, with indicative premiums (no underwriting)",
+)
+def list_insurance(
+    insurance_type: InsuranceType | None = Query(default=None, description="Only this type"),
+    _customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+) -> list[InsuranceProductOut]:
+    return service.list_insurance_products(session, insurance_type)
 
 
 @router.post(
