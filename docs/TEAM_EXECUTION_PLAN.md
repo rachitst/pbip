@@ -2367,7 +2367,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #101 | **Sprint:** 6 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (suite merged in #288, 4c5d2d5; laptop: 0% errors, 0 deadlocks/overdrafts, money conserved; NOT met: p95 within budget and 10,000 requests in one run on the 2-CPU laptop, staging #198) | **Status:** In Progress | **Risk:** High (needs staging hardware)
+- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (suite merged in #288, 4c5d2d5; laptop: 0% errors, 0 deadlocks/overdrafts, money conserved; NOT met: p95 within budget and 10,000 requests in one run on the 2-CPU laptop, staging #198; GitHub runner run 41378616211 after #295, 6843893: 13,666 requests, 0% errors, all p95 under 500 ms (transfers 348 ms, 537 ms on an earlier runner), invariants clean) | **Status:** In Progress | **Risk:** High (needs staging hardware)
 - **Depends on:** TASK-012 (#23, Rachit), TASK-033 (#56, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-033
 - **Goal:** Load testing suite verifying p95 latency < 500ms under 500 concurrent virtual users.
@@ -2598,7 +2598,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #109 | **Sprint:** 6 | **Priority:** could | **Size:** M (1.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Sujal (`SUJALGPM`)
-- **Start:** Sun 01 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (1.8 days of slack)
+- **Start:** Sun 01 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** Mon 2 Nov (#297, 937ce21, taken over by Rachit: mutmut 3.8.1 on ledger + payments services, 1,041/1,076 mutants killed = 96.7% (68.2% on the first 500 before); 0 critical survivors, all 35 classified; gate `python -m scripts.mutation_gate` fails below 85%; report docs/testing/mutation-report.md; laptop, not CI) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-005 (#16, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Parallel: can start immediately
 - **Goal:** Mutation testing run with mutmut on core ledger and payments modules proving test robustness.
@@ -3051,7 +3051,7 @@ decision in ADR-0015.
 
 - **Issue:** #185 | **Sprint:** unscheduled | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (merged in #288, 4c5d2d5; laptop browser: page loads 913-1,665 ms, login 2,102 ms, all within budget; API p95 budget not met under 50 VUs on the laptop; first nightly perf.yml run on a GitHub runner pending) | **Status:** In Progress | **Risk:** Medium
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (merged in #288, 4c5d2d5; laptop browser: page loads 913-1,665 ms, login 2,102 ms, all within budget; API p95 budget not met under 50 VUs on the laptop; GitHub runner run 41378616211 after #295: every API p95 under 500 ms (transfers 348 ms; 537 ms on an earlier runner, so not yet stable), browser budgets passed) | **Status:** In Progress | **Risk:** Medium
 - **Depends on:** TASK-012 (#23, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **Goal:** Measured evidence for the section 8 targets: page load < 2 s, API response < 500 ms, login < 3 s.
