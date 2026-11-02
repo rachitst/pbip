@@ -168,7 +168,7 @@ Across modules, code calls the other module's `service` or `policy` functions on
 | `notifications` | Inbox, read state, outbox relay target | `/notifications*` | Implemented (API and web bell) |
 | `analytics` | Spending, trends, health score, balance forecast, segment; nightly and weekly jobs | `/analytics/*` | Implemented. Forecast UI Planned (TASK-050) |
 | `insights` | Relationship-manager churn signals | `/insights/customers` | Partial: no UI (TASK-066) |
-| `recommendations` | Rule-based product recommendations with reasons (`rules-v1`) | `/recommendations` | Partial: no UI (TASK-062); age band fixed to `unknown` until TASK-107 |
+| `recommendations` | Rule-based product recommendations with reasons (`rules-v1`) | `/recommendations` | Partial: customer carousel on `/accounts` in review (TASK-062, PR #328); age band fixed to `unknown` until TASK-107 |
 | `loans` | Catalogue (3 products), EMI schedule, explainable eligibility; idempotent application with ledger disbursal, stored schedule and a repayment instruction on the scheduled transfers engine ([ADR-0024](../adr/0024-loan-disbursal-and-repayments.md)) | `/loans*` | Implemented (API and web) |
 | `assistant` | Read-only tool registry, rules-first router, Ollama adapter, guard, sanitiser, output filter, SSE | `/assistant/*` | Implemented (5 tools). FAQ, product and investment tools Planned (TASK-105) |
 | `events` | Clickstream batch ingestion into monthly partitions | `/events/batch` | Partial: the web app does not send events yet (TASK-055 In Progress) |
