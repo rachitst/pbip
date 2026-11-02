@@ -350,3 +350,58 @@ def list_account_entries(
     if f.text:
         stmt = stmt.where(Transaction.reference.ilike(f"%{_escape_like(f.text)}%", escape="\\"))
     return [(entry, txn) for entry, txn in session.execute(stmt).all()]
+
+
+@dataclass(frozen=True)
+class PeriodEntry:
+    """One posted entry with its transaction's description fields (statements, read-only)."""
+
+    direction: EntryDirection
+    amount: int
+    balance_after: int
+    created_at: datetime
+    type: TransactionType
+    status: TransactionStatus
+    reference: str | None
+
+
+def entries_in_period(
+    session: Session, account_id: UUID, start: datetime, end: datetime, limit: int
+) -> list[PeriodEntry]:
+    """Read-only: an account's entries posted in ``[start, end)``, oldest first (statements).
+
+    Selects plain columns, not ORM entities: a year of entries is read without hydrating and
+    identity-mapping thousands of objects. Uses ``ix_transaction_entries_account_id_created_at``.
+    The caller authorizes the account.
+    """
+    stmt = (
+        select(
+            TransactionEntry.direction,
+            TransactionEntry.amount,
+            TransactionEntry.balance_after,
+            TransactionEntry.created_at,
+            Transaction.type,
+            Transaction.status,
+            Transaction.reference,
+        )
+        .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
+        .where(
+            TransactionEntry.account_id == account_id,
+            TransactionEntry.created_at >= start,
+            TransactionEntry.created_at < end,
+        )
+        .order_by(TransactionEntry.seq.asc())
+        .limit(limit)
+    )
+    return [PeriodEntry(*row) for row in session.execute(stmt).all()]
+
+
+def balance_before(session: Session, account_id: UUID, moment: datetime) -> int:
+    """Read-only: the ledger balance just before ``moment`` (0 if nothing was posted earlier)."""
+    value = session.execute(
+        select(TransactionEntry.balance_after)
+        .where(TransactionEntry.account_id == account_id, TransactionEntry.created_at < moment)
+        .order_by(TransactionEntry.seq.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    return int(value) if value is not None else 0

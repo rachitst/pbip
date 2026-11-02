@@ -3813,6 +3813,14 @@
         "title": "SpendingTrendsResponse",
         "type": "object"
       },
+      "StatementFormat": {
+        "enum": [
+          "csv",
+          "pdf"
+        ],
+        "title": "StatementFormat",
+        "type": "string"
+      },
       "StepUpRequest": {
         "properties": {
           "code": {
@@ -4613,6 +4621,84 @@
         "summary": "Get one of my accounts",
         "tags": [
           "accounts"
+        ]
+      }
+    },
+    "/api/v1/accounts/{account_id}/statements": {
+      "get": {
+        "operationId": "download_statement_api_v1_accounts__account_id__statements_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "First day of the period (IST), inclusive",
+            "in": "query",
+            "name": "start_date",
+            "required": true,
+            "schema": {
+              "description": "First day of the period (IST), inclusive",
+              "format": "date",
+              "title": "Start Date",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Last day of the period (IST), inclusive; not in the future",
+            "in": "query",
+            "name": "end_date",
+            "required": true,
+            "schema": {
+              "description": "Last day of the period (IST), inclusive; not in the future",
+              "format": "date",
+              "title": "End Date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/StatementFormat",
+              "default": "pdf"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {},
+              "text/csv": {}
+            },
+            "description": "The statement file (attachment)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Download a statement for one of my accounts (PDF or CSV)",
+        "tags": [
+          "statements"
         ]
       }
     },
