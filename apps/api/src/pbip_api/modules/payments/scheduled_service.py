@@ -294,7 +294,9 @@ def _execute_due_occurrence(
     if next_date is not None:
         instruction.next_run_date = next_date
     else:
+        # Nothing is left to run, so there is nothing to pause: a finished order has no reason.
         instruction.status = ScheduledTransferStatus.COMPLETED
+        instruction.pause_reason = None
 
     audit.record(
         actor_user_id=None,
