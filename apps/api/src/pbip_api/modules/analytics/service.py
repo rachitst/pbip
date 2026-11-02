@@ -286,11 +286,17 @@ def get_customer_segment(session: Session, customer_id: UUID) -> CustomerSegment
     )
 
 
+CustomerActivity = repository.CustomerActivity  # public result type of get_customer_activity
+
+
 def get_customer_activity(
-    session: Session, as_of: datetime, window: timedelta
-) -> list[repository.CustomerActivity]:
-    """Balances now and at the window start, and last activity, for every customer (one query)."""
-    return repository.customer_activity(session, as_of, window)
+    session: Session, as_of: datetime, window: timedelta, customer_id: UUID | None = None
+) -> list[CustomerActivity]:
+    """Balances now and at the window start, and last activity, for every customer (one query).
+
+    ``customer_id`` limits it to one customer the caller has already authorised.
+    """
+    return repository.customer_activity(session, as_of, window, customer_id)
 
 
 FORECAST_HISTORY_DAYS = 180
@@ -331,3 +337,14 @@ def get_balance_forecast(
             for a, b in zip(p80, p95, strict=True)
         ],
     )
+
+
+def get_transaction_volume(
+    session: Session, customer_id: UUID, as_of: datetime, window: timedelta
+) -> repository.TransactionVolume:
+    """Posted inflows and outflows with other parties over ``window`` up to ``as_of``.
+
+    Takes a customer id the caller has already authorised (an RM view, TASK-066); it never reads
+    one from the client.
+    """
+    return repository.transaction_volume(session, customer_id, as_of - window, as_of)

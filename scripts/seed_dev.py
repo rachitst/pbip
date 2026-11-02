@@ -34,6 +34,7 @@ STAFF = [
     ("analyst@demo.pbip", "Fraud Analyst", RoleName.FRAUD_ANALYST),
     ("compliance@demo.pbip", "Compliance Officer", RoleName.COMPLIANCE_OFFICER),
     ("admin@demo.pbip", "Platform Admin", RoleName.ADMIN),
+    ("rm@demo.pbip", "Relationship Manager", RoleName.RELATIONSHIP_MANAGER),
 ]
 
 

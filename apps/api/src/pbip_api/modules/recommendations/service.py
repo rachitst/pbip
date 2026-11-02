@@ -57,12 +57,16 @@ def _context(
 
 
 def get_customer_recommendations(
-    session: Session, customer_id: UUID, now: datetime | None = None
+    session: Session, customer_id: UUID, now: datetime | None = None, top_k: int = 3
 ) -> RecommendationsResponse:
-    """Top 3 eligible products for the authenticated customer, ordered by the rule-based score."""
+    """Top ``top_k`` eligible products for the customer, ordered by the rule-based score.
+
+    The customer route keeps the default of 3; the RM insights view (TASK-066) asks for every
+    eligible product so it can find the best loan product even when it is not in the top 3.
+    """
     eval_time = now or utcnow()
     ctx = _context(session, customer_id, eval_time)
-    recommendations = [] if ctx is None else generate_recommendations(ctx, top_k=3)
+    recommendations = [] if ctx is None else generate_recommendations(ctx, top_k=top_k)
     return RecommendationsResponse(
         customer_id=customer_id,
         recommendations=[

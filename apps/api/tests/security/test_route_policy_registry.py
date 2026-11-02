@@ -9,6 +9,7 @@ import pytest
 from fastapi.routing import APIRoute
 from pbip_api.main import ROUTERS
 from pbip_api.modules.fraud.router import analyst_gate
+from pbip_api.modules.insights.router import rm_gate
 from pbip_test_support import build_app
 
 pytestmark = pytest.mark.security
@@ -81,3 +82,23 @@ def test_every_fraud_route_is_behind_the_mfa_analyst_gate() -> None:
         if analyst_gate not in {d.call for d in route.dependant.dependencies}
     ]
     assert not offenders, f"Fraud routes without the MFA analyst gate: {offenders}"
+
+
+def test_every_insights_route_is_behind_the_mfa_rm_gate() -> None:
+    """RM insights (churn signals, health, outreach notes about customers) are staff-only with MFA.
+
+    ``rm_gate`` is ``require_roles(RELATIONSHIP_MANAGER, ADMIN, mfa=True)`` (TASK-056, TASK-066);
+    a new insights route that uses a weaker gate (or only authentication) fails here.
+    """
+    insights_routes = [r for r in _all_api_routes() if r.path.startswith("/api/v1/insights/")]
+    assert {
+        "/api/v1/insights/customers",
+        "/api/v1/insights/customers/{customer_id}",
+        "/api/v1/insights/customers/{customer_id}/interactions",
+    } <= {r.path for r in insights_routes}
+    offenders = [
+        f"{sorted(route.methods)} {route.path}"
+        for route in insights_routes
+        if rm_gate not in {d.call for d in route.dependant.dependencies}
+    ]
+    assert not offenders, f"Insights routes without the MFA RM gate: {offenders}"
