@@ -140,10 +140,14 @@ habits.*
 * ✓ It shows a 0-100 health score with savings, buffer and debt components and tips.
 * ✓ Empty, loading and error states are handled.
 * ✓ The score moves with ledger activity and uses closed months only.
-* ✗ A balance-forecast chart with the confidence band is shown. The API returns 80%/95% intervals labelled
-  "Predicted, not exact".
+* ✓ A balance-forecast chart with the confidence band is shown: the last 30 days of actual balance continue
+  into the 30-day projection, the 80%/95% band is labelled "Predicted, not exact", scheduled payments
+  (standing orders, loan EMIs) are marked on the line, with tooltips, a text summary and a table (TASK-050).
+* ✓ The projection includes the known scheduled payments up to the month end, and the customer is warned once a
+  month (bell notification) when the month may end within INR 1,000 of zero or of the overdraft limit
+  (TASK-043).
 
-**Status:** Partial. The forecast chart is TASK-050.
+**Status:** Implemented (in review).
 
 **Tests:**
 
@@ -151,9 +155,12 @@ habits.*
 * `integration/test_analytics.py`: `test_spending_trends_and_mom_calculations`,
   `test_financial_health_score_moves_with_ledger_activity`,
   `test_health_score_uses_closed_months_only_so_the_calendar_day_does_not_move_it`;
-* `integration/test_forecast.py::test_forecast_is_labelled_with_intervals_from_the_account_history`.
+* `integration/test_forecast.py::test_forecast_is_labelled_with_intervals_from_the_account_history`;
+* `integration/test_forecast_projection.py` (obligations, threshold, once-a-month alert) and
+  `unit/test_balance_projection.py`;
+* `apps/web/src/pages/BalanceForecastSection.test.tsx`.
 
-**Tasks:** TASK-040, TASK-041, TASK-042, TASK-049 (Done); TASK-050 (Todo).
+**Tasks:** TASK-040, TASK-041, TASK-042, TASK-049 (Done); TASK-043, TASK-050 (in review).
 
 ### US-07 See products recommended for me (FR-12)
 

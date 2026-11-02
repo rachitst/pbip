@@ -4,13 +4,14 @@ Read path (never writes): a closed month is served from ``monthly_category_spend
 nightly task has stored it; otherwise, and always for the running month, the breakdown is computed
 from the ledger entries (ADR-0011). Write path: ``materialize_monthly_spending`` is the Celery
 task body that stores closed months and refreshes the most recent one because a transfer can be
-reversed weeks after it was posted.
+reversed weeks after it was posted. The balance forecast (TASK-042/043) is read-only too, except
+that the endpoint may add one low-balance notification per account and month.
 """
 
 import calendar
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from uuid import UUID
 
 import structlog
@@ -18,21 +19,28 @@ from sqlalchemy.orm import Session
 
 from pbip_api.core.db import utcnow
 from pbip_api.core.errors import NotFoundError, UnprocessableError
-from pbip_api.modules.analytics import repository
+from pbip_api.modules.accounts.service import mask_account_number
+from pbip_api.modules.analytics import projection, repository
 from pbip_api.modules.analytics.health import compute_financial_health_score
 from pbip_api.modules.analytics.models import MonthlyCategorySpending
 from pbip_api.modules.analytics.policy import verify_account_ownership
+from pbip_api.modules.analytics.projection import ModelDay
 from pbip_api.modules.analytics.schemas import (
     BalanceForecastPoint,
     BalanceForecastResponse,
+    BalanceHistoryPoint,
     CategoryShiftItem,
     CategorySpendingItem,
     CustomerSegmentResponse,
+    EndOfMonthProjection,
     FinancialHealthScoreResponse,
+    ForecastObligation,
     MonthlySpendingSummary,
     SpendingBreakdownResponse,
     SpendingTrendsResponse,
 )
+from pbip_api.modules.notifications import service as notifications_service
+from pbip_api.modules.payments import service as payments_service
 
 _logger = structlog.get_logger(__name__)
 MATERIALIZED_MONTHS_BACK = 2
@@ -300,43 +308,210 @@ def get_customer_activity(
 
 
 FORECAST_HISTORY_DAYS = 180
+FORECAST_HISTORY_SHOWN_DAYS = 30
+
+
+def _loan_obligations(
+    session: Session, customer_id: UUID, instruction: projection.Obligation, until: date
+) -> list[projection.Obligation]:
+    """The unpaid instalments due by ``until`` of the loan that ``instruction`` repays, with their
+    exact amounts (the last EMI differs). An overdue one is dated ``instruction.date`` (today):
+    the engine retries arrears every day (ADR-0024)."""
+    from pbip_api.modules.loans import service as loans_service  # lazy: loans imports analytics
+
+    if instruction.loan_id is None:
+        raise ValueError("not a loan repayment instruction")
+    loan = loans_service.get_loan(session, customer_id, instruction.loan_id)
+    return [
+        projection.Obligation(
+            date=max(instalment.due_date, instruction.date),
+            amount_minor=instalment.amount_minor,
+            kind=projection.ObligationKind.LOAN_EMI,
+            scheduled_transfer_id=instruction.scheduled_transfer_id,
+            loan_id=instruction.loan_id,
+            reference=instruction.reference,
+        )
+        for instalment in loan.instalments
+        if instalment.status != "PAID" and instalment.due_date <= until
+    ]
+
+
+def upcoming_obligations(
+    session: Session, customer_id: UUID, account_id: UUID, today: date, until: date
+) -> list[projection.Obligation]:
+    """Known debits of an owned account from ``today`` to ``until``: every occurrence of the
+    customer's ACTIVE standing orders on it, and the instalments of loans it repays.
+
+    A transfer occurrence before today is left out: the engine records it as missed and does not
+    pay it (ADR-0023). Paused and cancelled instructions are not obligations.
+    """
+    occurrences = payments_service.upcoming_account_occurrences(
+        session, customer_id, account_id, until
+    )
+    obligations = [
+        projection.Obligation(
+            date=o.occurrence_date,
+            amount_minor=o.amount_minor,
+            kind=projection.ObligationKind.SCHEDULED_TRANSFER,
+            scheduled_transfer_id=o.scheduled_transfer_id,
+            loan_id=None,
+            reference=o.reference,
+        )
+        for o in occurrences
+        if o.loan_id is None and o.occurrence_date >= today
+    ]
+    loans_seen: set[UUID] = set()
+    for o in occurrences:
+        if o.loan_id is not None and o.loan_id not in loans_seen:
+            loans_seen.add(o.loan_id)
+            instruction = projection.Obligation(
+                date=today,
+                amount_minor=o.amount_minor,
+                kind=projection.ObligationKind.LOAN_EMI,
+                scheduled_transfer_id=o.scheduled_transfer_id,
+                loan_id=o.loan_id,
+                reference=o.reference,
+            )
+            obligations.extend(_loan_obligations(session, customer_id, instruction, until))
+    obligations.sort(key=lambda ob: (ob.date, str(ob.scheduled_transfer_id)))
+    return obligations
+
+
+def _model_days(history: list[int], horizon: int, first_day: date) -> tuple[str, list[ModelDay]]:
+    from pbip_ml.forecasting.model import forecast_daily_balance  # lazy: numba
+
+    by_level = {
+        round(f.confidence_level * 100): f
+        for f in forecast_daily_balance(history, horizon, first_day)
+    }
+    days = [
+        ModelDay(
+            median=a.median, lower_80=a.lower, upper_80=a.upper, lower_95=b.lower, upper_95=b.upper
+        )
+        for a, b in zip(by_level[80].points, by_level[95].points, strict=True)
+    ]
+    return by_level[80].method, days
+
+
+def _point(day: projection.ProjectedDay) -> BalanceForecastPoint:
+    return BalanceForecastPoint(
+        date=day.date,
+        predicted_minor=day.predicted_minor,
+        lower_80_minor=day.lower_80_minor,
+        upper_80_minor=day.upper_80_minor,
+        lower_95_minor=day.lower_95_minor,
+        upper_95_minor=day.upper_95_minor,
+        obligations_minor=day.obligations_minor,
+    )
+
+
+def _end_of_month(
+    days: list[projection.ProjectedDay], eom: date, overdraft_limit: int
+) -> EndOfMonthProjection:
+    last = next(d for d in days if d.date == eom)
+    threshold = projection.low_balance_threshold(overdraft_limit)
+    return EndOfMonthProjection(
+        date=eom,
+        predicted_minor=last.predicted_minor,
+        lower_80_minor=last.lower_80_minor,
+        upper_80_minor=last.upper_80_minor,
+        lower_95_minor=last.lower_95_minor,
+        upper_95_minor=last.upper_95_minor,
+        obligations_minor=sum(d.obligations_minor for d in days if d.date <= eom),
+        alert_threshold_minor=threshold,
+        low_balance=projection.is_low(last, threshold),
+    )
 
 
 def get_balance_forecast(
     session: Session, customer_id: UUID, account_id: UUID, horizon_days: int, now: datetime
 ) -> BalanceForecastResponse:
-    """Daily end-of-day balance projection for an owned account (TASK-042). Predicted, not exact."""
-    from pbip_ml.forecasting.model import MODEL_VERSION, forecast_daily_balance  # lazy: numba
+    """Daily end-of-day balance projection for an owned account (TASK-042), combining the known
+    scheduled obligations with the model forecast of the rest (TASK-043). Predicted, not exact.
+
+    Read-only: the assistant's tool calls this too. The forecast always reaches the month end,
+    even when ``horizon_days`` is shorter, so the month-end figure is always there.
+    """
+    from pbip_ml.forecasting.model import MODEL_VERSION  # lazy: numba
 
     account = verify_account_ownership(session, customer_id, account_id)
     history = repository.daily_balances(session, account.id, now, FORECAST_HISTORY_DAYS)
     if len(history) < 2:
         raise UnprocessableError("at least two days of account history are needed for a forecast")
-    first_day = now.date()
-    by_level = {
-        round(f.confidence_level * 100): f
-        for f in forecast_daily_balance(history, horizon_days, first_day)
-    }
-    p80, p95 = by_level[80].points, by_level[95].points
+    today = now.date()
+    history_start = today - timedelta(days=len(history))
+    eom = projection.month_end(today)
+    model_horizon = max(horizon_days, (eom - today).days + 1)
+    until = today + timedelta(days=model_horizon - 1)
+    discretionary, paid_in_history = projection.discretionary_history(
+        history,
+        history_start,
+        repository.scheduled_debits_by_day(session, account.id, now, FORECAST_HISTORY_DAYS),
+    )
+    method, model_days = _model_days(discretionary, model_horizon, today)
+    obligations = upcoming_obligations(session, customer_id, account.id, today, until)
+    days = projection.project(model_days, today, paid_in_history, obligations)
+    shown = history[-FORECAST_HISTORY_SHOWN_DAYS:]
+    shown_start = today - timedelta(days=len(shown))
     return BalanceForecastResponse(
         account_id=account.id,
         currency=account.currency,
-        method=by_level[80].method,
+        method=method,
         model_version=MODEL_VERSION,
         history_days=len(history),
         horizon_days=horizon_days,
-        points=[
-            BalanceForecastPoint(
-                date=a.period_start,
-                predicted_minor=round(a.median),
-                lower_80_minor=round(a.lower),
-                upper_80_minor=round(a.upper),
-                lower_95_minor=round(b.lower),
-                upper_95_minor=round(b.upper),
-            )
-            for a, b in zip(p80, p95, strict=True)
+        points=[_point(day) for day in days[:horizon_days]],
+        history=[
+            BalanceHistoryPoint(date=shown_start + timedelta(days=i), balance_minor=balance)
+            for i, balance in enumerate(shown)
         ],
+        obligations=[
+            ForecastObligation(
+                date=o.date,
+                amount_minor=o.amount_minor,
+                kind=o.kind.value,
+                scheduled_transfer_id=o.scheduled_transfer_id,
+                loan_id=o.loan_id,
+                reference=o.reference,
+            )
+            for o in obligations
+        ],
+        end_of_month=_end_of_month(days, eom, account.overdraft_limit),
     )
+
+
+def get_balance_forecast_with_alert(
+    session: Session,
+    customer_id: UUID,
+    user_id: UUID,
+    account_id: UUID,
+    horizon_days: int,
+    now: datetime,
+) -> BalanceForecastResponse:
+    """The forecast, plus the low month-end balance alert (TASK-043), computed on read.
+
+    When the projected month-end balance is at or below the threshold, the customer gets one bell
+    notification for this account and month; later reads in the same month send nothing more.
+    Commits only when it adds that notification.
+    """
+    forecast = get_balance_forecast(session, customer_id, account_id, horizon_days, now)
+    eom = forecast.end_of_month
+    if eom.low_balance:
+        account = verify_account_ownership(session, customer_id, account_id)
+        added = notifications_service.notify_projected_low_balance(
+            session,
+            user_id=user_id,
+            account_id=account.id,
+            account_masked=mask_account_number(account.account_number),
+            month_end=eom.date,
+            predicted_minor=eom.predicted_minor,
+            currency=account.currency,
+            now=now,
+        )
+        if added:
+            session.commit()
+            _logger.info("projected_low_balance_alert_sent", month=eom.date.strftime("%Y-%m"))
+    return forecast
 
 
 def get_transaction_volume(

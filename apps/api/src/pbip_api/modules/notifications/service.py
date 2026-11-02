@@ -1,9 +1,10 @@
 """Transactional outbox + in-app notifications."""
 
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
 from pbip_api.core.db import utcnow
@@ -29,6 +30,8 @@ PASSWORD_CHANGED = "PASSWORD_CHANGED"  # noqa: S105  # pragma: allowlist secret 
 MFA_ENABLED = "MFA_ENABLED"
 DEVICE_REGISTERED = "DEVICE_REGISTERED"
 STATEMENT_DOWNLOADED = "STATEMENT_DOWNLOADED"
+# Balance projection (TASK-043): at most one per user, account and calendar month.
+PROJECTED_LOW_BALANCE = "PROJECTED_LOW_BALANCE"
 
 _TRANSFER_TYPES = {
     TRANSFER_POSTED,
@@ -95,6 +98,74 @@ def enqueue_statement(
             "format": file_format,
         },
     )
+
+
+def _month_bounds(now: datetime) -> tuple[datetime, datetime]:
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    end = (
+        start.replace(year=start.year + 1, month=1)
+        if start.month == 12
+        else start.replace(month=start.month + 1)
+    )
+    return start, end
+
+
+def notify_projected_low_balance(
+    session: Session,
+    *,
+    user_id: UUID,
+    account_id: UUID,
+    account_masked: str,
+    month_end: date,
+    predicted_minor: int,
+    currency: str,
+    now: datetime,
+) -> bool:
+    """Warn the customer once per account and calendar month that the month may end low (TASK-043).
+
+    Written directly, in the CALLER'S transaction (the caller commits): the notification is the
+    only change, so there is nothing for an outbox event to wait for. A transaction-scoped
+    advisory lock on (user, account) makes the check-then-insert atomic, so two concurrent
+    forecast requests cannot both send it. ``now`` is the request clock and is stored as the
+    notification time, so "this month" is the same month the projection was made for. Returns
+    whether a notification was added.
+    """
+    session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+        {"key": f"projected-low-balance:{user_id}:{account_id}"},
+    )
+    start, end = _month_bounds(now)
+    already_sent = session.execute(
+        select(Notification.id)
+        .where(
+            Notification.user_id == user_id,
+            Notification.type == PROJECTED_LOW_BALANCE,
+            Notification.account_id == account_id,
+            Notification.created_at >= start,
+            Notification.created_at < end,
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    if already_sent is not None:
+        return False
+    session.add(
+        Notification(
+            user_id=user_id,
+            type=PROJECTED_LOW_BALANCE,
+            title="Your balance may run low this month",
+            body=(
+                f"Predicted, not exact: account {account_masked} may end "
+                f"{month_end.strftime('%d %b %Y')} at about "
+                f"{format_minor(predicted_minor, currency)}, after your scheduled payments. "
+                "Consider moving money in or rescheduling a payment."
+            ),
+            resource_type=None,
+            account_id=account_id,
+            created_at=now,
+        )
+    )
+    session.flush()
+    return True
 
 
 def _statement(event: OutboxEvent, user_id: UUID) -> Notification:

@@ -5,7 +5,7 @@ the only table this module writes is ``monthly_category_spending``.
 """
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
 from pbip_ml.segmentation.contract import CustomerRFMFeatures, SegmentAssignment
@@ -29,6 +29,7 @@ from pbip_api.modules.ledger.models import (
 
 HEALTH_WINDOW_MONTHS = 12
 INCOME_TYPES = (TransactionType.DEPOSIT, TransactionType.TRANSFER)
+SCHEDULED_CHANNEL = "SCHEDULED"  # transactions.channel of the scheduled-transfer engine (ADR-0023)
 
 
 @dataclass(frozen=True)
@@ -583,3 +584,32 @@ def daily_balances(session: Session, account_id: UUID, now: datetime, days: int)
         series.append(last)
         day += timedelta(days=1)
     return series
+
+
+def scheduled_debits_by_day(
+    session: Session, account_id: UUID, now: datetime, days: int
+) -> dict[date, int]:
+    """Debits the scheduled-transfer engine posted on the account per UTC day, over the same window
+    as ``daily_balances`` (today excluded).
+
+    These are the known obligations already paid (standing orders and loan EMIs, ``channel =
+    'SCHEDULED'``). A reversed transfer is left out: its debit and the compensating credit are
+    both in the balance, so they already cancel there.
+    """
+    start = (now - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    day = func.date(func.timezone("UTC", TransactionEntry.created_at))
+    rows = session.execute(
+        select(day, func.sum(TransactionEntry.amount))
+        .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
+        .where(
+            TransactionEntry.account_id == account_id,
+            TransactionEntry.direction == EntryDirection.DEBIT,
+            TransactionEntry.created_at >= start,
+            TransactionEntry.created_at < today,
+            Transaction.channel == SCHEDULED_CHANNEL,
+            Transaction.status != TransactionStatus.REVERSED,
+        )
+        .group_by(day)
+    ).all()
+    return {row[0]: int(row[1]) for row in rows}

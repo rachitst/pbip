@@ -913,6 +913,52 @@ a {
   height: 240px;
   margin: var(--space-4) 0;
 }
+.insights-chart--forecast {
+  height: 280px;
+  margin: var(--space-4) 0;
+}
+.forecast-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  font-size: var(--text-sm);
+}
+.forecast-legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.forecast-key {
+  flex-shrink: 0;
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  border-top: 2px solid var(--chart-1);
+}
+.forecast-key--predicted {
+  border-top-style: dashed;
+}
+.forecast-key--band {
+  height: 12px;
+  border: 0;
+  background: color-mix(in srgb, var(--chart-1) 30%, transparent);
+}
+.forecast-key--payment {
+  width: 10px;
+  height: 10px;
+  border: 0;
+  background: var(--chart-3);
+  transform: rotate(45deg);
+}
+.forecast-tooltip {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+}
 .insights-legend {
   list-style: none;
   margin: 0;

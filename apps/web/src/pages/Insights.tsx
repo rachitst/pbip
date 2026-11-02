@@ -28,6 +28,7 @@ import { Alert } from "../ui/Alert";
 import { Amount } from "../ui/Amount";
 import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
+import { BalanceForecastSection } from "./BalanceForecastSection";
 import { TOOLTIP_STYLE, categoryTooltip, donutSlices, formatShare } from "./insightsChart";
 
 const TITLE = "Spending & Financial Health";
@@ -148,6 +149,7 @@ export function Insights() {
       {!isPending && !isError && (
         <div className="insights">
           <FinancialHealthSection health={healthQuery.data} />
+          {activeAccountId && <BalanceForecastSection accountId={activeAccountId} />}
           <CategorySpendingSection spending={spendingQuery.data} />
           <SpendingTrendsSection trends={trendsQuery.data} />
         </div>

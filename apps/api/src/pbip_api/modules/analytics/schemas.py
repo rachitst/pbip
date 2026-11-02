@@ -236,6 +236,56 @@ class BalanceForecastPoint(BaseModel):
     upper_80_minor: int
     lower_95_minor: int
     upper_95_minor: int
+    obligations_minor: int = Field(
+        default=0,
+        ge=0,
+        description="Known scheduled debits due this day (standing orders, loan EMIs), "
+        "already subtracted from the projection",
+    )
+
+
+class BalanceHistoryPoint(BaseModel):
+    """A past end-of-day ledger balance: actual, not predicted."""
+
+    model_config = ConfigDict(frozen=True)
+
+    date: date_type
+    balance_minor: int
+
+
+class ForecastObligation(BaseModel):
+    """A known upcoming debit: one occurrence of an ACTIVE scheduled instruction (TASK-043)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    date: date_type = Field(description="Day the engine will collect it (overdue EMIs: today)")
+    amount_minor: int = Field(gt=0)
+    kind: Literal["SCHEDULED_TRANSFER", "LOAN_EMI"]
+    scheduled_transfer_id: UUID
+    loan_id: UUID | None = None
+    reference: str | None = None
+
+
+class EndOfMonthProjection(BaseModel):
+    """The projected balance on the running month's last day (TASK-043). Predicted, not exact."""
+
+    model_config = ConfigDict(frozen=True)
+
+    date: date_type
+    predicted_minor: int
+    lower_80_minor: int
+    upper_80_minor: int
+    lower_95_minor: int
+    upper_95_minor: int
+    obligations_minor: int = Field(
+        ge=0, description="Known scheduled debits from today to the month end, included above"
+    )
+    alert_threshold_minor: int = Field(
+        description="INR 1,000.00 above the lowest allowed balance (0 minus the overdraft limit)"
+    )
+    low_balance: bool = Field(
+        description="True when the predicted month-end balance is at or below the threshold"
+    )
 
 
 class BalanceForecastResponse(BaseModel):
@@ -252,4 +302,14 @@ class BalanceForecastResponse(BaseModel):
     model_version: str
     history_days: int = Field(description="Days of balance history the forecast used")
     horizon_days: int
-    points: list[BalanceForecastPoint]
+    points: list[BalanceForecastPoint] = Field(
+        description="Model forecast of everything except scheduled debits, minus the known "
+        "obligations (TASK-043)"
+    )
+    history: list[BalanceHistoryPoint] = Field(
+        description="Actual end-of-day balances of the last 30 days before the first point"
+    )
+    obligations: list[ForecastObligation] = Field(
+        description="Known upcoming debits to the later of the horizon end and the month end"
+    )
+    end_of_month: EndOfMonthProjection

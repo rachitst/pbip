@@ -4,7 +4,12 @@ import userEvent from "@testing-library/user-event";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
-import { NotificationBell, badgeText, notificationDestination } from "./NotificationBell";
+import {
+  NotificationBell,
+  badgeText,
+  notificationDestination,
+  notificationKind,
+} from "./NotificationBell";
 
 function urlOf(input: Parameters<typeof fetch>[0]): string {
   if (typeof input === "string") return input;
@@ -545,6 +550,20 @@ describe("notification link targets (#45)", () => {
     expect(
       notificationDestination({ ...mockTransferPosted, type: "NEW", resource_type: null }),
     ).toBeNull();
+  });
+
+  it("opens the forecast on Insights for a projected low balance (TASK-043)", () => {
+    const lowBalance = {
+      ...mockTransferPosted,
+      type: "PROJECTED_LOW_BALANCE",
+      resource_type: null,
+      resource_id: null,
+    };
+    expect(notificationDestination(lowBalance)).toBe("/insights");
+    expect(notificationKind("PROJECTED_LOW_BALANCE")).toEqual({
+      label: "Low balance ahead",
+      tone: "warning",
+    });
   });
 
   it("opens Profile & security for a security notification", async () => {

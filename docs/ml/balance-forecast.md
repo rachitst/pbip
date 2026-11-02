@@ -25,8 +25,37 @@ each using only the data before it, 30-day horizon, 233 forecasts per method.
 AutoARIMA has the lowest error and the best-calibrated 80% interval (AutoETS's is too wide).
 Coverage above the nominal level means the intervals are slightly conservative.
 
+## End-of-month projection (TASK-043)
+The same endpoint combines the model with the payments the bank already knows about:
+
+1. **Known obligations**: every occurrence, from today to the later of the horizon end and the month end,
+   of the customer's ACTIVE standing orders that debit the account, and the unpaid instalments of each loan
+   whose repayment instruction is ACTIVE (exact amounts; an overdue instalment is dated today because the
+   engine retries arrears daily, ADR-0024). A standing-order occurrence before today is not counted: the
+   engine records it as missed and does not pay it (ADR-0023). Paused and cancelled instructions are not
+   obligations.
+2. **Everything else** is forecast by the model above, from the balance history with every past debit of the
+   scheduled engine (`transactions.channel = 'SCHEDULED'`, reversed ones excluded) added back. Otherwise last
+   month's EMI would be in the history as a pattern *and* this month's EMI would be subtracted: counted twice.
+3. `projected(t) = model(t) - scheduled debits added back - obligations due from today to t`. The interval
+   bounds move by the same amounts (obligations are known, so they add no uncertainty).
+
+The pure arithmetic is `apps/api/src/pbip_api/modules/analytics/projection.py` (unit-tested). The response
+adds `history` (30 days of actual balances), `obligations`, `points[].obligations_minor` and `end_of_month`.
+The forecast always reaches the month end, even when `horizon_days` is shorter.
+
+**Low-balance alert.** `end_of_month.low_balance` is true when the predicted (central) month-end balance is at
+or below `alert_threshold_minor` = INR 1,000.00 minus the overdraft limit, that is within INR 1,000 of zero, or
+of the overdraft limit when the account has one. The endpoint then adds one `PROJECTED_LOW_BALANCE` bell
+notification, at most once per user, account and calendar month (a transaction-scoped advisory lock makes it
+safe under concurrent reads). It is computed on read, with no background job: a customer who never opens the
+forecast is not alerted. The assistant's forecast tool uses the read-only variant and never notifies.
+
 ## Limits
 * Synthetic data only: real customer behaviour will differ; re-run the backtest on real history.
 * AutoARIMA costs about 0.9 s per fit on a 2-CPU laptop (AutoETS about 0.2 s); statsforecast's
   numba compile adds about 2 s to the first forecast in each API process. Not measured in staging.
-* The history is the ledger only: scheduled payments and salary dates are not used as regressors.
+* The history is the ledger only. Scheduled payments are handled outside the model (above); salary dates are not
+  used as regressors.
+* Only the viewing customer's own instructions are counted: a co-holder's standing orders on a joint account are
+  not in the projection.

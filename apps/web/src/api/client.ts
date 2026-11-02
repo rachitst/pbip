@@ -52,6 +52,8 @@ export type CategoryShiftItem = components["schemas"]["CategoryShiftItem"];
 export type FinancialHealthScoreResponse = components["schemas"]["FinancialHealthScoreResponse"];
 export type FinancialHealthComponents = components["schemas"]["FinancialHealthComponents"];
 export type HealthScoreComponent = components["schemas"]["HealthScoreComponent"];
+export type BalanceForecastResponse = components["schemas"]["BalanceForecastResponse"];
+export type ForecastObligation = components["schemas"]["ForecastObligation"];
 export type ChatResponse = components["schemas"]["ChatResponse"];
 export type AssistantHistory = components["schemas"]["AssistantHistory"];
 export type AssistantMessageOut = components["schemas"]["AssistantMessageOut"];
@@ -447,6 +449,13 @@ export const api = {
     return apiFetch<FinancialHealthScoreResponse>(
       `/api/v1/analytics/health-score?${params.toString()}`,
     );
+  },
+  balanceForecast: (accountId: string, horizonDays = 30) => {
+    const params = new URLSearchParams({
+      account_id: accountId,
+      horizon_days: String(horizonDays),
+    });
+    return apiFetch<BalanceForecastResponse>(`/api/v1/analytics/forecast?${params.toString()}`);
   },
   customerInsights: (filters: {
     segment?: string;
