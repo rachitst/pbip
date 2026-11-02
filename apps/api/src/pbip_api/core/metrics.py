@@ -27,3 +27,8 @@ IDEMPOTENT_REPLAYS_TOTAL = Counter(
     "idempotent_replays_total", "Requests answered from a stored idempotent response"
 )
 LOGIN_FAILURES_TOTAL = Counter("login_failures_total", "Failed login attempts", ["reason"])
+UNHANDLED_ERRORS_TOTAL = Counter(
+    "unhandled_errors_total",
+    "Unhandled exceptions answered with a generic 500 (error tracking, TASK-103)",
+    ["route", "error_type"],
+)

@@ -3,24 +3,29 @@
 import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pbip_api.core.config import Settings
+from pbip_api.core.metrics import TRANSFERS_TOTAL
 from pbip_api.modules.accounts.models import AccountType
 from pbip_api.modules.accounts.service import open_account
 from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.auth.service import AuthService, RequestMeta
+from pbip_api.modules.compliance.models import AuditLog
 from pbip_api.modules.fraud.dependencies import get_fraud_scorer
-from pbip_api.modules.fraud.models import FraudEvent
+from pbip_api.modules.fraud.models import AlertStatus, FraudAlert, FraudEvent
 from pbip_api.modules.ledger import service as ledger
-from pbip_api.modules.ledger.models import Transaction
+from pbip_api.modules.ledger.models import IdempotencyKey, Transaction
+from pbip_api.modules.notifications.models import OutboxEvent
+from pbip_api.modules.payments.service import PaymentsService
 from pbip_ml.fraud.contract import FraudDecision
 from pbip_ml.fraud.testing import FixedDecisionScorer
 from pbip_test_support import Actor, FakeClock, age_payee, totp_code
-from sqlalchemy import Engine, func, select, text
+from sqlalchemy import Engine, func, select, text, update
 from sqlalchemy.orm import Session, sessionmaker
 
 pytestmark = pytest.mark.integration
@@ -320,6 +325,7 @@ def test_block_declines_without_moving_money_and_hides_the_reasons(
     client: TestClient,
     pair: tuple[Actor, Actor, dict[str, Any]],
     make_staff: Callable[..., Actor],
+    migrated_engine: Engine,
 ) -> None:
     alice, _bob, payee = pair
     force_decision(app, FraudDecision.BLOCK)
@@ -327,6 +333,10 @@ def test_block_declines_without_moving_money_and_hides_the_reasons(
     assert response.status_code == 403 and response.json()["status"] == "DECLINED"
     assert "reasons" not in response.text and "risk" not in response.text
     assert balance(client, alice)["ledger"] == 10_000_000
+    # TASK-086: the stored transaction says WHY it was declined (analyst and audit evidence).
+    with sessionmaker(bind=migrated_engine)() as session:
+        declined = session.get(Transaction, uuid.UUID(response.json()["id"]))
+        assert declined is not None and declined.decline_reason == "FRAUD_BLOCK"
     analyst = make_staff(RoleName.FRAUD_ANALYST)
     alerts = client.get("/api/v1/fraud/alerts?status=OPEN", headers=analyst.headers).json()
     assert (
@@ -440,6 +450,11 @@ def test_step_up_with_mfa_completes_after_a_valid_code(
     )
     assert done.status_code == 200 and done.json()["status"] == "POSTED"
     assert balance(client, bob)["ledger"] == 50_000
+    with sessionmaker(bind=migrated_engine)() as session:  # TASK-086: audit row names the transfer
+        confirmed = session.execute(
+            select(AuditLog).where(AuditLog.action == "TRANSFER_STEP_UP_CONFIRMED")
+        ).scalar_one()
+        assert confirmed.resource_id == tid and confirmed.actor_user_id == alice.user_id
     replay = client.post(
         f"/api/v1/transfers/{tid}/step-up",
         headers=alice.headers,
@@ -614,6 +629,7 @@ def test_three_wrong_step_up_codes_hand_the_transfer_to_an_analyst(
     migrated_engine: Engine,
     clock: FakeClock,
     make_staff: Callable[..., Actor],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """TASK-037: after 3 failed codes the transfer is held for review, not left retryable."""
     alice, _bob, payee = pair
@@ -624,8 +640,23 @@ def test_three_wrong_step_up_codes_hand_the_transfer_to_an_analyst(
     for _ in range(2):
         wrong = client.post(url, headers=alice.headers, json={"code": "000000"})
         assert wrong.status_code == 422
+    locked: list[object] = []
+    real_lock = PaymentsService._lock_user
+
+    def spy(self: PaymentsService, user_id: uuid.UUID) -> None:
+        locked.append(user_id)
+        real_lock(self, user_id)
+
+    monkeypatch.setattr(PaymentsService, "_lock_user", spy)
     third = client.post(url, headers=alice.headers, json={"code": "000000"})
     assert third.status_code == 200 and third.json()["status"] == "PENDING_REVIEW"
+    # TASK-086: the escalation takes THIS user's advisory lock (AGENTS lock order), never a shared key.
+    assert locked and set(locked) == {alice.user_id}
+    with sessionmaker(bind=migrated_engine)() as session:
+        escalated = session.execute(
+            select(AuditLog).where(AuditLog.action == "TRANSFER_STEP_UP_ESCALATED")
+        ).scalar_one()
+        assert escalated.resource_id == tid and escalated.ip == "testclient"
     assert balance(client, alice)["held"] == 50_000  # money held for the analyst
     analyst = make_staff(RoleName.FRAUD_ANALYST)
     alerts = client.get("/api/v1/fraud/alerts", headers=analyst.headers).json()
@@ -652,3 +683,490 @@ def test_a_correct_code_after_two_wrong_ones_still_completes(
     done = client.post(url, headers=alice.headers, json={"code": totp_code(secret, clock)})
     assert done.status_code == 200 and done.json()["status"] == "POSTED"
     assert balance(client, bob)["ledger"] == 50_000
+
+
+# --------------------------------------------------------------- TASK-086 mutation gaps
+# Tests added for mutants that survived the mutation run (docs/testing/mutation-report.md): they pin
+# down what an analyst decision and the daily limit must leave behind, not only the HTTP status.
+
+
+def _decide(
+    client: TestClient, analyst: Actor, alert_id: str, action: str, note: str | None
+) -> Any:
+    body: dict[str, Any] = {"action": action}
+    if note is not None:
+        body["note"] = note
+    return client.post(
+        f"/api/v1/fraud/alerts/{alert_id}/decision", headers=analyst.headers, json=body
+    )
+
+
+@pytest.mark.parametrize("release", [True, False])
+def test_analyst_decision_records_who_why_and_tells_the_customer(
+    app: FastAPI,
+    client: TestClient,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    make_staff: Callable[..., Actor],
+    migrated_engine: Engine,
+    release: bool,
+) -> None:
+    alice, _bob, payee = pair
+    force_decision(app, FraudDecision.REVIEW)
+    tid = send(client, alice, payee, 300_000).json()["id"]
+    analyst = make_staff(RoleName.FRAUD_ANALYST)
+    alert_id = client.get("/api/v1/fraud/alerts", headers=analyst.headers).json()[0]["id"]
+    action, note = ("RELEASE", "customer confirmed by phone") if release else ("REJECT", "mule")
+    assert _decide(client, analyst, alert_id, action, note).status_code == 204
+
+    with sessionmaker(bind=migrated_engine)() as session:
+        alert = session.get(FraudAlert, uuid.UUID(alert_id))
+        assert alert is not None
+        assert alert.status == (
+            AlertStatus.FALSE_POSITIVE if release else AlertStatus.CONFIRMED_FRAUD
+        )
+        assert alert.resolution_note == note and alert.assigned_to_user_id == analyst.user_id
+        assert alert.resolved_at is not None
+        txn = session.get(Transaction, uuid.UUID(tid))
+        assert txn is not None
+        if release:
+            assert txn.status == "POSTED" and txn.decline_reason is None
+        else:
+            assert txn.status == "DECLINED" and txn.decline_reason == "ANALYST_REJECTED"
+        told = (
+            session.execute(
+                select(OutboxEvent)
+                .where(OutboxEvent.payload["transaction_id"].astext == tid)
+                .order_by(OutboxEvent.created_at.desc())
+            )
+            .scalars()
+            .first()
+        )
+        assert told is not None and told.payload["user_id"] == str(alice.user_id)
+        assert told.event_type == ("TRANSFER_POSTED" if release else "TRANSFER_DECLINED")
+        audit = session.execute(
+            select(AuditLog).where(AuditLog.action == "FRAUD_ALERT_RESOLVED")
+        ).scalar_one()
+        assert (audit.actor_user_id, audit.resource_type, audit.resource_id) == (
+            analyst.user_id,
+            "fraud_alert",
+            alert_id,
+        )
+        assert audit.ip == "testclient" and audit.request_id
+        assert audit.details == {"release": release, "transaction_id": tid}
+
+
+def test_labelling_an_engine_block_keeps_it_declined_and_tells_the_customer(
+    app: FastAPI,
+    client: TestClient,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    make_staff: Callable[..., Actor],
+    migrated_engine: Engine,
+) -> None:
+    """A BLOCK has no hold: even a RELEASE label must not post it (no money moves on a label)."""
+    alice, bob, payee = pair
+    force_decision(app, FraudDecision.BLOCK)
+    tid = send(client, alice, payee, 10_000).json()["id"]
+    analyst = make_staff(RoleName.FRAUD_ANALYST)
+    alert_id = client.get("/api/v1/fraud/alerts", headers=analyst.headers).json()[0]["id"]
+    assert _decide(client, analyst, alert_id, "RELEASE", None).status_code == 204
+    assert balance(client, alice)["ledger"] == 10_000_000 and balance(client, bob)["ledger"] == 0
+    with sessionmaker(bind=migrated_engine)() as session:
+        txn = session.get(Transaction, uuid.UUID(tid))
+        assert txn is not None and txn.status == "DECLINED" and txn.decline_reason == "FRAUD_BLOCK"
+        told = (
+            session.execute(
+                select(OutboxEvent)
+                .where(OutboxEvent.payload["transaction_id"].astext == tid)
+                .order_by(OutboxEvent.created_at.desc())
+            )
+            .scalars()
+            .first()
+        )
+        assert told is not None and told.event_type == "TRANSFER_DECLINED"
+
+
+def test_decision_errors_are_specific(
+    app: FastAPI,
+    client: TestClient,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    make_staff: Callable[..., Actor],
+) -> None:
+    alice, _bob, payee = pair
+    force_decision(app, FraudDecision.REVIEW)
+    send(client, alice, payee, 300_000)
+    analyst = make_staff(RoleName.FRAUD_ANALYST)
+    missing = _decide(client, analyst, str(uuid.uuid4()), "REJECT", None)
+    assert missing.status_code == 404 and missing.json()["title"] == "alert not found"
+    alert_id = client.get("/api/v1/fraud/alerts", headers=analyst.headers).json()[0]["id"]
+    assert _decide(client, analyst, alert_id, "REJECT", None).status_code == 204
+    twice = _decide(client, analyst, alert_id, "RELEASE", None)
+    assert twice.status_code == 409 and twice.json()["title"] == "alert already resolved"
+
+
+_NOW = datetime(2026, 11, 2, 23, 59, 59, 999_999, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    ("earlier_at", "counted"),
+    [
+        (_NOW.replace(hour=0, minute=0, second=0, microsecond=0), True),  # exactly midnight UTC
+        (
+            _NOW.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(microseconds=1),
+            False,
+        ),
+    ],
+)
+def test_daily_limit_window_starts_exactly_at_midnight_utc(
+    client: TestClient,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    settings: Settings,
+    migrated_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+    earlier_at: datetime,
+    counted: bool,
+) -> None:
+    alice, _bob, payee = pair
+    settings.daily_transfer_limit_minor = 150_000
+    earlier = send(client, alice, payee, 100_000)
+    assert earlier.status_code == 201
+    with migrated_engine.begin() as conn:  # backdate the header only; entries are untouched
+        conn.execute(
+            update(Transaction)
+            .where(Transaction.id == uuid.UUID(earlier.json()["id"]))
+            .values(created_at=earlier_at)
+        )
+    monkeypatch.setattr("pbip_api.modules.payments.service.utcnow", lambda: _NOW)
+    second = send(client, alice, payee, 60_000)
+    if counted:
+        assert (
+            second.status_code == 422 and second.json()["title"] == "daily transfer limit exceeded"
+        )
+    else:
+        assert second.status_code == 201
+
+
+def test_a_transfer_of_exactly_the_daily_limit_is_allowed(
+    client: TestClient, pair: tuple[Actor, Actor, dict[str, Any]], settings: Settings
+) -> None:
+    """The limit is inclusive, the transfer under check is not counted twice, and an empty day
+    sums to zero."""
+    alice, _bob, payee = pair
+    settings.daily_transfer_limit_minor = 150_000
+    assert send(client, alice, payee, 150_000).status_code == 201
+    assert send(client, alice, payee, 1).status_code == 422
+
+
+def _latest_event(engine: Engine, tid: str) -> OutboxEvent:
+    with sessionmaker(bind=engine)() as session:
+        event = (
+            session.execute(
+                select(OutboxEvent)
+                .where(OutboxEvent.payload["transaction_id"].astext == tid)
+                .order_by(OutboxEvent.created_at.desc())
+            )
+            .scalars()
+            .first()
+        )
+        assert event is not None
+        return event
+
+
+def test_step_up_is_scoped_to_the_owner_and_to_that_transfer(
+    app: FastAPI,
+    client: TestClient,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    auth_service_factory: Callable[[Session], AuthService],
+    migrated_engine: Engine,
+    clock: FakeClock,
+) -> None:
+    """BOLA and wrong-row guards on _owned_transaction: another customer gets 404 (indistinguishable
+    from missing), and confirming one pending transfer never touches the owner's other one."""
+    alice, bob, payee = pair
+    secret = enable_mfa(auth_service_factory, migrated_engine, alice, clock)
+    force_decision(app, FraudDecision.STEP_UP)
+    first = send(client, alice, payee, 20_000).json()["id"]
+    second = send(client, alice, payee, 30_000).json()["id"]
+    stolen = client.post(
+        f"/api/v1/transfers/{first}/step-up", headers=bob.headers, json={"code": "000000"}
+    )
+    assert stolen.status_code == 404 and stolen.json()["title"] == "transfer not found"
+    done = client.post(
+        f"/api/v1/transfers/{second}/step-up",
+        headers=alice.headers,
+        json={"code": totp_code(secret, clock)},
+    )
+    assert done.status_code == 200 and done.json()["id"] == second
+    with sessionmaker(bind=migrated_engine)() as session:
+        statuses = {
+            str(t.id): t.status
+            for t in session.execute(
+                select(Transaction).where(Transaction.id.in_([uuid.UUID(first), uuid.UUID(second)]))
+            ).scalars()
+        }
+    assert statuses == {first: "PENDING_STEP_UP", second: "POSTED"}
+    assert balance(client, bob)["ledger"] == 30_000
+    not_waiting = client.post(
+        f"/api/v1/transfers/{second}/step-up",
+        headers=alice.headers,
+        json={"code": totp_code(secret, clock)},
+    )
+    assert not_waiting.status_code == 409
+    assert not_waiting.json()["title"] == "this transfer is not waiting for verification"
+
+
+def test_confirmed_step_up_is_audited_notified_and_counted(
+    app: FastAPI,
+    client: TestClient,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    auth_service_factory: Callable[[Session], AuthService],
+    migrated_engine: Engine,
+    clock: FakeClock,
+) -> None:
+    alice, _bob, payee = pair
+    secret = enable_mfa(auth_service_factory, migrated_engine, alice, clock)
+    force_decision(app, FraudDecision.STEP_UP)
+    tid = send(client, alice, payee, 25_000).json()["id"]
+    posted_before = TRANSFERS_TOTAL.labels("POSTED")._value.get()
+    ok = client.post(
+        f"/api/v1/transfers/{tid}/step-up",
+        headers=alice.headers,
+        json={"code": totp_code(secret, clock)},
+    )
+    assert ok.status_code == 200
+    assert TRANSFERS_TOTAL.labels("POSTED")._value.get() == posted_before + 1
+    with sessionmaker(bind=migrated_engine)() as session:
+        audit = session.execute(
+            select(AuditLog).where(AuditLog.action == "TRANSFER_STEP_UP_CONFIRMED")
+        ).scalar_one()
+        assert audit.resource_type == "transaction" and audit.ip == "testclient"
+        assert audit.request_id
+    event = _latest_event(migrated_engine, tid)
+    assert event.event_type == "TRANSFER_POSTED"
+    assert event.payload == {
+        "user_id": str(alice.user_id),
+        "transaction_id": tid,
+        "account_id": str(alice.account_id),
+        "amount_minor": 25_000,
+        "currency": "INR",
+    }
+
+
+def test_escalation_is_audited_notified_and_counted(
+    app: FastAPI,
+    client: TestClient,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    auth_service_factory: Callable[[Session], AuthService],
+    migrated_engine: Engine,
+    clock: FakeClock,
+) -> None:
+    alice, _bob, payee = pair
+    enable_mfa(auth_service_factory, migrated_engine, alice, clock)
+    force_decision(app, FraudDecision.STEP_UP)
+    tid = send(client, alice, payee, 40_000).json()["id"]
+    review_before = TRANSFERS_TOTAL.labels("PENDING_REVIEW")._value.get()
+    for _ in range(3):
+        last = client.post(
+            f"/api/v1/transfers/{tid}/step-up", headers=alice.headers, json={"code": "000000"}
+        )
+    assert last.status_code == 200 and last.json()["id"] == tid
+    assert last.json()["status"] == "PENDING_REVIEW"
+    assert TRANSFERS_TOTAL.labels("PENDING_REVIEW")._value.get() == review_before + 1
+    with sessionmaker(bind=migrated_engine)() as session:
+        audit = session.execute(
+            select(AuditLog).where(AuditLog.action == "TRANSFER_STEP_UP_ESCALATED")
+        ).scalar_one()
+        assert audit.actor_user_id == alice.user_id and audit.resource_type == "transaction"
+        assert audit.request_id and audit.details == {"failed_codes": 3}
+    event = _latest_event(migrated_engine, tid)
+    assert event.event_type == "TRANSFER_UNDER_REVIEW"
+    assert event.payload["user_id"] == str(alice.user_id)
+
+
+@pytest.mark.parametrize("path", ["confirm", "escalate"])
+def test_daily_limit_is_rechecked_when_a_held_transfer_finally_moves(
+    app: FastAPI,
+    client: TestClient,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    auth_service_factory: Callable[[Session], AuthService],
+    migrated_engine: Engine,
+    clock: FakeClock,
+    settings: Settings,
+    path: str,
+) -> None:
+    """The limit is enforced against what the customer has sent TODAY when money moves or is held,
+    not only when the transfer was first created (another transfer may have used it up since)."""
+    alice, _bob, payee = pair
+    secret = enable_mfa(auth_service_factory, migrated_engine, alice, clock)
+    force_decision(app, FraudDecision.STEP_UP)
+    tid = send(client, alice, payee, 80_000).json()["id"]
+    force_decision(app, FraudDecision.ALLOW)
+    assert send(client, alice, payee, 80_000).status_code == 201  # uses the day's allowance
+    settings.daily_transfer_limit_minor = 150_000
+    url = f"/api/v1/transfers/{tid}/step-up"
+    if path == "confirm":
+        last = client.post(url, headers=alice.headers, json={"code": totp_code(secret, clock)})
+    else:
+        for _ in range(3):
+            last = client.post(url, headers=alice.headers, json={"code": "000000"})
+    assert last.status_code == 422 and last.json()["code"] == "limit_exceeded"
+
+
+@pytest.mark.parametrize("path", ["confirm", "escalate"])
+def test_a_held_transfer_within_the_limit_is_not_counted_twice_when_it_moves(
+    app: FastAPI,
+    client: TestClient,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    auth_service_factory: Callable[[Session], AuthService],
+    migrated_engine: Engine,
+    clock: FakeClock,
+    settings: Settings,
+    path: str,
+) -> None:
+    """The recheck excludes the transfer under check: 100k waiting for step-up is already 'live'
+    today, and counting it again would refuse a transfer that is within the 150k limit."""
+    alice, _bob, payee = pair
+    secret = enable_mfa(auth_service_factory, migrated_engine, alice, clock)
+    settings.daily_transfer_limit_minor = 150_000
+    force_decision(app, FraudDecision.STEP_UP)
+    tid = send(client, alice, payee, 100_000).json()["id"]
+    url = f"/api/v1/transfers/{tid}/step-up"
+    if path == "confirm":
+        last = client.post(url, headers=alice.headers, json={"code": totp_code(secret, clock)})
+        assert last.status_code == 200 and last.json()["status"] == "POSTED"
+    else:
+        for _ in range(3):
+            last = client.post(url, headers=alice.headers, json={"code": "000000"})
+        assert last.status_code == 200 and last.json()["status"] == "PENDING_REVIEW"
+
+
+def test_a_transfer_held_for_review_counts_the_days_earlier_spending(
+    app: FastAPI,
+    client: TestClient,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    settings: Settings,
+) -> None:
+    alice, _bob, payee = pair
+    settings.daily_transfer_limit_minor = 150_000
+    assert send(client, alice, payee, 80_000).status_code == 201
+    force_decision(app, FraudDecision.REVIEW)
+    held = send(client, alice, payee, 80_000)
+    assert held.status_code == 422 and held.json()["code"] == "limit_exceeded"
+    assert balance(client, alice)["held"] == 0
+
+
+def test_holds_allow_the_exact_balance_and_accumulate(
+    app: FastAPI, client: TestClient, pair: tuple[Actor, Actor, dict[str, Any]]
+) -> None:
+    alice, _bob, payee = pair
+    force_decision(app, FraudDecision.REVIEW)
+    assert send(client, alice, payee, 4_000_000).status_code == 202
+    assert send(client, alice, payee, 6_000_000).status_code == 202  # exactly what is left
+    assert balance(client, alice) == {"ledger": 10_000_000, "held": 10_000_000, "available": 0}
+    broke = send(client, alice, payee, 1)
+    assert broke.status_code == 422 and broke.json()["title"] == "insufficient funds"
+
+
+def test_the_idempotency_row_records_which_transfer_it_answered(
+    client: TestClient, pair: tuple[Actor, Actor, dict[str, Any]], migrated_engine: Engine
+) -> None:
+    alice, _bob, payee = pair
+    key = new_key()
+    tid = send(client, alice, payee, 5_000, key).json()["id"]
+    with sessionmaker(bind=migrated_engine)() as session:
+        row = session.execute(
+            select(IdempotencyKey).where(IdempotencyKey.key == key["Idempotency-Key"])
+        ).scalar_one()
+        assert str(row.transaction_id) == tid and row.response_status == 201
+
+
+def test_wrong_step_up_codes_count_per_transfer(
+    app: FastAPI,
+    client: TestClient,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    auth_service_factory: Callable[[Session], AuthService],
+    migrated_engine: Engine,
+    clock: FakeClock,
+) -> None:
+    """Two wrong codes on one transfer and two on another: neither has reached the limit of three."""
+    alice, _bob, payee = pair
+    enable_mfa(auth_service_factory, migrated_engine, alice, clock)
+    force_decision(app, FraudDecision.STEP_UP)
+    first = send(client, alice, payee, 10_000).json()["id"]
+    second = send(client, alice, payee, 20_000).json()["id"]
+    for tid in (first, second):
+        for _ in range(2):
+            wrong = client.post(
+                f"/api/v1/transfers/{tid}/step-up", headers=alice.headers, json={"code": "000000"}
+            )
+            assert wrong.status_code == 422
+    with sessionmaker(bind=migrated_engine)() as session:
+        statuses = (
+            session.execute(
+                select(Transaction.status).where(
+                    Transaction.id.in_([uuid.UUID(first), uuid.UUID(second)])
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert sorted(statuses) == ["PENDING_STEP_UP", "PENDING_STEP_UP"]
+
+
+@pytest.mark.parametrize(
+    ("decision", "message"),
+    [
+        (FraudDecision.ALLOW, "Transfer completed"),
+        (FraudDecision.STEP_UP, "Additional verification is required"),
+        (FraudDecision.REVIEW, "Your transfer is being reviewed for your protection"),
+        (FraudDecision.BLOCK, "We could not process this transfer. Please contact support"),
+    ],
+)
+def test_customer_sees_the_exact_plain_message_for_each_outcome(
+    app: FastAPI,
+    client: TestClient,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    auth_service_factory: Callable[[Session], AuthService],
+    migrated_engine: Engine,
+    clock: FakeClock,
+    decision: FraudDecision,
+    message: str,
+) -> None:
+    """The customer-facing wording is a contract: plain, and never a fraud reason or score."""
+    alice, _bob, payee = pair
+    if decision == FraudDecision.STEP_UP:  # without MFA a step-up goes straight to review
+        enable_mfa(auth_service_factory, migrated_engine, alice, clock)
+    force_decision(app, decision)
+    assert send(client, alice, payee, 10_000).json()["message"] == message
+
+
+def test_a_second_escalation_after_one_already_won_returns_the_state_and_holds_once(
+    app: FastAPI,
+    client: TestClient,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    auth_service_factory: Callable[[Session], AuthService],
+    migrated_engine: Engine,
+    clock: FakeClock,
+    settings: Settings,
+) -> None:
+    """The 'a concurrent request won' branch of _escalate_to_review, driven deterministically: two
+    requests that both counted the third wrong code each escalate; the second must report the state
+    the first left and must not place a second hold (money reserved twice)."""
+    alice, _bob, payee = pair
+    enable_mfa(auth_service_factory, migrated_engine, alice, clock)
+    force_decision(app, FraudDecision.STEP_UP)
+    tid = uuid.UUID(send(client, alice, payee, 70_000).json()["id"])
+    meta = RequestMeta(ip="198.51.100.7", user_agent="race-test", request_id="race-1")
+    results = []
+    for _ in range(2):
+        with sessionmaker(bind=migrated_engine, expire_on_commit=False)() as session:
+            service = PaymentsService(
+                session,
+                settings,
+                FixedDecisionScorer(FraudDecision.ALLOW),
+                auth_service_factory(session),
+            )
+            results.append(service._escalate_to_review(alice.user_id, tid, meta))
+            session.commit()
+    assert [r.body["status"] for r in results] == ["PENDING_REVIEW", "PENDING_REVIEW"]
+    assert results[1].body["id"] == str(tid)
+    assert balance(client, alice)["held"] == 70_000  # one hold, not two

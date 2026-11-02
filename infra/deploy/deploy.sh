@@ -18,8 +18,41 @@ STATE_PREVIOUS=.previous_tag
 STATE_PENDING=.deployed_tag.pending
 WAIT_TIMEOUT="${DEPLOY_WAIT_TIMEOUT:-180}"
 
+env_value() { # <name>: a value from the host .env (compose reads the same file); empty if unset
+  [ -f .env ] || return 0
+  sed -n "s/^$1=//p" .env | tail -n 1
+}
+
+# TLS material the stack refuses to start without (runbook 1.4). Never overwrites existing files:
+#   certs/db   self-signed PostgreSQL certificate; also the API's sslrootcert (sslmode=verify-full)
+#   certs/web  placeholder self-signed certificate for PUBLIC_HOSTNAME, so nginx can start and answer
+#              the first certbot HTTP-01 challenge; certbot-deploy-hook.sh replaces it with the real one
+ensure_tls() {
+  local host
+  host="$(env_value PUBLIC_HOSTNAME)"
+  mkdir -p acme certs/db certs/web
+  chmod 0700 certs
+  chmod 0755 certs/db certs/web acme # mounted into containers that run as non-root users
+  if [ ! -s certs/db/server.crt ] || [ ! -s certs/db/server.key ]; then
+    echo "==> Creating the PostgreSQL TLS certificate (certs/db)"
+    openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 3650 \
+      -subj "/CN=db" -addext "subjectAltName=DNS:db" \
+      -keyout certs/db/server.key -out certs/db/server.crt 2>/dev/null
+    chmod 0600 certs/db/server.key # copied and re-owned by tls-entrypoint.sh
+  fi
+  if [ ! -s certs/web/tls.crt ] || [ ! -s certs/web/tls.key ]; then
+    echo "==> Creating a placeholder web certificate for ${host:-localhost}; run certbot next (runbook 1.4)"
+    openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 30 \
+      -subj "/CN=${host:-localhost}" -addext "subjectAltName=DNS:${host:-localhost}" \
+      -keyout certs/web/tls.key -out certs/web/tls.crt 2>/dev/null
+    chmod 0644 certs/web/tls.key # nginx-unprivileged (uid 101) reads it; certs/ itself is 0700
+  fi
+  chmod 0755 tls-entrypoint.sh 2>/dev/null || true
+}
+
 start_release() { # <image_prefix> <tag>
   export IMAGE_PREFIX="$1" IMAGE_TAG="$2"
+  ensure_tls
   echo "==> Pulling $1/api:$2 and $1/web:$2"
   "${COMPOSE[@]}" pull --quiet
   echo "==> Starting release $2 (migrate first, then waiting up to ${WAIT_TIMEOUT}s for health checks)"

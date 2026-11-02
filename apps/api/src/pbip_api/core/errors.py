@@ -12,6 +12,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from pbip_api.core.metrics import UNHANDLED_ERRORS_TOTAL
+from pbip_api.core.middleware import route_template
+
 PROBLEM_JSON = "application/problem+json"
 
 _logger = structlog.get_logger(__name__)
@@ -108,8 +111,33 @@ async def _validation_error_handler(request: Request, exc: Exception) -> JSONRes
     return problem(request, 422, "validation_error", "Request validation failed", errors)
 
 
+def _raised_at(exc: BaseException) -> str:
+    """`module.py:line:function` of the innermost frame: actionable, and carries no data values."""
+    tb = exc.__traceback__
+    if tb is None:
+        return "unknown"
+    while tb.tb_next is not None:
+        tb = tb.tb_next
+    code = tb.tb_frame.f_code
+    return f"{code.co_filename.rsplit('/', 1)[-1]}:{tb.tb_lineno}:{code.co_name}"
+
+
 async def _unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
-    _logger.error("unhandled_exception", error_type=type(exc).__name__)
+    """Error tracking (TASK-103): one searchable log event + a metric per unhandled error.
+
+    The request id is bound by RequestContextMiddleware. Only the exception TYPE and code location
+    are recorded - never ``str(exc)``, arguments or the request, which may contain personal data.
+    """
+    route = route_template(request.scope)
+    error_type = type(exc).__name__
+    _logger.error(
+        "unhandled_exception",
+        error_type=error_type,
+        route=route,
+        method=request.method,
+        raised_at=_raised_at(exc),
+    )
+    UNHANDLED_ERRORS_TOTAL.labels(route, error_type).inc()
     return problem(request, 500, "internal_error", "Internal server error")
 
 

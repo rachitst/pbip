@@ -28,6 +28,8 @@ class FraudEvent(Base):
     __table_args__ = (
         Index("ix_fraud_events_transaction_id", "transaction_id"),
         Index("ix_fraud_events_decision_created_at", "decision", "created_at"),
+        # Read on every scored payment (recent decisions) and by the monitoring API (TASK-079).
+        Index("ix_fraud_events_customer_id_created_at", "customer_id", "created_at"),
     )
 
     id: Mapped[UUID] = uuid_pk()
