@@ -1402,6 +1402,20 @@
         "title": "DecisionRequest",
         "type": "object"
       },
+      "DemoLabStatus": {
+        "properties": {
+          "enabled": {
+            "description": "True: the lab may run here. Outside local/test the endpoint answers 404",
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "DemoLabStatus",
+        "type": "object"
+      },
       "DeviceOut": {
         "description": "Device metadata returned to client.\n\nRaw fingerprints and fingerprint hashes are never exposed.",
         "properties": {
@@ -5964,6 +5978,25 @@
             }
           },
           {
+            "description": "Only the alert raised for this transaction (at most one)",
+            "in": "query",
+            "name": "transaction_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the alert raised for this transaction (at most one)",
+              "title": "Transaction Id"
+            }
+          },
+          {
             "in": "query",
             "name": "limit",
             "required": false,
@@ -6119,6 +6152,36 @@
           }
         ],
         "summary": "RELEASE (false positive, posts the held transfer) or REJECT (confirmed fraud)",
+        "tags": [
+          "fraud"
+        ]
+      }
+    },
+    "/api/v1/fraud/demo-lab": {
+      "get": {
+        "description": "The lab drives real customer APIs with demo credentials. The web app only knows how it was\nbuilt, not where it is deployed, so the server's APP_ENV decides. Staging and production\nanswer 404 (not a 200 \"disabled\"), so the lab is indistinguishable from absent there.",
+        "operationId": "get_demo_lab_status_api_v1_fraud_demo_lab_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DemoLabStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not a local/test environment: the lab does not exist here"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Whether the fraud demonstration lab (TASK-081) may run in this environment",
         "tags": [
           "fraud"
         ]

@@ -46,7 +46,11 @@ def open_alert(session: Session, event: FraudEvent) -> FraudAlert:
 
 
 def list_alerts(
-    session: Session, status: AlertStatus | None, limit: int, offset: int
+    session: Session,
+    status: AlertStatus | None,
+    limit: int,
+    offset: int,
+    transaction_id: UUID | None = None,
 ) -> list[tuple[FraudAlert, FraudEvent, Transaction, str | None]]:
     """Queue rows with the customer's name, so an analyst can triage without opening each."""
     stmt = (
@@ -60,6 +64,8 @@ def list_alerts(
     )
     if status is not None:
         stmt = stmt.where(FraudAlert.status == status)
+    if transaction_id is not None:
+        stmt = stmt.where(FraudAlert.transaction_id == transaction_id)
     return [(a, e, t, name) for a, e, t, name in session.execute(stmt).all()]
 
 
