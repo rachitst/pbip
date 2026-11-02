@@ -16,7 +16,7 @@
 **Honest assessment:** a 3.4x sustained speed-up across 80 tasks, with no loss of testing, security or review quality, is far beyond what AI-assisted teams normally achieve. Treat the full backlog by Nov 3 as **high risk**. The plan still commits every task to a date on or before Nov 3, as requested, and makes the shortfall visible early:
 
 * **Day 3 (Oct 27) and Day 5 (Oct 29) checkpoints** compare actual merged work with this schedule. The measured speed-up (planned person-days merged / days elapsed / 6) is the number that matters; if it is below ~3.4x, the forecast shortfall on Nov 3 is reported, not hidden.
-* No acceptance criterion, test, security check or review is reduced to buy speed (AGENTS.md is unchanged).
+* No acceptance criterion, test, security check or review is reduced to buy speed (AGENTS.md is unchanged apart from the time-boxed final-sprint exception in section 4a, which moves where docs and full local checks happen, not whether they happen).
 * If the team decides to protect a smaller scope, the blueprint's slip order applies (COULD first, then SHOULD in depth; never tests, security or docs). That is a scope decision for the team, recorded on the issues; it is not made silently by this plan.
 
 ## 2. Owners and load
@@ -67,6 +67,25 @@
 | 8 | Sun 01 Nov | 061 Kalpak, 068 Pranay, 077 Rachit, 081 Abbas, 086 Sujal, 090 Abbas | 036 Kalpak, 064 Sujal, 066 Krishna, 076 Abbas, 084 Pranay, 090 Abbas | Daily updates + handoff notices. |
 | 9 | Mon 02 Nov | 062 Kalpak, 065 Krishna, 074 Kalpak, 087 Rachit, 088 Krishna, 092 Rachit | 061 Kalpak, 062 Kalpak, 065 Krishna, 068 Pranay, 074 Kalpak, 077 Rachit, 081 Abbas, 086 Sujal, 088 Krishna, 092 Rachit | Integration day: everything still open must be In Review. |
 | 10 | Tue 03 Nov | 089 Rachit, 091 Rachit, 093 Rachit | 087 Rachit, 089 Rachit, 091 Rachit, 093 Rachit | Deadline: merge only green, reviewed PRs; report every unfinished task with its real status. |
+
+## 4a. Final-sprint process change (approved by the product owner on 2026-11-03)
+
+A time-boxed exception for the final sprint only. It adapts AGENTS.md section 0 rule 9 (local checks) and section 12
+(docs in the same PR); every other rule in AGENTS.md is unchanged.
+
+* **Planning docs move to batch docs PRs.** Feature PRs no longer edit `docs/requirements/traceability.md`,
+  `docs/architecture/HLD.md`, `docs/requirements/user-stories.md`, this plan or `docs/backlog/backlog.toml`. A batch
+  docs PR updates them after every 2-3 feature merges, and at the latest before a new queue item starts.
+* **Done means the batch docs PR has merged.** A task counts as Done only once the batch docs PR that records it has
+  merged, with every acceptance criterion checked against the merged PR.
+* **Still in every feature PR:** the regenerated `docs/api/openapi.json` and `apps/web/src/api/schema.d.ts`, any
+  migration, any ADR, and a `docs/security/threat-model.md` row for new attack surface.
+* **Styles:** a new page gets its own stylesheet file instead of appending to the shared `styles.css`.
+* **Local checks** are the targeted tests plus `ruff`, `mypy --strict`, ESLint/`tsc` and the OpenAPI check. The full
+  suite runs in CI, and a green `CI Gate` is required before merge.
+* **One full `make check` on `main`** before the final release.
+* **The pre-push hook is never bypassed** (no `--no-verify`).
+* **No merge queue and no ruleset changes.** Each PR is merged as soon as it is green.
 
 ## 5. Sprint-by-sprint schedule
 
@@ -915,6 +934,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   - [ ] State machine diagrams for Transfer lifecycle and Fraud alert review flow
   - [ ] Sequence diagrams for double-entry ledger lock ordering and idempotency resolution
 - **Definition of done (evidence):** Peer-reviewed, committed to docs/architecture/LLD.md.
+- **Follow-up (2026-11-02):** the four documentation drifts found while writing the LLD (#316: table counts,
+  scheduled transfers, the ADR-0023 loan hook, the reserved `REVERSED` state) were fixed in #322 (321ccf1); LLD
+  section 6 items 1, 5 and 6 record the corrections.
 - **Required checks:**
   - Automated: document builds/renders, links valid, content matches the code and backlog
   - Manual: a teammate follows the document end to end
@@ -1923,7 +1945,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #85 | **Sprint:** 5 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Kalpak (`Patil-Kalpak`)
-- **Start:** Mon 02 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (set when merged) | **Status:** In Review (#328) | **Risk:** Low (1.5 days of slack)
+- **Start:** Mon 02 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (#328, d855a71, merged Mon 02 Nov; criteria not all met) | **Status:** In Progress (the fixed-deposit card opens `/wealth`, not the booking dialog, so criterion 3 "directly to the application modal" is met only for the savings account) | **Risk:** Low (1.5 days of slack)
 - **Depends on:** TASK-054 (#77, Krishna), TASK-019 (#42, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-054, TASK-019
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout.
@@ -1951,7 +1973,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #86 | **Sprint:** 5 | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Core Banking & Ledger
 - **Owner:** Sujal (`SUJALGPM`)
-- **Start:** Fri 30 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (1.5 days of slack)
+- **Start:** Fri 30 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** Mon 02 Nov (#327, 26473fe) | **Status:** Done | **Risk:** Low (1.5 days of slack)
 - **Depends on:** none
 - **Mode:** Parallel: can start immediately
 - **Goal:** Catalogue service for fixed-term deposits and simulated wealth products.
@@ -1978,7 +2000,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #87 | **Sprint:** 5 | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Core Banking & Ledger
 - **Owner:** Sujal (`SUJALGPM`)
-- **Start:** Sat 31 Oct | **Target deadline:** Sun 01 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (1.5 days of slack)
+- **Start:** Sat 31 Oct | **Target deadline:** Sun 01 Nov | **Actual completion:** Mon 02 Nov (#327, 26473fe) | **Status:** Done | **Risk:** Low (1.5 days of slack)
 - **Depends on:** TASK-063 (#86, Sujal), TASK-005 (#16, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-063
 - **Goal:** Investment endpoint locking funds into Fixed Deposit contracts via ledger reserve.
@@ -2008,7 +2030,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #88 | **Sprint:** 5 | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Mon 02 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (1.5 days of slack)
+- **Start:** Mon 02 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** Mon 02 Nov (#327, 26473fe) | **Status:** Done | **Risk:** Low (1.5 days of slack)
 - **Depends on:** TASK-064 (#87, Sujal), TASK-019 (#42, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-064, TASK-019
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; deposit booking uses the review and outcome pattern.
@@ -2653,7 +2675,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #111 | **Sprint:** 6 | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Mon 02 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Medium (1.1 days of slack before downstream work is delayed)
+- **Start:** Mon 02 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (#321, 01aad5a, merged Mon 02 Nov; criteria not all met) | **Status:** In Progress (criterion 4: the pack maps to AGENTS.md and ADRs only, not to any named AI-governance guideline for financial institutions; DoD path `docs/ml/model-cards.md` is a directory `docs/ml/model-cards/`) | **Risk:** Medium (1.1 days of slack before downstream work is delayed)
 - **Depends on:** TASK-029 (#52, Rachit), TASK-042 (#65, Rachit), TASK-084 (#107, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-029, TASK-042, TASK-084
 - **Goal:** Standardized model cards documenting training data, ethical considerations, and limitations.
@@ -2915,7 +2937,7 @@ decision in ADR-0015.
 
 - **Issue:** #180 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Mon 02 Nov | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** In Review (TASK-097 and TASK-107 in one PR) | **Risk:** Unscheduled
+- **Start:** Mon 02 Nov | **Target deadline:** - | **Actual completion:** Mon 02 Nov (#326, 38c010a) | **Status:** Done | **Risk:** Unscheduled
 - **Depends on:** none.
 - **Mode:** Unscheduled
 - **Goal:** Captures the customer's risk tolerance, the UC-07 input investment recommendations need.
@@ -2996,7 +3018,7 @@ decision in ADR-0015.
 
 - **Issue:** #183 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Start:** - | **Target deadline:** - | **Actual completion:** Mon 02 Nov (#325, 13f68cb) | **Status:** Done | **Risk:** Unscheduled
 - **Depends on:** TASK-048 (#71, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; lives in the staff route tree.
@@ -3024,7 +3046,7 @@ decision in ADR-0015.
 
 - **Issue:** #184 | **Sprint:** unscheduled | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Analytics & Insights
 - **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Start:** - | **Target deadline:** - | **Actual completion:** Mon 02 Nov (#325, 13f68cb) | **Status:** Done | **Risk:** Unscheduled
 - **Depends on:** TASK-019 (#42, Kalpak), TASK-044 (#67, Krishna), TASK-054 (#77, Krishna), TASK-055 (#78, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; lives in the staff route tree.
@@ -3185,7 +3207,7 @@ decision in ADR-0015.
 
 - **Issue:** #194 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Identity & Core Banking
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Mon 02 Nov | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** In Review (TASK-097 and TASK-107 in one PR) | **Risk:** Unscheduled
+- **Start:** Mon 02 Nov | **Target deadline:** - | **Actual completion:** Mon 02 Nov (#326, 38c010a) | **Status:** Done | **Risk:** Unscheduled
 - **Depends on:** none.
 - **Mode:** Unscheduled
 - **Goal:** The minimum demographic input for recommendations (ADR-0015): optional date of birth, explicit consent, derived age band.
@@ -3236,7 +3258,7 @@ with #201 and TLS was delivered in #280, so neither is repeated here.
 
 - **Issue:** #283 | **Sprint:** unscheduled | **Priority:** should | **Size:** S (0.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Unassigned
-- **Start:** Mon 02 Nov | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** In Review | **Risk:** Unscheduled
+- **Start:** Mon 02 Nov | **Target deadline:** - | **Actual completion:** Tue 03 Nov (#330, 51c6307) | **Status:** Done | **Risk:** Unscheduled
 - **Depends on:** TASK-019.
 - **Mode:** Unscheduled
 - **Goal:** FR-08 / section 5 'total balance overview': the dashboard shows the total balance across the customer's own accounts.
@@ -3250,7 +3272,7 @@ with #201 and TLS was delivered in #280, so neither is repeated here.
 
 - **Issue:** #284 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** AI Assistant & Security
 - **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Start:** - | **Target deadline:** - | **Actual completion:** Mon 02 Nov (#331, 46a18e3) | **Status:** Done | **Risk:** Unscheduled
 - **Depends on:** TASK-057, TASK-059.
 - **Mode:** Unscheduled
 - **Goal:** FR-39 / UC-08 example 'Show unusual expenses': a read-only assistant tool that lists the customer's spending that is unusual for them, with the reason.
