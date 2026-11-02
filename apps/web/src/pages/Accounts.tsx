@@ -7,6 +7,7 @@ import { errorMessage } from "../lib/errors";
 import { accountTypeLabel } from "../lib/format";
 import { formatMinor } from "../lib/money";
 import { OPEN_ACCOUNT_PARAM } from "../lib/recommendations";
+import { trackAccountViewed, trackProductClicked } from "../telemetry/tracker";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
@@ -55,12 +56,17 @@ export function Accounts() {
             expanded={openedId === account.id}
             highlightTransactionId={account.id === linkedAccount ? linkedTransaction : null}
             onToggle={() => {
+              if (openedId !== account.id) trackAccountViewed(account.account_type);
               setOpenedId(openedId === account.id ? null : account.id);
             }}
           />
         ))}
       </ul>
-      <ProductRecommendations />
+      <ProductRecommendations
+        onProductAction={(item) => {
+          trackProductClicked(item.product_id);
+        }}
+      />
       <OpenAccount requested={openAccountType(params.get(OPEN_ACCOUNT_PARAM))} />
       {accounts.data && accounts.data.length > 0 && (
         <SendMoney

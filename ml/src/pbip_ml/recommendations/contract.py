@@ -13,6 +13,37 @@ class ProductType(StrEnum):
     INSURANCE = "INSURANCE"
 
 
+class HeldProductKind(StrEnum):
+    """What a customer already holds, as the owning modules report it (TASK-111, ADR-0030).
+
+    No fund or card kinds: PBIP sells no fund units (ADR-0025) and issues no cards or insurance,
+    so nobody can hold one. A new kind is an additive contract change once a module sells it.
+    """
+
+    SAVINGS_ACCOUNT = "SAVINGS_ACCOUNT"
+    CURRENT_ACCOUNT = "CURRENT_ACCOUNT"
+    PERSONAL_LOAN = "PERSONAL_LOAN"
+    AUTO_LOAN = "AUTO_LOAN"
+    HOME_LOAN = "HOME_LOAN"
+    FIXED_DEPOSIT = "FIXED_DEPOSIT"
+
+
+class HeldProduct(BaseModel):
+    """One product the customer holds now. No ids or account numbers: the rules need neither."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: HeldProductKind
+    amount_minor: int = Field(
+        ge=0,
+        default=0,
+        description=(
+            "Principal of a fixed deposit or outstanding principal of a loan; 0 for accounts, "
+            "whose balances already feed total_balance_minor"
+        ),
+    )
+
+
 class Recommendation(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -58,6 +89,10 @@ class CustomerRecommendationContext(BaseModel):
     age_band: str = Field(
         default="unknown",
         description="Derived age band per ADR-0015 (18-25, 26-35, 36-50, 51-59, 60+, unknown)",
+    )
+    held_products: tuple[HeldProduct, ...] = Field(
+        default=(),
+        description="Open accounts, active loans and open fixed deposits (TASK-111, ADR-0030)",
     )
 
 
