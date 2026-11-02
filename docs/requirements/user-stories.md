@@ -120,7 +120,7 @@ access.*
 * `integration/test_accounts.py`: `test_open_savings_account_success`, `test_open_account_enforces_limit_of_five`;
 * `apps/web/src/pages/OpenAccount.test.tsx`.
 
-**Tasks:** TASK-005, TASK-019 (Done), TASK-109 (In Review).
+**Tasks:** TASK-005, TASK-019 (Done), TASK-109 (Done #330).
 
 ### US-05 See my recent transactions (FR-09, FR-28)
 
@@ -182,14 +182,14 @@ habits.*
 * ✓ The results are scoped to the authenticated customer.
 * ✓ The dashboard shows the suggestions with "why this was recommended".
 
-**Status:** Partial until TASK-062 (PR #328) merges: the carousel on `/accounts` shows each product with its
-reasons behind a keyboard disclosure.
+**Status:** Implemented (#328): the carousel on `/accounts` shows each product with its reasons behind a keyboard
+disclosure.
 
 **Tests:** `integration/test_recommendations.py::test_recommendations_are_scoped_to_the_authenticated_customer`,
 `test_recommendations_use_the_customers_real_figures_and_ignore_date_of_birth_without_consent`;
 `apps/web/src/pages/ProductRecommendations.test.tsx`.
 
-**Tasks:** TASK-054 (In Progress); TASK-062 (In Review, PR #328).
+**Tasks:** TASK-054 (In Progress); TASK-062 (In Progress: #328 merged; the fixed-deposit action opens `/wealth`, not the booking dialog).
 
 ## UC-03 Download account statement
 
@@ -468,7 +468,7 @@ and a rewards card.
 **Tests** (`integration/test_loans.py`): `test_eligible_with_explained_figures`,
 `test_rejected_when_dti_would_exceed_half_of_income`, `test_rejected_after_a_recent_lockout`.
 
-**Tasks:** TASK-046 (Done); TASK-054 (In Progress), TASK-062 (In Review, PR #328).
+**Tasks:** TASK-046 (Done); TASK-054 (In Progress), TASK-062 (In Progress: #328 merged; the fixed-deposit action opens `/wealth`, not the booking dialog).
 
 ### US-21 Apply for and track a loan (FR-32)
 
@@ -510,7 +510,7 @@ and a rewards card.
 **Tests:** `integration/test_risk_profile.py`; `unit/test_customer_risk_and_age_band.py`;
 `apps/web/src/pages/RiskProfileSection.test.tsx`.
 
-**Tasks:** TASK-097 (In Review).
+**Tasks:** TASK-097 (Done #326).
 
 ### US-23 Get suitable investment suggestions (FR-34 to FR-36)
 
@@ -538,7 +538,8 @@ compare them, so that I can invest sensibly.*
 `test_maturity_is_computed_on_read_and_pays_exactly_the_projected_amount`; `test_wealth_deposit_math.py`;
 `Wealth.test.tsx`.
 
-**Tasks:** TASK-054 (In Progress); TASK-063, TASK-064, TASK-065 (In review); TASK-096, TASK-097, TASK-098 (Todo).
+**Tasks:** TASK-054 (In Progress); TASK-063, TASK-064, TASK-065 (Done #327); TASK-097 (Done #326: the band is recorded,
+not yet used here); TASK-096, TASK-098 (Todo).
 
 ## UC-08 AI assistant interaction
 
@@ -573,7 +574,7 @@ navigating reports.*
 * `unit/test_assistant_routing.py::test_clear_questions_take_the_fast_path`;
 * `apps/web/src/assistant/AssistantDrawer.test.tsx`.
 
-**Tasks:** TASK-057 to TASK-061 (Done); TASK-110 (#284, FR-38 without an amount).
+**Tasks:** TASK-057 to TASK-061 (Done); TASK-110 (#284, Done #331: FR-38 without an amount).
 
 ### US-25 Get help, product discovery, investment ideas and unusual-expense explanations (FR-39, FR-40)
 
@@ -597,7 +598,7 @@ unusual expenses.*
 `test_injection_in_a_merchant_name_stays_quoted_data_and_selects_nothing`,
 `test_cross_customer_unusual_expense_probes_never_return_the_victims_items`.
 
-**Tasks:** TASK-110 (#284, In Review); TASK-105 (Todo).
+**Tasks:** TASK-110 (#284, Done #331); TASK-105 (Todo).
 
 ### US-26 Trust that the assistant cannot be abused (FR-41)
 
@@ -729,7 +730,7 @@ behavioural profiles reflect real engagement.*
 `test_events_reject_extra_fields_free_text_and_urls`, `test_no_ip_address_or_user_agent_is_stored`,
 `test_events_partition_routing_across_months`.
 
-**Tasks:** TASK-055 (In Progress); TASK-101 (In Review: reads the events; the web app still sends none).
+**Tasks:** TASK-055 (In Progress); TASK-101 (Done #325: reads the events; the web app still sends none).
 
 ### US-31 Build a behavioural profile from spend and income (FR-52)
 
@@ -776,7 +777,7 @@ behavioural dashboard, so that I contact the right people.*
 `test_logged_interaction_is_listed_shared_and_audited_without_the_note`); `security/test_route_policy_registry.py`
 (`test_every_insights_route_is_behind_the_mfa_rm_gate`); web `RMInsights.test.tsx`, `routing.test.tsx`.
 
-**Tasks:** TASK-056 (In Progress); TASK-066 (In Review); TASK-101 (In Review).
+**Tasks:** TASK-056 (In Progress); TASK-066 (In Review); TASK-101 (Done #325).
 
 ## UC-12 Product recommendation engine
 
@@ -805,7 +806,7 @@ behaviour, spending, demographics and what I already hold.*
 * `integration/test_recommendations.py` (`test_engine_gets_the_age_band_only_with_consent_and_never_the_date`);
 * `integration/test_demographics.py`; `apps/web/src/pages/DemographicsSection.test.tsx`.
 
-**Tasks:** TASK-054 (In Progress); TASK-062 (In Review, PR #328); TASK-107 (Done #326).
+**Tasks:** TASK-054 (In Progress); TASK-062 (In Progress: #328 merged; the fixed-deposit action opens `/wealth`, not the booking dialog); TASK-107 (Done #326).
 
 ## UC-13 Security monitoring dashboard
 
@@ -865,7 +866,7 @@ acknowledge and resolve, with indicators of overdue reviews.*
 * ✓ Indicators: unresolved exceptions in the period, exceptions not acknowledged within 24 hours, fraud reviews open
   past 24 hours, and the audit chain status; each shown with its definition.
 
-**Status:** Implemented (in review).
+**Status:** Implemented (#325).
 
 **Tests:** `integration/test_compliance_exceptions.py` (`test_exceptions_and_indicators_are_exact_on_known_events`,
 `test_acknowledge_then_resolve_is_audited_with_actor_and_reason`, `test_a_tampered_audit_chain_is_an_exception_that_can_be_worked`,
@@ -873,7 +874,7 @@ acknowledge and resolve, with indicators of overdue reviews.*
 `test_exceptions_response_carries_no_customer_pii`); `security/test_route_policy_registry.py`
 (`test_every_compliance_route_is_behind_the_mfa_compliance_gate`); web `ComplianceDashboard.test.tsx`.
 
-**Tasks:** TASK-100 (In Review).
+**Tasks:** TASK-100 (Done #325).
 
 ---
 
