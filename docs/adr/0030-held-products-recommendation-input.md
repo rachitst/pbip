@@ -1,5 +1,5 @@
 # ADR 0030: Held products as a recommendation input
-- Status: Proposed (needs owner confirmation: it changes `pbip_ml/recommendations/contract.py`)
+- Status: Accepted (product owner, 2026-11-03)
 - Date: 2026-11-03
 - Deciders: Architecture Team
 
