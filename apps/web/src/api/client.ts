@@ -4,6 +4,8 @@ export type TokenResponse = components["schemas"]["TokenResponse"];
 export type AccountOut = components["schemas"]["AccountOut"];
 export type PayeeOut = components["schemas"]["PayeeOut"];
 export type TransferOut = components["schemas"]["TransferOut"];
+export type ScheduledTransferOut = components["schemas"]["ScheduledTransferOut"];
+export type ScheduledTransferCreate = components["schemas"]["ScheduledTransferCreate"];
 export type PayeeVerificationOut = components["schemas"]["PayeeVerificationOut"];
 export type PayeeUpdate = components["schemas"]["PayeeUpdate"];
 export type BillerOut = components["schemas"]["BillerOut"];
@@ -266,6 +268,27 @@ export const api = {
     apiFetch<undefined>("/api/v1/auth/password-change", {
       method: "POST",
       body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }),
+  scheduledTransfers: () =>
+    apiFetch<ScheduledTransferOut[]>("/api/v1/transfers/scheduled?limit=100"),
+  /** One Idempotency-Key per user intent: a retried create can never make a second standing order. */
+  createScheduledTransfer: (body: ScheduledTransferCreate, idempotencyKey: string) =>
+    apiFetch<ScheduledTransferOut>("/api/v1/transfers/scheduled", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(body),
+    }),
+  cancelScheduledTransfer: (id: string) =>
+    apiFetch<ScheduledTransferOut>(`/api/v1/transfers/scheduled/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+  pauseScheduledTransfer: (id: string) =>
+    apiFetch<ScheduledTransferOut>(`/api/v1/transfers/scheduled/${encodeURIComponent(id)}/pause`, {
+      method: "POST",
+    }),
+  resumeScheduledTransfer: (id: string) =>
+    apiFetch<ScheduledTransferOut>(`/api/v1/transfers/scheduled/${encodeURIComponent(id)}/resume`, {
+      method: "POST",
     }),
   /** UC-03 / TASK-016: dates are YYYY-MM-DD (bank days, IST). */
   statement: (accountId: string, start: string, end: string, format: "pdf" | "csv") =>
