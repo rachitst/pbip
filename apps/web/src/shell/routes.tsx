@@ -42,6 +42,8 @@ const Insights = lazy(() => import("../pages/Insights"));
 const BehaviourAnalytics = lazy(() => import("../pages/staff/BehaviourAnalytics"));
 // The Wealth page draws its allocation chart with Recharts too: also loaded on first visit.
 const Wealth = lazy(() => import("../pages/Wealth"));
+// The comparison reuses the Wealth page's formatters, so it shares that lazily loaded chunk.
+const WealthCompare = lazy(() => import("../pages/WealthCompare"));
 
 const HOME_PATH: Record<Area, string> = { customer: "/accounts", staff: "/staff", none: "/" };
 
@@ -230,6 +232,14 @@ export const routes: RouteObject[] = [
             element: (
               <Suspense fallback={<LoadingState label="Loading wealth..." />}>
                 <Wealth />
+              </Suspense>
+            ),
+          },
+          {
+            path: "wealth/compare",
+            element: (
+              <Suspense fallback={<LoadingState label="Loading product comparison..." />}>
+                <WealthCompare />
               </Suspense>
             ),
           },
