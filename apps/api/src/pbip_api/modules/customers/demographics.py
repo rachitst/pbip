@@ -51,7 +51,12 @@ def age_band(date_of_birth: date | None, today: date) -> AgeBand:
     """
     if date_of_birth is None:
         return AgeBand.UNKNOWN
-    age = age_on(date_of_birth, today)
+    return band_for_age(age_on(date_of_birth, today))
+
+
+def band_for_age(age: int) -> AgeBand:
+    """The band of a completed age; under 18 is UNKNOWN. Public so other modules (the insurance
+    eligibility hints, ADR-0028) use these exact boundaries instead of copying them."""
     if age < MIN_AGE:
         return AgeBand.UNKNOWN
     if age <= 25:
