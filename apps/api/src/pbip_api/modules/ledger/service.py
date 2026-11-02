@@ -320,15 +320,38 @@ def list_account_entries(
     return [(entry, txn) for entry, txn in session.execute(stmt).all()]
 
 
+@dataclass(frozen=True)
+class PeriodEntry:
+    """One posted entry with its transaction's description fields (statements, read-only)."""
+
+    direction: EntryDirection
+    amount: int
+    balance_after: int
+    created_at: datetime
+    type: TransactionType
+    status: TransactionStatus
+    reference: str | None
+
+
 def entries_in_period(
     session: Session, account_id: UUID, start: datetime, end: datetime, limit: int
-) -> list[tuple[TransactionEntry, Transaction]]:
+) -> list[PeriodEntry]:
     """Read-only: an account's entries posted in ``[start, end)``, oldest first (statements).
 
-    Uses ``ix_transaction_entries_account_id_created_at``. The caller authorizes the account.
+    Selects plain columns, not ORM entities: a year of entries is read without hydrating and
+    identity-mapping thousands of objects. Uses ``ix_transaction_entries_account_id_created_at``.
+    The caller authorizes the account.
     """
     stmt = (
-        select(TransactionEntry, Transaction)
+        select(
+            TransactionEntry.direction,
+            TransactionEntry.amount,
+            TransactionEntry.balance_after,
+            TransactionEntry.created_at,
+            Transaction.type,
+            Transaction.status,
+            Transaction.reference,
+        )
         .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
         .where(
             TransactionEntry.account_id == account_id,
@@ -338,7 +361,7 @@ def entries_in_period(
         .order_by(TransactionEntry.seq.asc())
         .limit(limit)
     )
-    return [(entry, txn) for entry, txn in session.execute(stmt).all()]
+    return [PeriodEntry(*row) for row in session.execute(stmt).all()]
 
 
 def balance_before(session: Session, account_id: UUID, moment: datetime) -> int:

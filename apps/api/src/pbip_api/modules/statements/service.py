@@ -22,7 +22,8 @@ from pbip_api.modules.auth.service import RequestMeta
 from pbip_api.modules.compliance.service import AuditService
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.ledger import service as ledger
-from pbip_api.modules.ledger.models import EntryDirection, Transaction, TransactionEntry
+from pbip_api.modules.ledger.models import EntryDirection
+from pbip_api.modules.ledger.service import PeriodEntry
 from pbip_api.modules.notifications import service as notifications
 from pbip_api.modules.statements.pdf import A4_HEIGHT, PdfDocument
 
@@ -71,17 +72,17 @@ class StatementFile:
     filename: str
 
 
-def _describe(txn: Transaction) -> str:
-    words = txn.type.value.replace("_", " ").capitalize()
-    return words if txn.status.value == "POSTED" else f"{words} ({txn.status.value.lower()})"
+def _describe(entry: PeriodEntry) -> str:
+    words = entry.type.value.replace("_", " ").capitalize()
+    return words if entry.status.value == "POSTED" else f"{words} ({entry.status.value.lower()})"
 
 
-def _line(entry: TransactionEntry, txn: Transaction) -> Line:
+def _line(entry: PeriodEntry) -> Line:
     debit = entry.amount if entry.direction == EntryDirection.DEBIT else 0
     return Line(
         posted_at=entry.created_at.astimezone(BANK_TZ),
-        description=_describe(txn),
-        reference=txn.reference or "",
+        description=_describe(entry),
+        reference=entry.reference or "",
         debit=debit,
         credit=entry.amount - debit,
         balance_after=entry.balance_after,
@@ -108,7 +109,7 @@ def build_statement(
     rows = ledger.entries_in_period(session, account.id, begin, finish, MAX_ENTRIES + 1)
     if len(rows) > MAX_ENTRIES:
         raise UnprocessableError("too many transactions in this period; choose a shorter one")
-    lines = [_line(entry, txn) for entry, txn in rows]
+    lines = [_line(entry) for entry in rows]
     if lines:
         first = lines[0]
         opening = first.balance_after - first.credit + first.debit
