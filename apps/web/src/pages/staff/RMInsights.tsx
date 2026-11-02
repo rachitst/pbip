@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { useSearchParams } from "react-router";
 import { api } from "../../api/client";
 import type { CustomerInsightItem } from "../../api/client";
 import { errorMessage } from "../../lib/errors";
@@ -47,7 +48,12 @@ function toNumber(value: string): number | undefined {
 export function RMInsights() {
   const me = useCurrentUser();
   const allowed = canAccessRMInsights(me);
-  const [segment, setSegment] = useState("");
+  // TASK-101: the behavioural dashboard links here with ?segment=... to drill into one segment.
+  const [searchParams] = useSearchParams();
+  const [segment, setSegment] = useState(() => {
+    const requested = searchParams.get("segment") ?? "";
+    return requested in SEGMENT_LABEL ? requested : "";
+  });
   const [churn, setChurn] = useState("");
   const [loan, setLoan] = useState("");
   const [offset, setOffset] = useState(0);
