@@ -10,7 +10,8 @@ import hashlib
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import date, timedelta
+from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -30,7 +31,7 @@ from pbip_api.core.metrics import (
     TRANSFERS_TOTAL,
 )
 from pbip_api.core.velocity import VelocityCounters
-from pbip_api.modules.accounts.models import Account, AccountType
+from pbip_api.modules.accounts.models import Account, AccountStatus, AccountType
 from pbip_api.modules.accounts.policy import get_owned_account
 from pbip_api.modules.auth.models import SecurityEvent, SecurityEventType, User
 from pbip_api.modules.auth.service import AuthService, RequestMeta
@@ -49,9 +50,20 @@ from pbip_api.modules.ledger.models import (
 from pbip_api.modules.notifications import service as notifications
 from pbip_api.modules.payees.models import Payee, PayeeStatus
 from pbip_api.modules.payees.policy import get_owned_payee
+from pbip_api.modules.payments.models import (
+    ScheduledTransfer,
+    ScheduledTransferStatus,
+    SchedulePauseReason,
+)
+from pbip_api.modules.payments.policy import get_owned_scheduled_transfer
+from pbip_api.modules.payments.recurrence import UpcomingOccurrence, compute_next_occurrence
+from pbip_api.modules.payments.schemas import ScheduledTransferCreate, to_scheduled_transfer_out
 
 # Wrong step-up codes for ONE transfer before it goes to an analyst instead (TASK-037).
 STEP_UP_MAX_FAILURES = 3
+# Sane bounds for a standing order (ADR-0023): first run within a year, last within ten years.
+SCHEDULE_MAX_LEAD_DAYS = 366
+SCHEDULE_MAX_SPAN_DAYS = 3_660
 
 
 class LimitExceededError(UnprocessableError):
@@ -77,6 +89,27 @@ class TransferResult:
     status_code: int
     body: dict[str, Any]
     replayed: bool = False
+
+
+class TransferChannel(StrEnum):
+    """Where a transfer originated. Stored on ``transactions.channel`` (String(10))."""
+
+    WEB = "WEB"
+    SCHEDULED = "SCHEDULED"
+
+
+@dataclass(frozen=True, slots=True)
+class TransferExecution:
+    """Outcome of ``_execute_transfer``: nothing here has been committed yet.
+
+    ``transaction`` is the new transaction, or the ORIGINAL one when ``replayed`` is true (an
+    idempotent replay writes nothing). The caller owns the commit, and must call
+    ``PaymentsService.record_committed`` afterwards for a non-replayed execution.
+    """
+
+    outcome: TransferResult
+    transaction: Transaction
+    replayed: bool
 
 
 _PENDING_OR_DONE = (
@@ -115,14 +148,66 @@ class PaymentsService:
         meta: RequestMeta,
         device_id: UUID | None = None,
     ) -> TransferResult:
+        """Interactive transfer: one use case, one commit."""
+        execution = self._execute_transfer(
+            user_id=user_id,
+            customer=customer,
+            command=command,
+            idempotency_key=idempotency_key,
+            meta=meta,
+            device_id=device_id,
+            channel=TransferChannel.WEB,
+            interactive=True,
+        )
+        if execution.replayed:
+            return execution.outcome  # a replay wrote nothing, so there is nothing to commit
+        self.session.commit()
+        self.record_committed(execution)
+        return execution.outcome
+
+    def record_committed(self, execution: TransferExecution) -> None:
+        """Metrics and Redis counters for an execution whose transaction has been committed.
+
+        Kept out of ``_execute_transfer`` so a rolled-back attempt is never counted.
+        """
+        if execution.replayed:
+            return
+        transaction = execution.transaction
+        TRANSFERS_TOTAL.labels(transaction.status.value).inc()
+        if self.counters is not None and transaction.debit_account_id is not None:
+            self.counters.record_transfer(
+                transaction.debit_account_id, transaction.id, transaction.amount, utcnow()
+            )
+
+    def _execute_transfer(
+        self,
+        *,
+        user_id: UUID,
+        customer: Customer,
+        command: TransferCommand,
+        idempotency_key: str,
+        meta: RequestMeta | None,
+        device_id: UUID | None,
+        channel: TransferChannel,
+        interactive: bool,
+    ) -> TransferExecution:
+        """The transfer use case WITHOUT committing or rolling back.
+
+        The caller owns the transaction boundary, so a scheduled run can update its own state in
+        the same commit. ``meta`` is None for background work: nothing is invented, the IP-derived
+        signals are simply unknown and the audit row carries no IP/request id. ``interactive`` is
+        False when nobody can answer a step-up challenge: STEP_UP then becomes REVIEW.
+        """
         if command.amount_minor > self.settings.max_transfer_minor:
             raise LimitExceededError("amount exceeds the per-transfer limit")
+        ip = meta.ip if meta is not None else None
+        request_id = meta.request_id if meta is not None else None
 
         self._lock_user(user_id)
         request_hash = self._request_hash(user_id, command)
         idem_id, replay = self._begin_idempotent(user_id, idempotency_key, request_hash)
         if replay is not None:
-            return replay
+            return TransferExecution(replay, self._replayed_transaction(idem_id), True)
 
         source = get_owned_account(self.session, customer.id, command.from_account_id)
         if source.currency != command.currency:
@@ -139,8 +224,11 @@ class PaymentsService:
             initiated_by_user_id=user_id,
             payee_id=payee.id if payee else None,
             reference=command.reference,
+            channel=channel.value,
         )
 
+        # The scorer contract only knows WEB/MOBILE/API (changing it needs an ADR), so the
+        # context keeps its default channel; the real channel is on the transaction and audit row.
         result = self.scorer.score(
             TransactionContext(
                 transaction_id=transaction.id,
@@ -151,8 +239,8 @@ class PaymentsService:
                 occurred_at=utcnow(),
                 payee_id=payee.id if payee else None,
                 device_id=device_id,
-                ip_country=self.countries.country(meta.ip),
-                ip_network=ip_network(meta.ip),
+                ip_country=self.countries.country(ip),
+                ip_network=ip_network(ip),
             )
         )
         FRAUD_INFERENCE_SECONDS.observe(result.latency_ms / 1000)
@@ -161,10 +249,11 @@ class PaymentsService:
 
         decision = result.decision
         user = self.session.get(User, user_id)
-        if decision == FraudDecision.STEP_UP and (user is None or not user.mfa_enabled):
-            decision = (
-                FraudDecision.REVIEW
-            )  # cannot step up without a second factor: hold for review
+        if decision == FraudDecision.STEP_UP and (
+            not interactive or user is None or not user.mfa_enabled
+        ):
+            # cannot step up without a person and a second factor: hold for review
+            decision = FraudDecision.REVIEW
 
         if decision == FraudDecision.ALLOW:
             self._enforce_daily_limit(user_id, transaction)
@@ -191,20 +280,28 @@ class PaymentsService:
             "TRANSFER_CREATED",
             "transaction",
             str(transaction.id),
-            ip=meta.ip,
-            request_id=meta.request_id,
+            ip=ip,
+            request_id=request_id,
             details={
                 "status": transaction.status.value,
                 "decision": result.decision.value,
                 "risk_score": result.risk_score,
                 "amount_minor": transaction.amount,
+                "channel": channel.value,
             },
         )
-        self.session.commit()
-        TRANSFERS_TOTAL.labels(transaction.status.value).inc()
-        if self.counters is not None:  # after commit: a rolled-back attempt is never counted
-            self.counters.record_transfer(source.id, transaction.id, transaction.amount, utcnow())
-        return outcome
+        return TransferExecution(outcome, transaction, False)
+
+    def _replayed_transaction(self, idem_id: UUID) -> Transaction:
+        row = self.session.get(IdempotencyKey, idem_id)
+        transaction = (
+            self.session.get(Transaction, row.transaction_id)
+            if row is not None and row.transaction_id is not None
+            else None
+        )
+        if transaction is None:
+            raise RuntimeError("idempotent replay without its transaction")
+        return transaction
 
     # ---------------------------------------------------------------- idempotency
     @staticmethod
@@ -520,3 +617,325 @@ class PaymentsService:
             details={"release": release, "transaction_id": str(transaction.id)},
         )
         self.session.commit()
+
+    # --------------------------------------------------- scheduled transfers
+    def create_scheduled_transfer(
+        self,
+        *,
+        customer: Customer,
+        user_id: UUID,
+        command: ScheduledTransferCreate,
+        idempotency_key: str,
+        meta: RequestMeta | None = None,
+    ) -> TransferResult:
+        """Create a scheduled transfer instruction (ADR-0023). Moves no money itself, but every
+        instruction pays out on each occurrence, so a retried create must not make a second one:
+        it is idempotent like ``POST /api/v1/transfers`` (same user lock, same key table)."""
+        self._validate_schedule_dates(command)
+        if command.amount_minor > self.settings.max_transfer_minor:
+            raise LimitExceededError("amount exceeds the per-transfer limit")
+
+        self._lock_user(user_id)
+        idem_id, replay = self._begin_idempotent(
+            user_id, idempotency_key, self._schedule_request_hash(user_id, command)
+        )
+        if replay is not None:
+            return replay
+        self._enforce_schedule_capacity(customer.id)
+        instruction = self._insert_scheduled_transfer(customer, user_id, command, meta)
+        outcome = TransferResult(
+            201, to_scheduled_transfer_out(instruction).model_dump(mode="json")
+        )
+        row = self.session.get(IdempotencyKey, idem_id)
+        if row is None:
+            raise RuntimeError("idempotency row vanished")
+        row.response_status = outcome.status_code
+        row.response_body = outcome.body
+        self.session.commit()
+        return outcome
+
+    def _enforce_schedule_capacity(self, customer_id: UUID) -> None:
+        """Counted under the user lock, so two concurrent creates cannot both squeeze in."""
+        live = self.session.execute(
+            select(func.count())
+            .select_from(ScheduledTransfer)
+            .where(
+                ScheduledTransfer.customer_id == customer_id,
+                ScheduledTransfer.status.in_(
+                    (ScheduledTransferStatus.ACTIVE, ScheduledTransferStatus.PAUSED)
+                ),
+            )
+        ).scalar_one()
+        if live >= self.settings.max_active_scheduled_transfers_per_customer:
+            raise ConflictError("too many scheduled transfers; cancel one before adding another")
+
+    @staticmethod
+    def _validate_schedule_dates(command: ScheduledTransferCreate) -> None:
+        today = utcnow().date()
+        if command.start_date < today:
+            raise UnprocessableError("start_date cannot be in the past")
+        if command.start_date > today + timedelta(days=SCHEDULE_MAX_LEAD_DAYS):
+            raise UnprocessableError("start_date must be within one year")
+        if command.end_date is not None and command.end_date > command.start_date + timedelta(
+            days=SCHEDULE_MAX_SPAN_DAYS
+        ):
+            raise UnprocessableError("end_date must be within ten years of start_date")
+
+    @staticmethod
+    def _schedule_request_hash(user_id: UUID, command: ScheduledTransferCreate) -> str:
+        """Distinct from ``_request_hash`` (the "op" field), so a key reused across the two
+        endpoints is a 422 reuse error, never a replay of the other endpoint's response."""
+        canonical = json.dumps(
+            {"op": "scheduled_transfer.create", "user": str(user_id)}
+            | command.model_dump(mode="json"),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(canonical.encode()).hexdigest()
+
+    def _insert_scheduled_transfer(
+        self,
+        customer: Customer,
+        user_id: UUID,
+        command: ScheduledTransferCreate,
+        meta: RequestMeta | None,
+    ) -> ScheduledTransfer:
+        source = get_owned_account(self.session, customer.id, command.from_account_id)
+        if source.status != AccountStatus.ACTIVE:
+            raise UnprocessableError("source account is not active")
+        if source.currency != command.currency:
+            raise UnprocessableError("currency does not match the source account")
+
+        cmd = TransferCommand(
+            from_account_id=command.from_account_id,
+            amount_minor=command.amount_minor,
+            currency=command.currency,
+            payee_id=command.payee_id,
+            to_account_id=command.to_account_id,
+            reference=command.reference,
+        )
+        self._resolve_destination(customer, cmd, source)
+
+        instruction = ScheduledTransfer(
+            customer_id=customer.id,
+            user_id=user_id,
+            from_account_id=command.from_account_id,
+            payee_id=command.payee_id,
+            to_account_id=command.to_account_id,
+            amount=command.amount_minor,
+            currency=command.currency,
+            reference=command.reference,
+            frequency=command.frequency,
+            status=ScheduledTransferStatus.ACTIVE,
+            start_date=command.start_date,
+            end_date=command.end_date,
+            next_run_date=command.start_date,
+            pause_reason=None,
+            failure_count=0,
+            last_failure_reason=None,
+            last_failed_occurrence_date=None,
+            last_run_date=None,
+            last_transaction_id=None,
+        )
+        self.session.add(instruction)
+        self.session.flush()
+
+        ip = meta.ip if meta is not None else None
+        request_id = meta.request_id if meta is not None else None
+        self.audit.record(
+            user_id,
+            "SCHEDULED_TRANSFER_CREATED",
+            "scheduled_transfer",
+            str(instruction.id),
+            ip=ip,
+            request_id=request_id,
+            details={
+                "from_account_id": str(instruction.from_account_id),
+                "amount_minor": instruction.amount,
+                "currency": instruction.currency,
+                "frequency": instruction.frequency.value,
+                "start_date": instruction.start_date.isoformat(),
+                "end_date": instruction.end_date.isoformat() if instruction.end_date else None,
+            },
+        )
+        return instruction
+
+    def list_scheduled_transfers(
+        self,
+        customer_id: UUID,
+        *,
+        status: ScheduledTransferStatus | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[ScheduledTransfer]:
+        """List instructions owned by authenticated customer (BOLA-safe)."""
+        query = select(ScheduledTransfer).where(ScheduledTransfer.customer_id == customer_id)
+        if status is not None:
+            query = query.where(ScheduledTransfer.status == status)
+        query = query.order_by(ScheduledTransfer.created_at.desc(), ScheduledTransfer.id.desc())
+        query = query.limit(limit).offset(offset)
+        return list(self.session.execute(query).scalars().all())
+
+    def get_scheduled_transfer(
+        self, customer_id: UUID, scheduled_transfer_id: UUID
+    ) -> ScheduledTransfer:
+        """Fetch a single owned instruction (404 for non-owned or non-existent)."""
+        return get_owned_scheduled_transfer(self.session, customer_id, scheduled_transfer_id)
+
+    def cancel_scheduled_transfer(
+        self,
+        *,
+        customer_id: UUID,
+        user_id: UUID,
+        scheduled_transfer_id: UUID,
+        meta: RequestMeta | None = None,
+    ) -> ScheduledTransfer:
+        """Cancel an owned scheduled transfer (terminal transition)."""
+        self._lock_user(user_id)
+        instruction = get_owned_scheduled_transfer(
+            self.session, customer_id, scheduled_transfer_id, for_update=True
+        )
+        if instruction.status == ScheduledTransferStatus.CANCELLED:
+            raise ConflictError("scheduled transfer is already cancelled")
+        if instruction.status == ScheduledTransferStatus.COMPLETED:
+            raise ConflictError("completed scheduled transfer cannot be cancelled")
+
+        prev_status = instruction.status.value
+        instruction.status = ScheduledTransferStatus.CANCELLED
+        instruction.pause_reason = None
+
+        ip = meta.ip if meta is not None else None
+        request_id = meta.request_id if meta is not None else None
+        self.audit.record(
+            user_id,
+            "SCHEDULED_TRANSFER_CANCELLED",
+            "scheduled_transfer",
+            str(instruction.id),
+            ip=ip,
+            request_id=request_id,
+            details={"previous_status": prev_status},
+        )
+        self.session.commit()
+        return instruction
+
+    def pause_scheduled_transfer(
+        self,
+        *,
+        customer_id: UUID,
+        user_id: UUID,
+        scheduled_transfer_id: UUID,
+        meta: RequestMeta | None = None,
+    ) -> ScheduledTransfer:
+        """Customer-initiated pause on an active instruction."""
+        self._lock_user(user_id)
+        instruction = get_owned_scheduled_transfer(
+            self.session, customer_id, scheduled_transfer_id, for_update=True
+        )
+        if instruction.status == ScheduledTransferStatus.PAUSED:
+            raise ConflictError("scheduled transfer is already paused")
+        if instruction.status == ScheduledTransferStatus.CANCELLED:
+            raise ConflictError("cancelled scheduled transfer cannot be paused")
+        if instruction.status == ScheduledTransferStatus.COMPLETED:
+            raise ConflictError("completed scheduled transfer cannot be paused")
+
+        instruction.status = ScheduledTransferStatus.PAUSED
+        instruction.pause_reason = SchedulePauseReason.CUSTOMER
+
+        ip = meta.ip if meta is not None else None
+        request_id = meta.request_id if meta is not None else None
+        self.audit.record(
+            user_id,
+            "SCHEDULED_TRANSFER_PAUSED",
+            "scheduled_transfer",
+            str(instruction.id),
+            ip=ip,
+            request_id=request_id,
+            details={"reason": "customer"},
+        )
+        self.session.commit()
+        return instruction
+
+    def resume_scheduled_transfer(
+        self,
+        *,
+        customer: Customer,
+        user_id: UUID,
+        scheduled_transfer_id: UUID,
+        meta: RequestMeta | None = None,
+    ) -> ScheduledTransfer:
+        """Customer-initiated resume on a paused instruction (R1/R4/R5)."""
+        self._lock_user(user_id)
+        instruction = get_owned_scheduled_transfer(
+            self.session, customer.id, scheduled_transfer_id, for_update=True
+        )
+        if instruction.status == ScheduledTransferStatus.ACTIVE:
+            raise ConflictError("scheduled transfer is already active")
+        if instruction.status == ScheduledTransferStatus.CANCELLED:
+            raise ConflictError("cancelled scheduled transfer cannot be resumed")
+        if instruction.status == ScheduledTransferStatus.COMPLETED:
+            raise ConflictError("completed scheduled transfer cannot be resumed")
+        if instruction.pause_reason == SchedulePauseReason.FRAUD_BLOCK:
+            raise ConflictError(
+                "Scheduled transfer was stopped after a security decline and cannot be resumed; "
+                "cancel it and contact the bank"
+            )
+
+        source = get_owned_account(self.session, customer.id, instruction.from_account_id)
+        if source.status != AccountStatus.ACTIVE:
+            raise UnprocessableError("source account is not active")
+
+        cmd = TransferCommand(
+            from_account_id=instruction.from_account_id,
+            amount_minor=instruction.amount,
+            currency=instruction.currency,
+            payee_id=instruction.payee_id,
+            to_account_id=instruction.to_account_id,
+            reference=instruction.reference,
+        )
+        self._resolve_destination(customer, cmd, source)
+
+        today = utcnow().date()
+        next_run: date | None = instruction.next_run_date
+        while next_run is not None and next_run < today:
+            next_run = compute_next_occurrence(
+                instruction.start_date,
+                next_run,
+                instruction.frequency,
+                instruction.end_date,
+            )
+
+        if next_run is None or (
+            instruction.end_date is not None and next_run > instruction.end_date
+        ):
+            instruction.status = ScheduledTransferStatus.COMPLETED
+        else:
+            instruction.status = ScheduledTransferStatus.ACTIVE
+            instruction.next_run_date = next_run
+
+        instruction.pause_reason = None
+        instruction.failure_count = 0
+        instruction.last_failure_reason = None
+
+        ip = meta.ip if meta is not None else None
+        request_id = meta.request_id if meta is not None else None
+        self.audit.record(
+            user_id,
+            "SCHEDULED_TRANSFER_RESUMED",
+            "scheduled_transfer",
+            str(instruction.id),
+            ip=ip,
+            request_id=request_id,
+            details={
+                "next_run_date": instruction.next_run_date.isoformat(),
+                "status": instruction.status.value,
+            },
+        )
+        self.session.commit()
+        return instruction
+
+    # ------------------------------------------------------------- projections
+    def upcoming_occurrences(self, customer_id: UUID, until: date) -> list[UpcomingOccurrence]:
+        """Project upcoming occurrences for customer's active instructions (R15)."""
+        from pbip_api.modules.payments.recurrence import upcoming_occurrences
+
+        return upcoming_occurrences(self.session, customer_id, until)
