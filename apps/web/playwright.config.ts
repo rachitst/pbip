@@ -6,7 +6,9 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   timeout: 30_000,
-  retries: process.env.CI ? 1 : 0,
+  // No retries: a journey that passes only on a second attempt is a flaky test to fix, not to hide
+  // (AGENTS.md section 10). The TASK-077 journeys are deterministic by construction (docs/testing/e2e.md).
+  retries: 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "https://localhost:8443",
