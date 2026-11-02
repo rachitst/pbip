@@ -693,7 +693,7 @@ outcome = "Automated model promotion script tagging champion models in MLflow re
 acceptance_criteria = [
     "Script evaluates candidate model against baseline metrics gate (PR-AUC, latency)",
     "Promotes winning model by setting alias 'champion' in MLflow Model Registry",
-    "FastAPI service loads model at startup dynamically from 'champion' alias",
+    "FastAPI service loads the champion at startup: export-champion copies the 'champion' alias into the checksummed FRAUD_MODEL_DIR files (ADR-0019; no MLflow call on the request path)",
     "Includes local disk fallback if MLflow server is disconnected",
 ]
 dependencies = ["TASK-011", "TASK-029"]

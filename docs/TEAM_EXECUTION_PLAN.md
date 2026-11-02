@@ -1222,7 +1222,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #61 | **Sprint:** 3 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Pranay (`pranaysanap`)
-- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged; PR #268) | **Status:** In Review | **Risk:** Low (3.0 days of slack)
+- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** Mon 02 Nov (#268, 0ae1607) | **Status:** Done | **Risk:** Low (3.0 days of slack)
 - **Depends on:** TASK-011 (#22, Krishna), TASK-029 (#52, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-029
 - **Goal:** Automated model promotion script tagging champion models in MLflow registry.
@@ -2967,7 +2967,7 @@ decision in ADR-0015.
 
 - **Issue:** #182 | **Sprint:** unscheduled | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov)
-- **Start:** Sun 01 Nov | **Target deadline:** Sun 01 Nov | **Actual completion:** Sun 1 Nov (`GET /api/v1/fraud/monitoring`, `/staff/monitoring`; in review) | **Status:** In review | **Risk:** Low
+- **Start:** Sun 01 Nov | **Target deadline:** Sun 01 Nov | **Actual completion:** Sun 1 Nov (`GET /api/v1/fraud/monitoring`, `/staff/monitoring`; #278) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-019 (#42, Kalpak), TASK-035 (#58, Krishna), TASK-036 (#59, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; lives in the staff route tree.
