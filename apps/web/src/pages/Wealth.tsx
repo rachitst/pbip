@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { api } from "../api/client";
 import type {
@@ -14,6 +14,7 @@ import type {
 import { errorMessage } from "../lib/errors";
 import { accountTypeLabel, formatDate } from "../lib/format";
 import { formatMinor, parseToMinor } from "../lib/money";
+import { BOOK_FIXED_DEPOSIT, BOOK_PARAM } from "../lib/recommendations";
 import type { StatusView } from "../lib/status";
 import { Alert } from "../ui/Alert";
 import { Amount } from "../ui/Amount";
@@ -410,13 +411,57 @@ function QuotePanel({
   );
 }
 
+function depositChoiceLabel(product: WealthProductOut): string {
+  return product.annual_rate_bps === null
+    ? product.name
+    : `${product.name} · ${formatRate(product.annual_rate_bps)}`;
+}
+
+/** Shown when the dialog was opened from a "book a fixed deposit" link: the link names no
+ * product, so the customer chooses among the catalogue's bookable deposits here. */
+function DepositChoice({
+  product,
+  choices,
+  onChoose,
+}: {
+  product: WealthProductOut;
+  choices: WealthProductOut[];
+  onChoose: (product: WealthProductOut) => void;
+}) {
+  return (
+    <Field label="Fixed deposit">
+      {(control) => (
+        <select
+          {...control}
+          value={product.id}
+          onChange={(e) => {
+            const chosen = choices.find((c) => c.id === e.target.value);
+            if (chosen) onChoose(chosen);
+          }}
+        >
+          {choices.map((c) => (
+            <option key={c.id} value={c.id}>
+              {depositChoiceLabel(c)}
+            </option>
+          ))}
+        </select>
+      )}
+    </Field>
+  );
+}
+
 function BookingDialog({
   product,
   accounts,
+  choices,
+  onChoose,
   onClose,
 }: {
   product: WealthProductOut;
   accounts: AccountOut[];
+  /** Deposits to choose from (deep link); empty when a product card's own button opened it. */
+  choices: WealthProductOut[];
+  onChoose: (product: WealthProductOut) => void;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -428,6 +473,14 @@ function BookingDialog({
   const [booked, setBooked] = useState<FixedDepositOut | null>(null);
   // ONE key per confirmed intent: retrying the same booking reuses it (never debits twice).
   const [intentKey, setIntentKey] = useState(() => crypto.randomUUID());
+  // Choosing another deposit is a new intent with that product's own tenures (reset in render).
+  const [productId, setProductId] = useState(product.id);
+  if (productId !== product.id) {
+    setProductId(product.id);
+    setTenureMonths(product.tenures_months[0] ?? 0);
+    setIntentKey(crypto.randomUUID());
+    setError(null);
+  }
   const settledText = useDebounced(amountText, QUOTE_DEBOUNCE_MS);
   const amountMinor = parseToMinor(settledText);
   const min = product.min_amount_minor ?? 0;
@@ -497,6 +550,9 @@ function BookingDialog({
         </section>
       ) : (
         <>
+          {choices.length > 0 && (
+            <DepositChoice product={product} choices={choices} onChoose={onChoose} />
+          )}
           <Field
             label="Amount"
             hint={`${formatMinor(min, "INR")} to ${formatMinor(max, "INR")}`}
@@ -631,12 +687,30 @@ function ProductCard({ product, onBook }: { product: WealthProductOut; onBook: (
 function CatalogueSection() {
   const [risk, setRisk] = useState<RiskLevel | "">("");
   const [booking, setBooking] = useState<WealthProductOut | null>(null);
+  const [choices, setChoices] = useState<WealthProductOut[]>([]);
   const products = useQuery({
     queryKey: ["wealth-products", risk],
     queryFn: () => api.wealthProducts(risk === "" ? undefined : risk),
   });
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts });
   const usable = (accounts.data ?? []).filter((a) => a.status === "ACTIVE" && a.currency === "INR");
+  // `?book=fixed-deposit` (the fixed-deposit recommendation) opens the booking dialog once the
+  // unfiltered catalogue has loaded, on its first bookable deposit with the others to choose from.
+  const [params] = useSearchParams();
+  const requested = params.get(BOOK_PARAM) === BOOK_FIXED_DEPOSIT;
+  const linked = requested && risk === "";
+  const bookableDeposits = linked
+    ? (products.data ?? []).filter((p) => p.bookable && p.product_type === "FIXED_DEPOSIT")
+    : [];
+  // Handled once per link: closing the dialog or changing the filter does not reopen it.
+  const [linkHandled, setLinkHandled] = useState(false);
+  if (!requested && linkHandled) setLinkHandled(false);
+  const first = bookableDeposits[0];
+  if (linked && !linkHandled && first !== undefined) {
+    setLinkHandled(true);
+    setBooking(first);
+    setChoices(bookableDeposits);
+  }
   return (
     <>
       <p className="muted">
@@ -670,6 +744,9 @@ function CatalogueSection() {
         />
       )}
       {products.data?.length === 0 && <EmptyState message="No products match this risk level." />}
+      {linked && products.data && bookableDeposits.length === 0 && (
+        <Alert tone="info">No fixed deposit can be booked online right now.</Alert>
+      )}
       {products.data && products.data.length > 0 && (
         <div className="loan-list">
           {products.data.map((p) => (
@@ -677,6 +754,7 @@ function CatalogueSection() {
               key={p.id}
               product={p}
               onBook={() => {
+                setChoices([]);
                 setBooking(p);
               }}
             />
@@ -687,6 +765,8 @@ function CatalogueSection() {
         <BookingDialog
           product={booking}
           accounts={usable}
+          choices={choices}
+          onChoose={setBooking}
           onClose={() => {
             setBooking(null);
           }}

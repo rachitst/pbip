@@ -16,6 +16,12 @@ const CREDIT_LINE_ID = "00000000-0000-4000-a000-000000000003";
 /** The open-account form on /accounts reads this parameter to preselect the account type. */
 export const OPEN_ACCOUNT_PARAM = "open";
 
+/** The wealth page reads `?book=fixed-deposit` to open its booking dialog on the catalogue's
+ * bookable fixed deposits. The recommended "fixed deposit" is a generic product, not a catalogue
+ * row, so the link names the kind of product and the customer picks the deposit in the dialog. */
+export const BOOK_PARAM = "book";
+export const BOOK_FIXED_DEPOSIT = "fixed-deposit";
+
 export const NOT_AVAILABLE_NOTE = "You cannot apply for this in PBIP yet.";
 
 export function recommendationAction(item: ProductRecommendationItem): RecommendationAction {
@@ -31,8 +37,13 @@ export function recommendationAction(item: ProductRecommendationItem): Recommend
       // the label names that page rather than promising a credit-line eligibility check.
       return { kind: "navigate", to: "/loans", label: "See our loans" };
     case FIXED_DEPOSIT_ID:
-      // TASK-064: fixed deposits are booked on the wealth page, from the real catalogue.
-      return { kind: "navigate", to: "/wealth", label: "See fixed deposits" };
+      // TASK-064: fixed deposits are booked on the wealth page, from the real catalogue; the link
+      // opens the booking dialog there, where the customer chooses which deposit to book.
+      return {
+        kind: "navigate",
+        to: `/wealth?${BOOK_PARAM}=${BOOK_FIXED_DEPOSIT}`,
+        label: "Book a fixed deposit",
+      };
     default:
       return { kind: "unavailable", note: NOT_AVAILABLE_NOTE };
   }
