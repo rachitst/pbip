@@ -21,6 +21,9 @@ BILL_PAYMENT_UNDER_REVIEW = "BILL_PAYMENT_UNDER_REVIEW"
 SCHEDULED_TRANSFER_FAILED = "SCHEDULED_TRANSFER_FAILED"
 SCHEDULED_TRANSFER_MISSED = "SCHEDULED_TRANSFER_MISSED"
 SCHEDULED_TRANSFER_PAUSED = "SCHEDULED_TRANSFER_PAUSED"
+# Loans (ADR-0024): both link to the ledger transaction, like transfers.
+LOAN_DISBURSED = "LOAN_DISBURSED"
+LOAN_REPAYMENT_POSTED = "LOAN_REPAYMENT_POSTED"
 # Security notifications for events the auth and customers modules already record (#45).
 PASSWORD_CHANGED = "PASSWORD_CHANGED"  # noqa: S105  # pragma: allowlist secret - an event type name
 MFA_ENABLED = "MFA_ENABLED"
@@ -34,6 +37,8 @@ _TRANSFER_TYPES = {
     BILL_PAYMENT_POSTED,
     BILL_PAYMENT_DECLINED,
     BILL_PAYMENT_UNDER_REVIEW,
+    LOAN_DISBURSED,
+    LOAN_REPAYMENT_POSTED,
 }
 _SCHEDULED_TRANSFER_TYPES = {
     SCHEDULED_TRANSFER_FAILED,
@@ -118,6 +123,15 @@ def _transfer_text(event: OutboxEvent) -> tuple[str, str] | None:
         )
     if event.event_type == TRANSFER_DECLINED:
         return "Transfer not completed", f"Your transfer of {amount} could not be completed."
+    if event.event_type == LOAN_DISBURSED:
+        emi = format_minor(int(event.payload["emi_minor"]), str(event.payload["currency"]))
+        return (
+            "Loan disbursed",
+            f"Your loan of {amount} was credited to your account. Your first EMI of {emi} is due "
+            f"on {event.payload['first_due_date']}.",
+        )
+    if event.event_type == LOAN_REPAYMENT_POSTED:
+        return "Loan EMI paid", f"Your loan EMI of {amount} was collected from your account."
     name = event.payload.get("biller_name")
     to_biller = f" to {name}" if isinstance(name, str) and name else ""
     if event.event_type == BILL_PAYMENT_POSTED:
