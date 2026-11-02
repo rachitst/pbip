@@ -7,6 +7,7 @@ import { errorMessage } from "../lib/errors";
 import { accountTypeLabel, formatDate } from "../lib/format";
 import { formatMinor, parseToMinor } from "../lib/money";
 import type { Tone } from "../lib/status";
+import { trackTransferInitiated } from "../telemetry/tracker";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -110,6 +111,7 @@ function NewSchedule({
   const [intentKey] = useState(() => crypto.randomUUID());
   const create = useMutation({
     mutationFn: () => {
+      trackTransferInitiated("SCHEDULED");
       const [kind, id = ""] = form.to.split(":");
       return api.createScheduledTransfer(
         {

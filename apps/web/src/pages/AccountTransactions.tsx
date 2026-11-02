@@ -6,6 +6,7 @@ import type { EntriesPage, EntryFilters } from "../api/client";
 import { formatDateTime } from "../lib/format";
 import { formatMinor, parseToMinor } from "../lib/money";
 import { transactionStatus } from "../lib/status";
+import { trackSearchPerformed } from "../telemetry/tracker";
 import { Amount } from "../ui/Amount";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
@@ -162,7 +163,12 @@ export function AccountTransactions({ accountId, currency, highlightTransactionI
   const filtered = Object.keys(filters).length > 0;
   return (
     <>
-      <FilterForm onApply={setFilters} />
+      <FilterForm
+        onApply={(next) => {
+          trackSearchPerformed("TRANSACTIONS", Object.keys(next).length);
+          setFilters(next);
+        }}
+      />
       <EntryList
         accountId={accountId}
         currency={currency}

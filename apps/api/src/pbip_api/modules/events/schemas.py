@@ -2,7 +2,8 @@
 
 Events are analytics signals, not a place for personal data: unknown fields are rejected, the page
 is a route path (no query string or fragment, which can carry emails or tokens), and ``properties``
-holds only numbers, booleans and short identifier-like strings, never free text.
+holds only numbers, booleans and short identifier-like strings, never free text. The web app sends
+route templates (``/accounts/:id``, TASK-112), so ``:`` is allowed in the page.
 """
 
 import re
@@ -52,8 +53,11 @@ class TelemetryEventIn(BaseModel):
     page_url: str | None = Field(
         default=None,
         max_length=256,
-        pattern=r"^/[A-Za-z0-9/_.-]*$",
-        description="Route path only, e.g. /accounts (no query string or fragment)",
+        pattern=r"^/[A-Za-z0-9/_.:-]*$",
+        description=(
+            "Route path or template only, e.g. /accounts or /accounts/:id (no query string or "
+            "fragment)"
+        ),
     )
     properties: dict[str, PropertyValue] = Field(
         default_factory=dict,
