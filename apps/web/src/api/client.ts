@@ -59,6 +59,13 @@ export type StreamToolCall = components["schemas"]["StreamToolCall"];
 export type StreamToolResult = components["schemas"]["StreamToolResult"];
 export type StreamToken = components["schemas"]["StreamToken"];
 export type StreamError = components["schemas"]["StreamError"];
+export type LoanProductOut = components["schemas"]["LoanProductOut"];
+export type EmiOut = components["schemas"]["EmiOut"];
+export type EligibilityOut = components["schemas"]["EligibilityOut"];
+export type LoanApplyRequest = components["schemas"]["LoanApplyRequest"];
+export type LoanSummaryOut = components["schemas"]["LoanSummaryOut"];
+export type LoanOut = components["schemas"]["LoanOut"];
+export type LoanInstalmentOut = components["schemas"]["LoanInstalmentOut"];
 
 export class ApiError extends Error {
   constructor(
@@ -356,6 +363,35 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ code }),
     }),
+  loanProducts: () => apiFetch<LoanProductOut[]>("/api/v1/loans/products"),
+  /** The server computes every EMI (exact integer paise); the browser never does money maths. */
+  calculateEmi: (productId: string, principalMinor: number, tenureMonths: number) =>
+    apiFetch<EmiOut>("/api/v1/loans/calculate-emi", {
+      method: "POST",
+      body: JSON.stringify({
+        product_id: productId,
+        principal_minor: principalMinor,
+        tenure_months: tenureMonths,
+      }),
+    }),
+  checkEligibility: (productId: string, amountMinor: number, tenureMonths: number) =>
+    apiFetch<EligibilityOut>("/api/v1/loans/check-eligibility", {
+      method: "POST",
+      body: JSON.stringify({
+        product_id: productId,
+        amount_minor: amountMinor,
+        tenure_months: tenureMonths,
+      }),
+    }),
+  /** Same one-key-per-intent rule as ``transfer``: a retried submit never disburses twice. */
+  applyForLoan: (body: LoanApplyRequest, idempotencyKey: string) =>
+    apiFetch<LoanOut>("/api/v1/loans/apply", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(body),
+    }),
+  loans: () => apiFetch<LoanSummaryOut[]>("/api/v1/loans"),
+  loan: (loanId: string) => apiFetch<LoanOut>(`/api/v1/loans/${encodeURIComponent(loanId)}`),
   notifications: (options?: { unread_only?: boolean; limit?: number; offset?: number }) => {
     const params = new URLSearchParams();
     if (options?.unread_only !== undefined) params.set("unread_only", String(options.unread_only));

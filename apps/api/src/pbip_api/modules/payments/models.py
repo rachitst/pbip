@@ -38,10 +38,9 @@ class ScheduledTransfer(Base):
         CheckConstraint("failure_count >= 0", name="failure_count_non_negative"),
         in_check("frequency", ScheduleFrequency, "frequency_valid"),
         in_check("status", ScheduledTransferStatus, "status_valid"),
+        # Exactly one destination: a verified payee, an own account, or a loan (ADR-0024).
         CheckConstraint(
-            "(payee_id IS NOT NULL AND to_account_id IS NULL) "
-            "OR (payee_id IS NULL AND to_account_id IS NOT NULL)",
-            name="destination_xor",
+            "num_nonnulls(payee_id, to_account_id, loan_id) = 1", name="destination_xor"
         ),
         CheckConstraint("end_date IS NULL OR end_date >= start_date", name="end_date_valid"),
         CheckConstraint(
@@ -72,6 +71,10 @@ class ScheduledTransfer(Base):
     payee_id: Mapped[UUID | None] = mapped_column(ForeignKey("payees.id", ondelete="RESTRICT"))
     to_account_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("accounts.id", ondelete="RESTRICT")
+    )
+    # Set only on a loan's repayment instruction, created with the loan (ADR-0024).
+    loan_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("loans.id", ondelete="RESTRICT"), unique=True
     )
     amount: Mapped[int] = mapped_column(BigInteger, nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="INR", nullable=False)

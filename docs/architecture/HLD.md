@@ -168,7 +168,7 @@ Across modules, code calls the other module's `service` or `policy` functions on
 | `analytics` | Spending, trends, health score, balance forecast, segment; nightly and weekly jobs | `/analytics/*` | Implemented. Forecast UI Planned (TASK-050) |
 | `insights` | Relationship-manager churn signals | `/insights/customers` | Partial: no UI (TASK-066) |
 | `recommendations` | Rule-based product recommendations with reasons (`rules-v1`) | `/recommendations` | Partial: no UI (TASK-062); age band fixed to `unknown` until TASK-107 |
-| `loans` | Catalogue (3 products), EMI schedule, explainable eligibility | `/loans/*` | Partial: applications and tracking Planned (TASK-047, TASK-051) |
+| `loans` | Catalogue (3 products), EMI schedule, explainable eligibility; idempotent application with ledger disbursal, stored schedule and a repayment instruction on the scheduled transfers engine ([ADR-0024](../adr/0024-loan-disbursal-and-repayments.md)) | `/loans*` | Implemented (API and web) |
 | `assistant` | Read-only tool registry, rules-first router, Ollama adapter, guard, sanitiser, output filter, SSE | `/assistant/*` | Implemented (5 tools). FAQ, product and investment tools Planned (TASK-105) |
 | `events` | Clickstream batch ingestion into monthly partitions | `/events/batch` | Partial: the web app does not send events yet (TASK-055 In Progress) |
 | `compliance` | Hash-chained audit log read and verify | `/compliance/audit-logs*` | Implemented |
@@ -185,7 +185,7 @@ Scheduled and recurring transfers have no module yet. They are Planned (TASK-015
 | `relay-outbox` | `pbip.outbox.relay` | every 10 s | Turns unprocessed `outbox_events` into `notifications` (`FOR UPDATE SKIP LOCKED`, batch 100) | Implemented. It does not publish to an external broker; the generic relay is Planned (TASK-026) |
 | `materialize-monthly-spending` | `pbip.analytics.materialize_monthly_spending` | 02:00 UTC daily | Writes `monthly_category_spending` ([ADR-0011](../adr/0011-monthly-spending-aggregates.md)) | Implemented |
 | `ensure-clickstream-partitions` | `pbip.events.ensure_partitions` | 01:30 UTC daily | Creates future monthly partitions (idempotent) | Implemented |
-| `execute-scheduled-transfers` | `pbip.transfers.execute_scheduled` | every 60 s | Runs due standing orders through the transfer use case (key `sched-{id}-{date}`, per-instruction try-lock); records missed occurrences without catch-up ([ADR-0023](../adr/0023-scheduled-transfers.md)) | Implemented |
+| `execute-scheduled-transfers` | `pbip.transfers.execute_scheduled` | every 60 s | Runs due standing orders through the transfer use case (key `sched-{id}-{date}`, per-instruction try-lock); records missed occurrences without catch-up ([ADR-0023](../adr/0023-scheduled-transfers.md)). Loan repayment instructions instead collect every due and overdue instalment in one ledger posting and retry daily until paid ([ADR-0024](../adr/0024-loan-disbursal-and-repayments.md)) | Implemented |
 | `segment-customers-weekly` | `pbip.analytics.segment_customers` | Sunday 03:00 UTC | K-Means segmentation into `customer_segments` ([ADR-0012](../adr/0012-customer-segmentation-offline-job.md)) | Implemented |
 
 The worker runs with `acks_late`, `reject_on_worker_lost` and prefetch 1, so a task interrupted by a crash is

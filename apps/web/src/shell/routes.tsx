@@ -10,6 +10,7 @@ import { CustomerSessionBar } from "./CustomerSessionBar";
 import { ThemeToggle } from "./theme";
 import { errorMessage } from "../lib/errors";
 import { Accounts } from "../pages/Accounts";
+import { Loans } from "../pages/Loans";
 import { NotFound } from "../pages/NotFound";
 import { MfaEnrolment } from "../pages/MfaEnrolment";
 import { PayBills } from "../pages/PayBills";
@@ -46,6 +47,7 @@ function customerNav(me: UserOut): NavItem[] {
     { to: "/bills", label: "Pay bills" },
     { to: "/scheduled", label: "Scheduled transfers" },
     { to: "/statements", label: "Statements" },
+    { to: "/loans", label: "Loans" },
     { to: "/insights", label: "Spending & health" },
     { to: "/profile", label: "Profile & security" },
   ];
@@ -210,6 +212,7 @@ export const routes: RouteObject[] = [
           { path: "payees", element: <Payees /> },
           { path: "bills", element: <PayBills /> },
           { path: "statements", element: <Statements /> },
+          { path: "loans", element: <Loans /> },
           {
             path: "insights",
             element: (

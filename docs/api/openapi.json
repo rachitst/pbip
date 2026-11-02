@@ -2545,6 +2545,253 @@
         "title": "LiveResponse",
         "type": "object"
       },
+      "LoanApplyRequest": {
+        "additionalProperties": false,
+        "description": "No customer, rate or schedule from the client: the customer is the authenticated one, the\nrate comes from the catalogue and the schedule from ``emi.schedule`` (ADR-0024).",
+        "properties": {
+          "account_id": {
+            "description": "One of MY accounts: receives the loan, pays the EMIs",
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "amount_minor": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 10000000000.0,
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "tenure_months": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 480.0,
+            "title": "Tenure Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "product_id",
+          "amount_minor",
+          "tenure_months",
+          "account_id"
+        ],
+        "title": "LoanApplyRequest",
+        "type": "object"
+      },
+      "LoanInstalmentOut": {
+        "properties": {
+          "amount_minor": {
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "balance_after_minor": {
+            "title": "Balance After Minor",
+            "type": "integer"
+          },
+          "due_date": {
+            "format": "date",
+            "title": "Due Date",
+            "type": "string"
+          },
+          "interest_minor": {
+            "title": "Interest Minor",
+            "type": "integer"
+          },
+          "paid_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid At"
+          },
+          "principal_minor": {
+            "title": "Principal Minor",
+            "type": "integer"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "status": {
+            "description": "OVERDUE = not paid and the due date has passed",
+            "enum": [
+              "PAID",
+              "DUE",
+              "OVERDUE"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "due_date",
+          "amount_minor",
+          "principal_minor",
+          "interest_minor",
+          "balance_after_minor",
+          "status",
+          "paid_at"
+        ],
+        "title": "LoanInstalmentOut",
+        "type": "object"
+      },
+      "LoanOut": {
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "annual_rate_bps": {
+            "title": "Annual Rate Bps",
+            "type": "integer"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "disbursal_transaction_id": {
+            "format": "uuid",
+            "title": "Disbursal Transaction Id",
+            "type": "string"
+          },
+          "disbursed_at": {
+            "format": "date-time",
+            "title": "Disbursed At",
+            "type": "string"
+          },
+          "emi_minor": {
+            "title": "Emi Minor",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "instalments": {
+            "items": {
+              "$ref": "#/components/schemas/LoanInstalmentOut"
+            },
+            "title": "Instalments",
+            "type": "array"
+          },
+          "loan_type": {
+            "enum": [
+              "PERSONAL",
+              "AUTO",
+              "HOME"
+            ],
+            "title": "Loan Type",
+            "type": "string"
+          },
+          "next_due_amount_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Due Amount Minor"
+          },
+          "next_due_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Earliest unpaid instalment; None when closed",
+            "title": "Next Due Date"
+          },
+          "outstanding_principal_minor": {
+            "description": "Principal not yet repaid",
+            "title": "Outstanding Principal Minor",
+            "type": "integer"
+          },
+          "overdue_instalments": {
+            "title": "Overdue Instalments",
+            "type": "integer"
+          },
+          "paid_instalments": {
+            "title": "Paid Instalments",
+            "type": "integer"
+          },
+          "principal_minor": {
+            "title": "Principal Minor",
+            "type": "integer"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "product_name": {
+            "title": "Product Name",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "CLOSED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tenure_months": {
+            "title": "Tenure Months",
+            "type": "integer"
+          },
+          "total_interest_minor": {
+            "title": "Total Interest Minor",
+            "type": "integer"
+          },
+          "total_payable_minor": {
+            "title": "Total Payable Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "product_id",
+          "product_name",
+          "loan_type",
+          "status",
+          "account_id",
+          "currency",
+          "principal_minor",
+          "annual_rate_bps",
+          "tenure_months",
+          "emi_minor",
+          "total_interest_minor",
+          "total_payable_minor",
+          "outstanding_principal_minor",
+          "paid_instalments",
+          "overdue_instalments",
+          "next_due_date",
+          "next_due_amount_minor",
+          "disbursed_at",
+          "disbursal_transaction_id",
+          "instalments"
+        ],
+        "title": "LoanOut",
+        "type": "object"
+      },
       "LoanProductOut": {
         "properties": {
           "annual_rate_bps": {
@@ -2596,6 +2843,139 @@
           "tenures_months"
         ],
         "title": "LoanProductOut",
+        "type": "object"
+      },
+      "LoanSummaryOut": {
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "annual_rate_bps": {
+            "title": "Annual Rate Bps",
+            "type": "integer"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "disbursed_at": {
+            "format": "date-time",
+            "title": "Disbursed At",
+            "type": "string"
+          },
+          "emi_minor": {
+            "title": "Emi Minor",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "loan_type": {
+            "enum": [
+              "PERSONAL",
+              "AUTO",
+              "HOME"
+            ],
+            "title": "Loan Type",
+            "type": "string"
+          },
+          "next_due_amount_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Due Amount Minor"
+          },
+          "next_due_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Earliest unpaid instalment; None when closed",
+            "title": "Next Due Date"
+          },
+          "outstanding_principal_minor": {
+            "description": "Principal not yet repaid",
+            "title": "Outstanding Principal Minor",
+            "type": "integer"
+          },
+          "overdue_instalments": {
+            "title": "Overdue Instalments",
+            "type": "integer"
+          },
+          "paid_instalments": {
+            "title": "Paid Instalments",
+            "type": "integer"
+          },
+          "principal_minor": {
+            "title": "Principal Minor",
+            "type": "integer"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "product_name": {
+            "title": "Product Name",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "CLOSED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tenure_months": {
+            "title": "Tenure Months",
+            "type": "integer"
+          },
+          "total_interest_minor": {
+            "title": "Total Interest Minor",
+            "type": "integer"
+          },
+          "total_payable_minor": {
+            "title": "Total Payable Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "product_id",
+          "product_name",
+          "loan_type",
+          "status",
+          "account_id",
+          "currency",
+          "principal_minor",
+          "annual_rate_bps",
+          "tenure_months",
+          "emi_minor",
+          "total_interest_minor",
+          "total_payable_minor",
+          "outstanding_principal_minor",
+          "paid_instalments",
+          "overdue_instalments",
+          "next_due_date",
+          "next_due_amount_minor",
+          "disbursed_at"
+        ],
+        "title": "LoanSummaryOut",
         "type": "object"
       },
       "Lockout": {
@@ -3809,6 +4189,19 @@
               }
             ],
             "title": "Last Transaction Id"
+          },
+          "loan_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set on a loan's repayment instruction (ADR-0024)",
+            "title": "Loan Id"
           },
           "next_run_date": {
             "format": "date",
@@ -7376,6 +7769,91 @@
         ]
       }
     },
+    "/api/v1/loans": {
+      "get": {
+        "operationId": "list_loans_api_v1_loans_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LoanSummaryOut"
+                  },
+                  "title": "Response List Loans Api V1 Loans Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "My active loans",
+        "tags": [
+          "loans"
+        ]
+      }
+    },
+    "/api/v1/loans/apply": {
+      "post": {
+        "operationId": "apply_for_loan_api_v1_loans_apply_post",
+        "parameters": [
+          {
+            "description": "Unique per logical request; retrying with the same key never duplicates.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Unique per logical request; retrying with the same key never duplicates.",
+              "maxLength": 128,
+              "minLength": 8,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoanApplyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Not eligible (plain reasons) or invalid request"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Apply for a loan: approve, book the schedule and disburse (idempotent)",
+        "tags": [
+          "loans"
+        ]
+      }
+    },
     "/api/v1/loans/calculate-emi": {
       "post": {
         "operationId": "calculate_emi_api_v1_loans_calculate_emi_post",
@@ -7493,6 +7971,54 @@
           }
         ],
         "summary": "Loan catalogue",
+        "tags": [
+          "loans"
+        ]
+      }
+    },
+    "/api/v1/loans/{loan_id}": {
+      "get": {
+        "operationId": "get_loan_api_v1_loans__loan_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "loan_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Loan Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "One of my loans with its repayment schedule",
         "tags": [
           "loans"
         ]

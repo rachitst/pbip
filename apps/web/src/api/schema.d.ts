@@ -814,6 +814,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/loans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My active loans */
+        get: operations["list_loans_api_v1_loans_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/loans/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply for a loan: approve, book the schedule and disburse (idempotent) */
+        post: operations["apply_for_loan_api_v1_loans_apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/loans/calculate-emi": {
         parameters: {
             query?: never;
@@ -857,6 +891,23 @@ export interface paths {
         };
         /** Loan catalogue */
         get: operations["list_products_api_v1_loans_products_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/loans/{loan_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One of my loans with its repayment schedule */
+        get: operations["get_loan_api_v1_loans__loan_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2389,6 +2440,126 @@ export interface components {
              */
             status: "ok";
         };
+        /**
+         * LoanApplyRequest
+         * @description No customer, rate or schedule from the client: the customer is the authenticated one, the
+         *     rate comes from the catalogue and the schedule from ``emi.schedule`` (ADR-0024).
+         */
+        LoanApplyRequest: {
+            /**
+             * Account Id
+             * Format: uuid
+             * @description One of MY accounts: receives the loan, pays the EMIs
+             */
+            account_id: string;
+            /** Amount Minor */
+            amount_minor: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Tenure Months */
+            tenure_months: number;
+        };
+        /** LoanInstalmentOut */
+        LoanInstalmentOut: {
+            /** Amount Minor */
+            amount_minor: number;
+            /** Balance After Minor */
+            balance_after_minor: number;
+            /**
+             * Due Date
+             * Format: date
+             */
+            due_date: string;
+            /** Interest Minor */
+            interest_minor: number;
+            /** Paid At */
+            paid_at: string | null;
+            /** Principal Minor */
+            principal_minor: number;
+            /** Seq */
+            seq: number;
+            /**
+             * Status
+             * @description OVERDUE = not paid and the due date has passed
+             * @enum {string}
+             */
+            status: "PAID" | "DUE" | "OVERDUE";
+        };
+        /** LoanOut */
+        LoanOut: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Annual Rate Bps */
+            annual_rate_bps: number;
+            /** Currency */
+            currency: string;
+            /**
+             * Disbursal Transaction Id
+             * Format: uuid
+             */
+            disbursal_transaction_id: string;
+            /**
+             * Disbursed At
+             * Format: date-time
+             */
+            disbursed_at: string;
+            /** Emi Minor */
+            emi_minor: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Instalments */
+            instalments: components["schemas"]["LoanInstalmentOut"][];
+            /**
+             * Loan Type
+             * @enum {string}
+             */
+            loan_type: "PERSONAL" | "AUTO" | "HOME";
+            /** Next Due Amount Minor */
+            next_due_amount_minor: number | null;
+            /**
+             * Next Due Date
+             * @description Earliest unpaid instalment; None when closed
+             */
+            next_due_date: string | null;
+            /**
+             * Outstanding Principal Minor
+             * @description Principal not yet repaid
+             */
+            outstanding_principal_minor: number;
+            /** Overdue Instalments */
+            overdue_instalments: number;
+            /** Paid Instalments */
+            paid_instalments: number;
+            /** Principal Minor */
+            principal_minor: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Product Name */
+            product_name: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ACTIVE" | "CLOSED";
+            /** Tenure Months */
+            tenure_months: number;
+            /** Total Interest Minor */
+            total_interest_minor: number;
+            /** Total Payable Minor */
+            total_payable_minor: number;
+        };
         /** LoanProductOut */
         LoanProductOut: {
             /**
@@ -2414,6 +2585,71 @@ export interface components {
             name: string;
             /** Tenures Months */
             tenures_months: number[];
+        };
+        /** LoanSummaryOut */
+        LoanSummaryOut: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Annual Rate Bps */
+            annual_rate_bps: number;
+            /** Currency */
+            currency: string;
+            /**
+             * Disbursed At
+             * Format: date-time
+             */
+            disbursed_at: string;
+            /** Emi Minor */
+            emi_minor: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Loan Type
+             * @enum {string}
+             */
+            loan_type: "PERSONAL" | "AUTO" | "HOME";
+            /** Next Due Amount Minor */
+            next_due_amount_minor: number | null;
+            /**
+             * Next Due Date
+             * @description Earliest unpaid instalment; None when closed
+             */
+            next_due_date: string | null;
+            /**
+             * Outstanding Principal Minor
+             * @description Principal not yet repaid
+             */
+            outstanding_principal_minor: number;
+            /** Overdue Instalments */
+            overdue_instalments: number;
+            /** Paid Instalments */
+            paid_instalments: number;
+            /** Principal Minor */
+            principal_minor: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Product Name */
+            product_name: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ACTIVE" | "CLOSED";
+            /** Tenure Months */
+            tenure_months: number;
+            /** Total Interest Minor */
+            total_interest_minor: number;
+            /** Total Payable Minor */
+            total_payable_minor: number;
         };
         /** Lockout */
         Lockout: {
@@ -3001,6 +3237,11 @@ export interface components {
             last_run_date: string | null;
             /** Last Transaction Id */
             last_transaction_id: string | null;
+            /**
+             * Loan Id
+             * @description Set on a loan's repayment instruction (ADR-0024)
+             */
+            loan_id?: string | null;
             /**
              * Next Run Date
              * Format: date
@@ -4916,6 +5157,60 @@ export interface operations {
             };
         };
     };
+    list_loans_api_v1_loans_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoanSummaryOut"][];
+                };
+            };
+        };
+    };
+    apply_for_loan_api_v1_loans_apply_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical request; retrying with the same key never duplicates. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoanApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoanOut"];
+                };
+            };
+            /** @description Not eligible (plain reasons) or invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     calculate_emi_api_v1_loans_calculate_emi_post: {
         parameters: {
             query?: never;
@@ -4998,6 +5293,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LoanProductOut"][];
+                };
+            };
+        };
+    };
+    get_loan_api_v1_loans__loan_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                loan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

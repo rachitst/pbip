@@ -72,6 +72,9 @@ class ScheduledTransferOut(BaseModel):
     from_account_id: UUID
     to_account_id: UUID | None
     payee_id: UUID | None
+    loan_id: UUID | None = Field(
+        default=None, description="Set on a loan's repayment instruction (ADR-0024)"
+    )
     amount_minor: int
     currency: str
     reference: str | None
@@ -95,6 +98,7 @@ def to_scheduled_transfer_out(st: ScheduledTransfer) -> ScheduledTransferOut:
         from_account_id=st.from_account_id,
         to_account_id=st.to_account_id,
         payee_id=st.payee_id,
+        loan_id=st.loan_id,
         amount_minor=st.amount,
         currency=st.currency,
         reference=st.reference,
