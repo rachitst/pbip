@@ -45,6 +45,13 @@ class AlertSummary(BaseModel):
     currency: str
     transaction_status: str
     created_at: datetime
+    customer_name: str | None = Field(
+        default=None, description="Full name of the customer who made the payment"
+    )
+    top_reason: str | None = Field(
+        default=None,
+        description="First recorded reason: bank rules first, then the model's strongest factor",
+    )
 
 
 class AlertCustomer(BaseModel):
@@ -196,7 +203,16 @@ class DecisionRequest(BaseModel):
     note: Text | None = Field(default=None, max_length=1000)
 
 
-def _summary(alert: FraudAlert, event: FraudEvent, txn: Transaction) -> AlertSummary:
+def _top_reason(event: FraudEvent) -> str | None:
+    """Rule reasons are stored before model and anomaly reasons, so the first one leads."""
+    first = event.reasons[0] if event.reasons else None
+    message = first.get("message") if isinstance(first, dict) else None
+    return message if isinstance(message, str) else None
+
+
+def _summary(
+    alert: FraudAlert, event: FraudEvent, txn: Transaction, customer_name: str | None = None
+) -> AlertSummary:
     return AlertSummary(
         id=alert.id,
         status=alert.status.value,
@@ -207,6 +223,8 @@ def _summary(alert: FraudAlert, event: FraudEvent, txn: Transaction) -> AlertSum
         currency=txn.currency,
         transaction_status=txn.status.value,
         created_at=alert.created_at,
+        customer_name=customer_name,
+        top_reason=_top_reason(event),
     )
 
 
@@ -287,8 +305,8 @@ def get_alert(
     session: Session = Depends(get_session),
 ) -> AlertDetail:
     alert, event, txn = service.get_alert(session, alert_id)
-    base = _summary(alert, event, txn)
     customer = session.get(Customer, event.customer_id)
+    base = _summary(alert, event, txn, customer.full_name if customer is not None else None)
     return AlertDetail(
         **base.model_dump(),
         transaction_id=txn.id,
