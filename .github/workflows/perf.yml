@@ -51,7 +51,10 @@ jobs:
       - name: Train the fraud models the hybrid scorer serves
         run: uv run python scripts/dev.py fraud-model
       - name: Start the stack with the load-test rate limits
-        run: docker compose -f docker-compose.yml -f infra/k6/compose.load.yml up -d --build --wait
+        # No --wait: worker and beat have no healthcheck by design; wait on readiness like the e2e job.
+        run: docker compose -f docker-compose.yml -f infra/k6/compose.load.yml up -d --build
+      - name: Wait for the stack (HTTPS)
+        run: curl --fail --silent --retry 60 --retry-delay 2 --retry-all-errors --cacert infra/certs/ca.crt https://localhost:8443/api/health/ready
       - name: Seed load users and snapshot the invariants
         run: |
           mkdir -p perf-results
@@ -72,7 +75,7 @@ jobs:
           USERS: ${{ env.LOAD_USERS }}
         run: python scripts/dev.py load --summary-export /results/k6-summary.json
       - name: Money and concurrency invariants after the run
-        if: always()
+        if: always() && hashFiles('perf-results/invariants-before.json') != ''
         run: uv run python scripts/load_invariants.py check perf-results/invariants-before.json | tee perf-results/invariants-after.json
       - run: npm ci
         working-directory: apps/web

@@ -494,6 +494,8 @@ def build_load_command(
     PERF_RESULTS.mkdir(exist_ok=True)
     image_at = cmd.index(K6_IMAGE)
     mounts = ["-v", f"{PERF_RESULTS.as_posix()}:/results"]
+    if hasattr(os, "getuid"):  # POSIX: the image's own user cannot write to a host-owned bind mount
+        mounts += ["--user", f"{os.getuid()}:{os.getgid()}"]
     if local_tls:
         mounts += [
             "-v",

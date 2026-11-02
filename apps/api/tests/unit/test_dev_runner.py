@@ -447,6 +447,8 @@ def test_load_mounts_results_and_trusts_the_dev_ca_for_local_https(tmp_path: Pat
         image_at = cmd.index(dev_mod.K6_IMAGE)
         assert f"{(tmp_path / 'out').as_posix()}:/results" in cmd[:image_at]
         assert "SSL_CERT_FILE=/certs/ca.crt" in cmd[:image_at]
+        if hasattr(os, "getuid"):  # k6 must write the summary into the host-owned mount
+            assert cmd[cmd.index("--user") + 1] == f"{os.getuid()}:{os.getgid()}"
         remote, _ = dev_mod.build_load_command("https://staging.example", False, [])
         assert "SSL_CERT_FILE=/certs/ca.crt" not in remote  # real hosts use the system trust store
         native, env = dev_mod.build_load_command(
