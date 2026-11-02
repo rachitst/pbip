@@ -5,8 +5,9 @@ from enum import StrEnum
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
 
+from pbip_api.core.validation import encodable_text
 from pbip_api.modules.analytics.schemas import Rating
 from pbip_api.modules.insights.models import (
     MAX_NOTE_CHARS,
@@ -132,8 +133,24 @@ class CustomerInsightDetail(BaseModel):
     evaluated_at: datetime
 
 
+_NOTE_WHITESPACE = frozenset("\t\n\r")
+
+
+def note_text(value: str) -> str:
+    """Like ``core.validation.storable_text`` but keeps line breaks and tabs: the note is typed in a
+    multi-line field. NUL (PostgreSQL cannot store it), lone surrogates and other control
+    characters are refused with a 422 instead of failing in the database driver as a 500."""
+    encodable_text(value)
+    if any((ch < " " and ch not in _NOTE_WHITESPACE) or ch == "\x7f" for ch in value):
+        msg = "text must not contain control characters"
+        raise ValueError(msg)
+    return value
+
+
 NoteText = Annotated[
-    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_NOTE_CHARS)
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_NOTE_CHARS),
+    AfterValidator(note_text),
 ]
 
 

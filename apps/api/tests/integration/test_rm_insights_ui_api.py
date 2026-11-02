@@ -6,6 +6,7 @@
 - the outreach log: RM/admin with MFA only, validated, audited without the note, 404 for unknown
 """
 
+import json
 import uuid
 from collections.abc import Callable
 from typing import Any
@@ -257,6 +258,9 @@ def test_logged_interaction_is_listed_shared_and_audited_without_the_note(
         {**NOTE, "outcome": "SOLD"},
         {**NOTE, "customer_id": str(uuid.uuid4())},  # unknown fields are rejected
         {"channel": "CALL", "outcome": "FOLLOW_UP"},
+        {**NOTE, "note": "with\x00nul"},  # PostgreSQL cannot store NUL: was a 500
+        {**NOTE, "note": "lone\ud800surrogate"},  # cannot be encoded: was a 500
+        {**NOTE, "note": "bell\x07 and escape\x1b[31m"},  # control characters
     ],
 )
 def test_invalid_interactions_are_rejected_and_nothing_is_stored(
@@ -268,8 +272,27 @@ def test_invalid_interactions_are_rejected_and_nothing_is_stored(
 ) -> None:
     alice = make_customer()
     rm = make_staff(RoleName.RELATIONSHIP_MANAGER)
-    assert client.post(_log(alice.customer_id), headers=rm.headers, json=body).status_code == 422
+    # ASCII-escaped JSON, so a lone surrogate reaches the server as the browser would send it.
+    raw = json.dumps(body).encode("ascii")
+    resp = client.post(
+        _log(alice.customer_id),
+        headers={**rm.headers, "Content-Type": "application/json"},
+        content=raw,
+    )
+    assert resp.status_code == 422, resp.text
     assert db.execute(text("SELECT count(*) FROM rm_interactions")).scalar_one() == 0
+
+
+def test_a_multi_line_note_keeps_its_line_breaks(
+    client: TestClient, make_customer: Callable[..., Actor], make_staff: Callable[..., Actor]
+) -> None:
+    """The UI field is a textarea, so line breaks and tabs are ordinary note content."""
+    alice = make_customer()
+    rm = make_staff(RoleName.RELATIONSHIP_MANAGER)
+    note = "Called at 10:00.\nWants a loan quote.\r\n\tCall back Friday."
+    resp = client.post(_log(alice.customer_id), headers=rm.headers, json={**NOTE, "note": note})
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["note"] == note
 
 
 def test_interactions_for_an_unknown_customer_are_404_and_not_stored(
