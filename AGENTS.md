@@ -186,6 +186,14 @@ staging/production must refuse to boot with dev secrets (tested).
 Update in the same PR: README/blueprint when behaviour or architecture changes; an ADR for any decision with
 trade-offs; `docs/security/threat-model.md` for new attack surface; docstrings state *why*, not *what*.
 
+**Time-boxed exception (final sprint, approved by the product owner on 2026-11-03).** Until the final release,
+feature PRs do not edit `traceability.md`, `HLD.md`, `user-stories.md`, `TEAM_EXECUTION_PLAN.md` or
+`backlog.toml`; batch docs PRs update them after every 2-3 merges, and a task is Done only once its batch docs PR
+has merged. Feature PRs still carry the regenerated OpenAPI contract and web types, migrations, ADRs and
+threat-model rows. Locally, targeted tests plus the static checks replace `make check` (rule 9); CI runs the full
+suite before merge, and one full `make check` runs on `main` before the release. The full rules are in
+`docs/TEAM_EXECUTION_PLAN.md` section 4a. Nothing else in this file changes.
+
 ## 13. Never do this
 
 Commit secrets or `.env` - log sensitive data - use `float` for money - write to the ledger outside
