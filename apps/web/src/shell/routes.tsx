@@ -14,6 +14,7 @@ import { NotFound } from "../pages/NotFound";
 import { MfaEnrolment } from "../pages/MfaEnrolment";
 import { Profile } from "../pages/Profile";
 import { ScheduledTransfers } from "../pages/ScheduledTransfers";
+import { Statements } from "../pages/Statements";
 import { AuditLog } from "../pages/staff/AuditLog";
 import { FraudAlert } from "../pages/staff/FraudAlert";
 import { FraudDemoLab } from "../pages/staff/FraudDemoLab";
@@ -38,6 +39,7 @@ function customerNav(me: UserOut): NavItem[] {
   const items: NavItem[] = [
     { to: "/accounts", label: "Accounts" },
     { to: "/scheduled", label: "Scheduled transfers" },
+    { to: "/statements", label: "Statements" },
     { to: "/insights", label: "Spending & health" },
     { to: "/profile", label: "Profile & security" },
   ];
@@ -198,6 +200,7 @@ export const routes: RouteObject[] = [
           { index: true, element: <Navigate to="/accounts" replace /> },
           { path: "accounts", element: <Accounts /> },
           { path: "scheduled", element: <ScheduledTransfers /> },
+          { path: "statements", element: <Statements /> },
           {
             path: "insights",
             element: (
