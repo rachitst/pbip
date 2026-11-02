@@ -1,0 +1,10 @@
+# Overlay for the Playwright E2E suite ONLY (TASK-077): every browser signs in from one client IP, and the
+# suite registers 14 customers and signs in more than 20 times, so the per-IP login (10/min) and
+# registration (10/h) limits would fail it on its own traffic. Never use in staging/production.
+#   docker compose -f docker-compose.yml -f infra/e2e/compose.e2e.yml up -d
+# The limiter itself stays covered by test_login_rate_limit_per_ip and the auth integration tests.
+services:
+  api:
+    environment:
+      RATE_LIMIT_LOGIN_PER_MINUTE: "600"
+      RATE_LIMIT_REGISTER_PER_HOUR: "600"

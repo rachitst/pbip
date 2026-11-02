@@ -36,7 +36,8 @@ Core rule: **nothing reaches `main` without a pull request, a green `CI Gate` an
 > **Obsolete secrets file.** Older versions of the seed script wrote plaintext MFA secrets to `.dev-secrets.txt`. If you
 > ever ran that old version, delete the file (`rm .dev-secrets.txt`, or `Remove-Item .dev-secrets.txt` on Windows).
 > Staff MFA codes now come from `uv run python scripts/totp.py <staff email>`, which decrypts the secret from your local
-> database; the demo password is the `DEMO_PASSWORD` constant in `scripts/seed_dev.py`.
+> database; the demo password is `PBIP_DEMO_PASSWORD` if you set it for `make seed`, otherwise (APP_ENV=local only) the
+> `DEMO_PASSWORD` constant in `scripts/seed_dev.py`.
 
 ## 2. Task and branch workflow
 
