@@ -1,18 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { api } from "../api/client";
 import type { AccountOut, OpenAccountType } from "../api/client";
 import { errorMessage } from "../lib/errors";
 import { accountTypeLabel } from "../lib/format";
 import { formatMinor } from "../lib/money";
-import { trackAccountViewed } from "../telemetry/tracker";
+import { OPEN_ACCOUNT_PARAM } from "../lib/recommendations";
+import { trackAccountViewed, trackProductClicked } from "../telemetry/tracker";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
 import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 import { AccountTransactions } from "./AccountTransactions";
+import { ProductRecommendations } from "./ProductRecommendations";
 import { SendMoney } from "./SendMoney";
 
 export function Accounts() {
@@ -58,7 +60,12 @@ export function Accounts() {
           />
         ))}
       </ul>
-      <OpenAccount />
+      <ProductRecommendations
+        onProductAction={(item) => {
+          trackProductClicked(item.product_id);
+        }}
+      />
+      <OpenAccount requested={openAccountType(params.get(OPEN_ACCOUNT_PARAM))} />
       {accounts.data && accounts.data.length > 0 && (
         <SendMoney
           accounts={accounts.data.filter((a) => a.status === "ACTIVE")}
@@ -120,9 +127,26 @@ function AccountRow({ account, expanded, highlightTransactionId, onToggle }: Acc
   );
 }
 
-function OpenAccount() {
+/** ?open=SAVINGS|CHECKING (a recommendation's action) asks for that account type; anything else
+ * is ignored. */
+function openAccountType(value: string | null): OpenAccountType | null {
+  return value === "SAVINGS" || value === "CHECKING" ? value : null;
+}
+
+function OpenAccount({ requested }: { requested: OpenAccountType | null }) {
   const queryClient = useQueryClient();
-  const [accountType, setAccountType] = useState<OpenAccountType>("SAVINGS");
+  const [accountType, setAccountType] = useState<OpenAccountType>(requested ?? "SAVINGS");
+  const [lastRequested, setLastRequested] = useState(requested);
+  if (lastRequested !== requested) {
+    setLastRequested(requested);
+    if (requested !== null) setAccountType(requested);
+  }
+  // A requested type moves focus to the form (which also scrolls it into view), so the customer
+  // lands on the choice they asked for instead of the top of the page.
+  const typeRef = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    if (requested !== null) typeRef.current?.focus();
+  }, [requested]);
   const open = useMutation({
     mutationFn: (type: OpenAccountType) => api.openAccount(type),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["accounts"] }),
@@ -142,6 +166,7 @@ function OpenAccount() {
           {(control) => (
             <select
               {...control}
+              ref={typeRef}
               value={accountType}
               onChange={(event) => {
                 setAccountType(event.target.value === "CHECKING" ? "CHECKING" : "SAVINGS");

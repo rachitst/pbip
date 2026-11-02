@@ -1,10 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
 import { AuthProvider } from "../auth/AuthContext";
-import { customerMe } from "../test-utils";
+import { customerMe, noRecommendations } from "../test-utils";
 
 function urlOf(input: Parameters<typeof fetch>[0]): string {
   if (typeof input === "string") return input;
@@ -40,10 +40,23 @@ const payee = {
   verified_at: "2026-01-01T00:00:00Z",
 };
 
+const creditLine = {
+  product_id: "00000000-0000-4000-a000-000000000003",
+  product_type: "LOAN",
+  title: "Personal credit line",
+  description: "Borrow as needed up to an agreed limit, subject to a credit check.",
+  score: 0.64,
+  reasons: ["Loan repayments take 12.0% of your income, within the 45% limit."],
+  model_version: "rules-v1",
+  cta_label: "Check eligibility",
+};
+
 describe("accounts page", () => {
   const fetchMock = vi.fn<typeof fetch>();
+  let recommendations: unknown = noRecommendations;
 
   beforeEach(() => {
+    recommendations = noRecommendations;
     fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock);
     fetchMock.mockImplementation((input, init) => {
@@ -52,6 +65,8 @@ describe("accounts page", () => {
       if (url.endsWith("/auth/me")) return Promise.resolve(json(200, customerMe));
       if (url.endsWith("/accounts")) return Promise.resolve(json(200, [account]));
       if (url.endsWith("/payees")) return Promise.resolve(json(200, [payee]));
+      if (url.endsWith("/recommendations")) return Promise.resolve(json(200, recommendations));
+      if (url.endsWith("/events/batch")) return Promise.resolve(json(202, {}));
       if (url.endsWith("/transfers") && init?.method === "POST") {
         return Promise.resolve(
           json(201, {
@@ -81,6 +96,35 @@ describe("accounts page", () => {
       </QueryClientProvider>,
     );
   }
+
+  it("sends product_clicked with the catalogue product id when a recommendation is followed (TASK-112)", async () => {
+    recommendations = { ...noRecommendations, recommendations: [creditLine] };
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(
+      await screen.findByRole("button", { name: "See our loans: Personal credit line" }),
+    );
+    window.dispatchEvent(new Event("pagehide"));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => urlOf(input).endsWith("/events/batch"))).toBe(
+        true,
+      );
+    });
+    const sent = fetchMock.mock.calls
+      .filter(([input]) => urlOf(input).endsWith("/events/batch"))
+      .flatMap(
+        ([, init]) =>
+          (
+            JSON.parse(init?.body as string) as {
+              events: { event_type: string; page_url?: string; properties?: object }[];
+            }
+          ).events,
+      );
+    expect(sent.find((e) => e.event_type === "product_clicked")).toMatchObject({
+      page_url: "/accounts",
+      properties: { product_id: creditLine.product_id },
+    });
+  });
 
   it("restores the session, shows balances and the amount on hold", async () => {
     renderApp();

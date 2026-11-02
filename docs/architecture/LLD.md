@@ -39,7 +39,7 @@ and is never joined to the operational schema ([ADR-0009](../adr/0009-synthetic-
 
 ## 2. Table inventory
 
-33 tables: 30 in `public`, 3 in `synthetic` (the same count as `er-diagram.md`). Partitions of
+35 tables: 32 in `public`, 3 in `synthetic` (the same count as `er-diagram.md`). Partitions of
 `clickstream_events` and `alembic_version` are not counted.
 
 | # | Table | Owning module (`models.py`) | Created in | Purpose |
@@ -66,17 +66,19 @@ and is never joined to the operational schema ([ADR-0009](../adr/0009-synthetic-
 | 20 | `scheduled_transfers` | `payments` | 0014, 0016 | Standing orders and loan repayment instructions |
 | 21 | `loans` | `loans` | 0016 | A disbursed loan with its contract snapshot |
 | 22 | `loan_instalments` | `loans` | 0016 | The repayment schedule, one row per EMI |
-| 23 | `notifications` | `notifications` | 0001, 0007 | In-app notification inbox |
-| 24 | `outbox_events` | `notifications` | 0001 | Transactional outbox, relayed into notifications |
-| 25 | `audit_logs` | `compliance` | 0001 | Hash-chained, append-only audit trail |
-| 26 | `monthly_category_spending` | `analytics` | 0003 | Nightly spending aggregates per account, month and category |
-| 27 | `customer_segments` | `analytics` | 0004 | Weekly rule-based customer segment |
-| 28 | `clickstream_events` | `events` | 0006 | Web behaviour events, range-partitioned by month |
-| 29 | `assistant_messages` | `assistant` | 0009 | AI assistant conversation history |
-| 30 | `rm_interactions` | `insights` | 0015 | Relationship manager outreach log |
-| 31 | `synthetic.generation_runs` | none (`pbip_datagen`) | 0002 | One seeded generator run |
-| 32 | `synthetic.customers` | none (`pbip_datagen`) | 0002 | Synthetic customers of a run |
-| 33 | `synthetic.transactions` | none (`pbip_datagen`) | 0002 | Synthetic transactions of a run (ML training data) |
+| 23 | `wealth_products` | `wealth` | 0018 | Wealth catalogue (seeded reference data, ADR-0025) |
+| 24 | `fixed_deposits` | `wealth` | 0018 | A booked fixed deposit with its contract snapshot |
+| 25 | `notifications` | `notifications` | 0001, 0007 | In-app notification inbox |
+| 26 | `outbox_events` | `notifications` | 0001 | Transactional outbox, relayed into notifications |
+| 27 | `audit_logs` | `compliance` | 0001 | Hash-chained, append-only audit trail |
+| 28 | `monthly_category_spending` | `analytics` | 0003 | Nightly spending aggregates per account, month and category |
+| 29 | `customer_segments` | `analytics` | 0004 | Weekly rule-based customer segment |
+| 30 | `clickstream_events` | `events` | 0006 | Web behaviour events, range-partitioned by month |
+| 31 | `assistant_messages` | `assistant` | 0009 | AI assistant conversation history |
+| 32 | `rm_interactions` | `insights` | 0015 | Relationship manager outreach log |
+| 33 | `synthetic.generation_runs` | none (`pbip_datagen`) | 0002 | One seeded generator run |
+| 34 | `synthetic.customers` | none (`pbip_datagen`) | 0002 | Synthetic customers of a run |
+| 35 | `synthetic.transactions` | none (`pbip_datagen`) | 0002 | Synthetic transactions of a run (ML training data) |
 
 ---
 
@@ -127,10 +129,15 @@ triggers.
 
 ### 3.2 Customers and devices (`api/modules/customers/models.py`)
 
-**`customers`** (0001)
-* Key columns: `full_name`, `date_of_birth`, `phone_enc` (encrypted), `kyc_status`, `segment`, `risk_profile`.
+**`customers`** (0001, 0018)
+* Key columns: `full_name`, `date_of_birth`, `phone_enc` (encrypted), `kyc_status`, `segment`, `risk_profile` with
+  `risk_score`, `risk_answers` (JSONB), `risk_questionnaire_version`, `risk_assessed_at` (TASK-097, all set together),
+  and `recommendations_consent_at` with `recommendations_consent_policy` (TASK-107, NULL = no consent).
 * FK: `user_id -> users` `RESTRICT`, unique (`uq_customers_user_id`): one customer per user.
-* CHECK: `ck_customers_kyc_status_valid` `kyc_status IN ('PENDING','VERIFIED','REJECTED')`.
+* CHECK: `ck_customers_kyc_status_valid` `kyc_status IN ('PENDING','VERIFIED','REJECTED')`;
+  `ck_customers_risk_profile_valid` (LOW, MODERATE, HIGH), `ck_customers_risk_score_range` (0-10),
+  `ck_customers_risk_assessment_complete` (band, score, answers, version and time all set or all NULL),
+  `ck_customers_recommendations_consent_complete` (consent time and policy version together).
 
 **`devices`** (0001)
 * Key columns: `fingerprint_hash`, `label`, `first_seen_at`, `last_seen_at`, `trusted`.
@@ -152,7 +159,8 @@ triggers.
     backstop against overdraft; `Account.spendable` computes the same expression in Python. Proven by
     `tests/integration/test_ledger.py::test_database_check_constraint_blocks_overdrawing_even_with_raw_sql`.
 * Seeded system accounts (0001, `SYSTEM_ACCOUNTS`): `SYS-CLEARING` `00000000-0000-0000-0000-0000000000c1` and
-  `SYS-FEES` `...0000c2`, referenced in code as `ledger.SYSTEM_CLEARING_ID` / `SYSTEM_FEES_ID`. System accounts
+  `SYS-FEES` `...0000c2`, referenced in code as `ledger.SYSTEM_CLEARING_ID` / `SYSTEM_FEES_ID`; 0018 adds
+  `SYS-FIXED-DEPOSITS` `...0000c3` (`ledger.SYSTEM_FIXED_DEPOSITS_ID`, the deposit liability, ADR-0025). System accounts
   may go negative (the CHECK exempts them), which is how money enters and leaves the simulated bank.
 * Writers: only `api/modules/ledger/service.py` changes `ledger_balance` and `held_amount` (AGENTS.md section 4).
   This is a code rule enforced by review; no trigger stops another `UPDATE` (section 3.15).
@@ -182,8 +190,8 @@ authenticated customer id.
 * FKs, all `NO ACTION`: `initiated_by_user_id -> users`, `debit_account_id -> accounts`,
   `credit_account_id -> accounts`, `payee_id -> payees`, `reversal_of_id -> transactions` (self).
 * CHECK:
-  * `ck_transactions_type_valid` `type IN ('TRANSFER','DEPOSIT','REVERSAL','FEE','BILL_PAYMENT','LOAN_DISBURSAL','LOAN_REPAYMENT')`
-    (0001 had the first four; 0008 added `BILL_PAYMENT`; 0016 added the two loan types)
+  * `ck_transactions_type_valid` `type IN ('TRANSFER','DEPOSIT','REVERSAL','FEE','BILL_PAYMENT','LOAN_DISBURSAL','LOAN_REPAYMENT','FD_BOOKING','FD_CLOSURE','FD_INTEREST')`
+    (0001 had the first four; 0008 added `BILL_PAYMENT`; 0016 added the two loan types; 0018 the three deposit types)
   * `ck_transactions_status_valid` `status IN ('INITIATED','PENDING_STEP_UP','PENDING_REVIEW','POSTED','DECLINED','REVERSED')`
   * `ck_transactions_amount_positive` `amount > 0`
 * Indexes: `ix_transactions_initiated_by_user_id_created_at` (daily limit, customer history),
@@ -334,6 +342,34 @@ authenticated customer id.
 * "Overdue" is not stored: it is derived as `DUE` and `due_date` before today (`loans/service.py` `_status`,
   ADR-0024).
 
+### 3.8a Wealth (`api/modules/wealth/models.py`, TASK-063/064, ADR-0025)
+
+**`wealth_products`** (0018)
+* Purpose: the wealth catalogue, seeded by migration 0018 (eight products, `catalogue_version` `2026-11-v1`);
+  a rate change is a new migration. Fixed ids `20000000-0000-4000-a000-00000000000N`.
+* Key columns: `code` (unique), `product_type`, `name`, `risk_level`, `yield_basis`, `annual_rate_bps` (NULL
+  when market-linked), `tenures_months INTEGER[]`, `min_lock_in_months`, `min_amount_minor`,
+  `max_amount_minor`, `premature_penalty_bps` (NULL: no premature closure), `bookable`, `notes`.
+* CHECK: enums; `ck_wealth_products_rate_only_when_not_market_linked`; non-negative rate, lock-in and penalty;
+  positive minimum, maximum at least the minimum; `ck_wealth_products_bookable_is_a_complete_deposit` (only a
+  fixed deposit with a rate, amount range and tenures can be bookable). Index `ix_wealth_products_risk_level`.
+
+**`fixed_deposits`** (0018)
+* Purpose: a booked deposit with a snapshot of its terms (`annual_rate_bps`, `tenure_months`, `lock_in_months`,
+  `premature_penalty_bps`) and its exact figures (`principal`, `maturity_interest`, `maturity_amount`,
+  `start_date`, `maturity_date`); closure fills `closure_kind`, `paid_interest`, `closed_on`, `closed_at`.
+* FKs, all `RESTRICT`: `customer_id -> customers`, `user_id -> users`, `account_id -> accounts`,
+  `product_id -> wealth_products`, `booking_transaction_id`, `closure_transaction_id`,
+  `interest_transaction_id -> transactions` (each unique).
+* CHECK: `status IN ('ACTIVE','CLOSED')`; `closure_kind IN ('MATURED','PREMATURE')`; `principal > 0`;
+  `tenure_months > 0 AND mod(tenure_months, 3) = 0`; `maturity_amount = principal + maturity_interest`;
+  `maturity_date > start_date`; `ck_fixed_deposits_closed_has_payout` (CLOSED exactly when the closure columns
+  and the principal payout transaction are set); an interest transaction only when interest was paid.
+* Indexes: `ix_fixed_deposits_customer_id_created_at`, `ix_fixed_deposits_user_id`, `ix_fixed_deposits_account_id`,
+  `ix_fixed_deposits_product_id`.
+* "Matured" is not stored: it is `ACTIVE` with `maturity_date` on or before today (IST), derived on read like
+  loan arrears.
+
 ### 3.9 Notifications and outbox (`api/modules/notifications/models.py`)
 
 **`notifications`** (0001, link columns added in 0007)
@@ -444,6 +480,8 @@ fire on `TRUNCATE`; no `public` table has a TRUNCATE guard.
 | 0014 | `20261102_0014_scheduled_transfers.py` | `scheduled_transfers` (ADR-0023) |
 | 0015 | `20261102_0015_rm_interactions.py` | `rm_interactions` (ADR-0022) |
 | 0016 | `20261102_0016_loans.py` | `loans`, `loan_instalments`, `scheduled_transfers.loan_id`, loan transaction types (ADR-0024). Its downgrade fails on purpose if loan rows exist: ledger history is never deleted to make a downgrade pass |
+| 0017 | `20261102_0017_customer_risk_profile_and_consent.py` | `customers` risk-tolerance columns (band, answers, score, questionnaire version, assessed at) and the ADR-0015 recommendations consent (timestamp, policy version); nothing backfilled (TASK-097, TASK-107) |
+| 0018 | `20261102_0018_wealth_catalogue_and_fixed_deposits.py` | `wealth_products` (seeded), `fixed_deposits`, `SYS-FIXED-DEPOSITS`, deposit transaction types (ADR-0025). Its downgrade fails on purpose if deposit transactions exist |
 
 Every migration has a downgrade; CI runs up, down, up and `alembic check`. One head is enforced by
 `tests/unit/test_migration_heads.py`.
@@ -683,6 +721,8 @@ ROLLBACK):
 | Create transfer | user advisory lock; idempotency row; accounts (debit, credit) `FOR UPDATE` sorted; header insert; on `REVIEW` the debit account again (already held) for the hold; entries; audit lock `724001` | `PaymentsService._execute_transfer`, `ledger.create_transaction`, `place_hold`, `post_transaction`, `AuditService.record` |
 | Pay bill | same as create transfer (credit side is `SYS-CLEARING`) | `BillsService.pay_bill` |
 | Apply for loan | user lock; idempotency row; accounts sorted (`disburse_loan` via `create_transaction`); header; entries; then `loans`, `loan_instalments`, `scheduled_transfers` inserts; audit lock | `loans/service.py` `apply_for_loan` |
+| Book fixed deposit | user lock; idempotency row; accounts sorted (customer, `SYS-FIXED-DEPOSITS`) in `book_fixed_deposit`; header; entries; `fixed_deposits` insert; audit lock | `wealth/service.py` `book_fixed_deposit` |
+| Close fixed deposit | user lock; idempotency row; deposit row `FOR UPDATE`; customer, `SYS-FIXED-DEPOSITS` and `SYS-CLEARING` sorted BEFORE both headers (`pay_out_fixed_deposit`); entries; audit lock | `wealth/service.py` `close_fixed_deposit` |
 | Confirm step-up | user lock; the transfer row `FOR UPDATE`; accounts sorted in `post_transaction`; audit lock | `confirm_step_up` |
 | Step-up escalation | (new transaction after the failure was committed) user lock; transfer row `FOR UPDATE`; debit account for the hold; audit lock | `_escalate_to_review` |
 | Analyst decision | alert row `FOR UPDATE`; transaction row `FOR UPDATE`; RELEASE: accounts sorted then hold row; REJECT: hold row then its account; `bill_payments` row; audit lock. No user lock, no idempotency key | `PaymentsService.review_alert` |
@@ -833,7 +873,7 @@ lock, so a repeated run finds nothing due and posts nothing (`test_concurrent_re
 1. **`REVERSED` is reachable only from code, not from the product.** Blueprint section 7 lists
    `POSTED -> REVERSED`. `ledger.reverse_transaction` exists and is tested, but no route, job or script on `main`
    calls it, and it reverses only `TRANSFER` transactions. `bill_payments.status = 'REVERSED'` is allowed by the
-   CHECK and never set.
+   CHECK and never set. Both are **reserved** for a future reversal flow; the Blueprint and HLD say so (#316).
 2. **`PENDING_STEP_UP` never expires.** No job times out an unanswered step-up. The transfer waits until a correct
    code or the third wrong one; no hold is placed meanwhile, and the daily limit is rechecked at confirm time.
 3. **Not every money-moving POST takes an `Idempotency-Key`** (AGENTS.md section 4 says they must). The analyst
@@ -843,10 +883,11 @@ lock, so a repeated run finds nothing due and posts nothing (`test_concurrent_re
 4. **Idempotency TTL is not enforced** (section 3.15, item 6).
 5. **Table counts in older documents are stale.** Blueprint section 4 says "Implemented (20 tables, migration
    `0001`)" and HLD section 5 says 26 `public` tables; `main` has 30 (`er-diagram.md`). HLD section 15 says there are
-   no scheduled transfers yet; they exist since migration `0014`.
+   no scheduled transfers yet; they exist since migration `0014`. Corrected in the Blueprint and HLD (#316).
 6. **ADR-0023 section 10 (R16)** says loan disbursal creates its instruction through `create_scheduled_transfer(...)`.
    The code uses a separate module function, `create_loan_repayment_instruction`, inside the loan application's
    transaction, so loan instructions skip the customer-facing idempotency, capacity and date checks.
+   ADR-0023 now names `create_loan_repayment_instruction`, with a dated correction note (#316).
 7. **No alert assignment step.** `fraud_alerts.assigned_to_user_id` is set to the analyst who resolves the alert,
    at resolution. There is no claim or assign endpoint.
 8. **docs/README.md planned one LLD per module** (`docs/lld/*.md`). The backlog's definition of done asks for a

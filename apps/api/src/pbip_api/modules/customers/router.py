@@ -2,19 +2,31 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Response, status
 from sqlalchemy.orm import Session
 
+from pbip_api.core.calendar import bank_today
 from pbip_api.core.db import get_session
 from pbip_api.core.errors import UnprocessableError
-from pbip_api.modules.auth.dependencies import get_request_meta
+from pbip_api.modules.auth.dependencies import get_clock, get_request_meta
 from pbip_api.modules.auth.service import RequestMeta
 from pbip_api.modules.customers import policy
 from pbip_api.modules.customers.dependencies import get_current_customer, get_customer_service
 from pbip_api.modules.customers.models import Customer
-from pbip_api.modules.customers.schemas import CustomerProfileOut, DeviceOut, DeviceRegisterRequest
+from pbip_api.modules.customers.schemas import (
+    CustomerProfileOut,
+    DateOfBirthIn,
+    DemographicsOut,
+    DeviceOut,
+    DeviceRegisterRequest,
+    RecommendationsConsentIn,
+    RiskProfileOut,
+    RiskQuestionnaire,
+)
 from pbip_api.modules.customers.service import CustomerService, to_device_out
 
 router = APIRouter(prefix="/api/v1/customers", tags=["customers"])
@@ -26,6 +38,91 @@ def get_my_profile(
     service: CustomerService = Depends(get_customer_service),
 ) -> CustomerProfileOut:
     return service.get_profile(customer)
+
+
+def _now(clock: Callable[[], float]) -> datetime:
+    return datetime.fromtimestamp(clock(), tz=UTC)
+
+
+@router.get(
+    "/me/risk-profile",
+    response_model=RiskProfileOut,
+    summary="Get my risk-tolerance profile (band, answers and when it was assessed)",
+)
+def get_my_risk_profile(
+    customer: Customer = Depends(get_current_customer),
+    service: CustomerService = Depends(get_customer_service),
+) -> RiskProfileOut:
+    return service.get_risk_profile(customer)
+
+
+@router.put(
+    "/me/risk-profile",
+    response_model=RiskProfileOut,
+    summary="Answer the risk-tolerance questionnaire and store the resulting band",
+)
+def put_my_risk_profile(
+    body: RiskQuestionnaire,
+    customer: Customer = Depends(get_current_customer),
+    service: CustomerService = Depends(get_customer_service),
+    meta: RequestMeta = Depends(get_request_meta),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> RiskProfileOut:
+    return service.assess_risk_profile(customer, body, _now(clock), meta)
+
+
+@router.get(
+    "/me/demographics",
+    response_model=DemographicsOut,
+    summary="Get my date of birth, derived age band and recommendations consent",
+)
+def get_my_demographics(
+    customer: Customer = Depends(get_current_customer),
+    service: CustomerService = Depends(get_customer_service),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> DemographicsOut:
+    return service.get_demographics(customer, bank_today(_now(clock)))
+
+
+@router.put(
+    "/me/date-of-birth",
+    response_model=DemographicsOut,
+    summary="Set my date of birth (optional; age 18 to 120)",
+)
+def put_my_date_of_birth(
+    body: DateOfBirthIn,
+    customer: Customer = Depends(get_current_customer),
+    service: CustomerService = Depends(get_customer_service),
+    meta: RequestMeta = Depends(get_request_meta),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> DemographicsOut:
+    return service.set_date_of_birth(customer, body.date_of_birth, _now(clock), meta)
+
+
+@router.delete(
+    "/me/date-of-birth", status_code=status.HTTP_204_NO_CONTENT, summary="Delete my date of birth"
+)
+def delete_my_date_of_birth(
+    customer: Customer = Depends(get_current_customer),
+    service: CustomerService = Depends(get_customer_service),
+    meta: RequestMeta = Depends(get_request_meta),
+) -> None:
+    service.delete_date_of_birth(customer, meta)
+
+
+@router.put(
+    "/me/recommendations-consent",
+    response_model=DemographicsOut,
+    summary="Grant or withdraw consent to use my age band for product recommendations",
+)
+def put_my_recommendations_consent(
+    body: RecommendationsConsentIn,
+    customer: Customer = Depends(get_current_customer),
+    service: CustomerService = Depends(get_customer_service),
+    meta: RequestMeta = Depends(get_request_meta),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> DemographicsOut:
+    return service.set_recommendations_consent(customer, body.granted, _now(clock), meta)
 
 
 @router.post(

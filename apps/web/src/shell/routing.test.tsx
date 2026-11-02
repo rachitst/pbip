@@ -193,6 +193,27 @@ describe("routing, roles and the application shell (ADR-0016)", () => {
       expect(insightCalls()).toBe(1);
     });
 
+    it("links compliance to compliance officers and behaviour analytics to RMs (TASK-100/101)", async () => {
+      me = { ...analystMe, roles: ["COMPLIANCE_OFFICER"] };
+      const first = renderApp();
+      let nav = await screen.findByRole("navigation", { name: "Main" });
+      expect(within(nav).getByRole("link", { name: "Compliance & risk" })).toHaveAttribute(
+        "href",
+        "/staff/compliance",
+      );
+      expect(within(nav).queryByRole("link", { name: "Behavioural analytics" })).toBeNull();
+      first.unmount();
+
+      me = { ...analystMe, roles: ["RELATIONSHIP_MANAGER"] };
+      renderApp();
+      nav = await screen.findByRole("navigation", { name: "Main" });
+      expect(within(nav).getByRole("link", { name: "Behavioural analytics" })).toHaveAttribute(
+        "href",
+        "/staff/behaviour",
+      );
+      expect(within(nav).queryByRole("link", { name: "Compliance & risk" })).toBeNull();
+    });
+
     it("links both areas for a user who is a customer and staff", async () => {
       me = { ...customerMe, roles: ["CUSTOMER", "COMPLIANCE_OFFICER"] };
       const user = userEvent.setup();

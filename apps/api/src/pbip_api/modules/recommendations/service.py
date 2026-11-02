@@ -2,8 +2,9 @@
 
 Every input comes from the customer's own data: balances from the accounts module, the health score
 and monthly income, spend and lifestyle share from analytics, and the weekly segment when one has
-been assigned. Nothing is defaulted to a made-up value. Per ADR-0015 the age band stays "unknown"
-until consented date of birth exists (TASK-107), so the engine never sees a date of birth.
+been assigned. Nothing is defaulted to a made-up value. Per ADR-0015 the engine gets only an age
+band, from ``customers.service.recommendation_age_band`` (TASK-107): ``unknown`` unless the customer
+has both a date of birth and a recorded consent, so the engine never sees a date of birth.
 """
 
 from datetime import datetime
@@ -13,10 +14,12 @@ from pbip_ml.recommendations import CustomerRecommendationContext, generate_reco
 from pbip_ml.recommendations.engine import MODEL_VERSION
 from sqlalchemy.orm import Session
 
+from pbip_api.core.calendar import bank_today
 from pbip_api.core.db import utcnow
 from pbip_api.core.errors import NotFoundError
 from pbip_api.modules.accounts import service as accounts_service
 from pbip_api.modules.analytics import service as analytics_service
+from pbip_api.modules.customers import service as customers_service
 from pbip_api.modules.recommendations.schemas import (
     ProductRecommendationItem,
     RecommendationsResponse,
@@ -52,7 +55,10 @@ def _context(
         buffer_months=health.components.buffer_months.metric_value,
         emi_ratio=health.components.emi_to_income.metric_value,
         total_balance_minor=sum(account.available_balance for account in accounts),
-        age_band="unknown",  # ADR-0015: no consented date of birth yet (TASK-107)
+        # ADR-0015: the band only, and "unknown" without a date of birth AND consent.
+        age_band=customers_service.recommendation_age_band(
+            session, customer_id, bank_today(now)
+        ).value,
     )
 
 

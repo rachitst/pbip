@@ -29,6 +29,7 @@ from pbip_api.modules.payees.router import router as payees_router
 from pbip_api.modules.payments.router import router as payments_router
 from pbip_api.modules.recommendations.router import router as recommendations_router
 from pbip_api.modules.statements.router import router as statements_router
+from pbip_api.modules.wealth.router import router as wealth_router
 
 ROUTERS = (
     health_router,
@@ -41,6 +42,7 @@ ROUTERS = (
     events_router,
     insights_router,
     loans_router,
+    wealth_router,
     assistant_router,
     payees_router,
     payments_router,

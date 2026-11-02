@@ -58,7 +58,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | FR-09 | The customer shall see recent transactions for an account, paginated. | UC-02, section 5 | Implemented | TASK-008, TASK-019 | |
 | FR-10 | The customer shall see spending insights: category breakdown, month-over-month trends, daily burn rate. | UC-02, section 5 "spending insights" | Implemented | TASK-040, TASK-049 | |
 | FR-11 | The customer shall see financial health indicators: a 0-100 health score with components and tips, and a balance forecast labelled as a prediction. | Section 5 "financial health indicators" | Partial | TASK-041, TASK-042, TASK-049; TASK-050 | The forecast has an API but no chart |
-| FR-12 | The dashboard shall show personalised product recommendations. | UC-02, section 5 | Partial | TASK-054; TASK-062 | API only; no UI |
+| FR-12 | The dashboard shall show personalised product recommendations. | UC-02, section 5 | Partial | TASK-054; TASK-062 | Carousel on `/accounts` (TASK-062, PR #328, in review); the ranking is rules-based (`rules-v1`) |
 | FR-13 | The customer shall be able to open an account and view its details. | Section 5 "view account details" | Implemented | TASK-005 | |
 | FR-14 | The customer shall be able to search and filter transactions by date and amount. | Section 5 "transaction search" | Planned | TASK-017 | |
 | FR-15 | The customer shall be able to view a statement for a chosen account and period and download it as PDF. | UC-03, section 5 | Planned | TASK-016, TASK-074 | `modules/statements` is empty |
@@ -87,10 +87,10 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 |---|---|---|---|---|---|
 | FR-29 | The system shall provide a loan catalogue and an EMI calculator with a repayment schedule. | Section 5 "loan catalogue, EMI calculator" | Partial | TASK-045; TASK-051 | API only; no UI |
 | FR-30 | The system shall assess loan eligibility from the customer's own income and existing repayments, with the reasons explained. | UC-06 "generates eligibility assessment" | Partial | TASK-046 | Uses income and EMIs (DTI ≤ 50%), not balances or spending patterns as UC-06 lists |
-| FR-31 | The system shall display personalised loan suggestions. | UC-06 "displays recommendations" | Partial | TASK-054, TASK-062 | The recommendation engine suggests a credit line and a rewards card, not the catalogue loans; no UI |
+| FR-31 | The system shall display personalised loan suggestions. | UC-06 "displays recommendations" | Partial | TASK-054, TASK-062 | The recommendation engine suggests a credit line and a rewards card, not the catalogue loans; the carousel (TASK-062, PR #328) links the credit line to `/loans` without preselecting a catalogue loan |
 | FR-32 | The customer shall apply for a loan and track it. | Section 5 "loan applications, loan tracking" | Planned | TASK-047, TASK-051 | |
-| FR-33 | The system shall record the customer's risk tolerance. | UC-07 input | Planned | TASK-097 | |
-| FR-34 | The system shall suggest investment products using risk tolerance, savings behaviour, income and available funds. | UC-07 | Partial | TASK-054; TASK-097, TASK-105 | Fixed deposit and index-fund SIP suggestions use income, savings ratio, buffer and balance; no risk tolerance |
+| FR-33 | The system shall record the customer's risk tolerance. | UC-07 input | Implemented | TASK-097 | Five-question questionnaire, deterministic LOW/MODERATE/HIGH band, answers and assessment time stored and audited (`/api/v1/customers/me/risk-profile`) |
+| FR-34 | The system shall suggest investment products using risk tolerance, savings behaviour, income and available funds. | UC-07 | Partial | TASK-054; TASK-097, TASK-105 | Fixed deposit and index-fund SIP suggestions use income, savings ratio, buffer and balance; the risk band is recorded (FR-33) but not yet an input |
 | FR-35 | The customer shall browse fixed deposits, mutual funds, stocks and bonds, and insurance products. | Section 5 wealth | Planned | TASK-063, TASK-064, TASK-065, TASK-096 | `modules/wealth` is empty |
 | FR-36 | The customer shall compare wealth and insurance products. | Section 5 "product comparison" | Planned | TASK-098 | |
 
@@ -124,11 +124,11 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | FR-50 | The system shall capture page visits and clickstream events. | UC-11 data captured | Implemented | TASK-055; TASK-112 (#286) | The web app sends page visits (route template) and key interactions in bounded batches ([event catalogue](../analytics/clickstream-events.md)); recommendation clicks start when the cards exist (TASK-062) |
 | FR-51 | The system shall capture session duration and product interests. | UC-11 data captured | Planned | TASK-055, TASK-101 | No session-duration field; no derived product interest |
 | FR-52 | The system shall analyse spend and income patterns and assign each customer a behavioural segment. | UC-11, section 5 "customer segmentation" | Implemented | TASK-040, TASK-044, TASK-052 | |
-| FR-53 | The system shall recommend loan, savings, investment and insurance products with reasons, using the behaviour profile and spending patterns. | UC-12 | Partial | TASK-054; TASK-062 | Rules-based (`rules-v1`) API; no UI |
-| FR-54 | Recommendations shall use demographics. | UC-12 input | Planned | TASK-107 | Limited by ADR-0015 to a consented age band; currently always `unknown` |
+| FR-53 | The system shall recommend loan, savings, investment and insurance products with reasons, using the behaviour profile and spending patterns. | UC-12 | Partial | TASK-054; TASK-062 | Rules-based (`rules-v1`) API; carousel on `/accounts` (TASK-062, PR #328, in review) |
+| FR-54 | Recommendations shall use demographics. | UC-12 input | Implemented | TASK-107 | Limited by ADR-0015 to a consented age band derived from an optional date of birth; `unknown` without both |
 | FR-55 | Recommendations shall take existing products into account. | UC-12 input | Planned | TASK-111 (#285) | Products already held are not an input |
 | FR-56 | A relationship manager shall see customers ranked by churn risk, with signals and the top eligible product. | Section 6 (relationship manager) | Partial | TASK-056; TASK-066 | API only; no UI |
-| FR-57 | Staff shall see a behavioural analytics dashboard: segmentation, spending patterns, product affinity, engagement. | Section 5 | Planned | TASK-101 | |
+| FR-57 | Staff shall see a behavioural analytics dashboard: segmentation, spending patterns, product affinity, engagement. | Section 5 | Implemented (in review) | TASK-101 | Engagement needs clickstream events the web app does not send yet |
 
 ### 2.8 Monitoring and compliance (UC-13, section 5)
 
@@ -136,7 +136,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 |---|---|---|---|---|---|
 | FR-58 | Security staff shall see high-risk customers, active alerts, login anomalies, fraud events and open investigations. | UC-13 | Implemented | TASK-099 | `GET /api/v1/fraud/monitoring` and the `/staff/monitoring` page (fraud analysts and admins, with MFA); ids and aggregates only |
 | FR-59 | A compliance officer shall read the audit history and verify its integrity. | Section 5 "audit history" | Implemented | TASK-048 | |
-| FR-60 | Compliance shall see system-generated alerts, exception management and regulatory monitoring. | Section 5 | Planned | TASK-100 | |
+| FR-60 | Compliance shall see system-generated alerts, exception management and regulatory monitoring. | Section 5 | Implemented (in review) | TASK-100 | SLAs are the bank's own 24 h assumption (ADR-0027) |
 
 ## 3. Non-functional requirements (section 8)
 
