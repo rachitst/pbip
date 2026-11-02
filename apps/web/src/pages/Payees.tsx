@@ -283,7 +283,7 @@ function PayeeRow({
       <td>
         <StatusBadge status={STATUS[payee.status] ?? { label: payee.status, tone: "neutral" }} />
       </td>
-      <td>{formatDate(payee.created_at)}</td>
+      <td className="hide-narrow">{formatDate(payee.created_at)}</td>
       <td className="row-actions">
         {payee.status === "PENDING_VERIFICATION" && (
           <Button
@@ -370,7 +370,9 @@ export function Payees() {
                 <th scope="col">Name</th>
                 <th scope="col">Account</th>
                 <th scope="col">Status</th>
-                <th scope="col">Added</th>
+                <th scope="col" className="hide-narrow">
+                  Added
+                </th>
                 <th scope="col">
                   <span className="sr-only">Actions</span>
                 </th>
