@@ -23,8 +23,8 @@ How it combines (`docs/ml/fraud-models.md` "Hybrid decision" and "Serving"):
    A missing, failing or slow model (over `FRAUD_MODEL_BUDGET_MS`, default 50 ms) falls back to rules only,
    never to ALLOW-all.
 
-**Out of scope:** incoming transfers and deposit structuring (F7, follow-up #274); dormancy as a signal
-(F8, follow-up #275); any customer-facing score or reason; automatic account action beyond the
+**Out of scope:** incoming transfers and deposit structuring (F7, follow-up GitHub issue #274); dormancy as a signal
+(F8, follow-up GitHub issue #275); any customer-facing score or reason; automatic account action beyond the
 transfer state machine; use of the bands on real traffic before the weights are re-fitted on real labels.
 
 ## Training data
