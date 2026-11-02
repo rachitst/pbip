@@ -151,7 +151,12 @@ function OpenAccount({ requested }: { requested: OpenAccountType | null }) {
   }, [requested]);
   const open = useMutation({
     mutationFn: (type: OpenAccountType) => api.openAccount(type),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+    // Cancel first: invalidating a query still on its first load joins that request, which read
+    // the database before this account existed, so the new account would not be listed.
+    onSuccess: async () => {
+      await queryClient.cancelQueries({ queryKey: ["accounts"] });
+      await queryClient.invalidateQueries({ queryKey: ["accounts"] });
+    },
   });
 
   return (
