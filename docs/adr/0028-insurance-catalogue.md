@@ -1,5 +1,5 @@
 # ADR 0028: Insurance catalogue as migration-seeded reference data, with no underwriting
-- Status: Proposed (needs the product owner's approval before merge)
+- Status: Accepted (product owner, 2026-11-03: pre-approved on four conditions, all met: seeded fixtures labelled illustrative and simulated, not insurer quotes; no purchase or payment flow; no customer PII in the table; working downgrade on the linear migration chain)
 - Date: 2026-11-02
 - Deciders: Architecture Team (TASK-096 / #179, TASK-098 / #181)
 
@@ -101,4 +101,4 @@ stays "Market-linked: no stated yield", never a number. No new endpoint is neede
 
 ## Scope of acceptance
 For the TASK-096/098 pull request only: the `insurance_products` table and its seed, the read-only endpoint and
-the client-side comparison. Status moves to Accepted when the product owner approves.
+the client-side comparison. Accepted by the product owner on 2026-11-03.
