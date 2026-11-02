@@ -313,3 +313,124 @@ class BalanceForecastResponse(BaseModel):
         description="Known upcoming debits to the later of the horizon end and the month end"
     )
     end_of_month: EndOfMonthProjection
+
+
+# --- Behavioural analytics dashboard (TASK-101): aggregates only, never a customer id ---
+
+BehaviourSegment = Literal[
+    "HIGH_NET_WORTH",
+    "BUDGET_CONSCIOUS",
+    "FREQUENT_TRANSACTOR",
+    "DISCRETIONARY_SPENDER",
+    "INACTIVE_SAVER",
+    "UNSEGMENTED",
+]
+
+
+class SegmentShare(BaseModel):
+    """One segment's size and the average RFM features the weekly job stored for it."""
+
+    segment: BehaviourSegment
+    customers: int
+    share_pct: float = Field(description="Share of all customers, percent, one decimal")
+    avg_recency_days: float | None = Field(description="Days since last transaction (job input)")
+    avg_monthly_transactions: float | None
+    avg_monthly_spend_minor: int | None
+    avg_savings_ratio: float | None
+    avg_discretionary_ratio: float | None
+
+
+class SegmentDistribution(BaseModel):
+    total_customers: int
+    last_segmented_at: datetime | None = Field(description="Latest weekly segmentation write")
+    items: list[SegmentShare]
+
+
+class TypeSpend(BaseModel):
+    transaction_type: str
+    spend_minor: int
+    transactions: int
+
+
+class SegmentSpend(BaseModel):
+    segment: BehaviourSegment
+    customers: int
+    spenders: int = Field(description="Customers with at least one spend entry in the period")
+    spend_minor: int
+    transactions: int
+    avg_spend_per_spender_minor: int = Field(description="spend_minor // spenders (floor)")
+    by_type: list[TypeSpend]
+
+
+class ProductHolding(BaseModel):
+    product: str
+    holders: int
+    share_pct: float = Field(description="holders / customers in the segment, percent")
+
+
+class SegmentAffinity(BaseModel):
+    segment: BehaviourSegment
+    customers: int
+    holdings: list[ProductHolding]
+
+
+class ProductClicks(BaseModel):
+    product_id: UUID
+    title: str
+    product_type: str
+    clicks: int = Field(description="product_clicked events in the period")
+    customers: int = Field(description="Distinct customers who clicked")
+
+
+class AffinityPanel(BaseModel):
+    products: list[str]
+    segments: list[SegmentAffinity]
+    recommendation_clicks: list[ProductClicks]
+
+
+class EventTypeCount(BaseModel):
+    event_type: str
+    events: int
+
+
+class SegmentEngagement(BaseModel):
+    segment: BehaviourSegment
+    customers: int
+    active_customers: int
+    active_share_pct: float
+
+
+class DailyEngagement(BaseModel):
+    day: date_type
+    active_customers: int
+    events: int
+
+
+class EngagementPanel(BaseModel):
+    events: int
+    sessions: int = Field(description="Distinct (customer, session id) pairs in the period")
+    active_customers: int = Field(description="Customers with at least one event in the period")
+    customers: int = Field(description="Customers in scope (all, or the filtered segment)")
+    active_share_pct: float
+    events_per_session: float
+    avg_session_seconds: int = Field(
+        description="Mean of last minus first event time per session (one-event sessions are 0)"
+    )
+    by_event_type: list[EventTypeCount]
+    by_segment: list[SegmentEngagement]
+    daily: list[DailyEngagement] = Field(description="Days (UTC) with at least one event")
+
+
+class BehaviourAnalyticsResponse(BaseModel):
+    """TASK-101: segment mix, spending, product affinity and engagement; aggregates only."""
+
+    generated_at: datetime
+    period_days: int
+    period_start: datetime
+    period_end: datetime
+    segment: BehaviourSegment | None = Field(description="Segment filter, or null for all")
+    currency: str
+    segments: SegmentDistribution
+    spending: list[SegmentSpend]
+    affinity: AffinityPanel
+    engagement: EngagementPanel
