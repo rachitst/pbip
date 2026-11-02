@@ -10,13 +10,13 @@ from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.notifications import service as notifications
 from pbip_api.modules.notifications.models import Notification, OutboxEvent
 from pbip_api.modules.notifications.service import relay_outbox
-from pbip_test_support import PASSWORD, Actor, age_payee
+from pbip_test_support import PASSWORD, Actor, age_payee, generated_password
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
 pytestmark = pytest.mark.integration
 
-NEW_PASSWORD = f"{uuid.uuid4()}Aa1!"
+NEW_PASSWORD = generated_password()
 
 
 def _relay(db: Session) -> None:
