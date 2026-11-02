@@ -12,6 +12,7 @@ import { errorMessage } from "../lib/errors";
 import { accountTypeLabel, formatDate } from "../lib/format";
 import { formatMinor } from "../lib/money";
 import type { Tone } from "../lib/status";
+import { trackLoanCalculatorUsed } from "../telemetry/tracker";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -335,6 +336,14 @@ function Calculator({
     [currentId, amountMinor, tenureMonths],
   );
   const settled = useDebounced(terms, DEBOUNCE_MS);
+  // TASK-112: the calculator counts as used once the customer has changed the starting terms and
+  // the change has settled (the debounce), so dragging a slider is one event, not dozens.
+  const [initialTerms] = useState(terms);
+  useEffect(() => {
+    if (sameTerms(settled, initialTerms)) return;
+    const loanType = products.find((p) => p.id === settled.productId)?.loan_type;
+    if (loanType !== undefined) trackLoanCalculatorUsed(loanType);
+  }, [settled, initialTerms, products]);
   const eligibility = useQuery({
     queryKey: ["loan-eligibility", settled],
     queryFn: () =>
