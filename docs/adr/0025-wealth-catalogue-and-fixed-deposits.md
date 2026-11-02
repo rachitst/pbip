@@ -137,7 +137,7 @@ open deposits + interest accrued to today (section 2); funds = 0, because PBIP h
   like deposits and loans already are).
 * A matured deposit waits for the customer; the page shows it as "Matured, ready to withdraw".
 * Account-takeover risk: a stolen session can book or close the victim's deposits, but money only moves between
-  the victim's own account and the bank; see threat T44.
+  the victim's own account and the bank; see threat T45.
 * Rates are simulated; the UI says "indicative, simulated rates".
 
 ## Scope of acceptance
