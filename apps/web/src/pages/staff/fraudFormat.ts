@@ -1,4 +1,5 @@
 import type { UserOut } from "../../api/client";
+import { formatDuration } from "../../lib/format";
 import type { Tone } from "../../lib/status";
 
 /** The fraud endpoints admit FRAUD_ANALYST and ADMIN (with an MFA-verified session). */
@@ -48,8 +49,15 @@ const FEATURE_WORDS: Record<string, string> = {
 };
 
 /** "Model: amount is 9.0x the customer's 30-day average" -> "Amount is 9.0x ..." */
+/** Rule messages count raw minutes ("added 1175 minutes ago"); say it the way a person would. */
+function humanMinutes(text: string): string {
+  return text.replace(/\b(\d+) minutes? ago\b/g, (_match, minutes: string) => {
+    return `${formatDuration(Number(minutes) * 60)} ago`;
+  });
+}
+
 export function plainReasonText(message: string): string {
-  let text = message.replace(/^(Model|Unusual):\s*/, "");
+  let text = humanMinutes(message.replace(/^(Model|Unusual):\s*/, ""));
   for (const [name, words] of Object.entries(FEATURE_WORDS)) {
     if (text.startsWith(name)) text = words + text.slice(name.length);
   }
