@@ -4,7 +4,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pyotp
 from fastapi import FastAPI
@@ -16,6 +16,16 @@ from pbip_api.main import create_app
 from sqlalchemy import Engine, text
 
 PASSWORD = "Correct-Horse-9!"
+
+
+def generated_password() -> str:
+    """A throwaway password that always passes the policy.
+
+    Random hex is split into groups of four because a raw uuid can hold a 5-character run such as
+    ``23456``, which the keyboard-sequence rule rejects (about 1 in 4,000; it failed CI on PR #344).
+    """
+    hex_digits = uuid4().hex
+    return "-".join(hex_digits[i : i + 4] for i in range(0, 32, 4)) + "-Aa1!"
 
 
 class FakeConnection:

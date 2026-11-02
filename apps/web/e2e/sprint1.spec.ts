@@ -1,11 +1,12 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
+import { newPassword } from "./support";
 
 // Sprint 1 customer journey against the full stack (nginx -> API -> PostgreSQL/Redis).
 // Each run registers a fresh customer, so the test needs no seed data and leaves others alone.
 // Random per run for a throwaway test user (never a real credential); the suffix satisfies the
 // letters + digits/symbols rule.
-const PASSWORD = `${crypto.randomUUID()}Aa1!`;
+const PASSWORD = newPassword();
 const NEW_PASSWORD = `${PASSWORD}-Rotated`;
 
 async function signIn(page: Page, email: string, password: string) {
