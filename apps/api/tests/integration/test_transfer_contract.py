@@ -242,6 +242,7 @@ def test_creating_a_transfer_audits_scores_counts_and_notifies_exactly(
             "decision": "ALLOW",
             "risk_score": 5,
             "amount_minor": 7_000,
+            "channel": "WEB",  # TASK-015: scheduled runs audit as SCHEDULED, requests as WEB
         }
         row = session.get(Transaction, uuid.UUID(tid))
         assert row is not None and str(row.payee_id) == payee["id"]
