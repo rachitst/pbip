@@ -77,9 +77,10 @@ and is never joined to the operational schema ([ADR-0009](../adr/0009-synthetic-
 | 31 | `clickstream_events` | `events` | 0006 | Web behaviour events, range-partitioned by month |
 | 32 | `assistant_messages` | `assistant` | 0009 | AI assistant conversation history |
 | 33 | `rm_interactions` | `insights` | 0015 | Relationship manager outreach log |
-| 34 | `synthetic.generation_runs` | none (`pbip_datagen`) | 0002 | One seeded generator run |
-| 35 | `synthetic.customers` | none (`pbip_datagen`) | 0002 | Synthetic customers of a run |
-| 36 | `synthetic.transactions` | none (`pbip_datagen`) | 0002 | Synthetic transactions of a run (ML training data) |
+| 34 | `rm_assignments` | `insights` | 0021 | Which RM looks after a customer, with history (ADR-0032) |
+| 35 | `synthetic.generation_runs` | none (`pbip_datagen`) | 0002 | One seeded generator run |
+| 36 | `synthetic.customers` | none (`pbip_datagen`) | 0002 | Synthetic customers of a run |
+| 37 | `synthetic.transactions` | none (`pbip_datagen`) | 0002 | Synthetic transactions of a run (ML training data) |
 
 ---
 
@@ -451,6 +452,18 @@ CHECKs: `role IN ('user','assistant')`, `char_length(content) <= 2000`, `tool_na
 `outcome IN ('INTERESTED','NOT_INTERESTED','FOLLOW_UP','NO_ANSWER','INFORMATION_SENT','ACCOUNT_REVIEW')`,
 `char_length(note) BETWEEN 1 AND 1000`. Indexes `(customer_id, created_at)`, `(staff_user_id)`.
 
+**`rm_assignments`** (0021, `api/modules/insights/models.py`,
+[ADR-0032](../adr/0032-rm-customer-assignment.md)). One row per assignment period; reassigning or unassigning
+closes the active row (`unassigned_at`, `unassigned_by_user_id`) and never deletes it. FKs `customer_id ->
+customers` `CASCADE`; `rm_user_id`, `assigned_by_user_id`, `unassigned_by_user_id -> users` `RESTRICT`. CHECKs:
+`unassigned_at IS NULL OR unassigned_at >= assigned_at`, `(unassigned_at IS NULL) = (unassigned_by_user_id IS
+NULL)`. Unique partial index `uq_rm_assignments_active_customer_id` on `(customer_id) WHERE unassigned_at IS NULL`
+(one active RM per customer); indexes `(customer_id, assigned_at)`, `(rm_user_id)`, `(assigned_by_user_id)`,
+`(unassigned_by_user_id)`. Writers: `insights/service.assign_rm` and `unassign_rm` only (ADMIN with MFA), under
+the advisory lock `pg_advisory_xact_lock(hashtext('rm_assignments'), hashtext(customer_id))`, each writing
+`RM_ASSIGNED`/`RM_UNASSIGNED` to the audit chain in the same transaction. Read by `insights/policy.py` to scope
+an RM to their customers.
+
 ### 3.12 Synthetic ML dataset (`synthetic` schema, migration 0002, ADR-0009)
 
 | Table | Keys and FKs | CHECKs (as written in 0002) | Triggers |
@@ -501,6 +514,7 @@ fire on `TRUNCATE`; no `public` table has a TRUNCATE guard.
 | 0018 | `20261102_0018_wealth_catalogue_and_fixed_deposits.py` | `wealth_products` (seeded), `fixed_deposits`, `SYS-FIXED-DEPOSITS`, deposit transaction types (ADR-0025). Its downgrade fails on purpose if deposit transactions exist |
 | 0019 | `20261102_0019_assistant_unusual_expenses_tool.py` | Widens the `assistant_messages.tool_name` CHECK for `get_unusual_expenses` (TASK-110); no new table |
 | 0020 | `20261102_0020_insurance_catalogue.py` | `insurance_products` (seeded, ADR-0028); the downgrade drops it (nothing references it) |
+| 0021 | `20261103_0021_rm_assignments.py` | `rm_assignments` (ADR-0032); downgrade drops the table and its assignment history (the changes stay in the audit chain) |
 
 Every migration has a downgrade; CI runs up, down, up and `alembic check`. One head is enforced by
 `tests/unit/test_migration_heads.py`.
