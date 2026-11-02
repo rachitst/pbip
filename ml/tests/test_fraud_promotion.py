@@ -38,7 +38,9 @@ from pbip_ml.tracking import (
 
 pytestmark = [pytest.mark.unit, pytest.mark.timeout(240)]
 
-GATE = p.MetricsGate(min_pr_auc=0.6, max_latency_p95_ms=1_000.0)  # small export: 0.74 vs 0.33
+# Small export: 0.74 vs 0.33. Latency is compared with the champion only where a test asks for
+# it (wall-clock timing of 30 calls on a busy CI runner is too noisy for a 1.5x ratio).
+GATE = p.MetricsGate(min_pr_auc=0.6, max_latency_p95_ms=1_000.0, max_latency_ratio=1_000.0)
 CALLS = 30  # latency samples per measurement (400 in the real CLI)
 
 
@@ -126,13 +128,19 @@ def _measured(pr_auc: float, latency: float = 10.0, holdout: float | None = None
         (_measured(0.79), None, ("test period",)),
         (_measured(0.86, holdout=0.70), None, ("held-out",)),
         (_measured(0.86, latency=51.0), None, ("latency",)),
-        (_measured(0.86), 0.87, ("champion",)),
-        (_measured(0.87), 0.87, ()),  # equal to the champion is not a regression
-        (_measured(0.5, latency=99.0), 0.9, ("test period", "latency", "champion")),
+        (_measured(0.86), _measured(0.87), ("champion's 0.8700",)),
+        (_measured(0.87), _measured(0.87), ()),  # equal to the champion is not a regression
+        (_measured(0.87, latency=15.0), _measured(0.87), ()),  # 1.5x the champion's p95: allowed
+        (_measured(0.87, latency=15.1), _measured(0.87), ("1.5 x the champion's 10.00 ms",)),
+        (
+            _measured(0.5, latency=99.0),
+            _measured(0.9),
+            ("test period", "> gate 50.00 ms", "champion's 0.9000", "champion's 10.00 ms"),
+        ),
     ],
 )
 def test_gate_lists_every_failed_condition(
-    measured: p.Measured, champion: float | None, expected: tuple[str, ...]
+    measured: p.Measured, champion: p.Measured | None, expected: tuple[str, ...]
 ) -> None:
     reasons = p.gate_reasons(measured, champion, p.MetricsGate())
     assert len(reasons) == len(expected)
@@ -174,7 +182,7 @@ def test_challenger_worse_than_the_champion_is_rejected_and_champion_stays(
     registry: Registry,
 ) -> None:
     assert _promote(registry, registry.good_run, "promo-cc").promoted
-    lenient = p.MetricsGate(min_pr_auc=0.0, max_latency_p95_ms=1_000.0)  # only the champion test
+    lenient = p.MetricsGate(0.0, 1_000.0, max_latency_ratio=1_000.0)  # only the PR-AUC comparison
     result = _promote(registry, registry.bad_run, "promo-cc", lenient)
     assert not result.promoted and result.version == "2"
     assert result.gate.champion_version == "1"
@@ -210,6 +218,23 @@ def test_gate_pr_auc_is_the_evaluation_reports_on_the_same_outgoing_rows(
     assert measured.rows_test == report["test"]["hybrid"]["review"]["rows"]
     test = t.time_split(load_export(registry.data)).test
     assert measured.rows_test == len(test) and set(test["is_debit"]) == {1}  # outgoing only
+
+
+def test_challenger_is_timed_against_the_champion_and_both_are_recorded(
+    registry: Registry,
+) -> None:
+    assert _promote(registry, registry.good_run, "promo-lat").promoted
+    # Ratio 0: any measured challenger p95 exceeds 0 x the champion's, so only this rule fails.
+    no_slower = p.MetricsGate(min_pr_auc=0.0, max_latency_p95_ms=1_000.0, max_latency_ratio=0.0)
+    result = _promote(registry, registry.good_run, "promo-lat", no_slower)
+    assert not result.promoted and result.gate.champion_version == "1"
+    champion_p95 = result.gate.champion_latency_p95_ms
+    assert champion_p95 is not None and champion_p95 > 0  # the champion was timed too
+    assert result.gate.champion_pr_auc_test == result.gate.candidate.pr_auc_test  # same model
+    assert len(result.gate.reasons) == 1 and "x the champion's" in result.gate.reasons[0]
+    assert _aliases(registry, "promo-lat") == {"champion": "1", "challenger": "2"}
+    tags = _client(registry).get_model_version("promo-lat", "2").tags
+    assert json.loads(tags["champion_measured"])["latency_p95_ms"] == champion_p95
 
 
 def test_latency_gate_uses_the_measured_latency(registry: Registry) -> None:

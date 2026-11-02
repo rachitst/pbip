@@ -16,7 +16,9 @@ Two commands (``python -m pbip_ml.fraud.promotion``):
     - served-hybrid PR-AUC >= ``min_pr_auc`` on the test period (and on the held-out seed if given);
     - single-request p95 latency of ``score_transfer`` <= ``max_latency_p95_ms`` (default 50 ms,
       the API's ``FRAUD_MODEL_BUDGET_MS``: a slower model would mostly be cut off by the budget);
-    - PR-AUC not lower than the current champion's by more than ``max_pr_auc_drop``.
+    - PR-AUC not lower than the current champion's by more than ``max_pr_auc_drop``;
+    - p95 latency not above ``max_latency_ratio`` times the champion's, both timed in the same
+      process one after the other (wall-clock timing is noisy, hence a ratio with headroom).
 
     Every version keeps its measured numbers and the verdict as tags, so the registry is the audit
     trail of what was promoted and why.
@@ -78,6 +80,7 @@ class MetricsGate:
     min_pr_auc: float = 0.80  # the served hybrid: 0.860 test / 0.858 held-out (report v1.1)
     max_latency_p95_ms: float = 50.0  # = FRAUD_MODEL_BUDGET_MS default (ADR-0019)
     max_pr_auc_drop: float = 0.0  # vs the champion, measured on the same rows
+    max_latency_ratio: float = 1.5  # vs the champion's p95, timed in the same process
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +102,7 @@ class GateResult:
     candidate: Measured
     champion_version: str | None = None
     champion_pr_auc_test: float | None = None
+    champion_latency_p95_ms: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,7 +207,7 @@ def measure(
 
 
 def gate_reasons(
-    candidate: Measured, champion_pr_auc: float | None, gate: MetricsGate
+    candidate: Measured, champion: Measured | None, gate: MetricsGate
 ) -> tuple[str, ...]:
     """Every failed condition, in words an operator can act on. Empty means promote."""
     reasons = []
@@ -218,13 +222,17 @@ def gate_reasons(
         reasons.append(
             f"p95 latency {candidate.latency_p95_ms:.2f} ms > gate {gate.max_latency_p95_ms:.2f} ms"
         )
-    if (
-        champion_pr_auc is not None
-        and candidate.pr_auc_test < champion_pr_auc - gate.max_pr_auc_drop
-    ):
+    if champion is None:
+        return tuple(reasons)
+    if candidate.pr_auc_test < champion.pr_auc_test - gate.max_pr_auc_drop:
         reasons.append(
-            f"PR-AUC {candidate.pr_auc_test:.4f} < the champion's {champion_pr_auc:.4f} "
+            f"PR-AUC {candidate.pr_auc_test:.4f} < the champion's {champion.pr_auc_test:.4f} "
             "on the same rows"
+        )
+    if candidate.latency_p95_ms > champion.latency_p95_ms * gate.max_latency_ratio:
+        reasons.append(
+            f"p95 latency {candidate.latency_p95_ms:.2f} ms > {gate.max_latency_ratio:g} x the "
+            f"champion's {champion.latency_p95_ms:.2f} ms"
         )
     return tuple(reasons)
 
@@ -242,16 +250,15 @@ def _check_same_export(report_path: Path, test: pd.DataFrame, run_id: str) -> No
         )
 
 
-def _champion_pr_auc(
-    uri: str, client: MlflowClient, name: str, version: str | None, test: pd.DataFrame, work: Path
-) -> float | None:
+def _champion_scorer(
+    uri: str, client: MlflowClient, name: str, version: str | None, work: Path
+) -> HybridScorer | None:
     if version is None:
         return None
     champion = client.get_model_version(name, version)
     if not champion.run_id:
         raise PromotionError(f"champion version {version} has no run")
-    scorer = fetch_run_artifacts(uri, champion.run_id, work / "champion")
-    return served_metrics(scorer, test).pr_auc
+    return fetch_run_artifacts(uri, champion.run_id, work / "champion")
 
 
 # --------------------------------------------------------------------------- promote
@@ -280,6 +287,13 @@ def _record(
         "measured": json.dumps(measured, sort_keys=True),
         "measured_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "compared_with_champion": result.champion_version or "-",
+        "champion_measured": json.dumps(
+            {
+                "pr_auc_test": result.champion_pr_auc_test,
+                "latency_p95_ms": result.champion_latency_p95_ms,
+            },
+            sort_keys=True,
+        ),
     }
     for key, value in tags.items():
         client.set_model_version_tag(name, version, key, value)
@@ -306,10 +320,18 @@ def promote(
         _check_same_export(work / "candidate" / REPORT, test, run_id)
         manifest_sha = _sha256(work / "candidate" / MANIFEST)
         champion_version = _aliases(client, name).get(CHAMPION)
-        champion_pr_auc = _champion_pr_auc(uri, client, name, champion_version, test, work)
+        champion_scorer = _champion_scorer(uri, client, name, champion_version, work)
         candidate = measure(scorer, test, held, latency_calls)
-    reasons = gate_reasons(candidate, champion_pr_auc, gate)
-    result = GateResult(not reasons, reasons, candidate, champion_version, champion_pr_auc)
+        champion = measure(champion_scorer, test, None, latency_calls) if champion_scorer else None
+    reasons = gate_reasons(candidate, champion, gate)
+    result = GateResult(
+        not reasons,
+        reasons,
+        candidate,
+        champion_version,
+        champion.pr_auc_test if champion else None,
+        champion.latency_p95_ms if champion else None,
+    )
     version = str(_register(client, name, run_id, manifest_sha).version)
     _record(client, name, version, gate, result)
     if result.passed:
@@ -411,6 +433,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--min-pr-auc", type=float, default=defaults.min_pr_auc)
     p.add_argument("--max-latency-ms", type=float, default=defaults.max_latency_p95_ms)
     p.add_argument("--max-pr-auc-drop", type=float, default=defaults.max_pr_auc_drop)
+    p.add_argument("--max-latency-ratio", type=float, default=defaults.max_latency_ratio)
     p.add_argument("--latency-calls", type=int, default=400)
     e = sub.add_parser(
         "export-champion", parents=[common], help="copy the champion into the served model dir"
@@ -425,7 +448,9 @@ def _run(args: argparse.Namespace, uri: str) -> int:
         sys.stdout.write(json.dumps(exported.as_dict(), indent=2) + "\n")
         return 0
     run_id = args.run_id or latest_training_run(connect(uri))
-    gate = MetricsGate(args.min_pr_auc, args.max_latency_ms, args.max_pr_auc_drop)
+    gate = MetricsGate(
+        args.min_pr_auc, args.max_latency_ms, args.max_pr_auc_drop, args.max_latency_ratio
+    )
     result = promote(
         uri, run_id, args.data, args.holdout, args.model_name, gate, args.latency_calls
     )
