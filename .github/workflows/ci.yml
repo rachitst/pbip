@@ -193,11 +193,23 @@ jobs:
       - run: pip install uv==${{ env.UV_VERSION }} cryptography
       - run: python scripts/init_env.py
       - run: python scripts/dev_certs.py
-      - run: docker compose up -d --build
+      # Every Playwright browser signs in from ONE client IP: the overlay raises the per-IP sign-in and
+      # registration limits for this stack only (infra/e2e/compose.e2e.yml, like infra/k6 for load tests).
+      - name: Start the stack (E2E overlay raises the per-IP sign-in and registration limits)
+        run: docker compose -f docker-compose.yml -f infra/e2e/compose.e2e.yml up -d --build
       - name: Wait for the stack (HTTPS, chain verified against the dev CA)
         run: curl --fail --silent --retry 60 --retry-delay 2 --retry-all-errors --cacert infra/certs/ca.crt https://localhost:8443/api/health/ready
       - name: TLS is enforced (HTTP redirects, HSTS, PostgreSQL rejects plain TCP)
         run: bash scripts/verify_tls.sh
+      # The fraud-review journey signs in as the seeded analyst (MFA-enrolled). The password is generated
+      # for this run, masked in the log and handed to Playwright only through the job environment.
+      - name: Seed demo customers and MFA-enrolled staff with a generated password
+        run: |
+          PBIP_DEMO_PASSWORD="$(python -c 'import secrets; print(secrets.token_urlsafe(24) + "Aa1!")')"
+          echo "::add-mask::$PBIP_DEMO_PASSWORD"
+          echo "PBIP_DEMO_PASSWORD=$PBIP_DEMO_PASSWORD" >> "$GITHUB_ENV"
+          export PBIP_DEMO_PASSWORD
+          docker compose exec -T -e PBIP_DEMO_PASSWORD api python - < scripts/seed_dev.py
       - run: npm ci
         working-directory: apps/web
       - run: npx playwright install --with-deps chromium
