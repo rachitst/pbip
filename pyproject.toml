@@ -33,6 +33,7 @@ dev = [
     "matplotlib>=3.11.2",
     "pyyaml>=6.0",
     "schemathesis>=4.32.7",
+    "mutmut>=3.8.1",
 ]
 
 [tool.ruff]

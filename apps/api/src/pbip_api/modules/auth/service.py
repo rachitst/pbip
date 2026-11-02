@@ -351,6 +351,7 @@ class AuthService:
             ttl=ttl,
             roles=user.role_names,
             amr=amr,
+            version=user.token_version,
         )
         raw = new_opaque_token()
         expires_at = self._now() + timedelta(days=self.settings.refresh_ttl_days)
@@ -376,12 +377,14 @@ class AuthService:
             .values(revoked_at=self._now())
         )
 
-    def _revoke_all_user_sessions(self, user_id: UUID) -> None:
+    def _revoke_all_user_sessions(self, user: User) -> None:
+        """End every session: refresh tokens revoked, access tokens rejected (ADR-0021)."""
         self.session.execute(
             update(RefreshToken)
-            .where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
+            .where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
             .values(revoked_at=self._now())
         )
+        user.token_version += 1
 
     def change_password(
         self,
@@ -417,7 +420,7 @@ class AuthService:
         user.password_changed_at = self._now()
         self._reset_failures(user)
 
-        self._revoke_all_user_sessions(user.id)
+        self._revoke_all_user_sessions(user)
         self._event(SecurityEventType.PASSWORD_CHANGED, user.id, meta)
         self.audit.record(
             user.id,
@@ -671,3 +674,16 @@ def recent_lockouts(session: Session, user_id: UUID, since: datetime) -> int:
             )
         ).scalar_one()
     )
+
+
+def access_token_is_current(session: Session, user_id: UUID, version: int) -> bool:
+    """Per-request revocation check for access tokens (ADR-0021).
+
+    A signed, unexpired token is accepted only while its user is ACTIVE and its ``ver`` claim equals
+    ``users.token_version``: disabling the account or changing the password takes effect on the next
+    request instead of after the token's TTL. One primary-key lookup on the request's own session.
+    """
+    row = session.execute(
+        select(User.status, User.token_version).where(User.id == user_id)
+    ).one_or_none()
+    return row is not None and row.status == UserStatus.ACTIVE and row.token_version == version

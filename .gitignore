@@ -57,3 +57,12 @@ docker-compose.override.yml
 
 # GeoIP database (DB-IP Lite, CC BY 4.0) is downloaded by scripts/fetch_geoip.py, not committed
 data/geoip/
+
+# Local dev TLS material (scripts/dev_certs.py)
+infra/certs/
+
+# mutmut work tree (TASK-086, docs/testing/mutation-report.md)
+apps/api/mutants/
+
+# k6 summaries and invariants from local load runs
+perf-results/

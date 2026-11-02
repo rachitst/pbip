@@ -3,10 +3,13 @@
 #   bash deploy.sh deploy ghcr.io/<owner>/pbip v0.1.0   (health-gated; see deploy.sh and the runbook)
 name: pbip-prod
 
+x-db-ca: &db-ca ./certs/db/server.crt:/etc/pbip-ca/ca.crt:ro
+
 x-api-env: &api-env
   APP_ENV: ${APP_ENV:-staging}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
-  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+  # TLS to PostgreSQL; the db certificate is self-signed by deploy.sh and pinned as the root here.
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=verify-full&sslrootcert=/etc/pbip-ca/ca.crt
   REDIS_URL: redis://redis:6379/0
   JWT_SECRET: ${JWT_SECRET}
   FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY}
@@ -22,7 +25,13 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-    volumes: [pgdata:/var/lib/postgresql/data]
+    # TLS required for every TCP client; deploy.sh creates ./certs/db and ships the entrypoint (runbook 1.4).
+    entrypoint: ["/usr/local/bin/pbip-tls-entrypoint.sh"]
+    command: ["postgres"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./tls-entrypoint.sh:/usr/local/bin/pbip-tls-entrypoint.sh:ro
+      - ./certs/db:/etc/pbip-db-certs:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -38,6 +47,7 @@ services:
     image: ${IMAGE_PREFIX}/api:${IMAGE_TAG}
     environment: *api-env
     command: ["alembic", "-c", "/app/apps/api/alembic.ini", "upgrade", "head"]
+    volumes: [*db-ca]
     depends_on: { db: { condition: service_healthy } }
     restart: "no"
   api:
@@ -45,6 +55,7 @@ services:
     environment: *api-env
     volumes:
       - ./geoip:/data/geoip:ro
+      - *db-ca
     depends_on:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
@@ -53,12 +64,14 @@ services:
     image: ${IMAGE_PREFIX}/api:${IMAGE_TAG}
     environment: *api-env
     command: ["celery", "-A", "pbip_api.worker.celery_app", "worker", "--loglevel=INFO"]
+    volumes: [*db-ca]
     depends_on: { redis: { condition: service_healthy } }
     restart: unless-stopped
   beat:
     image: ${IMAGE_PREFIX}/api:${IMAGE_TAG}
     environment: *api-env
     command: ["celery", "-A", "pbip_api.worker.celery_app", "beat", "--loglevel=INFO", "--schedule=/tmp/celerybeat-schedule"]
+    volumes: [*db-ca]
     depends_on: { redis: { condition: service_healthy } }
     restart: unless-stopped
   web:
@@ -66,7 +79,14 @@ services:
     # nginx resolves `api` at start-up, so it is (re)started only once a healthy API exists.
     depends_on:
       api: { condition: service_healthy }
-    ports: ["${PUBLIC_PORT:-80}:8080"]
+    # TLS terminates here (certbot certificate in ./certs/web, runbook 1.4); HTTP only redirects and
+    # answers ACME HTTP-01 challenges from ./acme (certbot --webroot).
+    volumes:
+      - ./certs/web:/etc/nginx/certs:ro
+      - ./acme:/var/www/acme:ro
+    ports: ["${PUBLIC_PORT:-80}:8080", "${PUBLIC_HTTPS_PORT:-443}:8443"]
+    environment:
+      PUBLIC_HTTPS_PORT: ${PUBLIC_HTTPS_PORT:-443}
     restart: unless-stopped
 
 volumes:

@@ -22,8 +22,8 @@ from pbip_api.modules.ledger.models import (
     TransactionStatus,
     TransactionType,
 )
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import Engine, func, select, update
+from sqlalchemy.orm import Session, sessionmaker
 
 pytestmark = pytest.mark.integration
 
@@ -191,7 +191,20 @@ def test_a_hold_can_be_resolved_only_once(db: Session) -> None:
 
     db.refresh(hold)
     assert hold.status == HoldStatus.RELEASED
+    assert hold.resolved_at is not None  # TASK-086: when the reservation ended is recorded
     assert _balances(db, a, b) == [(1_000, 0), (0, 0)]  # released funds were not captured too
+
+
+def test_capturing_a_hold_records_when_it_was_resolved(db: Session) -> None:
+    """TASK-086 (surviving mutant: resolved_at=None on capture)."""
+    a, b = make_account(db, 1_000), make_account(db)
+    txn = _header(db, a, b, 250)
+    hold = ledger.place_hold(db, txn)
+    ledger.capture_hold_and_post(db, txn)
+    db.commit()
+    db.refresh(hold)
+    assert hold.status == HoldStatus.CAPTURED and hold.resolved_at is not None
+    assert _balances(db, a, b) == [(750, 0), (250, 0)]
 
 
 def test_resolving_a_transaction_that_never_had_a_hold_is_a_conflict(db: Session) -> None:
@@ -228,3 +241,183 @@ def test_reversal_guards(db: Session) -> None:
     db.rollback()
     assert _balances(db, a, b) == [(1_000, 0), (0, 0)]
     assert ledger.entry_balance(db, a.id) == 1_000 and ledger.entry_balance(db, b.id) == 0
+
+
+@pytest.mark.parametrize("missing_leg", ["debit_account_id", "credit_account_id"])
+def test_reversal_refuses_a_transfer_missing_either_leg(db: Session, missing_leg: str) -> None:
+    """TASK-086 (surviving mutant: `or` -> `and`): a header that lost ONE leg (corrupted data) must not
+    be reversed; reversing it would post a one-sided compensating entry. No DB constraint prevents
+    the state, so this guard is the only defence."""
+    a, b = make_account(db, 1_000), make_account(db)
+    original = transfer(db, a, b, 300)
+    db.commit()
+    before = db.execute(select(func.count()).select_from(Transaction)).scalar_one()
+    # Corrupt only the transaction header; balances and entries are never written outside the ledger.
+    db.execute(update(Transaction).where(Transaction.id == original.id).values({missing_leg: None}))
+    db.commit()
+    with pytest.raises(
+        ledger.LedgerInvariantError, match=r"^transaction has no debit/credit instruction$"
+    ):
+        ledger.reverse_transaction(db, original.id, None, "corrupted header")
+    db.rollback()
+    assert db.execute(select(func.count()).select_from(Transaction)).scalar_one() == before
+    assert _balances(db, a, b) == [(700, 0), (300, 0)]
+
+
+# --------------------------------------------------------------- TASK-086 mutation gaps
+
+
+def test_an_account_with_no_entries_has_a_zero_entry_balance(db: Session) -> None:
+    empty = make_account(db)
+    assert ledger.entry_balance(db, empty.id) == 0
+
+
+@pytest.mark.parametrize("missing_leg", ["debit_account_id", "credit_account_id"])
+def test_capturing_a_hold_refuses_a_header_missing_either_leg(
+    db: Session, missing_leg: str
+) -> None:
+    """Capture would post a one-sided transfer; the guard refuses and nothing moves."""
+    a, b = make_account(db, 1_000), make_account(db)
+    txn = _header(db, a, b, 200)
+    ledger.place_hold(db, txn)
+    db.commit()
+    db.execute(update(Transaction).where(Transaction.id == txn.id).values({missing_leg: None}))
+    db.commit()
+    db.refresh(txn)
+    with pytest.raises(
+        ledger.LedgerInvariantError, match=r"^transaction has no debit/credit instruction$"
+    ):
+        ledger.capture_hold_and_post(db, txn)
+    db.rollback()
+    assert _balances(db, a, b) == [(1_000, 200), (0, 0)]  # still only held, never posted
+
+
+def test_ledger_errors_carry_their_exact_messages(db: Session) -> None:
+    a, b = make_account(db, 1_000), make_account(db)
+    with pytest.raises(NotFoundError, match=r"^transaction not found$"):
+        ledger.reverse_transaction(db, uuid.uuid4(), None, "missing")
+    db.rollback()
+    txn = _header(db, a, b, 100)
+    with pytest.raises(ConflictError, match=r"^no active hold for this transaction$"):
+        ledger.release_hold(db, txn)
+    db.rollback()
+    deposit = db.execute(
+        select(Transaction).where(Transaction.type == TransactionType.DEPOSIT).limit(1)
+    ).scalar_one()
+    with pytest.raises(ConflictError, match=r"^only posted transfers can be reversed$"):
+        ledger.reverse_transaction(db, deposit.id, None, "not a transfer")
+    db.rollback()
+
+
+def test_a_reversal_names_who_made_it_and_keeps_the_reference_within_140(db: Session) -> None:
+    a, b = make_account(db, 1_000), make_account(db)
+    actor = db.execute(select(User.id).limit(1)).scalar_one()
+    original = transfer(db, a, b, 100)
+    db.commit()
+    reversal = ledger.reverse_transaction(db, original.id, actor, "x" * 300)
+    db.commit()
+    assert reversal.initiated_by_user_id == actor
+    assert reversal.reference == ("Reversal: " + "x" * 300)[:140] and len(reversal.reference) == 140
+
+
+def test_the_ledger_posts_a_single_minor_unit(db: Session) -> None:
+    """The smallest legal amount is 1 paisa; the positivity guard must not reject it."""
+    a, b = make_account(db, 10), make_account(db)
+    transfer(db, a, b, 1)
+    db.commit()
+    assert _balances(db, a, b) == [(9, 0), (1, 0)]
+
+
+def test_a_deposit_is_labelled_and_channelled_by_default(db: Session) -> None:
+    a = make_account(db)
+    deposit = ledger.deposit(db, a.id, 5)
+    db.commit()
+    assert (deposit.reference, deposit.channel) == ("Deposit", "WEB")
+
+
+def test_posting_guards_carry_their_exact_messages(db: Session) -> None:
+    a, b = make_account(db, 1_000), make_account(db)
+    debit, credit = EntryDirection.DEBIT, EntryDirection.CREDIT
+    with pytest.raises(NotFoundError, match=r"^account not found$"):
+        ledger.deposit(db, uuid.uuid4(), 100)
+    db.rollback()
+    txn = _header(db, a, b, 100)
+    with pytest.raises(
+        ledger.LedgerInvariantError, match=r"^a transaction needs at least one leg$"
+    ):
+        ledger.post_transaction(db, txn, [])
+    with pytest.raises(ledger.LedgerInvariantError, match=r"^leg amounts must be positive$"):
+        ledger.post_transaction(db, txn, [ledger.Leg(a.id, debit, 0), ledger.Leg(b.id, credit, 0)])
+    with pytest.raises(
+        ledger.LedgerInvariantError, match=r"^unbalanced legs: debits=100 credits=99$"
+    ):
+        ledger.post_transaction(
+            db, txn, [ledger.Leg(a.id, debit, 100), ledger.Leg(b.id, credit, 99)]
+        )
+    with pytest.raises(ledger.InsufficientFundsError, match=r"^insufficient funds$"):
+        ledger.post_transaction(
+            db, txn, [ledger.Leg(a.id, debit, 5_000), ledger.Leg(b.id, credit, 5_000)]
+        )
+    db.rollback()
+    foreign = _header(db, a, b, 100, currency="USD")
+    with pytest.raises(UnprocessableError, match=r"^currency mismatch$"):
+        ledger.post_transaction(db, foreign, ledger.transfer_legs(foreign))
+    db.rollback()
+    _freeze(db, b)
+    db.flush()
+    with pytest.raises(ledger.AccountNotActiveError, match=r"^account is not active$"):
+        ledger.deposit(db, b.id, 1)
+    db.rollback()
+
+
+@pytest.mark.parametrize("missing", ["debit", "credit"])
+def test_legs_and_holds_refuse_a_header_without_an_account(db: Session, missing: str) -> None:
+    """Pure guards on an unsaved header: nothing is written, so no rollback is needed."""
+    account_id = uuid.uuid4()
+    header = Transaction(
+        type=TransactionType.TRANSFER,
+        status=TransactionStatus.INITIATED,
+        amount=100,
+        currency="INR",
+        debit_account_id=None if missing == "debit" else account_id,
+        credit_account_id=None if missing == "credit" else account_id,
+    )
+    with pytest.raises(
+        ledger.LedgerInvariantError, match=r"^transaction has no debit/credit instruction$"
+    ):
+        ledger.transfer_legs(header)
+    if missing == "debit":
+        with pytest.raises(
+            ledger.LedgerInvariantError, match=r"^transaction has no debit account$"
+        ):
+            ledger.place_hold(db, header)
+
+
+def test_entry_listing_is_bounded_and_newest_first_by_default(db: Session) -> None:
+    """The page query itself is LIMITed (the caller asks for limit + 1): an unbounded query would
+    read an account's whole history on every page."""
+    a, b = make_account(db, 1_000), make_account(db)
+    for amount in (1, 2, 3):
+        transfer(db, a, b, amount)
+    db.commit()
+    rows = ledger.list_account_entries(db, a.id, 2, None)
+    assert [(entry.amount, txn.amount) for entry, txn in rows] == [(3, 3), (2, 2)]
+
+
+def test_locking_reads_the_committed_balance_not_the_one_already_in_the_session(
+    db: Session, migrated_engine: Engine
+) -> None:
+    """A request loads the source account (ownership check) BEFORE taking the row lock. If another
+    request spends from it in between, the lock must refresh the row: posting against the stale
+    balance would overdraw the account and overwrite the other request's debit (lost update)."""
+    a, b = make_account(db, 1_000), make_account(db)
+    assert db.get_one(Account, a.id).ledger_balance == 1_000  # now cached in this session
+    with sessionmaker(bind=migrated_engine)() as other:
+        transfer(other, other.get_one(Account, a.id), other.get_one(Account, b.id), 600)
+        other.commit()
+    with pytest.raises(ledger.InsufficientFundsError, match=r"^insufficient funds$"):
+        transfer(db, a, b, 600)
+    db.rollback()
+    with sessionmaker(bind=migrated_engine)() as fresh:
+        assert fresh.get_one(Account, a.id).ledger_balance == 400
+        assert fresh.get_one(Account, b.id).ledger_balance == 600

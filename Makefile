@@ -4,7 +4,7 @@
 .DEFAULT_GOAL := help
 .PHONY: help doctor setup env infra-up infra-down up up-all down logs migrate seed \
 	datagen fraud-model promote-model fraud-champion notebooks ml-up mlflow-smoke dev-api dev-worker dev-web lint fmt typecheck imports security openapi \
-	test test-unit test-int test-web test-e2e smoke perf fuzz check clean
+	test test-unit test-int test-web test-e2e smoke perf load fuzz check clean
 
 PYTHON ?= python3
 
@@ -26,7 +26,7 @@ infra-up: ## Start only PostgreSQL + Redis in Docker
 infra-down: ## Stop PostgreSQL + Redis
 	@$(PYTHON) scripts/dev.py infra-down
 
-up: ## Build and start the full PBIP stack (web on :8080)
+up: ## Build and start the full PBIP stack (web on https://localhost:8443)
 	@$(PYTHON) scripts/dev.py up
 
 up-all: ## Full stack + monitoring (Prometheus, Grafana) + MLflow
@@ -109,6 +109,9 @@ test-e2e: ## Playwright end-to-end (needs make up)
 
 smoke: ## Post-deploy smoke test
 	@$(PYTHON) scripts/dev.py smoke
+
+load: ## k6 load suite: 70% reads, 20% transfers, 10% auth with NFR thresholds (seeded stack)
+	@$(PYTHON) scripts/dev.py load
 
 perf: ## k6 baseline on health endpoints (50 VUs, p95 < 50 ms); needs a running API
 	@$(PYTHON) scripts/dev.py perf
