@@ -424,6 +424,13 @@ describe("Wealth (TASK-065)", () => {
     renderPage();
     expect(await screen.findByText(/Could not load the wealth products/)).toBeInTheDocument();
   });
+
+  it("links to the side-by-side product comparison (TASK-098)", async () => {
+    mockApi();
+    renderPage();
+    const link = await screen.findByRole("link", { name: "Compare products side by side" });
+    expect(link).toHaveAttribute("href", "/wealth/compare");
+  });
 });
 
 describe("Wealth booking deep link (TASK-062)", () => {

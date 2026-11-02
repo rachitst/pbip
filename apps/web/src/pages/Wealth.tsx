@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useState } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { api } from "../api/client";
 import type {
@@ -798,6 +798,10 @@ export function Wealth() {
       </section>
       <section aria-labelledby="catalogue-title">
         <h2 id="catalogue-title">Products</h2>
+        <p>
+          <Link to="/wealth/compare">Compare products side by side</Link>, including term life and
+          health insurance.
+        </p>
         <CatalogueSection />
       </section>
     </div>
