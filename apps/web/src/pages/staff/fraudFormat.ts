@@ -48,12 +48,16 @@ const FEATURE_WORDS: Record<string, string> = {
 };
 
 /** "Model: amount is 9.0x the customer's 30-day average" -> "Amount is 9.0x ..." */
-export function plainMessage(reason: FraudReason): string {
-  let text = reason.message.replace(/^(Model|Unusual):\s*/, "");
+export function plainReasonText(message: string): string {
+  let text = message.replace(/^(Model|Unusual):\s*/, "");
   for (const [name, words] of Object.entries(FEATURE_WORDS)) {
     if (text.startsWith(name)) text = words + text.slice(name.length);
   }
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+export function plainMessage(reason: FraudReason): string {
+  return plainReasonText(reason.message);
 }
 
 /** Bar width 0-100 for a reason, relative to the strongest reason of the same source. */

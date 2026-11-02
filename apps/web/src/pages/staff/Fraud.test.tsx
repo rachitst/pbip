@@ -31,6 +31,8 @@ const summary: AlertSummary = {
   currency: "INR",
   transaction_status: "PENDING_REVIEW",
   created_at: "2026-11-01T10:00:00Z",
+  customer_name: "Asha Rao",
+  top_reason: "Model: amount is 9.0x the customer's 30-day average",
 };
 
 const detail: AlertDetail = {
@@ -117,6 +119,15 @@ describe("reason formatting", () => {
 });
 
 describe("FraudQueue", () => {
+  it("names the customer and the main reason, and falls back when either is missing", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      json(200, [{ ...summary, customer_name: null, top_reason: null }]),
+    );
+    renderAt("/staff/fraud", <FraudQueue />);
+    expect(await screen.findByText("Unknown customer")).toBeInTheDocument();
+    expect(screen.getByText("No reason recorded")).toBeInTheDocument();
+  });
+
   it("lists open alerts and switches filters through the API", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -124,9 +135,15 @@ describe("FraudQueue", () => {
         Promise.resolve(json(200, urlOf(input).includes("status=OPEN") ? [summary] : [])),
       );
     renderAt("/staff/fraud", <FraudQueue />);
-    const row = (await screen.findByRole("link", { name: /2026/ })).closest("tr");
+    const row = (await screen.findByText("Asha Rao")).closest("tr");
     expect(row).not.toBeNull();
-    expect(within(row as HTMLElement).getByText("72")).toBeInTheDocument();
+    const cells = within(row as HTMLElement);
+    expect(cells.getByText("72 of 100")).toBeInTheDocument();
+    expect(cells.getByText("Amount is 9.0x the customer's 30-day average")).toBeInTheDocument();
+    expect(cells.getByRole("link", { name: /ago$/ })).toHaveAttribute("href", "/staff/fraud/al-1");
+    expect(
+      screen.getByText("Showing 1 alert, newest first. Risk is out of 100."),
+    ).toBeInTheDocument();
     expect(within(row as HTMLElement).getByText("Held for review")).toBeInTheDocument();
     expect(urlOf(fetchMock.mock.calls[0]?.[0] ?? "")).toContain(
       "/api/v1/fraud/alerts?limit=100&status=OPEN",
@@ -155,7 +172,7 @@ describe("FraudAlert", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(json(200, detail));
     renderAt("/staff/fraud/al-1", <FraudAlert />);
     expect(
-      await screen.findByRole("heading", { name: "Risk 72: Held for review" }),
+      await screen.findByRole("heading", { name: "Risk 72 of 100: Held for review" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Payee was added 3 minutes before the transfer")).toBeInTheDocument();
     expect(screen.getByLabelText(/Payee was added 3 minutes.*\+2\.40 \(SHAP\)/)).toHaveAttribute(
@@ -172,6 +189,10 @@ describe("FraudAlert", () => {
       screen.getByText("Amount compared with the 30-day average is 9.00, usually about 1.00"),
     ).toBeInTheDocument();
     expect(screen.getByText("Asha Rao")).toBeInTheDocument();
+    expect(screen.getByText("Identity verified")).toBeInTheDocument();
+    expect(
+      screen.getByText("Model version hybrid-lgbm-iforest-1, in 21.4 milliseconds"),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Risk score 72 of 100")).toHaveAttribute("value", "72");
   });
 
