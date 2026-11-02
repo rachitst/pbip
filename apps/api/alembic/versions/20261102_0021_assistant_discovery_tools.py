@@ -4,8 +4,8 @@
 read-only tools join the list. Downgrade: the old list cannot hold the new names, so stored
 replies of those tools keep their (redacted) text and lose only the tool name.
 
-Revision ID: 0020
-Revises: 0019
+Revision ID: 0021
+Revises: 0020
 Create Date: 2026-11-02
 """
 
@@ -13,8 +13,8 @@ from collections.abc import Sequence
 
 from alembic import op
 
-revision: str = "0020"
-down_revision: str | None = "0019"
+revision: str = "0021"
+down_revision: str | None = "0020"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

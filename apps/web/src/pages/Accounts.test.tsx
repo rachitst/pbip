@@ -51,6 +51,22 @@ describe("accounts page", () => {
       if (url.endsWith("/auth/refresh")) return Promise.resolve(json(200, { access_token: "t" }));
       if (url.endsWith("/auth/me")) return Promise.resolve(json(200, customerMe));
       if (url.endsWith("/accounts")) return Promise.resolve(json(200, [account]));
+      if (url.endsWith("/accounts/summary")) {
+        return Promise.resolve(
+          json(200, {
+            totals: [
+              {
+                currency: "INR",
+                ledger_balance_minor: 1_000_000,
+                held_minor: 25_000,
+                available_minor: 975_000,
+                account_count: 1,
+                frozen_account_count: 0,
+              },
+            ],
+          }),
+        );
+      }
       if (url.endsWith("/payees")) return Promise.resolve(json(200, [payee]));
       if (url.endsWith("/recommendations")) return Promise.resolve(json(200, noRecommendations));
       if (url.endsWith("/transfers") && init?.method === "POST") {
@@ -89,6 +105,17 @@ describe("accounts page", () => {
     expect(screen.getByLabelText("ledger balance")).toHaveTextContent("Ledger: INR 10,000.00");
     expect(screen.getByLabelText("held funds")).toHaveTextContent("INR 250.00 on hold");
     expect(screen.getByText("INR 250.00 on hold")).toBeInTheDocument();
+  });
+
+  it("puts the server-computed total balance above the account list (TASK-109)", async () => {
+    renderApp();
+    const total = await screen.findByLabelText("total available INR");
+    expect(total).toHaveTextContent("INR 9,750.00");
+    expect(screen.getByLabelText("total ledger INR")).toHaveTextContent("Ledger: INR 10,000.00");
+    const firstAccount = await screen.findByLabelText("available balance");
+    expect(
+      total.compareDocumentPosition(firstAccount) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("sends an exact minor-unit amount with an Idempotency-Key header", async () => {
