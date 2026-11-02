@@ -2,6 +2,8 @@ import type { components, operations } from "./schema";
 
 export type TokenResponse = components["schemas"]["TokenResponse"];
 export type AccountOut = components["schemas"]["AccountOut"];
+export type AccountsSummaryOut = components["schemas"]["AccountsSummaryOut"];
+export type CurrencyTotalOut = components["schemas"]["CurrencyTotalOut"];
 export type PayeeOut = components["schemas"]["PayeeOut"];
 export type TransferOut = components["schemas"]["TransferOut"];
 export type ScheduledTransferOut = components["schemas"]["ScheduledTransferOut"];
@@ -266,6 +268,7 @@ export const api = {
     }),
   me: () => apiFetch<UserOut>("/api/v1/auth/me"),
   accounts: () => apiFetch<AccountOut[]>("/api/v1/accounts"),
+  accountsSummary: () => apiFetch<AccountsSummaryOut>("/api/v1/accounts/summary"),
   openAccount: (accountType: OpenAccountType) =>
     apiFetch<AccountOut>("/api/v1/accounts", {
       method: "POST",

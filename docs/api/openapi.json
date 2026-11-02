@@ -55,6 +55,23 @@
         "title": "AccountOut",
         "type": "object"
       },
+      "AccountsSummaryOut": {
+        "description": "FR-08 total balance overview. ``totals`` is empty when the customer holds no counted\naccount; it has one row per currency, ordered by currency code.",
+        "properties": {
+          "totals": {
+            "items": {
+              "$ref": "#/components/schemas/CurrencyTotalOut"
+            },
+            "title": "Totals",
+            "type": "array"
+          }
+        },
+        "required": [
+          "totals"
+        ],
+        "title": "AccountsSummaryOut",
+        "type": "object"
+      },
       "AdminCreateUserRequest": {
         "properties": {
           "email": {
@@ -1318,6 +1335,50 @@
           "items"
         ],
         "title": "ComplianceExceptionsOut",
+        "type": "object"
+      },
+      "CurrencyTotalOut": {
+        "description": "Totals for ONE currency: amounts in different currencies are never added together.",
+        "properties": {
+          "account_count": {
+            "minimum": 0.0,
+            "title": "Account Count",
+            "type": "integer"
+          },
+          "available_minor": {
+            "description": "Ledger minus held, ACTIVE accounts only: held amounts and frozen accounts are excluded; an arranged overdraft is not added",
+            "title": "Available Minor",
+            "type": "integer"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "frozen_account_count": {
+            "minimum": 0.0,
+            "title": "Frozen Account Count",
+            "type": "integer"
+          },
+          "held_minor": {
+            "description": "Amount on hold (pending review) on the counted accounts",
+            "title": "Held Minor",
+            "type": "integer"
+          },
+          "ledger_balance_minor": {
+            "description": "Posted balance of the counted ACTIVE and FROZEN accounts",
+            "title": "Ledger Balance Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "currency",
+          "ledger_balance_minor",
+          "held_minor",
+          "available_minor",
+          "account_count",
+          "frozen_account_count"
+        ],
+        "title": "CurrencyTotalOut",
         "type": "object"
       },
       "CustomerInsightDetail": {
@@ -7266,6 +7327,32 @@
           }
         ],
         "summary": "Open a new account",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/v1/accounts/summary": {
+      "get": {
+        "operationId": "get_my_accounts_summary_api_v1_accounts_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountsSummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Total balance across my accounts, per currency",
         "tags": [
           "accounts"
         ]
