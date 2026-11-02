@@ -20,16 +20,13 @@ import pandas as pd
 from sklearn.ensemble import IsolationForest
 from sklearn.metrics import average_precision_score, confusion_matrix
 
-from pbip_ml.fraud.features import FEATURE_NAMES, offline_features
+# The served schema and model class live in the inference-safe module, so serving never imports
+# this one (#350, ADR-0033). Re-exported here for the training jobs, reports and tests.
+from pbip_ml.fraud.artifacts import ANOMALY_FEATURES as ANOMALY_FEATURES
+from pbip_ml.fraud.artifacts import MODEL_FEATURES as MODEL_FEATURES
+from pbip_ml.fraud.artifacts import AnomalyModel as AnomalyModel
+from pbip_ml.fraud.features import offline_features
 
-MODEL_FEATURES = (
-    *FEATURE_NAMES,
-    "log_amount",
-    "hour_ist",
-    "new_device",
-    "is_debit",
-)
-ANOMALY_FEATURES = ("ratio_to_avg_amount", "velocity_10m", "distinct_devices_7d", "log_amount")
 LGBM_PARAMS: dict[str, Any] = {
     "objective": "binary",
     "learning_rate": 0.05,
@@ -170,33 +167,6 @@ def train_lightgbm(split: Split, rounds: int = 600) -> tuple[lgb.Booster, float]
         y_val, np.asarray(booster.predict(x_val, num_iteration=booster.best_iteration))
     )
     return booster, threshold
-
-
-@dataclass
-class AnomalyModel:
-    """Isolation Forest over normal training debits, with a 0-1 score and a reason."""
-
-    forest: IsolationForest
-    low: float
-    high: float
-    medians: dict[str, float]
-    spreads: dict[str, float]
-
-    def score(self, frame: pd.DataFrame) -> np.ndarray:
-        raw = -self.forest.score_samples(
-            frame[list(ANOMALY_FEATURES)].to_numpy(dtype=float)
-        )  # higher = more anomalous
-        clipped: np.ndarray = np.clip((raw - self.low) / (self.high - self.low), 0.0, 1.0)
-        return clipped
-
-    def explain(self, row: pd.Series) -> str:
-        """The feature furthest from typical training behaviour, in plain words."""
-
-        def distance(name: str) -> float:
-            return abs(float(row[name]) - self.medians[name]) / self.spreads[name]
-
-        name = max(ANOMALY_FEATURES, key=distance)
-        return f"{name} is {float(row[name]):.2f}, usually about {self.medians[name]:.2f}"
 
 
 def train_isolation_forest(split: Split, seed: int = 42) -> AnomalyModel:

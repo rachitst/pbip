@@ -31,7 +31,7 @@ eligibility decisions; use on real traffic without retraining on real labelled o
 - Imbalance: `scale_pos_weight` = negatives / positives; early stopping on validation PR-AUC
   (`fraud-models.md` "LightGBM (supervised)").
 
-## Features (9 columns, verified in `training.py` `MODEL_FEATURES`)
+## Features (9 columns, verified in `artifacts.py` `MODEL_FEATURES`)
 
 `ratio_to_avg_amount`, `payee_age_seconds`, `velocity_10m`, `failure_count_24h`, `distinct_devices_7d`
 (the TASK-024 features, `fraud/features.py` `FEATURE_NAMES`), plus `log_amount`, `hour_ist`, `new_device`

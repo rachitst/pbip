@@ -3,6 +3,7 @@
 **Status:** trained offline and evaluated. The hybrid scorer is wired into transfers and bill payments behind `FRAUD_SCORER=hybrid` (TASK-033, ADR-0019). Local and demo run `hybrid` since the GitHub issue #251 fix (generator v2.1); the code default for other deployments stays `rules`. Current numbers: `docs/ml/model-evaluation-report-v1.md` (v1.1). The tables below are the v2.0 (before the GitHub issue #251 fix) training run, kept for history.
 **Code:**
 - `ml/src/pbip_ml/fraud/training.py`: dataset, time split, models, metrics.
+- `ml/src/pbip_ml/fraud/artifacts.py`: the served feature order, `AnomalyModel` and the allow-listed artifact loader (inference-safe, ADR-0033).
 - `ml/src/pbip_ml/fraud/train.py`: CLI and MLflow logging.
 - `ml/tests/test_fraud_training.py`.
 
