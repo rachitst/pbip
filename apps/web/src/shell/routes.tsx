@@ -15,6 +15,7 @@ import { MfaEnrolment } from "../pages/MfaEnrolment";
 import { PayBills } from "../pages/PayBills";
 import { Payees } from "../pages/Payees";
 import { Profile } from "../pages/Profile";
+import { Statements } from "../pages/Statements";
 import { AuditLog } from "../pages/staff/AuditLog";
 import { FraudAlert } from "../pages/staff/FraudAlert";
 import { FraudDemoLab } from "../pages/staff/FraudDemoLab";
@@ -40,6 +41,7 @@ function customerNav(me: UserOut): NavItem[] {
     { to: "/accounts", label: "Accounts" },
     { to: "/payees", label: "Payees" },
     { to: "/bills", label: "Pay bills" },
+    { to: "/statements", label: "Statements" },
     { to: "/insights", label: "Spending & health" },
     { to: "/profile", label: "Profile & security" },
   ];
@@ -201,6 +203,7 @@ export const routes: RouteObject[] = [
           { path: "accounts", element: <Accounts /> },
           { path: "payees", element: <Payees /> },
           { path: "bills", element: <PayBills /> },
+          { path: "statements", element: <Statements /> },
           {
             path: "insights",
             element: (
