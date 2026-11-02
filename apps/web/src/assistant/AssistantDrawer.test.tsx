@@ -157,6 +157,38 @@ describe("AssistantDrawer", () => {
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
+  it("TASK-105: shows the tool label, the catalogue as plain text and a link to Wealth", async () => {
+    const reply = [
+      "Funds and bonds:",
+      "- \u201cNifty 50 index fund (illustrative)\u201d: high risk, market-linked, no rate shown, from INR 500.00, not sold online.",
+      "- \u201c<img src=x onerror=alert(1)>\u201d: low risk, market-linked, no rate shown.",
+    ].join("\n");
+    const stream = controlledStream([
+      frame("tool_call", { tool: "list_products", engine: "rules" }),
+      frame("tool_result", { tool: "list_products", outcome: "ok" }),
+      frame("done", done(reply, { tool: "list_products", link: "/wealth" })),
+    ]);
+    streamResponse = () => stream.response;
+    renderDrawer();
+    await userEvent.click(screen.getByRole("button", { name: "Ask the PBIP assistant" }));
+    const dialog = screen.getByRole("dialog");
+    await userEvent.type(
+      within(dialog).getByRole("textbox", { name: "Message" }),
+      "which funds do you have?{Enter}",
+    );
+    stream.next();
+    expect(await within(dialog).findByText(TOOL_LABELS.list_products)).toBeInTheDocument();
+    stream.finish();
+    const items = await within(dialog).findAllByRole("listitem");
+    expect(items[0]).toHaveTextContent("Nifty 50 index fund (illustrative)");
+    expect(items[1]).toHaveTextContent("<img src=x onerror=alert(1)>");
+    expect(dialog.querySelector("img")).toBeNull();
+    expect(await within(dialog).findByRole("link", { name: "Open wealth" })).toHaveAttribute(
+      "href",
+      "/wealth",
+    );
+  });
+
   it("shows a generic error event from the stream", async () => {
     const stream = controlledStream([frame("error", { detail: "Please try again shortly." })]);
     streamResponse = () => stream.response;
@@ -204,6 +236,14 @@ describe("unusual expenses replies (TASK-110)", () => {
     expect(items[0]).toHaveTextContent("Shopping: INR 14,000.00");
     expect(items[1]).toHaveTextContent("\u201c<script>alert(1)</script>\u201d");
     expect(document.querySelector("script")).toBeNull();
+  });
+});
+
+describe("FAQ, products and investment suggestions (TASK-105)", () => {
+  it("label each new tool while it runs", () => {
+    expect(TOOL_LABELS.get_faq_answer).toBe("Looking up how PBIP works...");
+    expect(TOOL_LABELS.list_products).toBe("Checking the product catalogue...");
+    expect(TOOL_LABELS.get_investment_suggestions).toBe("Matching options to your risk profile...");
   });
 });
 

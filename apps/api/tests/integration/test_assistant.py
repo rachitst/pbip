@@ -21,6 +21,8 @@ from pbip_api.modules.compliance.models import AuditLog
 from pbip_api.modules.ledger.models import Transaction
 from pbip_api.modules.loans import emi as emi_math
 from pbip_api.modules.loans.catalogue import PRODUCTS, LoanType
+from pbip_api.modules.recommendations import service as recommendations_service
+from pbip_ml.recommendations import PRODUCT_CATALOGUE
 from pbip_test_support import Actor, FakeClock, age_payee, month_start, post_spend_at
 from sqlalchemy import Engine, func, select, text
 from sqlalchemy.orm import Session
@@ -549,3 +551,191 @@ def test_a_loan_without_an_amount_when_repayments_leave_no_room(
     body = _chat(client, alice, "can I take a personal loan?")
     assert body["reply"].startswith("A personal loan isn't affordable right now.")
     assert "already take 60% of your income of INR 1,00,000.00" in body["reply"]
+
+
+# ---------------------------------------------------------------- TASK-105 FAQ, products, suggestions
+
+CAUTIOUS = {
+    "investment_horizon": "UNDER_1_YEAR",
+    "loss_reaction": "SELL_EVERYTHING",
+    "investment_goal": "PROTECT_SAVINGS",
+    "investment_experience": "SOME",
+    "emergency_fund": "THREE_TO_6_MONTHS",
+}  # 2 points: LOW
+BOLD = {
+    "investment_horizon": "OVER_5_YEARS",
+    "loss_reaction": "INVEST_MORE",
+    "investment_goal": "MAXIMUM_GROWTH",
+    "investment_experience": "EXTENSIVE",
+    "emergency_fund": "OVER_6_MONTHS",
+}  # 10 points: HIGH
+FD_OPTIONS = (
+    "“Fixed deposit, 6 to 9 months”: 6.50% a year (annual yield 6.66%); "
+    "“Fixed deposit, 1 to 3 years”: 7.10% a year (annual yield 7.29%); "
+    "“Tax-saver fixed deposit, 5 years”: 6.75% a year (annual yield 6.92%)"
+)
+DISCLAIMER = (
+    "These come from fixed rules applied to your own account figures and your questionnaire "
+    "answers. They are not personalised financial advice."
+)
+
+
+def test_help_questions_are_answered_from_the_curated_faq_by_the_rules_route(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    use_model: Callable[[object], None],
+    settings: Settings,
+    db: Session,
+) -> None:
+    alice = make_customer(funds=5_000_00)
+    model = FakeModel('{"tool": "get_account_summary", "arguments": {}}')
+    use_model(model)
+    limits = _chat(client, alice, "What's the daily transfer limit?")
+    assert limits["tool"] == "get_faq_answer" and limits["engine"] == "rules"
+    assert limits["link"] == "/transfers"
+    assert limits["reply"] == (
+        f"One transfer or bill payment can be up to {format_minor(settings.max_transfer_minor)}, "
+        f"and you can send up to {format_minor(settings.daily_transfer_limit_minor)} in total "
+        "per day. Transfers and bill payments that are posted or still waiting for verification "
+        "or review count towards the daily total, which starts again at 00:00 UTC (05:30 IST)."
+    )
+    assert "INR 2,00,000.00" in limits["reply"] and "INR 5,00,000.00" in limits["reply"]
+    deposits = _chat(client, alice, "what happens if I close my FD early?")
+    assert deposits["tool"] == "get_faq_answer" and deposits["link"] == "/wealth"
+    assert (
+        "On offer: “Fixed deposit, 1 to 3 years” at 7.10% a year; “Fixed deposit, 6 to 9 months” "
+        "at 6.50% a year; “Tax-saver fixed deposit, 5 years” at 6.75% a year, locked in for 60 "
+        "months. Closing early, where allowed, pays the rate less 1.00% for the time held, and "
+        "no interest within the first 7 days."
+    ) in deposits["reply"]
+    statement = _chat(client, alice, "how do I download a statement?")
+    assert statement["tool"] == "get_faq_answer" and statement["link"] == "/statements"
+    assert model.messages == []  # clear questions never reach the model
+    assert [(r.action, r.details) for r in _audit(db, alice)] == [
+        ("assistant.tool_call", {"tool": "get_faq_answer", "outcome": "ok", "engine": "rules"})
+    ] * 3
+
+
+def test_products_are_listed_from_the_real_catalogues_with_their_exact_rates(
+    client: TestClient, make_customer: Callable[..., Actor], db: Session
+) -> None:
+    alice = make_customer()
+    loans = _chat(client, alice, "what loans do you offer?")
+    assert loans["tool"] == "list_products" and loans["link"] == "/loans"
+    assert loans["reply"] == "\n".join(
+        [
+            "Loans (indicative rates, subject to eligibility):",
+            "- Personal loan: from 11.50% a year, INR 25,000.00 to INR 15,00,000.00, 12 to 60 "
+            "months.",
+            "- Car loan: from 9.25% a year, INR 1,00,000.00 to INR 50,00,000.00, 12 to 84 months.",
+            "- Home loan: from 8.50% a year, INR 5,00,000.00 to INR 5,00,00,000.00, 60 to 360 "
+            "months.",
+        ]
+    )
+    funds = _chat(client, alice, "which funds do you have?")
+    assert funds["tool"] == "list_products" and funds["link"] == "/wealth"
+    assert funds["reply"] == "\n".join(
+        [
+            "Funds and bonds:",
+            "- “Balanced advantage fund (illustrative)”: moderate risk, market-linked, no rate "
+            "shown, from INR 500.00, not sold online.",
+            "- “ELSS tax-saver fund (illustrative)”: high risk, market-linked, no rate shown, "
+            "from INR 500.00, locked in for 36 months, not sold online.",
+            "- “Nifty 50 index fund (illustrative)”: high risk, market-linked, no rate shown, "
+            "from INR 500.00, not sold online.",
+            "- “Liquid fund (illustrative)”: low risk, market-linked, no rate shown, from INR "
+            "500.00, not sold online.",
+            "- “Sovereign gold bond (illustrative)”: moderate risk, fixed coupon 2.50% a year "
+            "plus the gold price at redemption, 96 months, locked in for 60 months, not sold "
+            "online.",
+            "Wealth catalogue 2026-11-v1: rates are indicative, simulated PBIP rates. Products "
+            "marked illustrative are listed for comparison, not sold online.",
+        ]
+    )
+    stored = client.get("/api/v1/assistant/messages", headers=alice.headers).json()["items"]
+    assert [m["tool"] for m in stored if m["role"] == "assistant"] == ["list_products"] * 2
+
+
+def _saver(
+    client: TestClient, make_customer: Callable[..., Actor], engine: Engine, clock: FakeClock
+) -> Actor:
+    """INR 5,00,000 paid in, INR 50,000 spent last month: a deposit and an index-fund SIP are
+    both eligible (the spend is in a closed month, so the result does not depend on the date)."""
+    saver = make_customer(funds=5_00_000_00)
+    spent_at = month_start(datetime.fromtimestamp(clock.now, UTC), 1) + timedelta(days=5)
+    post_spend_at(engine, saver.account_id, 50_000_00, "Rent", spent_at)
+    return saver
+
+
+def _assess(client: TestClient, actor: Actor, answers: dict[str, str]) -> str:
+    resp = client.put("/api/v1/customers/me/risk-profile", headers=actor.headers, json=answers)
+    assert resp.status_code == 200, resp.text
+    assessed = datetime.fromisoformat(resp.json()["assessed_at"])
+    return f"{assessed:%d %b %Y}"
+
+
+def _engine_reasons(db: Session, actor: Actor, clock: FakeClock) -> dict[str, str]:
+    """Every eligible product's reasons, straight from the TASK-054 engine (not just the top 3)."""
+    found = recommendations_service.get_customer_recommendations(
+        db, actor.customer_id, datetime.fromtimestamp(clock.now, UTC), top_k=len(PRODUCT_CATALOGUE)
+    )
+    db.rollback()
+    return {r.title: " ".join(r.reasons) for r in found.recommendations}
+
+
+def test_investment_suggestions_need_an_assessed_risk_profile(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    migrated_engine: Engine,
+    clock: FakeClock,
+) -> None:
+    saver = _saver(client, make_customer, migrated_engine, clock)
+    body = _chat(client, saver, "suggest investments for me")
+    assert body["tool"] == "get_investment_suggestions" and body["engine"] == "rules"
+    assert body["link"] == "/profile"
+    assert body["reply"] == (
+        "You haven't answered the risk-tolerance questionnaire yet, so I can't suggest "
+        "investments. Answer its five questions under Profile & security, then ask me again."
+    )
+
+
+def test_investment_suggestions_follow_the_risk_band_and_the_engine_reasons(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    migrated_engine: Engine,
+    clock: FakeClock,
+    db: Session,
+) -> None:
+    cautious = _saver(client, make_customer, migrated_engine, clock)
+    day = _assess(client, cautious, CAUTIOUS)
+    reasons = _engine_reasons(db, cautious, clock)
+    assert "Your balance of INR 4,50,000.00 covers" in reasons["Fixed deposit"]
+    body = _chat(client, cautious, "where should I invest my savings?")
+    assert body["tool"] == "get_investment_suggestions" and body["link"] == "/wealth"
+    assert body["reply"] == "\n".join(
+        [
+            f"Your risk profile is low (RTQ-1, assessed {day}).",
+            "Suggestions from the recommendation engine (rules-v1) that fit it:",
+            f"- Fixed deposit (low risk). Why: {reasons['Fixed deposit']} In the catalogue: "
+            f"{FD_OPTIONS}.",
+            "Not suggested because it is riskier than your low profile: Index fund SIP (high "
+            "risk).",
+            DISCLAIMER,
+        ]
+    )
+
+    bold = _saver(client, make_customer, migrated_engine, clock)
+    day = _assess(client, bold, BOLD)
+    reasons = _engine_reasons(db, bold, clock)
+    body = _chat(client, bold, "any investment ideas for me?")
+    assert body["reply"] == "\n".join(
+        [
+            f"Your risk profile is high (RTQ-1, assessed {day}).",
+            "Suggestions from the recommendation engine (rules-v1) that fit it:",
+            f"- Index fund SIP (high risk). Why: {reasons['Index fund SIP']} In the catalogue: "
+            "“Nifty 50 index fund (illustrative)”: market-linked, no rate shown.",
+            f"- Fixed deposit (low risk). Why: {reasons['Fixed deposit']} In the catalogue: "
+            f"{FD_OPTIONS}.",
+            f"{DISCLAIMER} Market-linked: returns are not guaranteed.",
+        ]
+    )

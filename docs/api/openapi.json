@@ -6567,7 +6567,10 @@
           "get_spend",
           "get_balance_forecast",
           "get_loan_affordability",
-          "get_unusual_expenses"
+          "get_unusual_expenses",
+          "get_faq_answer",
+          "list_products",
+          "get_investment_suggestions"
         ],
         "title": "ToolName",
         "type": "string"
