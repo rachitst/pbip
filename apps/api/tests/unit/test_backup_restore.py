@@ -223,6 +223,13 @@ def test_public_key_encryption_and_invalid_combinations(passphrase_file: Path) -
     assert "--passphrase-file" not in backup.Encryption().decrypt_command(Path("x"))
 
 
+POSIX_ONLY = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="NTFS has no POSIX mode bits (st_mode is always 0o666/0o444); Windows is covered below",
+)
+
+
+@POSIX_ONLY
 def test_passphrase_file_must_be_private(tmp_path: Path, passphrase_file: Path) -> None:
     backup.check_passphrase_file(passphrase_file)
     passphrase_file.chmod(0o644)
@@ -230,6 +237,21 @@ def test_passphrase_file_must_be_private(tmp_path: Path, passphrase_file: Path) 
         backup.check_passphrase_file(passphrase_file)
     with pytest.raises(backup.BackupError, match="not readable"):
         backup.check_passphrase_file(tmp_path / "missing")
+
+
+def test_passphrase_privacy_is_not_claimed_on_windows_but_warned_about(
+    tmp_path: Path, passphrase_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Runs on every platform: posix=False is the Windows branch, whatever the host is.
+    passphrase_file.chmod(0o644)
+    backup.check_passphrase_file(passphrase_file, posix=False)
+    err = capsys.readouterr().err
+    assert "NOT verified on Windows" in err
+    assert "ACL" in err
+    with pytest.raises(backup.BackupError, match="not readable"):
+        backup.check_passphrase_file(tmp_path / "missing", posix=False)
+    with pytest.raises(backup.BackupError, match="not a regular file"):
+        backup.check_passphrase_file(tmp_path, posix=False)
 
 
 def test_tools_run_on_host_or_in_container_without_the_password_in_argv() -> None:
@@ -321,6 +343,7 @@ def test_backup_dry_run_prints_the_plan_and_executes_nothing(
     assert list(tmp_path.iterdir()) == [passphrase_file]
 
 
+@POSIX_ONLY
 def test_backup_refuses_a_world_readable_passphrase_file(
     tmp_path: Path, passphrase_file: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
