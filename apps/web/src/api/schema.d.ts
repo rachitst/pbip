@@ -673,6 +673,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fraud/demo-lab": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether the fraud demonstration lab (TASK-081) may run in this environment
+         * @description The lab drives real customer APIs with demo credentials. The web app only knows how it was
+         *     built, not where it is deployed, so the server's APP_ENV decides. Staging and production
+         *     answer 404 (not a 200 "disabled"), so the lab is indistinguishable from absent there.
+         */
+        get: operations["get_demo_lab_status_api_v1_fraud_demo_lab_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fraud/monitoring": {
         parameters: {
             query?: never;
@@ -1037,6 +1059,11 @@ export interface components {
              * Format: uuid
              */
             customer_id: string;
+            /**
+             * Customer Name
+             * @description Full name of the customer who made the payment
+             */
+            customer_name?: string | null;
             /** Decision */
             decision: string;
             /** Features */
@@ -1069,6 +1096,11 @@ export interface components {
             /** Status */
             status: string;
             /**
+             * Top Reason
+             * @description First recorded reason: bank rules first, then the model's strongest factor
+             */
+            top_reason?: string | null;
+            /**
              * Transaction Id
              * Format: uuid
              */
@@ -1094,6 +1126,11 @@ export interface components {
             created_at: string;
             /** Currency */
             currency: string;
+            /**
+             * Customer Name
+             * @description Full name of the customer who made the payment
+             */
+            customer_name?: string | null;
             /** Decision */
             decision: string;
             /**
@@ -1107,6 +1144,11 @@ export interface components {
             severity: string;
             /** Status */
             status: string;
+            /**
+             * Top Reason
+             * @description First recorded reason: bank rules first, then the model's strongest factor
+             */
+            top_reason?: string | null;
             /** Transaction Status */
             transaction_status: string;
         };
@@ -1620,6 +1662,14 @@ export interface components {
             action: "RELEASE" | "REJECT";
             /** Note */
             note?: string | null;
+        };
+        /** DemoLabStatus */
+        DemoLabStatus: {
+            /**
+             * Enabled
+             * @description True: the lab may run here. Outside local/test the endpoint answers 404
+             */
+            enabled: boolean;
         };
         /**
          * DeviceOut
@@ -4061,6 +4111,8 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["AlertStatus"] | null;
+                /** @description Only the alert raised for this transaction (at most one) */
+                transaction_id?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -4151,6 +4203,33 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    get_demo_lab_status_api_v1_fraud_demo_lab_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoLabStatus"];
+                };
+            };
+            /** @description Not a local/test environment: the lab does not exist here */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

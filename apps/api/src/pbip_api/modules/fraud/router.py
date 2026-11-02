@@ -8,7 +8,9 @@ from pydantic import BaseModel, Field
 from redis import Redis
 from sqlalchemy.orm import Session
 
+from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.db import get_session, utcnow
+from pbip_api.core.errors import NotFoundError
 from pbip_api.core.redis import get_redis
 from pbip_api.core.validation import Text
 from pbip_api.modules.accounts.service import mask_account_number
@@ -43,6 +45,13 @@ class AlertSummary(BaseModel):
     currency: str
     transaction_status: str
     created_at: datetime
+    customer_name: str | None = Field(
+        default=None, description="Full name of the customer who made the payment"
+    )
+    top_reason: str | None = Field(
+        default=None,
+        description="First recorded reason: bank rules first, then the model's strongest factor",
+    )
 
 
 class AlertCustomer(BaseModel):
@@ -183,12 +192,27 @@ class SecurityMonitoring(BaseModel):
     fraud_events: FraudEventsPanel
 
 
+class DemoLabStatus(BaseModel):
+    enabled: bool = Field(
+        description="True: the lab may run here. Outside local/test the endpoint answers 404"
+    )
+
+
 class DecisionRequest(BaseModel):
     action: Literal["RELEASE", "REJECT"]
     note: Text | None = Field(default=None, max_length=1000)
 
 
-def _summary(alert: FraudAlert, event: FraudEvent, txn: Transaction) -> AlertSummary:
+def _top_reason(event: FraudEvent) -> str | None:
+    """Rule reasons are stored before model and anomaly reasons, so the first one leads."""
+    first = event.reasons[0] if event.reasons else None
+    message = first.get("message") if isinstance(first, dict) else None
+    return message if isinstance(message, str) else None
+
+
+def _summary(
+    alert: FraudAlert, event: FraudEvent, txn: Transaction, customer_name: str | None = None
+) -> AlertSummary:
     return AlertSummary(
         id=alert.id,
         status=alert.status.value,
@@ -199,6 +223,8 @@ def _summary(alert: FraudAlert, event: FraudEvent, txn: Transaction) -> AlertSum
         currency=txn.currency,
         transaction_status=txn.status.value,
         created_at=alert.created_at,
+        customer_name=customer_name,
+        top_reason=_top_reason(event),
     )
 
 
@@ -235,15 +261,37 @@ def get_monitoring(
     )
 
 
+@router.get(
+    "/demo-lab",
+    response_model=DemoLabStatus,
+    summary="Whether the fraud demonstration lab (TASK-081) may run in this environment",
+    responses={404: {"description": "Not a local/test environment: the lab does not exist here"}},
+)
+def get_demo_lab_status(
+    _analyst: Principal = Depends(analyst_gate),
+    settings: Settings = Depends(get_settings),
+) -> DemoLabStatus:
+    """The lab drives real customer APIs with demo credentials. The web app only knows how it was
+    built, not where it is deployed, so the server's APP_ENV decides. Staging and production
+    answer 404 (not a 200 "disabled"), so the lab is indistinguishable from absent there."""
+    if not settings.fraud_demo_lab_enabled:
+        raise NotFoundError("not found")
+    return DemoLabStatus(enabled=True)
+
+
 @router.get("/alerts", response_model=list[AlertSummary], summary="Alert queue (newest first)")
 def list_alerts(
     alert_status: AlertStatus | None = Query(default=None, alias="status"),
+    transaction_id: UUID | None = Query(
+        default=None, description="Only the alert raised for this transaction (at most one)"
+    ),
     limit: int = Query(default=25, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=10_000),
     _analyst: Principal = Depends(analyst_gate),
     session: Session = Depends(get_session),
 ) -> list[AlertSummary]:
-    return [_summary(*row) for row in service.list_alerts(session, alert_status, limit, offset)]
+    rows = service.list_alerts(session, alert_status, limit, offset, transaction_id)
+    return [_summary(*row) for row in rows]
 
 
 @router.get(
@@ -257,8 +305,8 @@ def get_alert(
     session: Session = Depends(get_session),
 ) -> AlertDetail:
     alert, event, txn = service.get_alert(session, alert_id)
-    base = _summary(alert, event, txn)
     customer = session.get(Customer, event.customer_id)
+    base = _summary(alert, event, txn, customer.full_name if customer is not None else None)
     return AlertDetail(
         **base.model_dump(),
         transaction_id=txn.id,
