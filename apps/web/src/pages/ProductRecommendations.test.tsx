@@ -3,7 +3,11 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RouterProvider, createMemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ProductRecommendationItem, RecommendationsResponse } from "../api/client";
+import type {
+  ProductRecommendationItem,
+  RecommendationsResponse,
+  WealthProductOut,
+} from "../api/client";
 import { NOT_AVAILABLE_NOTE, productTypeLabel } from "../lib/recommendations";
 import { account, customerMe, json, renderApp, urlOf } from "../test-utils";
 import { ProductRecommendations } from "./ProductRecommendations";
@@ -57,6 +61,28 @@ const familyCover: ProductRecommendationItem = {
   cta_label: "Get a quote",
 };
 
+/** A bookable deposit from the wealth catalogue (TASK-063), for the FD card's deep link. */
+const catalogueDeposit: WealthProductOut = {
+  id: "fd-regular",
+  code: "FD-REGULAR",
+  product_type: "FIXED_DEPOSIT",
+  name: "Fixed deposit, 1 to 3 years",
+  description: "Cumulative deposit: interest compounds quarterly and is paid with the principal.",
+  risk_level: "LOW",
+  yield_basis: "GUARANTEED",
+  annual_rate_bps: 710,
+  apy_bps: 729,
+  tenures_months: [12, 18, 24, 36],
+  min_lock_in_months: 0,
+  min_amount_minor: 1_000_000,
+  max_amount_minor: 1_000_000_000,
+  premature_closure_allowed: true,
+  premature_penalty_bps: 100,
+  bookable: true,
+  notes: "Indicative, simulated rate set by PBIP, not a real bank's offer.",
+  catalogue_version: "2026-11-v1",
+};
+
 function response(items: ProductRecommendationItem[]): RecommendationsResponse {
   return {
     customer_id: "cust-1",
@@ -83,6 +109,7 @@ describe("product recommendations on the accounts page", () => {
       if (url.endsWith("/accounts")) return Promise.resolve(json(200, [account]));
       if (url.endsWith("/payees")) return Promise.resolve(json(200, []));
       if (url.endsWith("/recommendations")) return recommendations();
+      if (url.endsWith("/wealth/products")) return Promise.resolve(json(200, [catalogueDeposit]));
       return Promise.resolve(json(404, { code: "not_found", title: "not found" }));
     });
   });
@@ -214,7 +241,7 @@ describe("product recommendations on the accounts page", () => {
     ]);
   });
 
-  it("sends a fixed deposit to the wealth page, where deposits are booked (TASK-064)", async () => {
+  it("opens the wealth page's booking dialog straight from the fixed deposit card", async () => {
     const user = userEvent.setup();
     recommendations = () => Promise.resolve(json(200, response([fixedDeposit])));
     renderApp();
@@ -222,8 +249,14 @@ describe("product recommendations on the accounts page", () => {
     const heading = await region.findByRole("heading", { name: "Fixed deposit" });
     const card = within(heading.closest("li") ?? heading);
     expect(card.queryByText(NOT_AVAILABLE_NOTE)).toBeNull();
-    await user.click(card.getByRole("button", { name: "See fixed deposits: Fixed deposit" }));
+    await user.click(card.getByRole("button", { name: "Book a fixed deposit: Fixed deposit" }));
     expect(window.location.pathname).toBe("/wealth");
+    expect(window.location.search).toBe("?book=fixed-deposit");
+    // The dialog opens on a real catalogue deposit with its real rate.
+    const dialog = await screen.findByRole("dialog", { name: `Book: ${catalogueDeposit.name}` });
+    expect(within(dialog).getByLabelText("Fixed deposit")).toHaveTextContent(
+      "Fixed deposit, 1 to 3 years · 7.10% p.a.",
+    );
   });
 });
 

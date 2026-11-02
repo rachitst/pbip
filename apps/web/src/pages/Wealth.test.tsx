@@ -44,6 +44,26 @@ const regular: WealthProductOut = {
   notes: "Indicative, simulated rate set by PBIP, not a real bank's offer.",
   catalogue_version: "2026-11-v1",
 };
+const taxSaverProduct: WealthProductOut = {
+  ...regular,
+  id: "fd-tax-saver",
+  code: "FD-TAX-SAVER",
+  name: "Tax-saver fixed deposit, 5 years",
+  annual_rate_bps: 690,
+  apy_bps: 708,
+  tenures_months: [60],
+  min_lock_in_months: 60,
+  premature_closure_allowed: false,
+  premature_penalty_bps: null,
+};
+const notBookable: WealthProductOut = {
+  ...regular,
+  id: "fd-senior",
+  code: "FD-SENIOR",
+  name: "Senior citizens fixed deposit",
+  annual_rate_bps: 760,
+  bookable: false,
+};
 const index: WealthProductOut = {
   ...regular,
   id: "mf-index",
@@ -201,11 +221,11 @@ function callsTo(fetchMock: ReturnType<typeof mockApi>, path: string) {
   return fetchMock.mock.calls.filter(([input]) => urlOf(input) === path);
 }
 
-function renderPage() {
+function renderPage(path = "/wealth") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[path]}>
         <Wealth />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -410,5 +430,87 @@ describe("Wealth (TASK-065)", () => {
     renderPage();
     const link = await screen.findByRole("link", { name: "Compare products side by side" });
     expect(link).toHaveAttribute("href", "/wealth/compare");
+  });
+});
+
+describe("Wealth booking deep link (TASK-062)", () => {
+  const link = "/wealth?book=fixed-deposit";
+
+  it("opens the booking dialog on the first bookable deposit, choosing among the real ones", async () => {
+    const fetchMock = mockApi({
+      products: () => json(200, [index, notBookable, regular, taxSaverProduct]),
+    });
+    const user = userEvent.setup();
+    renderPage(link);
+    const dialog = await screen.findByRole("dialog", { name: `Book: ${regular.name}` });
+    expect(dialog).toHaveAttribute("open");
+    const choice = within(dialog).getByLabelText("Fixed deposit");
+    expect(choice).toHaveValue("fd-regular");
+    // Only bookable fixed deposits, each with its catalogue rate: no fund, no unbookable deposit.
+    expect(
+      within(choice)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual([
+      "Fixed deposit, 1 to 3 years · 7.10% p.a.",
+      "Tax-saver fixed deposit, 5 years · 6.90% p.a.",
+    ]);
+    expect(
+      within(within(dialog).getByLabelText("Tenure"))
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(["1 year", "18 months", "2 years", "3 years"]);
+
+    await user.selectOptions(choice, "fd-tax-saver");
+    expect(
+      await screen.findByRole("dialog", { name: `Book: ${taxSaverProduct.name}` }),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Tenure")).toHaveValue("60");
+    await user.type(within(dialog).getByLabelText("Amount", { exact: false }), "100000");
+    await within(dialog).findByRole("region", { name: "Maturity preview" });
+    await user.click(within(dialog).getByRole("button", { name: "Confirm and book" }));
+    await within(dialog).findByRole("region", { name: "Booking receipt" });
+    const books = callsTo(fetchMock, "/api/v1/wealth/fixed-deposits/book");
+    expect(books).toHaveLength(1);
+    expect(bodyOf(books[0]?.[1])).toMatchObject({
+      product_id: "fd-tax-saver",
+      amount_minor: 10_000_000,
+      tenure_months: 60,
+    });
+  });
+
+  it("does not reopen the dialog after the customer closes it", async () => {
+    mockApi();
+    const user = userEvent.setup();
+    renderPage(link);
+    const dialog = await screen.findByRole("dialog", { name: `Book: ${regular.name}` });
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    await user.selectOptions(screen.getByLabelText("Risk level"), "LOW");
+    await user.selectOptions(screen.getByLabelText("Risk level"), "All");
+    expect(await screen.findByRole("region", { name: regular.name })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("a card's own button books that product without the deposit choice", async () => {
+    mockApi({ products: () => json(200, [regular, taxSaverProduct]) });
+    const user = userEvent.setup();
+    renderPage();
+    const card = await screen.findByRole("region", { name: taxSaverProduct.name });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await user.click(within(card).getByRole("button", { name: "Book this deposit" }));
+    const dialog = await screen.findByRole("dialog", { name: `Book: ${taxSaverProduct.name}` });
+    expect(within(dialog).queryByLabelText("Fixed deposit")).toBeNull();
+  });
+
+  it("says so when the catalogue has no bookable fixed deposit", async () => {
+    mockApi({ products: () => json(200, [index, notBookable]) });
+    renderPage(link);
+    expect(
+      await screen.findByText("No fixed deposit can be booked online right now."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
