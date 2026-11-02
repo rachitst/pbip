@@ -11,6 +11,7 @@ import { ThemeToggle } from "./theme";
 import { errorMessage } from "../lib/errors";
 import { Accounts } from "../pages/Accounts";
 import { NotFound } from "../pages/NotFound";
+import { MfaEnrolment } from "../pages/MfaEnrolment";
 import { PayBills } from "../pages/PayBills";
 import { Payees } from "../pages/Payees";
 import { Profile } from "../pages/Profile";
@@ -23,6 +24,7 @@ import { useDemoLabStatus } from "../pages/staff/fraudLab";
 import { SecurityMonitoring } from "../pages/staff/SecurityMonitoring";
 import { StaffHome } from "../pages/staff/StaffHome";
 import { Alert } from "../ui/Alert";
+import { PageHeader } from "../ui/PageHeader";
 import { ErrorState, LoadingState } from "../ui/States";
 import { AppShell, SignOutButton } from "./AppShell";
 import type { NavItem } from "./AppShell";
@@ -59,6 +61,7 @@ function staffNav(me: UserOut, demoLabEnabled: boolean): NavItem[] {
   if (me.roles.includes("COMPLIANCE_OFFICER") || me.roles.includes("ADMIN")) {
     items.push({ to: "/staff/audit-log", label: "Audit log" });
   }
+  items.push({ to: "/staff/security", label: "Sign-in security" });
   if (isCustomer(me)) items.push({ to: "/accounts", label: "My banking" });
   return items;
 }
@@ -93,7 +96,7 @@ function AreaLayout({ area, children }: { area: Area; children: ReactNode }) {
             Staff tools need a session verified with an authenticator code.{" "}
             {me.mfa_enabled
               ? "Sign out and sign in again, entering your authenticator code."
-              : "Your account has no authenticator set up; ask an administrator to enrol one."}
+              : "Your account has no authenticator app yet: set one up under Sign-in security."}
           </Alert>
         )}
         {children}
@@ -166,6 +169,16 @@ function StaffArea() {
   return <OutsideArea />;
 }
 
+/** #201: staff enrol their own authenticator; every staff endpoint requires an MFA session. */
+function StaffSecurity() {
+  return (
+    <div className="page">
+      <PageHeader title="Sign-in security" />
+      <MfaEnrolment />
+    </div>
+  );
+}
+
 /** A page the user's role cannot use, shown inside the user's OWN area as "not found". */
 function OutsideArea() {
   const me = useCurrentUser();
@@ -209,6 +222,7 @@ export const routes: RouteObject[] = [
           { path: "fraud/:alertId", element: <FraudAlert /> },
           { path: "fraud-lab", element: <FraudDemoLab /> },
           { path: "monitoring", element: <SecurityMonitoring /> },
+          { path: "security", element: <StaffSecurity /> },
         ],
       },
       { path: "*", element: <OutsideArea /> },

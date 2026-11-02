@@ -6,19 +6,20 @@ import { useAuth } from "../auth/AuthContext";
 import { describeBrowser, getDeviceId } from "../lib/device";
 import { errorMessage } from "../lib/errors";
 import { formatDate } from "../lib/format";
+import { MIN_PASSWORD_LENGTH } from "../lib/password";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
 import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
-
-const MIN_PASSWORD_LENGTH = 12; // mirrors the server policy; the server remains the authority
+import { MfaEnrolment } from "./MfaEnrolment";
 
 export function Profile() {
   return (
     <div className="page">
       <PageHeader title="Profile & security" />
       <ProfileDetails />
+      <MfaEnrolment />
       <Devices />
       <ChangePassword />
     </div>
