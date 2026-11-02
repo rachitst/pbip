@@ -146,6 +146,8 @@ def test_rows_carry_only_what_an_rm_needs(
         "churn_risk_level",
         "top_recommended_product",
         "top_product_score",
+        "loan_product",
+        "loan_propensity_score",
         "high_value",
     }  # no email, phone, address, date of birth or account number
 
