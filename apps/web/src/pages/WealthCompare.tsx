@@ -10,6 +10,7 @@ import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 import { formatRate } from "./Loans";
 import { formatShareBps, tenureLabel } from "./Wealth";
+import "./WealthCompare.css";
 
 export const MIN_COMPARE = 2;
 export const MAX_COMPARE = 4;
