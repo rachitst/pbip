@@ -6,11 +6,18 @@ from sqlalchemy.orm import Session
 from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.db import get_session
 from pbip_api.modules.accounts.service import mask_account_number
+from pbip_api.modules.auth.dependencies import get_request_meta
+from pbip_api.modules.auth.service import RequestMeta
 from pbip_api.modules.customers.dependencies import get_current_customer
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.payees import policy
 from pbip_api.modules.payees.models import Payee
-from pbip_api.modules.payees.schemas import PayeeCreate, PayeeOut, PayeeVerificationOut
+from pbip_api.modules.payees.schemas import (
+    PayeeCreate,
+    PayeeOut,
+    PayeeUpdate,
+    PayeeVerificationOut,
+)
 from pbip_api.modules.payees.service import PayeeService
 
 router = APIRouter(prefix="/api/v1/payees", tags=["payees"])
@@ -64,6 +71,24 @@ def get_payee(
     session: Session = Depends(get_session),
 ) -> PayeeOut:
     return to_out(policy.get_owned_payee(session, customer.id, payee_id))
+
+
+@router.patch(
+    "/{payee_id}",
+    response_model=PayeeOut,
+    summary="Rename or re-nickname a payee; a new name must be verified again",
+)
+def update_payee(
+    payee_id: UUID,
+    body: PayeeUpdate,
+    customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+    service: PayeeService = Depends(get_payee_service),
+    meta: RequestMeta = Depends(get_request_meta),
+) -> PayeeOut:
+    payee = policy.get_owned_payee(session, customer.id, payee_id)
+    changes = body.model_dump(exclude_unset=True)
+    return to_out(service.update(payee, customer.user_id, changes, meta))
 
 
 @router.post(
