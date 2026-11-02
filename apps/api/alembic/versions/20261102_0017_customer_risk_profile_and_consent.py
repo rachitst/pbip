@@ -5,7 +5,7 @@ the answers, score, questionnaire version and assessment time beside it. The ADR
 use the date of birth for recommendations is a timestamp plus the policy version agreed to.
 Nothing is backfilled: every existing customer starts unassessed, with no consent (ADR-0015 rule 5).
 
-Revision ID: 0018
+Revision ID: 0017
 Revises: 0016
 Create Date: 2026-11-02
 """
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0018"
+revision: str = "0017"
 down_revision: str | None = "0016"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
