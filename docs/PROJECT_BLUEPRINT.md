@@ -112,7 +112,7 @@ One `uv` workspace (`apps/api`, `ml`, `data-gen`) with a single `uv.lock`.
 
 ## 4. Data model
 
-Implemented: 33 tables, 30 in the operational `public` schema and 3 in the ML `synthetic` schema (counting
+Implemented: 35 tables, 32 in the operational `public` schema and 3 in the ML `synthetic` schema (counting
 convention as in the LLD: `alembic_version` and the monthly partitions of `clickstream_events` are not counted).
 Migration `0001` created the first 20; later migrations added the rest. Money columns are `BIGINT` minor units.
 The sketch below is the original core design; the complete, CI-checked diagram generated from the
