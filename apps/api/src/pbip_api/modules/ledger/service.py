@@ -14,6 +14,7 @@ Entries are recorded from the account's own perspective: DEBIT decreases, CREDIT
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import case, func, select
@@ -293,17 +294,36 @@ def reverse_transaction(
     return reversal
 
 
+@dataclass(frozen=True)
+class EntryFilters:
+    """Optional narrowing of an account's entries (TASK-017). Every field is already validated."""
+
+    start: datetime | None = None  # inclusive
+    end: datetime | None = None  # exclusive
+    min_amount: int | None = None
+    max_amount: int | None = None
+    direction: EntryDirection | None = None
+    text: str | None = None  # case-insensitive substring of the payment reference
+
+
+def _escape_like(text: str) -> str:
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def list_account_entries(
     session: Session,
     account_id: UUID,
     limit: int,
     after_seq: int | None,
     newer: bool = False,
+    filters: EntryFilters | None = None,
 ) -> list[tuple[TransactionEntry, Transaction]]:
     """Keyset page of an account's entries by posting order (``seq``).
 
     ``newer=False`` walks back in time (newest first, ``seq < after_seq``); ``newer=True`` walks
-    forward (oldest first, ``seq > after_seq``). The caller authorizes the account first.
+    forward (oldest first, ``seq > after_seq``). Filters narrow the same keyset walk, so a cursor
+    from a filtered page continues that filtered list. Values are bound parameters, never SQL text.
+    The caller authorizes the account first.
     """
     order = TransactionEntry.seq.asc() if newer else TransactionEntry.seq.desc()
     stmt = (
@@ -316,4 +336,17 @@ def list_account_entries(
     if after_seq is not None:
         bound = TransactionEntry.seq > after_seq if newer else TransactionEntry.seq < after_seq
         stmt = stmt.where(bound)
+    f = filters or EntryFilters()
+    if f.start is not None:
+        stmt = stmt.where(TransactionEntry.created_at >= f.start)
+    if f.end is not None:
+        stmt = stmt.where(TransactionEntry.created_at < f.end)
+    if f.min_amount is not None:
+        stmt = stmt.where(TransactionEntry.amount >= f.min_amount)
+    if f.max_amount is not None:
+        stmt = stmt.where(TransactionEntry.amount <= f.max_amount)
+    if f.direction is not None:
+        stmt = stmt.where(TransactionEntry.direction == f.direction)
+    if f.text:
+        stmt = stmt.where(Transaction.reference.ilike(f"%{_escape_like(f.text)}%", escape="\\"))
     return [(entry, txn) for entry, txn in session.execute(stmt).all()]

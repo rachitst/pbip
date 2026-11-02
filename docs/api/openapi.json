@@ -1729,6 +1729,14 @@
         "title": "EntriesPage",
         "type": "object"
       },
+      "EntryDirection": {
+        "enum": [
+          "DEBIT",
+          "CREDIT"
+        ],
+        "title": "EntryDirection",
+        "type": "string"
+      },
       "EntryOut": {
         "properties": {
           "amount_minor": {
@@ -4333,6 +4341,7 @@
     },
     "/api/v1/accounts/{account_id}/transactions": {
       "get": {
+        "description": "Filters keep the same keyset cursor: send the same filters with ``cursor`` for the next\npage of the filtered list (TASK-017).",
         "operationId": "list_my_account_entries_api_v1_accounts__account_id__transactions_get",
         "parameters": [
           {
@@ -4386,6 +4395,123 @@
               "$ref": "#/components/schemas/PageDirection",
               "default": "older",
               "description": "older: newest first, walking back; newer: oldest first, walking forward"
+            }
+          },
+          {
+            "description": "First bank day (IST)",
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "First bank day (IST)",
+              "title": "Start Date"
+            }
+          },
+          {
+            "description": "To this bank day (IST), inclusive",
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "To this bank day (IST), inclusive",
+              "title": "End Date"
+            }
+          },
+          {
+            "description": "Paise, inclusive",
+            "in": "query",
+            "name": "min_amount",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 9223372036854775807,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Paise, inclusive",
+              "title": "Min Amount"
+            }
+          },
+          {
+            "description": "Paise, inclusive",
+            "in": "query",
+            "name": "max_amount",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 9223372036854775807,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Paise, inclusive",
+              "title": "Max Amount"
+            }
+          },
+          {
+            "description": "DEBIT (money out) or CREDIT (money in)",
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/EntryDirection"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "DEBIT (money out) or CREDIT (money in)",
+              "title": "Type"
+            }
+          },
+          {
+            "description": "Case-insensitive text in the payment reference",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Case-insensitive text in the payment reference",
+              "title": "Search"
             }
           }
         ],

@@ -98,4 +98,40 @@ describe("account transactions (keyset pagination)", () => {
       "true",
     );
   });
+
+  it("sends the filters in paise and keeps them on the next page's cursor (TASK-017)", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(await screen.findByRole("button", { name: "Transactions" }));
+    await screen.findByRole("table");
+    await user.type(screen.getByLabelText("Search references"), "rent");
+    await user.selectOptions(screen.getByLabelText("Money in or out"), "DEBIT");
+    await user.type(screen.getByLabelText("Minimum amount (INR)"), "1500.50");
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
+    await user.click(await screen.findByRole("button", { name: "Load older" }));
+    await screen.findByText("Ref 1");
+    const calls = fetchMock.mock.calls
+      .map(([input]) => new URL(urlOf(input), "http://localhost"))
+      .filter((u) => u.pathname.endsWith("/transactions") && u.searchParams.has("search"));
+    expect(calls.map((u) => u.searchParams.get("cursor"))).toEqual([null, "cursor-2"]);
+    for (const u of calls) {
+      expect(u.searchParams.get("search")).toBe("rent");
+      expect(u.searchParams.get("type")).toBe("DEBIT");
+      expect(u.searchParams.get("min_amount")).toBe("150050");
+    }
+  });
+
+  it("checks the filters locally and clears them", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(await screen.findByRole("button", { name: "Transactions" }));
+    await screen.findByRole("table");
+    await user.type(screen.getByLabelText("Minimum amount (INR)"), "500");
+    await user.type(screen.getByLabelText("Maximum amount (INR)"), "100");
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("must not be more than the maximum");
+    await user.click(screen.getByRole("button", { name: "Clear" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Minimum amount (INR)")).toHaveValue("");
+  });
 });

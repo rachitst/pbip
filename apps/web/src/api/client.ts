@@ -1,4 +1,4 @@
-import type { components } from "./schema";
+import type { components, operations } from "./schema";
 
 export type TokenResponse = components["schemas"]["TokenResponse"];
 export type AccountOut = components["schemas"]["AccountOut"];
@@ -9,6 +9,13 @@ export type CustomerProfileOut = components["schemas"]["CustomerProfileOut"];
 export type DeviceOut = components["schemas"]["DeviceOut"];
 export type EntriesPage = components["schemas"]["EntriesPage"];
 export type EntryOut = components["schemas"]["EntryOut"];
+/** TASK-017 query filters, from the generated contract (amounts in paise, dates YYYY-MM-DD IST). */
+export type EntryFilters = Omit<
+  NonNullable<
+    operations["list_my_account_entries_api_v1_accounts__account_id__transactions_get"]["parameters"]["query"]
+  >,
+  "limit" | "cursor" | "direction"
+>;
 export type OpenAccountType = components["schemas"]["OpenAccountType"];
 export type NotificationOut = components["schemas"]["NotificationOut"];
 export type NotificationsPage = components["schemas"]["NotificationsPage"];
@@ -185,9 +192,18 @@ export const api = {
       body: JSON.stringify({ account_type: accountType }),
     }),
   /** Keyset pagination: pass the previous page's next_cursor to walk further back in time. */
-  accountEntries: (accountId: string, cursor: string | null, limit = 10) => {
+  /** TASK-017: ``filters`` must be sent again with each ``cursor`` of the same list. */
+  accountEntries: (
+    accountId: string,
+    cursor: string | null,
+    limit = 10,
+    filters: EntryFilters = {},
+  ) => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (cursor) params.set("cursor", cursor);
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== null && value !== "") params.set(key, String(value));
+    }
     return apiFetch<EntriesPage>(
       `/api/v1/accounts/${encodeURIComponent(accountId)}/transactions?${params.toString()}`,
     );
