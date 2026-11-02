@@ -2036,7 +2036,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #89 | **Sprint:** 5 | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Sat 31 Oct | **Target deadline:** Sun 01 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (2.4 days of slack)
+- **Start:** Sat 31 Oct | **Target deadline:** Sun 01 Nov | **Actual completion:** - (set when merged) | **Status:** In Review | **Risk:** Low (2.4 days of slack)
 - **Depends on:** TASK-056 (#79, Krishna), TASK-019 (#42, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-056, TASK-019
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; lives in the staff route tree for the relationship manager role.
@@ -2049,9 +2049,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Action logger to record customer calls and notes
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #89`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Customer leads table filterable by segment and loan propensity score
-  - [ ] Customer detail flyout showing recent transaction volume, health score, and churn probability
-  - [ ] Action logger to record customer calls and notes
+  - [x] Customer leads table filterable by segment and loan propensity score
+  - [x] Customer detail flyout showing recent transaction volume, health score, and churn probability
+  - [x] Action logger to record customer calls and notes
 - **Definition of done (evidence):** Component tests test RM role permissions and customer lead filtering.
 - **Required checks:**
   - Automated: Vitest + Testing Library covering loading, empty, error and success states; Playwright journey for critical flows; types only from `schema.d.ts`; correctness tests on aggregates with fixed fixtures (edge cases: empty history, single month)

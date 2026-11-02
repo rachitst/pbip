@@ -425,9 +425,11 @@ class CustomerActivity:
 
 
 def customer_activity(
-    session: Session, as_of: datetime, window: timedelta
+    session: Session, as_of: datetime, window: timedelta, customer_id: UUID | None = None
 ) -> list[CustomerActivity]:
     """Every customer's balances and last activity in ONE query (no per-customer round trips).
+
+    ``customer_id`` narrows it to one customer (the RM detail view) with the same arithmetic.
 
     Balances are summed from the immutable entries rather than read from ``accounts`` so that they
     can be taken at any point in time; transfers between a customer's own accounts net to zero.
@@ -460,11 +462,13 @@ def customer_activity(
         .group_by(ClickstreamEvent.customer_id)
         .subquery()
     )
-    rows = session.execute(
+    query = (
         select(
             Customer.id,
             Customer.full_name,
-            Customer.segment,
+            # The offline job writes ``customer_segments`` (ADR-0012); ``customers.segment`` is the
+            # older column nothing assigns, kept only as a fallback.
+            func.coalesce(CustomerSegment.segment, Customer.segment).label("segment"),
             Customer.created_at,
             User.last_login_at,
             ledger.c.balance,
@@ -473,10 +477,14 @@ def customer_activity(
             events.c.last_event,
         )
         .join(User, User.id == Customer.user_id)
+        .outerjoin(CustomerSegment, CustomerSegment.customer_id == Customer.id)
         .outerjoin(ledger, ledger.c.customer_id == Customer.id)
         .outerjoin(events, events.c.customer_id == Customer.id)
         .order_by(Customer.id)
-    ).all()
+    )
+    if customer_id is not None:
+        query = query.where(Customer.id == customer_id)
+    rows = session.execute(query).all()
     return [
         CustomerActivity(
             customer_id=row.id,
@@ -496,6 +504,48 @@ def customer_activity(
         )
         for row in rows
     ]
+
+
+@dataclass(frozen=True)
+class TransactionVolume:
+    """Posted money movements with other parties over a window (minor units)."""
+
+    transaction_count: int
+    inflow_minor: int
+    outflow_minor: int
+
+
+def transaction_volume(
+    session: Session, customer_id: UUID, start: datetime, end: datetime
+) -> TransactionVolume:
+    """Counts each posted transaction once; moves between the customer's own accounts are skipped.
+
+    Reversals are left out, as in the health metrics, so a corrected mistake is not activity.
+    """
+    owned = select(AccountHolder.account_id).where(AccountHolder.customer_id == customer_id)
+    # ``IS NOT NULL`` first: a deposit has no debit account, and NULL IN (...) would be NULL.
+    debit_owned = Transaction.debit_account_id.is_not(None) & Transaction.debit_account_id.in_(
+        owned
+    )
+    credit_owned = Transaction.credit_account_id.is_not(None) & Transaction.credit_account_id.in_(
+        owned
+    )
+    inflow = credit_owned & ~debit_owned
+    outflow = debit_owned & ~credit_owned
+    row = session.execute(
+        select(
+            func.count().filter(inflow | outflow),
+            func.coalesce(func.sum(Transaction.amount).filter(inflow), 0),
+            func.coalesce(func.sum(Transaction.amount).filter(outflow), 0),
+        ).where(
+            debit_owned | credit_owned,
+            Transaction.status == TransactionStatus.POSTED,
+            Transaction.type != TransactionType.REVERSAL,
+            Transaction.created_at >= start,
+            Transaction.created_at <= end,
+        )
+    ).one()
+    return TransactionVolume(int(row[0]), int(row[1]), int(row[2]))
 
 
 def daily_balances(session: Session, account_id: UUID, now: datetime, days: int) -> list[int]:

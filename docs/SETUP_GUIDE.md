@@ -323,6 +323,7 @@ Postgres (port 5432) and Redis (port 6379) will start in detached background con
 - Retail customer: `alice@demo.pbip` / `bob@demo.pbip`
 - Bank staff (analyst): `analyst@demo.pbip`
 - Admin: `admin@demo.pbip`
+- Relationship manager: `rm@demo.pbip` (RM insights page, TASK-066)
 
 ### Step 3: Launch Local Dev Servers (Multiple Terminals)
 Open 3 separate terminal tabs:
