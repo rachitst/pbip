@@ -20,9 +20,12 @@ export function uniqueTag(): string {
 }
 
 /** A throwaway password generated per run (never a real credential); the suffix satisfies the
- * letters + digits/symbols rule. */
+ * letters + digits/symbols rule. The random hex is split into groups of four: a raw uuid can hold
+ * a 5-character run such as "23456", which the keyboard-sequence rule rejects (about 1 run in
+ * 4,000; it failed the BOLA journey on PR #344). */
 export function newPassword(): string {
-  return `${randomUUID()}Aa1!`;
+  const hex = randomUUID().replace(/-/g, "");
+  return `${(hex.match(/.{4}/g) ?? []).join("-")}-Aa1!`;
 }
 
 export function staffPassword(): string {
