@@ -31,3 +31,4 @@ from pbip_api.modules.loans import models as _loans  # noqa: F401
 from pbip_api.modules.notifications import models as _notifications  # noqa: F401
 from pbip_api.modules.payees import models as _payees  # noqa: F401
 from pbip_api.modules.payments import models as _payments  # noqa: F401
+from pbip_api.modules.wealth import models as _wealth  # noqa: F401

@@ -35,6 +35,8 @@ from pbip_api.modules.ledger.models import (
 
 SYSTEM_CLEARING_ID = UUID("00000000-0000-0000-0000-0000000000c1")
 SYSTEM_FEES_ID = UUID("00000000-0000-0000-0000-0000000000c2")
+# The bank's liability for money held on fixed deposit (migration 0017, ADR-0025).
+SYSTEM_FIXED_DEPOSITS_ID = UUID("00000000-0000-0000-0000-0000000000c3")
 
 
 class InsufficientFundsError(UnprocessableError):
@@ -317,6 +319,87 @@ def collect_loan_repayment(
     )
     post_transaction(session, transaction, transfer_legs(transaction))
     return transaction
+
+
+def book_fixed_deposit(
+    session: Session,
+    *,
+    account_id: UUID,
+    amount: int,
+    currency: str,
+    initiated_by_user_id: UUID,
+    reference: str,
+) -> Transaction:
+    """Move a deposit's principal: DEBIT the customer, CREDIT ``SYS-FIXED-DEPOSITS`` (ADR-0025).
+
+    A real posting, not a hold: the money leaves the customer's balance for the whole term. Raises
+    ``InsufficientFundsError`` like any debit. Locks both accounts (sorted) before the header.
+    """
+    transaction = create_transaction(
+        session,
+        type_=TransactionType.FD_BOOKING,
+        amount=amount,
+        currency=currency,
+        debit_account_id=account_id,
+        credit_account_id=SYSTEM_FIXED_DEPOSITS_ID,
+        initiated_by_user_id=initiated_by_user_id,
+        reference=reference,
+    )
+    post_transaction(session, transaction, transfer_legs(transaction))
+    return transaction
+
+
+@dataclass(frozen=True, slots=True)
+class DepositPayout:
+    principal: Transaction
+    interest: Transaction | None  # None when no interest is due (e.g. closed in the first week)
+
+
+def pay_out_fixed_deposit(
+    session: Session,
+    *,
+    account_id: UUID,
+    principal: int,
+    interest: int,
+    currency: str,
+    initiated_by_user_id: UUID,
+    reference: str,
+) -> DepositPayout:
+    """Close a deposit (ADR-0025): the principal back from ``SYS-FIXED-DEPOSITS`` (``FD_CLOSURE``)
+    and the interest from the bank's clearing account (``FD_INTEREST``), two balanced postings.
+
+    ALL THREE accounts are locked in sorted id order before either header is inserted: locking the
+    clearing account only for the second posting would take a row lock after the first header's
+    KEY SHARE locks, the order the lock contract forbids.
+    """
+    if interest < 0:
+        raise LedgerInvariantError("interest cannot be negative")
+    lock_accounts(session, [account_id, SYSTEM_FIXED_DEPOSITS_ID, SYSTEM_CLEARING_ID])
+    returned = create_transaction(
+        session,
+        type_=TransactionType.FD_CLOSURE,
+        amount=principal,
+        currency=currency,
+        debit_account_id=SYSTEM_FIXED_DEPOSITS_ID,
+        credit_account_id=account_id,
+        initiated_by_user_id=initiated_by_user_id,
+        reference=f"{reference} principal",
+    )
+    post_transaction(session, returned, transfer_legs(returned))
+    if interest == 0:
+        return DepositPayout(returned, None)
+    paid = create_transaction(
+        session,
+        type_=TransactionType.FD_INTEREST,
+        amount=interest,
+        currency=currency,
+        debit_account_id=SYSTEM_CLEARING_ID,
+        credit_account_id=account_id,
+        initiated_by_user_id=initiated_by_user_id,
+        reference=f"{reference} interest",
+    )
+    post_transaction(session, paid, transfer_legs(paid))
+    return DepositPayout(returned, paid)
 
 
 def reverse_transaction(

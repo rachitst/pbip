@@ -398,6 +398,35 @@
         "title": "AlertSummary",
         "type": "object"
       },
+      "AllocationSlice": {
+        "properties": {
+          "asset_class": {
+            "enum": [
+              "CASH",
+              "DEPOSITS",
+              "FUNDS"
+            ],
+            "title": "Asset Class",
+            "type": "string"
+          },
+          "share_bps": {
+            "description": "Share of the total; the slices sum to 10000 (0 if empty)",
+            "title": "Share Bps",
+            "type": "integer"
+          },
+          "value_minor": {
+            "title": "Value Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "asset_class",
+          "value_minor",
+          "share_bps"
+        ],
+        "title": "AllocationSlice",
+        "type": "object"
+      },
       "AssistantHistory": {
         "properties": {
           "items": {
@@ -1540,6 +1569,150 @@
         "title": "DemoLabStatus",
         "type": "object"
       },
+      "DepositBookRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "description": "One of MY accounts: funds the deposit, receives the payout",
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "amount_minor": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 10000000000.0,
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "tenure_months": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 120.0,
+            "title": "Tenure Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "product_id",
+          "amount_minor",
+          "tenure_months",
+          "account_id"
+        ],
+        "title": "DepositBookRequest",
+        "type": "object"
+      },
+      "DepositQuoteOut": {
+        "properties": {
+          "annual_rate_bps": {
+            "title": "Annual Rate Bps",
+            "type": "integer"
+          },
+          "apy_bps": {
+            "title": "Apy Bps",
+            "type": "integer"
+          },
+          "lock_in_months": {
+            "title": "Lock In Months",
+            "type": "integer"
+          },
+          "maturity_amount_minor": {
+            "title": "Maturity Amount Minor",
+            "type": "integer"
+          },
+          "maturity_date": {
+            "format": "date",
+            "title": "Maturity Date",
+            "type": "string"
+          },
+          "maturity_interest_minor": {
+            "title": "Maturity Interest Minor",
+            "type": "integer"
+          },
+          "premature_penalty_bps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Premature Penalty Bps"
+          },
+          "principal_minor": {
+            "title": "Principal Minor",
+            "type": "integer"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "product_name": {
+            "title": "Product Name",
+            "type": "string"
+          },
+          "start_date": {
+            "format": "date",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "tenure_months": {
+            "title": "Tenure Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "product_id",
+          "product_name",
+          "principal_minor",
+          "tenure_months",
+          "annual_rate_bps",
+          "apy_bps",
+          "start_date",
+          "maturity_date",
+          "maturity_interest_minor",
+          "maturity_amount_minor",
+          "lock_in_months",
+          "premature_penalty_bps"
+        ],
+        "title": "DepositQuoteOut",
+        "type": "object"
+      },
+      "DepositTermsRequest": {
+        "additionalProperties": false,
+        "description": "No rate, maturity or customer from the client: the rate comes from the catalogue, the\nmaturity from ``deposit_math`` and the customer from the session (ADR-0025).",
+        "properties": {
+          "amount_minor": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 10000000000.0,
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "tenure_months": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 120.0,
+            "title": "Tenure Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "product_id",
+          "amount_minor",
+          "tenure_months"
+        ],
+        "title": "DepositTermsRequest",
+        "type": "object"
+      },
       "DeviceOut": {
         "description": "Device metadata returned to client.\n\nRaw fingerprints and fingerprint hashes are never exposed.",
         "properties": {
@@ -2143,6 +2316,205 @@
           "components"
         ],
         "title": "FinancialHealthScoreResponse",
+        "type": "object"
+      },
+      "FixedDepositOut": {
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "accrued_interest_minor": {
+            "description": "Interest earned to today at the contract rate (paid interest once closed)",
+            "title": "Accrued Interest Minor",
+            "type": "integer"
+          },
+          "annual_rate_bps": {
+            "title": "Annual Rate Bps",
+            "type": "integer"
+          },
+          "booked_at": {
+            "format": "date-time",
+            "title": "Booked At",
+            "type": "string"
+          },
+          "booking_transaction_id": {
+            "format": "uuid",
+            "title": "Booking Transaction Id",
+            "type": "string"
+          },
+          "can_close_now": {
+            "title": "Can Close Now",
+            "type": "boolean"
+          },
+          "closed_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed On"
+          },
+          "closure_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "MATURED",
+                  "PREMATURE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closure Kind"
+          },
+          "closure_transaction_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closure Transaction Id"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "days_to_maturity": {
+            "description": "Bank days until maturity; 0 once matured",
+            "title": "Days To Maturity",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "interest_transaction_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interest Transaction Id"
+          },
+          "lock_in_until": {
+            "format": "date",
+            "title": "Lock In Until",
+            "type": "string"
+          },
+          "maturity_amount_minor": {
+            "title": "Maturity Amount Minor",
+            "type": "integer"
+          },
+          "maturity_date": {
+            "format": "date",
+            "title": "Maturity Date",
+            "type": "string"
+          },
+          "maturity_interest_minor": {
+            "title": "Maturity Interest Minor",
+            "type": "integer"
+          },
+          "paid_interest_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid Interest Minor"
+          },
+          "payout_if_closed_today_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What closing today would pay (premature penalty applied); None if it cannot",
+            "title": "Payout If Closed Today Minor"
+          },
+          "principal_minor": {
+            "title": "Principal Minor",
+            "type": "integer"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "product_name": {
+            "title": "Product Name",
+            "type": "string"
+          },
+          "start_date": {
+            "format": "date",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "status": {
+            "description": "MATURED = active and the maturity date reached: ready to withdraw",
+            "enum": [
+              "ACTIVE",
+              "MATURED",
+              "CLOSED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tenure_months": {
+            "title": "Tenure Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "product_id",
+          "product_name",
+          "status",
+          "account_id",
+          "currency",
+          "principal_minor",
+          "annual_rate_bps",
+          "tenure_months",
+          "start_date",
+          "maturity_date",
+          "days_to_maturity",
+          "maturity_interest_minor",
+          "maturity_amount_minor",
+          "accrued_interest_minor",
+          "lock_in_until",
+          "can_close_now",
+          "payout_if_closed_today_minor",
+          "closure_kind",
+          "paid_interest_minor",
+          "closed_on",
+          "booking_transaction_id",
+          "closure_transaction_id",
+          "interest_transaction_id",
+          "booked_at"
+        ],
+        "title": "FixedDepositOut",
         "type": "object"
       },
       "FlaggedEvent": {
@@ -3901,6 +4273,79 @@
         "title": "PayeeVerificationOut",
         "type": "object"
       },
+      "PortfolioOut": {
+        "properties": {
+          "accrued_interest_minor": {
+            "description": "Interest earned to date on open deposits",
+            "title": "Accrued Interest Minor",
+            "type": "integer"
+          },
+          "allocation": {
+            "items": {
+              "$ref": "#/components/schemas/AllocationSlice"
+            },
+            "title": "Allocation",
+            "type": "array"
+          },
+          "as_of": {
+            "format": "date",
+            "title": "As Of",
+            "type": "string"
+          },
+          "cash_minor": {
+            "description": "Ledger balance of my INR accounts",
+            "title": "Cash Minor",
+            "type": "integer"
+          },
+          "currency": {
+            "const": "INR",
+            "title": "Currency",
+            "type": "string"
+          },
+          "deposits_value_minor": {
+            "description": "Principal + accrued interest",
+            "title": "Deposits Value Minor",
+            "type": "integer"
+          },
+          "funds_minor": {
+            "description": "Fund holdings: PBIP sells no fund units, so always 0",
+            "title": "Funds Minor",
+            "type": "integer"
+          },
+          "invested_principal_minor": {
+            "description": "Principal of my open fixed deposits",
+            "title": "Invested Principal Minor",
+            "type": "integer"
+          },
+          "open_deposits": {
+            "title": "Open Deposits",
+            "type": "integer"
+          },
+          "projected_maturity_value_minor": {
+            "title": "Projected Maturity Value Minor",
+            "type": "integer"
+          },
+          "total_minor": {
+            "title": "Total Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "currency",
+          "as_of",
+          "cash_minor",
+          "invested_principal_minor",
+          "accrued_interest_minor",
+          "deposits_value_minor",
+          "projected_maturity_value_minor",
+          "funds_minor",
+          "total_minor",
+          "open_deposits",
+          "allocation"
+        ],
+        "title": "PortfolioOut",
+        "type": "object"
+      },
       "ProductRecommendationItem": {
         "description": "A single personalized product recommendation with explainable reasons.",
         "properties": {
@@ -4110,6 +4555,15 @@
         ],
         "title": "RegisterRequest",
         "type": "object"
+      },
+      "RiskLevel": {
+        "enum": [
+          "LOW",
+          "MODERATE",
+          "HIGH"
+        ],
+        "title": "RiskLevel",
+        "type": "string"
       },
       "RiskyPayee": {
         "properties": {
@@ -5315,6 +5769,162 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "WealthProductOut": {
+        "properties": {
+          "annual_rate_bps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Indicative, simulated annual rate (deposits) or coupon (gold bond); None when market-linked",
+            "title": "Annual Rate Bps"
+          },
+          "apy_bps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Annualised yield: quarterly compounding for deposits, the coupon for the gold bond; None for market-linked funds (PBIP has no market data)",
+            "title": "Apy Bps"
+          },
+          "bookable": {
+            "description": "Only fixed deposits can be booked online",
+            "title": "Bookable",
+            "type": "boolean"
+          },
+          "catalogue_version": {
+            "title": "Catalogue Version",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "max_amount_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Amount Minor"
+          },
+          "min_amount_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Amount Minor"
+          },
+          "min_lock_in_months": {
+            "title": "Min Lock In Months",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "title": "Notes",
+            "type": "string"
+          },
+          "premature_closure_allowed": {
+            "title": "Premature Closure Allowed",
+            "type": "boolean"
+          },
+          "premature_penalty_bps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Premature Penalty Bps"
+          },
+          "product_type": {
+            "enum": [
+              "FIXED_DEPOSIT",
+              "MUTUAL_FUND",
+              "SOVEREIGN_GOLD_BOND"
+            ],
+            "title": "Product Type",
+            "type": "string"
+          },
+          "risk_level": {
+            "enum": [
+              "LOW",
+              "MODERATE",
+              "HIGH"
+            ],
+            "title": "Risk Level",
+            "type": "string"
+          },
+          "tenures_months": {
+            "description": "Empty for open-ended funds",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Tenures Months",
+            "type": "array"
+          },
+          "yield_basis": {
+            "enum": [
+              "GUARANTEED",
+              "FIXED_COUPON",
+              "MARKET_LINKED"
+            ],
+            "title": "Yield Basis",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "product_type",
+          "name",
+          "description",
+          "risk_level",
+          "yield_basis",
+          "annual_rate_bps",
+          "apy_bps",
+          "tenures_months",
+          "min_lock_in_months",
+          "min_amount_minor",
+          "max_amount_minor",
+          "premature_closure_allowed",
+          "premature_penalty_bps",
+          "bookable",
+          "notes",
+          "catalogue_version"
+        ],
+        "title": "WealthProductOut",
         "type": "object"
       }
     },
@@ -9210,6 +9820,329 @@
         "summary": "Complete a flagged transfer with a TOTP code",
         "tags": [
           "payments"
+        ]
+      }
+    },
+    "/api/v1/wealth/fixed-deposits": {
+      "get": {
+        "operationId": "list_fixed_deposits_api_v1_wealth_fixed_deposits_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FixedDepositOut"
+                  },
+                  "title": "Response List Fixed Deposits Api V1 Wealth Fixed Deposits Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "My fixed deposits",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/fixed-deposits/book": {
+      "post": {
+        "operationId": "book_fixed_deposit_api_v1_wealth_fixed_deposits_book_post",
+        "parameters": [
+          {
+            "description": "Unique per logical request; retrying with the same key never duplicates.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Unique per logical request; retrying with the same key never duplicates.",
+              "maxLength": 128,
+              "minLength": 8,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DepositBookRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixedDepositOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Insufficient funds, terms not offered or invalid request"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Book a fixed deposit from one of my accounts (idempotent)",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/fixed-deposits/quote": {
+      "post": {
+        "operationId": "quote_fixed_deposit_api_v1_wealth_fixed_deposits_quote_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DepositTermsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepositQuoteOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Exact maturity preview for a fixed deposit (books nothing)",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/fixed-deposits/{deposit_id}": {
+      "get": {
+        "operationId": "get_fixed_deposit_api_v1_wealth_fixed_deposits__deposit_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deposit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Deposit Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixedDepositOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "One of my fixed deposits",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/fixed-deposits/{deposit_id}/close": {
+      "post": {
+        "operationId": "close_fixed_deposit_api_v1_wealth_fixed_deposits__deposit_id__close_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deposit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Deposit Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Unique per logical request; retrying with the same key never duplicates.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Unique per logical request; retrying with the same key never duplicates.",
+              "maxLength": 128,
+              "minLength": 8,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixedDepositOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "Already closed"
+          },
+          "422": {
+            "description": "Still inside its lock-in period"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Close one of my fixed deposits: maturity payout, or premature with the penalty rate",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/portfolio": {
+      "get": {
+        "operationId": "get_portfolio_api_v1_wealth_portfolio_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "My portfolio: cash, deposits with accrued interest, and allocation",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/products": {
+      "get": {
+        "operationId": "list_products_api_v1_wealth_products_get",
+        "parameters": [
+          {
+            "description": "Only this risk level",
+            "in": "query",
+            "name": "risk_level",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/RiskLevel"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this risk level",
+              "title": "Risk Level"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WealthProductOut"
+                  },
+                  "title": "Response List Products Api V1 Wealth Products Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Wealth catalogue: fixed deposits, mutual funds and the sovereign gold bond",
+        "tags": [
+          "wealth"
         ]
       }
     }

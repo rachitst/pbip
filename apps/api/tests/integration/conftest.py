@@ -55,7 +55,7 @@ def clean_db(migrated_engine: Engine) -> None:
                 "customers, devices, account_holders, payees, scheduled_transfers, transactions, "
                 "transaction_entries, holds, idempotency_keys, fraud_events, fraud_alerts, "
                 "audit_logs, notifications, outbox_events, monthly_category_spending, "
-                "customer_segments, clickstream_events, bill_payments, loans, loan_instalments CASCADE"
+                "customer_segments, clickstream_events, bill_payments, loans, loan_instalments, fixed_deposits CASCADE"
             )
         )
         connection.execute(text("DELETE FROM accounts WHERE account_type <> 'SYSTEM'"))
