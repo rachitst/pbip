@@ -3,7 +3,6 @@ py/clear-text-logging on scripts/seed_dev.py): MFA secrets stay encrypted in the
 scripts/totp.py derives codes from there. The E2E suite (TASK-077) seeds with a generated
 password, takes unused staff codes from totp.py and funds its own customers with e2e_fund.py."""
 
-import secrets
 from collections.abc import Callable
 from pathlib import Path
 from uuid import UUID
@@ -20,7 +19,7 @@ from pbip_api.modules.auth.service import AuthService, RequestMeta
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.insights import service as insights_service
 from pbip_api.modules.ledger.models import Transaction, TransactionType
-from pbip_test_support import PASSWORD, FakeClock, totp_code
+from pbip_test_support import PASSWORD, FakeClock, generated_password, totp_code
 from sqlalchemy import func, select, text, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
@@ -76,7 +75,7 @@ def test_seed_writes_no_secret_file_and_prints_no_secrets(
     monkeypatch.setattr(seed_dev, "get_settings", lambda: settings)
     monkeypatch.setattr(seed_dev, "get_engine", lambda: migrated_engine)
     monkeypatch.chdir(tmp_path)  # the old script wrote .dev-secrets.txt into the working directory
-    password = _generated_password()
+    password = generated_password()
 
     assert seed_dev.main({seed_dev.PASSWORD_ENV: password}) == 0
 
@@ -97,11 +96,7 @@ def test_seed_writes_no_secret_file_and_prints_no_secrets(
         ).at(1_000_000)
 
 
-def _generated_password() -> str:
-    return f"{secrets.token_urlsafe(18)}Aa1!"
-
-
-ENV_PASSWORD = _generated_password()
+ENV_PASSWORD = generated_password()
 
 
 def _seed_with(
@@ -115,7 +110,7 @@ def _seed_with(
 def test_seeded_users_get_the_password_from_the_environment(
     migrated_engine: Engine, db: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    password = _generated_password()
+    password = generated_password()
 
     assert _seed_with(settings, migrated_engine, monkeypatch, {"PBIP_DEMO_PASSWORD": password}) == 0
 
