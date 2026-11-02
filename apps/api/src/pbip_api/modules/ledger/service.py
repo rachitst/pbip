@@ -35,7 +35,7 @@ from pbip_api.modules.ledger.models import (
 
 SYSTEM_CLEARING_ID = UUID("00000000-0000-0000-0000-0000000000c1")
 SYSTEM_FEES_ID = UUID("00000000-0000-0000-0000-0000000000c2")
-# The bank's liability for money held on fixed deposit (migration 0017, ADR-0025).
+# The bank's liability for money held on fixed deposit (migration 0018, ADR-0025).
 SYSTEM_FIXED_DEPOSITS_ID = UUID("00000000-0000-0000-0000-0000000000c3")
 
 

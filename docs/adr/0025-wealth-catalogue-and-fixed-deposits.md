@@ -24,7 +24,7 @@ catalogue, never invented per request; rates are stated as indicative and simula
 
 ## Decision
 
-### 1. The catalogue is reference data seeded by migration `0017` (table `wealth_products`)
+### 1. The catalogue is reference data seeded by migration `0018` (table `wealth_products`)
 Unlike the loan catalogue (code, ADR-0024), the wealth catalogue is a table, because the definition of done asks
 for a catalogue migration, TASK-096 (insurance) asks for catalogue data "seeded through a migration and the same
 in every environment", and a booked deposit can then reference its product with a real foreign key. Each row
@@ -70,7 +70,7 @@ months so a deposit is a whole number of quarters. With `r` the annual rate:
   practice). A deposit inside its lock-in (the tax-saver) cannot be closed early: 422.
 
 ### 3. Postings: a dedicated system account and three transaction types
-Migration `0017` adds the system account `SYS-FIXED-DEPOSITS` (`...0000c3`), the bank's liability for money held
+Migration `0018` adds the system account `SYS-FIXED-DEPOSITS` (`...0000c3`), the bank's liability for money held
 on deposit, and widens `ck_transactions_type_valid`:
 
 | Posting | DEBIT | CREDIT | Type |

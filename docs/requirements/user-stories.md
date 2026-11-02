@@ -175,7 +175,7 @@ habits.*
 **Status:** Partial. The UI is TASK-062.
 
 **Tests:** `integration/test_recommendations.py::test_recommendations_are_scoped_to_the_authenticated_customer`,
-`test_recommendations_use_the_customers_real_figures_and_ignore_date_of_birth`.
+`test_recommendations_use_the_customers_real_figures_and_ignore_date_of_birth_without_consent`.
 
 **Tasks:** TASK-054 (In Progress); TASK-062 (Todo).
 
@@ -487,15 +487,18 @@ and a rewards card.
 
 **Acceptance criteria:**
 
-* ✗ The questionnaire produces a band of LOW, MODERATE or HIGH.
-* ✗ The profile is readable and updatable only by me.
-* ✗ The assessment date and answers are kept.
+* ✓ The questionnaire produces a band of LOW, MODERATE or HIGH (five enumerated answers worth 0-2 points each;
+  0-3 LOW, 4-6 MODERATE, 7-10 HIGH, questionnaire RTQ-1 in `modules/customers/risk.py`).
+* ✓ The profile is readable and updatable only by me (`GET`/`PUT /api/v1/customers/me/risk-profile`).
+* ✓ The assessment date and answers are kept, and every assessment is audited.
+* ✓ Profile & security has a "Risk profile" questionnaire.
 
-**Status:** Planned.
+**Status:** Implemented. The band is not yet an input to investment suggestions (US-23).
 
-**Tests:** none yet.
+**Tests:** `integration/test_risk_profile.py`; `unit/test_customer_risk_and_age_band.py`;
+`apps/web/src/pages/RiskProfileSection.test.tsx`.
 
-**Tasks:** TASK-097 (Todo).
+**Tasks:** TASK-097 (In Review).
 
 ### US-23 Get suitable investment suggestions (FR-34 to FR-36)
 
@@ -760,19 +763,21 @@ behaviour, spending, demographics and what I already hold.*
 * ✓ The catalogue covers savings, loan, investment and insurance types.
 * ✓ The reasons come from my own figures.
 * ✓ A high debt ratio excludes credit products.
-* ✗ A consented age band is used. It is always `unknown` today (ADR-0015).
+* ✓ A consented age band is used (ADR-0015): `unknown` without a date of birth and a recorded consent, and
+  withdrawal applies to the next request. The engine never receives the date.
 * ✗ Products I already hold are taken into account.
 * ✗ The ranking uses a trained propensity model. It is hand-weighted today.
 
-**Status:** Partial. The age band is TASK-107. Existing holdings have no task. The propensity model is TASK-054.
+**Status:** Partial. Existing holdings have no task. The propensity model is TASK-054.
 
 **Tests:**
 
 * `ml/tests/test_recommendations.py`: `test_eligibility_exclusion_for_high_debt_ratio`,
   `test_adr_0015_age_band_never_changes_ranking_only_adds_an_eligibility_reason`;
-* `integration/test_recommendations.py`.
+* `integration/test_recommendations.py` (`test_engine_gets_the_age_band_only_with_consent_and_never_the_date`);
+* `integration/test_demographics.py`; `apps/web/src/pages/DemographicsSection.test.tsx`.
 
-**Tasks:** TASK-054 (In Progress); TASK-062, TASK-107 (Todo).
+**Tasks:** TASK-054 (In Progress); TASK-107 (In Review); TASK-062 (Todo).
 
 ## UC-13 Security monitoring dashboard
 

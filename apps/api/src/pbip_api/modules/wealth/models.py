@@ -1,6 +1,6 @@
 """Wealth catalogue and fixed deposits (TASK-063, TASK-064, ADR-0025).
 
-``wealth_products`` is reference data seeded by migration 0017 (identical in every environment; a
+``wealth_products`` is reference data seeded by migration 0018 (identical in every environment; a
 rate change is a new migration). A fixed deposit stores a SNAPSHOT of the terms it was booked on, so
 a later catalogue change never rewrites an existing contract. "Matured" is derived (ACTIVE and the
 maturity date reached), never stored, so it cannot go stale.

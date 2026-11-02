@@ -35,7 +35,17 @@ def test_ordinary_keys_that_contain_pan_are_not_over_redacted() -> None:
 
 
 @pytest.mark.parametrize(
-    "key", ["full_name", "date_of_birth", "phone", "phone_masked", "customer_phone"]
+    "key",
+    [
+        "full_name",
+        "date_of_birth",
+        "phone",
+        "phone_masked",
+        "customer_phone",
+        "birth_date",
+        "birthdate",
+        "dob",
+    ],
 )
 def test_customer_pii_keys_are_redacted_at_any_depth(key: str) -> None:
     """PII that is never meant to be logged is redacted by key as a backstop (#145)."""

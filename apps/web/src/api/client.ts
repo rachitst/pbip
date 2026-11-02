@@ -15,6 +15,9 @@ export type MfaEnrollmentOut = components["schemas"]["MfaEnrollmentOut"];
 export type RecoveryCodesOut = components["schemas"]["RecoveryCodesOut"];
 export type CustomerProfileOut = components["schemas"]["CustomerProfileOut"];
 export type DeviceOut = components["schemas"]["DeviceOut"];
+export type RiskProfileOut = components["schemas"]["RiskProfileOut"];
+export type RiskQuestionnaire = components["schemas"]["RiskQuestionnaire"];
+export type DemographicsOut = components["schemas"]["DemographicsOut"];
 export type EntriesPage = components["schemas"]["EntriesPage"];
 export type EntryOut = components["schemas"]["EntryOut"];
 /** TASK-017 query filters, from the generated contract (amounts in paise, dates YYYY-MM-DD IST). */
@@ -278,6 +281,25 @@ export const api = {
       method: "POST",
       headers: { "X-Device-ID": deviceId },
       body: JSON.stringify({ label }),
+    }),
+  riskProfile: () => apiFetch<RiskProfileOut>("/api/v1/customers/me/risk-profile"),
+  saveRiskProfile: (answers: RiskQuestionnaire) =>
+    apiFetch<RiskProfileOut>("/api/v1/customers/me/risk-profile", {
+      method: "PUT",
+      body: JSON.stringify(answers),
+    }),
+  demographics: () => apiFetch<DemographicsOut>("/api/v1/customers/me/demographics"),
+  setDateOfBirth: (dateOfBirth: string) =>
+    apiFetch<DemographicsOut>("/api/v1/customers/me/date-of-birth", {
+      method: "PUT",
+      body: JSON.stringify({ date_of_birth: dateOfBirth }),
+    }),
+  deleteDateOfBirth: () =>
+    apiFetch<undefined>("/api/v1/customers/me/date-of-birth", { method: "DELETE" }),
+  setRecommendationsConsent: (granted: boolean) =>
+    apiFetch<DemographicsOut>("/api/v1/customers/me/recommendations-consent", {
+      method: "PUT",
+      body: JSON.stringify({ granted }),
     }),
   /** 204 on success; the server revokes every session, so the caller must sign out. */
   changePassword: (currentPassword: string, newPassword: string) =>

@@ -624,6 +624,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/customers/me/date-of-birth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set my date of birth (optional; age 18 to 120) */
+        put: operations["put_my_date_of_birth_api_v1_customers_me_date_of_birth_put"];
+        post?: never;
+        /** Delete my date of birth */
+        delete: operations["delete_my_date_of_birth_api_v1_customers_me_date_of_birth_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers/me/demographics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get my date of birth, derived age band and recommendations consent */
+        get: operations["get_my_demographics_api_v1_customers_me_demographics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers/me/recommendations-consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Grant or withdraw consent to use my age band for product recommendations */
+        put: operations["put_my_recommendations_consent_api_v1_customers_me_recommendations_consent_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers/me/risk-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get my risk-tolerance profile (band, answers and when it was assessed) */
+        get: operations["get_my_risk_profile_api_v1_customers_me_risk_profile_get"];
+        /** Answer the risk-tolerance questionnaire and store the resulting band */
+        put: operations["put_my_risk_profile_api_v1_customers_me_risk_profile_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/events/batch": {
         parameters: {
             query?: never;
@@ -1342,6 +1412,11 @@ export interface components {
             roles: string[];
         };
         /**
+         * AgeBand
+         * @enum {string}
+         */
+        AgeBand: "18-25" | "26-35" | "36-50" | "51-59" | "60+" | "unknown";
+        /**
          * AlertCustomer
          * @description What an analyst needs to judge the alert; no contact details or date of birth.
          */
@@ -2040,6 +2115,18 @@ export interface components {
              */
             segment: "HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER";
         };
+        /**
+         * DateOfBirthIn
+         * @description Self-declared date of birth (ADR-0015). The age must be 18 to 120 on the bank's date.
+         */
+        DateOfBirthIn: {
+            /**
+             * Date Of Birth
+             * Format: date
+             * @description ISO date, YYYY-MM-DD
+             */
+            date_of_birth: string;
+        };
         /** DayCounts */
         DayCounts: {
             /** Allow */
@@ -2073,6 +2160,33 @@ export interface components {
              * @description True: the lab may run here. Outside local/test the endpoint answers 404
              */
             enabled: boolean;
+        };
+        /**
+         * DemographicsOut
+         * @description The customer's own date of birth and consent state. Returned to the owner only.
+         */
+        DemographicsOut: {
+            /** @description Band derived from the date of birth today */
+            age_band: components["schemas"]["AgeBand"];
+            /** Consent Granted At */
+            consent_granted_at: string | null;
+            /**
+             * Consent Policy Version
+             * @description Policy version the current consent was given under
+             */
+            consent_policy_version: string | null;
+            /**
+             * Current Policy Version
+             * @description Policy version a new consent agrees to
+             */
+            current_policy_version: string;
+            /** Date Of Birth */
+            date_of_birth: string | null;
+            /**
+             * Recommendations Consent
+             * @description Whether the age band may be used to tailor product recommendations
+             */
+            recommendations_consent: boolean;
         };
         /** DepositBookRequest */
         DepositBookRequest: {
@@ -2252,6 +2366,12 @@ export interface components {
             /** Tenure Months */
             tenure_months: number;
         };
+        /**
+         * EmergencyFund
+         * @description Months of essential spending the customer could cover without investments.
+         * @enum {string}
+         */
+        EmergencyFund: "UNDER_3_MONTHS" | "THREE_TO_6_MONTHS" | "OVER_6_MONTHS";
         /** EmiOut */
         EmiOut: {
             /** Annual Rate Bps */
@@ -2824,6 +2944,22 @@ export interface components {
          * @enum {string}
          */
         InteractionOutcome: "INTERESTED" | "NOT_INTERESTED" | "FOLLOW_UP" | "NO_ANSWER" | "INFORMATION_SENT" | "ACCOUNT_REVIEW";
+        /**
+         * InvestmentExperience
+         * @enum {string}
+         */
+        InvestmentExperience: "NONE" | "SOME" | "EXTENSIVE";
+        /**
+         * InvestmentGoal
+         * @enum {string}
+         */
+        InvestmentGoal: "PROTECT_SAVINGS" | "STEADY_GROWTH" | "MAXIMUM_GROWTH";
+        /**
+         * InvestmentHorizon
+         * @description How long the customer expects to leave money invested.
+         * @enum {string}
+         */
+        InvestmentHorizon: "UNDER_1_YEAR" | "ONE_TO_5_YEARS" | "OVER_5_YEARS";
         /** LiveResponse */
         LiveResponse: {
             /**
@@ -3126,6 +3262,12 @@ export interface components {
             /** Password */
             password: string;
         };
+        /**
+         * LossReaction
+         * @description What the customer would do if their investments fell 20% in a year.
+         * @enum {string}
+         */
+        LossReaction: "SELL_EVERYTHING" | "WAIT_AND_HOLD" | "INVEST_MORE";
         /** MfaConfirmRequest */
         MfaConfirmRequest: {
             /** Code */
@@ -3502,6 +3644,14 @@ export interface components {
             status: "ok" | "degraded";
         };
         /**
+         * RecommendationsConsentIn
+         * @description Grant (true) or withdraw (false) consent to use the date of birth for recommendations.
+         */
+        RecommendationsConsentIn: {
+            /** Granted */
+            granted: boolean;
+        };
+        /**
          * RecommendationsResponse
          * @description Customer personalized product recommendations payload.
          */
@@ -3567,10 +3717,60 @@ export interface components {
             password: string;
         };
         /**
+         * RiskBand
+         * @enum {string}
+         */
+        RiskBand: "LOW" | "MODERATE" | "HIGH";
+        /**
          * RiskLevel
          * @enum {string}
          */
         RiskLevel: "LOW" | "MODERATE" | "HIGH";
+        /**
+         * RiskProfileOut
+         * @description The customer's current risk band and the answers that produced it; nulls until assessed.
+         */
+        RiskProfileOut: {
+            answers: components["schemas"]["RiskQuestionnaire"] | null;
+            /**
+             * Assessed At
+             * @description When the band was last assessed
+             */
+            assessed_at: string | null;
+            /** @description LOW, MODERATE or HIGH; null if never assessed */
+            band: components["schemas"]["RiskBand"] | null;
+            /**
+             * Max Score
+             * @description Highest possible score
+             */
+            max_score: number;
+            /**
+             * Questionnaire Version
+             * @description Questionnaire version that scored these answers
+             */
+            questionnaire_version: string | null;
+            /**
+             * Score
+             * @description Sum of the answer points
+             */
+            score: number | null;
+        };
+        /**
+         * RiskQuestionnaire
+         * @description The five risk-tolerance questions (TASK-097). Every answer is an enumerated choice.
+         */
+        RiskQuestionnaire: {
+            /** @description Months of essential spending you could cover without investments */
+            emergency_fund: components["schemas"]["EmergencyFund"];
+            /** @description Your experience of market-linked investments */
+            investment_experience: components["schemas"]["InvestmentExperience"];
+            /** @description What matters most for your investments */
+            investment_goal: components["schemas"]["InvestmentGoal"];
+            /** @description How long you expect to keep money invested */
+            investment_horizon: components["schemas"]["InvestmentHorizon"];
+            /** @description What you would do if your investments fell 20% in a year */
+            loss_reaction: components["schemas"]["LossReaction"];
+        };
         /** RiskyPayee */
         RiskyPayee: {
             /**
@@ -5288,6 +5488,163 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CustomerProfileOut"];
+                };
+            };
+        };
+    };
+    put_my_date_of_birth_api_v1_customers_me_date_of_birth_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DateOfBirthIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemographicsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_my_date_of_birth_api_v1_customers_me_date_of_birth_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_my_demographics_api_v1_customers_me_demographics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemographicsOut"];
+                };
+            };
+        };
+    };
+    put_my_recommendations_consent_api_v1_customers_me_recommendations_consent_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecommendationsConsentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemographicsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_risk_profile_api_v1_customers_me_risk_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RiskProfileOut"];
+                };
+            };
+        };
+    };
+    put_my_risk_profile_api_v1_customers_me_risk_profile_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RiskQuestionnaire"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RiskProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

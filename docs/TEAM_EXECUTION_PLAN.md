@@ -2914,8 +2914,8 @@ decision in ADR-0015.
 ### TASK-097 - Customer Risk-Tolerance Profile API
 
 - **Issue:** #180 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
-- **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Owner:** Rachit (`rachitst`)
+- **Start:** Mon 02 Nov | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** In Review (TASK-097 and TASK-107 in one PR) | **Risk:** Unscheduled
 - **Depends on:** none.
 - **Mode:** Unscheduled
 - **Goal:** Captures the customer's risk tolerance, the UC-07 input investment recommendations need.
@@ -3184,8 +3184,8 @@ decision in ADR-0015.
 ### TASK-107 - Consented Date of Birth and Age Band for Recommendations
 
 - **Issue:** #194 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Identity & Core Banking
-- **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Owner:** Rachit (`rachitst`)
+- **Start:** Mon 02 Nov | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** In Review (TASK-097 and TASK-107 in one PR) | **Risk:** Unscheduled
 - **Depends on:** none.
 - **Mode:** Unscheduled
 - **Goal:** The minimum demographic input for recommendations (ADR-0015): optional date of birth, explicit consent, derived age band.
