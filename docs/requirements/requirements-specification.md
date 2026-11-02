@@ -91,8 +91,8 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | FR-32 | The customer shall apply for a loan and track it. | Section 5 "loan applications, loan tracking" | Planned | TASK-047, TASK-051 | |
 | FR-33 | The system shall record the customer's risk tolerance. | UC-07 input | Implemented | TASK-097 | Five-question questionnaire, deterministic LOW/MODERATE/HIGH band, answers and assessment time stored and audited (`/api/v1/customers/me/risk-profile`) |
 | FR-34 | The system shall suggest investment products using risk tolerance, savings behaviour, income and available funds. | UC-07 | Partial | TASK-054; TASK-097, TASK-105 | Fixed deposit and index-fund SIP suggestions use income, savings ratio, buffer and balance; the risk band is recorded (FR-33) but not yet an input |
-| FR-35 | The customer shall browse fixed deposits, mutual funds, stocks and bonds, and insurance products. | Section 5 wealth | Partial | TASK-063, TASK-064, TASK-065 (merged #327); TASK-096 | Fixed deposits are browsed, booked and closed on `/wealth` (ADR-0025); mutual funds and a sovereign gold bond are listed for discovery only, not sold; no stocks; no insurance (TASK-096) |
-| FR-36 | The customer shall compare wealth and insurance products. | Section 5 "product comparison" | Planned | TASK-098 | |
+| FR-35 | The customer shall browse fixed deposits, mutual funds, stocks and bonds, and insurance products. | Section 5 wealth | Partial | TASK-063, TASK-064, TASK-065, TASK-096 | Seeded catalogues: deposits, illustrative funds and a gold bond (`GET /api/v1/wealth/products`, ADR-0025), term-life and health insurance with indicative premiums and entry-age hints (`GET /api/v1/wealth/insurance`, ADR-0028); no stocks |
+| FR-36 | The customer shall compare wealth and insurance products. | Section 5 "product comparison" | Implemented | TASK-098 | `/wealth/compare`: two to four products side by side, "Not applicable" where a field does not apply |
 
 ### 2.5 AI assistant (UC-08, section 5)
 
