@@ -1325,6 +1325,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/wealth/fixed-deposits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My fixed deposits */
+        get: operations["list_fixed_deposits_api_v1_wealth_fixed_deposits_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/fixed-deposits/book": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Book a fixed deposit from one of my accounts (idempotent) */
+        post: operations["book_fixed_deposit_api_v1_wealth_fixed_deposits_book_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/fixed-deposits/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exact maturity preview for a fixed deposit (books nothing) */
+        post: operations["quote_fixed_deposit_api_v1_wealth_fixed_deposits_quote_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/fixed-deposits/{deposit_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One of my fixed deposits */
+        get: operations["get_fixed_deposit_api_v1_wealth_fixed_deposits__deposit_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/fixed-deposits/{deposit_id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close one of my fixed deposits: maturity payout, or premature with the penalty rate */
+        post: operations["close_fixed_deposit_api_v1_wealth_fixed_deposits__deposit_id__close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/portfolio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My portfolio: cash, deposits with accrued interest, and allocation */
+        get: operations["get_portfolio_api_v1_wealth_portfolio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Wealth catalogue: fixed deposits, mutual funds and the sovereign gold bond */
+        get: operations["list_products_api_v1_wealth_products_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1509,6 +1628,21 @@ export interface components {
             top_reason?: string | null;
             /** Transaction Status */
             transaction_status: string;
+        };
+        /** AllocationSlice */
+        AllocationSlice: {
+            /**
+             * Asset Class
+             * @enum {string}
+             */
+            asset_class: "CASH" | "DEPOSITS" | "FUNDS";
+            /**
+             * Share Bps
+             * @description Share of the total; the slices sum to 10000 (0 if empty)
+             */
+            share_bps: number;
+            /** Value Minor */
+            value_minor: number;
         };
         /** AssistantHistory */
         AssistantHistory: {
@@ -2209,6 +2343,76 @@ export interface components {
              */
             recommendations_consent: boolean;
         };
+        /** DepositBookRequest */
+        DepositBookRequest: {
+            /**
+             * Account Id
+             * Format: uuid
+             * @description One of MY accounts: funds the deposit, receives the payout
+             */
+            account_id: string;
+            /** Amount Minor */
+            amount_minor: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Tenure Months */
+            tenure_months: number;
+        };
+        /** DepositQuoteOut */
+        DepositQuoteOut: {
+            /** Annual Rate Bps */
+            annual_rate_bps: number;
+            /** Apy Bps */
+            apy_bps: number;
+            /** Lock In Months */
+            lock_in_months: number;
+            /** Maturity Amount Minor */
+            maturity_amount_minor: number;
+            /**
+             * Maturity Date
+             * Format: date
+             */
+            maturity_date: string;
+            /** Maturity Interest Minor */
+            maturity_interest_minor: number;
+            /** Premature Penalty Bps */
+            premature_penalty_bps: number | null;
+            /** Principal Minor */
+            principal_minor: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Product Name */
+            product_name: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /** Tenure Months */
+            tenure_months: number;
+        };
+        /**
+         * DepositTermsRequest
+         * @description No rate, maturity or customer from the client: the rate comes from the catalogue, the
+         *     maturity from ``deposit_math`` and the customer from the session (ADR-0025).
+         */
+        DepositTermsRequest: {
+            /** Amount Minor */
+            amount_minor: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Tenure Months */
+            tenure_months: number;
+        };
         /**
          * DeviceOut
          * @description Device metadata returned to client.
@@ -2678,6 +2882,96 @@ export interface components {
              * @description Length of the trailing window used
              */
             window_months: number;
+        };
+        /** FixedDepositOut */
+        FixedDepositOut: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /**
+             * Accrued Interest Minor
+             * @description Interest earned to today at the contract rate (paid interest once closed)
+             */
+            accrued_interest_minor: number;
+            /** Annual Rate Bps */
+            annual_rate_bps: number;
+            /**
+             * Booked At
+             * Format: date-time
+             */
+            booked_at: string;
+            /**
+             * Booking Transaction Id
+             * Format: uuid
+             */
+            booking_transaction_id: string;
+            /** Can Close Now */
+            can_close_now: boolean;
+            /** Closed On */
+            closed_on: string | null;
+            /** Closure Kind */
+            closure_kind: ("MATURED" | "PREMATURE") | null;
+            /** Closure Transaction Id */
+            closure_transaction_id: string | null;
+            /** Currency */
+            currency: string;
+            /**
+             * Days To Maturity
+             * @description Bank days until maturity; 0 once matured
+             */
+            days_to_maturity: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Interest Transaction Id */
+            interest_transaction_id: string | null;
+            /**
+             * Lock In Until
+             * Format: date
+             */
+            lock_in_until: string;
+            /** Maturity Amount Minor */
+            maturity_amount_minor: number;
+            /**
+             * Maturity Date
+             * Format: date
+             */
+            maturity_date: string;
+            /** Maturity Interest Minor */
+            maturity_interest_minor: number;
+            /** Paid Interest Minor */
+            paid_interest_minor: number | null;
+            /**
+             * Payout If Closed Today Minor
+             * @description What closing today would pay (premature penalty applied); None if it cannot
+             */
+            payout_if_closed_today_minor: number | null;
+            /** Principal Minor */
+            principal_minor: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Product Name */
+            product_name: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * Status
+             * @description MATURED = active and the maturity date reached: ready to withdraw
+             * @enum {string}
+             */
+            status: "ACTIVE" | "MATURED" | "CLOSED";
+            /** Tenure Months */
+            tenure_months: number;
         };
         /** FlaggedEvent */
         FlaggedEvent: {
@@ -3538,6 +3832,52 @@ export interface components {
             name_match: "MATCH" | "NO_MATCH" | "NOT_CHECKED";
             payee: components["schemas"]["PayeeOut"];
         };
+        /** PortfolioOut */
+        PortfolioOut: {
+            /**
+             * Accrued Interest Minor
+             * @description Interest earned to date on open deposits
+             */
+            accrued_interest_minor: number;
+            /** Allocation */
+            allocation: components["schemas"]["AllocationSlice"][];
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+            /**
+             * Cash Minor
+             * @description Ledger balance of my INR accounts
+             */
+            cash_minor: number;
+            /**
+             * Currency
+             * @constant
+             */
+            currency: "INR";
+            /**
+             * Deposits Value Minor
+             * @description Principal + accrued interest
+             */
+            deposits_value_minor: number;
+            /**
+             * Funds Minor
+             * @description Fund holdings: PBIP sells no fund units, so always 0
+             */
+            funds_minor: number;
+            /**
+             * Invested Principal Minor
+             * @description Principal of my open fixed deposits
+             */
+            invested_principal_minor: number;
+            /** Open Deposits */
+            open_deposits: number;
+            /** Projected Maturity Value Minor */
+            projected_maturity_value_minor: number;
+            /** Total Minor */
+            total_minor: number;
+        };
         /** ProductClicks */
         ProductClicks: {
             /**
@@ -3744,6 +4084,11 @@ export interface components {
          * @enum {string}
          */
         RiskBand: "LOW" | "MODERATE" | "HIGH";
+        /**
+         * RiskLevel
+         * @enum {string}
+         */
+        RiskLevel: "LOW" | "MODERATE" | "HIGH";
         /**
          * RiskProfileOut
          * @description The customer's current risk band and the answers that produced it; nulls until assessed.
@@ -4412,6 +4757,69 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** WealthProductOut */
+        WealthProductOut: {
+            /**
+             * Annual Rate Bps
+             * @description Indicative, simulated annual rate (deposits) or coupon (gold bond); None when market-linked
+             */
+            annual_rate_bps: number | null;
+            /**
+             * Apy Bps
+             * @description Annualised yield: quarterly compounding for deposits, the coupon for the gold bond; None for market-linked funds (PBIP has no market data)
+             */
+            apy_bps: number | null;
+            /**
+             * Bookable
+             * @description Only fixed deposits can be booked online
+             */
+            bookable: boolean;
+            /** Catalogue Version */
+            catalogue_version: string;
+            /** Code */
+            code: string;
+            /** Description */
+            description: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Max Amount Minor */
+            max_amount_minor: number | null;
+            /** Min Amount Minor */
+            min_amount_minor: number | null;
+            /** Min Lock In Months */
+            min_lock_in_months: number;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes: string;
+            /** Premature Closure Allowed */
+            premature_closure_allowed: boolean;
+            /** Premature Penalty Bps */
+            premature_penalty_bps: number | null;
+            /**
+             * Product Type
+             * @enum {string}
+             */
+            product_type: "FIXED_DEPOSIT" | "MUTUAL_FUND" | "SOVEREIGN_GOLD_BOND";
+            /**
+             * Risk Level
+             * @enum {string}
+             */
+            risk_level: "LOW" | "MODERATE" | "HIGH";
+            /**
+             * Tenures Months
+             * @description Empty for open-ended funds
+             */
+            tenures_months: number[];
+            /**
+             * Yield Basis
+             * @enum {string}
+             */
+            yield_basis: "GUARANTEED" | "FIXED_COUPON" | "MARKET_LINKED";
         };
     };
     responses: never;
@@ -7038,6 +7446,215 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TransferOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_fixed_deposits_api_v1_wealth_fixed_deposits_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedDepositOut"][];
+                };
+            };
+        };
+    };
+    book_fixed_deposit_api_v1_wealth_fixed_deposits_book_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical request; retrying with the same key never duplicates. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepositBookRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedDepositOut"];
+                };
+            };
+            /** @description Insufficient funds, terms not offered or invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    quote_fixed_deposit_api_v1_wealth_fixed_deposits_quote_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepositTermsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DepositQuoteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_fixed_deposit_api_v1_wealth_fixed_deposits__deposit_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deposit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedDepositOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    close_fixed_deposit_api_v1_wealth_fixed_deposits__deposit_id__close_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical request; retrying with the same key never duplicates. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                deposit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedDepositOut"];
+                };
+            };
+            /** @description Already closed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Still inside its lock-in period */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_portfolio_api_v1_wealth_portfolio_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioOut"];
+                };
+            };
+        };
+    };
+    list_products_api_v1_wealth_products_get: {
+        parameters: {
+            query?: {
+                /** @description Only this risk level */
+                risk_level?: components["schemas"]["RiskLevel"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WealthProductOut"][];
                 };
             };
             /** @description Validation Error */

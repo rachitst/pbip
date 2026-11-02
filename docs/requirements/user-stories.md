@@ -510,15 +510,23 @@ compare them, so that I can invest sensibly.*
 * ✓ The recommendation engine suggests a fixed deposit or an index-fund SIP only when income, savings ratio, buffer
   and balance qualify.
 * ✗ The suggestions use my risk tolerance.
-* ✗ A wealth catalogue lists FDs, funds and bonds.
+* ✓ A wealth catalogue lists FDs, funds and a sovereign gold bond with tenure, APY and lock-in, filterable by risk
+  level; funds state no yield because PBIP has no market data (TASK-063, ADR-0025).
+* ✓ I can book a fixed deposit from my account with an exact maturity preview, see it with a maturity countdown in
+  my portfolio, and withdraw it at maturity or close it early at the penalty rate (TASK-064, TASK-065).
 * ✗ Insurance products are listed.
 * ✗ Two to four products can be compared side by side.
 
 **Status:** Partial.
 
-**Tests:** `ml/tests/test_recommendations.py::test_eligibility_exclusion_for_high_debt_ratio`.
+**Tests:** `ml/tests/test_recommendations.py::test_eligibility_exclusion_for_high_debt_ratio`;
+`test_wealth.py::test_catalogue_lists_deposits_funds_and_the_gold_bond_with_yield_and_lock_in`,
+`test_catalogue_filters_by_risk_level`, `test_booking_posts_one_balanced_entry_and_stores_the_deposit`,
+`test_premature_closure_pays_the_penalty_rate_and_balances`,
+`test_maturity_is_computed_on_read_and_pays_exactly_the_projected_amount`; `test_wealth_deposit_math.py`;
+`Wealth.test.tsx`.
 
-**Tasks:** TASK-054 (In Progress); TASK-063, TASK-064, TASK-065, TASK-096, TASK-097, TASK-098 (Todo).
+**Tasks:** TASK-054 (In Progress); TASK-063, TASK-064, TASK-065 (In review); TASK-096, TASK-097, TASK-098 (Todo).
 
 ## UC-08 AI assistant interaction
 

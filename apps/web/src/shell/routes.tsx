@@ -39,6 +39,8 @@ import { MeContext, useCurrentUser } from "./MeContext";
 // Recharts is large: load the Insights page (and the chart library) only when it is opened.
 const Insights = lazy(() => import("../pages/Insights"));
 const BehaviourAnalytics = lazy(() => import("../pages/staff/BehaviourAnalytics"));
+// The Wealth page draws its allocation chart with Recharts too: also loaded on first visit.
+const Wealth = lazy(() => import("../pages/Wealth"));
 
 const HOME_PATH: Record<Area, string> = { customer: "/accounts", staff: "/staff", none: "/" };
 
@@ -50,6 +52,7 @@ function customerNav(me: UserOut): NavItem[] {
     { to: "/scheduled", label: "Scheduled transfers" },
     { to: "/statements", label: "Statements" },
     { to: "/loans", label: "Loans" },
+    { to: "/wealth", label: "Wealth" },
     { to: "/insights", label: "Spending & health" },
     { to: "/profile", label: "Profile & security" },
   ];
@@ -219,6 +222,14 @@ export const routes: RouteObject[] = [
           { path: "bills", element: <PayBills /> },
           { path: "statements", element: <Statements /> },
           { path: "loans", element: <Loans /> },
+          {
+            path: "wealth",
+            element: (
+              <Suspense fallback={<LoadingState label="Loading wealth..." />}>
+                <Wealth />
+              </Suspense>
+            ),
+          },
           {
             path: "insights",
             element: (
