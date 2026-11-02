@@ -17,7 +17,18 @@ import pytest
 pytestmark = pytest.mark.unit
 
 ROOT = Path(__file__).resolve().parents[4]
-_SKIP_DIRS = {".git", ".venv", "node_modules", "dist", "build", "htmlcov", "__pycache__", "mlruns"}
+# "mutants" is mutmut's generated copy of apps/api (TASK-086): it repeats this file's own examples.
+_SKIP_DIRS = {
+    ".git",
+    ".venv",
+    "node_modules",
+    "dist",
+    "build",
+    "htmlcov",
+    "__pycache__",
+    "mlruns",
+    "mutants",
+}
 _SKIP_SUFFIXES = {".lock", ".json", ".png", ".svg", ".ico", ".mmdb", ".parquet", ".csv", ".ipynb"}
 _THIS_FILE = Path(__file__).resolve()
 _COMMAND_END = re.compile(r"[\])]|(?<![\\,])\n")
