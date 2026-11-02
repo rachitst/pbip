@@ -21,6 +21,9 @@ Not covered by a card:
 
 ## Governance in one page
 
+The full mapping to RBI FREE-AI, the EU AI Act and SR 11-7 / PRA SS1/23, with evidence and gaps, is in
+[governance-alignment.md](governance-alignment.md).
+
 - **No black boxes (AGENTS.md section 8).** Fraud decisions return `risk_score`, `decision`, `reasons[]`
   (RULE / MODEL / ANOMALY) and `model_version`. The feature snapshot is stored in `fraud_events`.
   Customers never see reasons or scores.
