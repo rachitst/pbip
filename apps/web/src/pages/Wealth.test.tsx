@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   AccountOut,
@@ -204,7 +205,9 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <Wealth />
+      <MemoryRouter>
+        <Wealth />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -400,5 +403,12 @@ describe("Wealth (TASK-065)", () => {
     mockApi({ products: () => json(500, { title: "x" }) });
     renderPage();
     expect(await screen.findByText(/Could not load the wealth products/)).toBeInTheDocument();
+  });
+
+  it("links to the side-by-side product comparison (TASK-098)", async () => {
+    mockApi();
+    renderPage();
+    const link = await screen.findByRole("link", { name: "Compare products side by side" });
+    expect(link).toHaveAttribute("href", "/wealth/compare");
   });
 });

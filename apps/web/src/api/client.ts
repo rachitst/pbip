@@ -94,6 +94,7 @@ export type DepositBookRequest = components["schemas"]["DepositBookRequest"];
 export type FixedDepositOut = components["schemas"]["FixedDepositOut"];
 export type PortfolioOut = components["schemas"]["PortfolioOut"];
 export type AllocationSlice = components["schemas"]["AllocationSlice"];
+export type InsuranceProductOut = components["schemas"]["InsuranceProductOut"];
 export type RiskLevel = WealthProductOut["risk_level"];
 
 export class ApiError extends Error {
@@ -473,6 +474,8 @@ export const api = {
     ),
   fixedDeposits: () => apiFetch<FixedDepositOut[]>("/api/v1/wealth/fixed-deposits"),
   portfolio: () => apiFetch<PortfolioOut>("/api/v1/wealth/portfolio"),
+  /** The seeded insurance catalogue (ADR-0028): indicative premiums, no underwriting. */
+  insuranceProducts: () => apiFetch<InsuranceProductOut[]>("/api/v1/wealth/insurance"),
   notifications: (options?: { unread_only?: boolean; limit?: number; offset?: number }) => {
     const params = new URLSearchParams();
     if (options?.unread_only !== undefined) params.set("unread_only", String(options.unread_only));

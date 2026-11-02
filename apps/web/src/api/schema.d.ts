@@ -1461,6 +1461,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/wealth/insurance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Insurance catalogue: term life and health, with indicative premiums (no underwriting) */
+        get: operations["list_insurance_api_v1_wealth_insurance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/wealth/portfolio": {
         parameters: {
             query?: never;
@@ -1560,6 +1577,19 @@ export interface components {
          * @enum {string}
          */
         AgeBand: "18-25" | "26-35" | "36-50" | "51-59" | "60+" | "unknown";
+        /** AgeBandHintOut */
+        AgeBandHintOut: {
+            /**
+             * Age Band
+             * @enum {string}
+             */
+            age_band: "18-25" | "26-35" | "36-50" | "51-59" | "60+";
+            /**
+             * Whole Band Eligible
+             * @description False when only some ages in the band are inside the entry ages
+             */
+            whole_band_eligible: boolean;
+        };
         /**
          * AlertCustomer
          * @description What an analyst needs to judge the alert; no contact details or date of birth.
@@ -3260,6 +3290,33 @@ export interface components {
             /** Open Alerts */
             open_alerts: number;
         };
+        /**
+         * IndicativePremiumOut
+         * @description ONE illustrative figure at a stated reference profile, never a quote for this customer
+         *     (PBIP does no underwriting, ADR-0028).
+         */
+        IndicativePremiumOut: {
+            /**
+             * Annual Premium Minor
+             * @description Indicative, simulated annual premium (paise)
+             */
+            annual_premium_minor: number;
+            /**
+             * Reference Age
+             * @description Age at entry the premium is stated for
+             */
+            reference_age: number;
+            /**
+             * Reference Cover Minor
+             * @description Cover the premium is stated for
+             */
+            reference_cover_minor: number;
+            /**
+             * Reference Term Years
+             * @description Policy term the premium is stated for
+             */
+            reference_term_years: number;
+        };
         /** InstalmentOut */
         InstalmentOut: {
             /** Balance After Minor */
@@ -3273,6 +3330,76 @@ export interface components {
             /** Principal Minor */
             principal_minor: number;
         };
+        /**
+         * InsuranceEligibilityOut
+         * @description Hints from the product's own rules only: the customer's data is not read.
+         */
+        InsuranceEligibilityOut: {
+            /**
+             * Age Bands
+             * @description Profile age bands that can apply
+             */
+            age_bands: components["schemas"]["AgeBandHintOut"][];
+            /**
+             * Max Cover Age
+             * @description Cover ends at this age; None: renewable for life
+             */
+            max_cover_age: number | null;
+            /** Max Entry Age */
+            max_entry_age: number;
+            /** Min Entry Age */
+            min_entry_age: number;
+        };
+        /** InsuranceProductOut */
+        InsuranceProductOut: {
+            /** Catalogue Version */
+            catalogue_version: string;
+            /** Code */
+            code: string;
+            /**
+             * Cover Max Minor
+             * @description Largest cover offered
+             */
+            cover_max_minor: number;
+            /**
+             * Cover Min Minor
+             * @description Smallest cover (sum insured/assured) offered
+             */
+            cover_min_minor: number;
+            /**
+             * Currency
+             * @constant
+             */
+            currency: "INR";
+            /** Description */
+            description: string;
+            eligibility: components["schemas"]["InsuranceEligibilityOut"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            indicative_premium: components["schemas"]["IndicativePremiumOut"];
+            /**
+             * Insurance Type
+             * @enum {string}
+             */
+            insurance_type: "TERM_LIFE" | "HEALTH";
+            /** Name */
+            name: string;
+            /** Notes */
+            notes: string;
+            /**
+             * Policy Terms Years
+             * @description Terms offered; [1] for yearly renewal
+             */
+            policy_terms_years: number[];
+        };
+        /**
+         * InsuranceType
+         * @enum {string}
+         */
+        InsuranceType: "TERM_LIFE" | "HEALTH";
         /**
          * InteractionChannel
          * @enum {string}
@@ -7830,6 +7957,38 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    list_insurance_api_v1_wealth_insurance_get: {
+        parameters: {
+            query?: {
+                /** @description Only this type */
+                insurance_type?: components["schemas"]["InsuranceType"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InsuranceProductOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
