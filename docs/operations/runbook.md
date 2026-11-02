@@ -344,7 +344,10 @@ audit chain, unreconciled account, unbalanced transaction): keep the file as evi
 
 - **Symmetric (`--passphrase-file`).** Generate once per key generation:
   `python3 -c "import secrets; print(secrets.token_urlsafe(48))" > /root/.pbip-backup-passphrase` then
-  `chmod 600 /root/.pbip-backup-passphrase`. The script refuses a passphrase file that group or others can read, and
+  `chmod 600 /root/.pbip-backup-passphrase`. The script refuses a passphrase file that group or others can read. On
+  Windows (development only) it cannot check this, because POSIX mode bits do not reflect the NTFS ACL: it prints a
+  warning instead, and you must restrict the file yourself with
+  `icacls <file> /inheritance:r /grant:r "%USERNAME%:R"`. Production backups run on Linux, where the check is enforced.
   gpg reads the file itself (`--passphrase-file`, `--pinentry-mode loopback`, `--no-symkey-cache`), so the passphrase
   never appears in a command line, an environment variable or a log. Keep a copy in the secret store under two-person
   control; never store it with the dumps or in the off-host bucket.
