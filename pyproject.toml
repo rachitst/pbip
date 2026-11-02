@@ -125,3 +125,24 @@ name = "ml package must not depend on the API"
 type = "forbidden"
 source_modules = ["pbip_ml", "pbip_datagen"]
 forbidden_modules = ["pbip_api"]
+
+# #350, ADR-0033: the API and the fraud serving modules never import the fraud training jobs,
+# directly or through another module.
+[[tool.importlinter.contracts]]
+name = "fraud serving must not depend on fraud training"
+type = "forbidden"
+source_modules = [
+    "pbip_api",
+    "pbip_ml.fraud.artifacts",
+    "pbip_ml.fraud.contract",
+    "pbip_ml.fraud.features",
+    "pbip_ml.fraud.hybrid",
+    "pbip_ml.fraud.inference",
+    "pbip_ml.fraud.rules",
+]
+forbidden_modules = [
+    "pbip_ml.fraud.evaluation",
+    "pbip_ml.fraud.promotion",
+    "pbip_ml.fraud.train",
+    "pbip_ml.fraud.training",
+]
