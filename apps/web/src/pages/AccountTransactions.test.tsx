@@ -25,6 +25,8 @@ describe("account transactions (keyset pagination)", () => {
         return Promise.resolve(json(200, { access_token: "t" }));
       if (url.pathname.endsWith("/auth/me")) return Promise.resolve(json(200, customerMe));
       if (url.pathname === "/api/v1/accounts") return Promise.resolve(json(200, [account]));
+      if (url.pathname === "/api/v1/accounts/summary")
+        return Promise.resolve(json(200, { totals: [] }));
       if (url.pathname === "/api/v1/payees") return Promise.resolve(json(200, []));
       if (url.pathname === "/api/v1/recommendations")
         return Promise.resolve(json(200, noRecommendations));
@@ -85,6 +87,7 @@ describe("account transactions (keyset pagination)", () => {
       if (url.endsWith("/auth/me")) return Promise.resolve(json(200, customerMe));
       if (url.endsWith("/accounts")) return Promise.resolve(json(200, [account]));
       if (url.endsWith("/payees")) return Promise.resolve(json(200, []));
+      if (url.endsWith("/accounts/summary")) return Promise.resolve(json(200, { totals: [] }));
       return Promise.resolve(json(200, { items: [], next_cursor: null, has_more: false }));
     });
     const user = userEvent.setup();

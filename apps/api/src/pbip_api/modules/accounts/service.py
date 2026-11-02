@@ -1,6 +1,7 @@
 """Account opening and read use cases."""
 
 import secrets
+from collections.abc import Iterable
 from datetime import date, timedelta
 from uuid import UUID
 
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 from pbip_api.core.calendar import day_start
 from pbip_api.core.errors import ConflictError, UnprocessableError
 from pbip_api.core.pagination import PageDirection, decode_cursor, encode_cursor
+from pbip_api.modules.accounts import policy
 from pbip_api.modules.accounts.models import (
     Account,
     AccountHolder,
@@ -17,7 +19,13 @@ from pbip_api.modules.accounts.models import (
     AccountType,
     HolderRole,
 )
-from pbip_api.modules.accounts.schemas import EntriesPage, EntryOut, OpenAccountType
+from pbip_api.modules.accounts.schemas import (
+    AccountsSummaryOut,
+    CurrencyTotalOut,
+    EntriesPage,
+    EntryOut,
+    OpenAccountType,
+)
 from pbip_api.modules.compliance.service import AuditService
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.ledger import service as ledger_service
@@ -172,15 +180,50 @@ def create_customer_account(
 
 
 def list_accounts(session: Session, customer_id: UUID) -> list[Account]:
-    return list(
-        session.execute(
-            select(Account)
-            .join(AccountHolder, AccountHolder.account_id == Account.id)
-            .where(AccountHolder.customer_id == customer_id)
-            .order_by(Account.created_at)
-        )
-        .scalars()
-        .all()
+    return policy.list_owned_accounts(session, customer_id)
+
+
+# FR-08 total balance: deposit accounts only. Loans are liabilities with their own schedule
+# (modules/loans), and fixed deposits are not an account type, so neither is added in here.
+_TOTALLED_TYPES = frozenset({AccountType.SAVINGS, AccountType.CURRENT})
+
+
+def summarise_balances(accounts: Iterable[Account]) -> list[CurrencyTotalOut]:
+    """Per-currency totals of the customer's deposit accounts (TASK-109).
+
+    * Joint accounts count in full for every holder: the customer sees and can spend them.
+    * CLOSED accounts are left out. FROZEN accounts count in the ledger and held totals (the
+      money is still the customer's) but add nothing to ``available``: they cannot pay out.
+    * ``available`` is ledger minus held, as on each account; the overdraft is not money held.
+    """
+    totals: dict[str, CurrencyTotalOut] = {}
+    for account in accounts:
+        if account.account_type not in _TOTALLED_TYPES or account.status == AccountStatus.CLOSED:
+            continue
+        total = totals.get(account.currency)
+        if total is None:
+            total = totals[account.currency] = CurrencyTotalOut(
+                currency=account.currency,
+                ledger_balance_minor=0,
+                held_minor=0,
+                available_minor=0,
+                account_count=0,
+                frozen_account_count=0,
+            )
+        total.account_count += 1
+        total.ledger_balance_minor += account.ledger_balance
+        total.held_minor += account.held_amount
+        if account.status == AccountStatus.FROZEN:
+            total.frozen_account_count += 1
+        else:
+            total.available_minor += account.available_balance
+    return [totals[currency] for currency in sorted(totals)]
+
+
+def get_accounts_summary(session: Session, customer_id: UUID) -> AccountsSummaryOut:
+    """Computed from the authenticated customer's own accounts only (accounts policy)."""
+    return AccountsSummaryOut(
+        totals=summarise_balances(policy.list_owned_accounts(session, customer_id))
     )
 
 
