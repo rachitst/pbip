@@ -6,6 +6,7 @@
 | `model_version` | `rules-v1` (`MODEL_VERSION` in `engine.py`), carried on every recommendation |
 | Owner | `rachitst` (`.github/CODEOWNERS`, rule `*`) |
 | Tasks | TASK-054; ADR-0015 |
+| Decision record | [No trained propensity model yet](../recommendation-propensity-decision.md) (2026-11-03) |
 
 ## What it is
 
@@ -13,7 +14,10 @@
 (buffer, income, debt ratio, balance, health score). Eligible products are then ordered by a fixed,
 hand-weighted linear formula per product type, squashed into (0, 1). The score is **not a probability**: it
 only orders products for one customer (`engine.py` module docstring and `relevance_score`). No data exists
-to train a propensity model (no recorded product take-ups).
+to train a propensity model (no recorded product take-ups): the synthetic generator simulates no product
+adoption, and inventing an adoption process would only produce labels the model learns back. The full
+reasoning, and what is needed to train one later, is in
+[`recommendation-propensity-decision.md`](../recommendation-propensity-decision.md).
 
 ## Intended use
 
@@ -35,7 +39,14 @@ months, monthly inflow, health score, segment match and EMI ratio; it does not r
 
 ## Evaluation
 
-**No evaluation report on main.** There are no outcome labels to evaluate a ranking against.
+**No ranking evaluation.** There are no outcome labels to evaluate a ranking against, so no precision,
+recall or PR-AUC can be reported, and none is claimed.
+
+**Latency** (measured 2026-11-03, details in the decision record): the engine's p95 is 0.13-0.17 ms of CPU
+time, guarded by `test_engine_p95_cpu_time_is_a_small_fraction_of_the_40ms_endpoint_budget`
+(`ml/tests/test_recommendations.py`, bound 4 ms). The endpoint's time is the 13 SQL statements that build
+the context; on an oversubscribed 2-CPU laptop its p95 was 143-173 ms, so the 40 ms target is not
+demonstrated. It has not been measured on an idle server (TASK-102).
 
 ## Limitations
 
