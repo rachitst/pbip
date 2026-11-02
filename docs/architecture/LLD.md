@@ -867,7 +867,7 @@ lock, so a repeated run finds nothing due and posts nothing (`test_concurrent_re
 1. **`REVERSED` is reachable only from code, not from the product.** Blueprint section 7 lists
    `POSTED -> REVERSED`. `ledger.reverse_transaction` exists and is tested, but no route, job or script on `main`
    calls it, and it reverses only `TRANSFER` transactions. `bill_payments.status = 'REVERSED'` is allowed by the
-   CHECK and never set.
+   CHECK and never set. Both are **reserved** for a future reversal flow; the Blueprint and HLD say so (#316).
 2. **`PENDING_STEP_UP` never expires.** No job times out an unanswered step-up. The transfer waits until a correct
    code or the third wrong one; no hold is placed meanwhile, and the daily limit is rechecked at confirm time.
 3. **Not every money-moving POST takes an `Idempotency-Key`** (AGENTS.md section 4 says they must). The analyst
@@ -877,10 +877,11 @@ lock, so a repeated run finds nothing due and posts nothing (`test_concurrent_re
 4. **Idempotency TTL is not enforced** (section 3.15, item 6).
 5. **Table counts in older documents are stale.** Blueprint section 4 says "Implemented (20 tables, migration
    `0001`)" and HLD section 5 says 26 `public` tables; `main` has 30 (`er-diagram.md`). HLD section 15 says there are
-   no scheduled transfers yet; they exist since migration `0014`.
+   no scheduled transfers yet; they exist since migration `0014`. Corrected in the Blueprint and HLD (#316).
 6. **ADR-0023 section 10 (R16)** says loan disbursal creates its instruction through `create_scheduled_transfer(...)`.
    The code uses a separate module function, `create_loan_repayment_instruction`, inside the loan application's
    transaction, so loan instructions skip the customer-facing idempotency, capacity and date checks.
+   ADR-0023 now names `create_loan_repayment_instruction`, with a dated correction note (#316).
 7. **No alert assignment step.** `fraud_alerts.assigned_to_user_id` is set to the analyst who resolves the alert,
    at resolution. There is no claim or assign endpoint.
 8. **docs/README.md planned one LLD per module** (`docs/lld/*.md`). The backlog's definition of done asks for a

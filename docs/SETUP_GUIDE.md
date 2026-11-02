@@ -319,7 +319,11 @@ Postgres (port 5432) and Redis (port 6379) will start in detached background con
   .\dev.ps1 migrate
   .\dev.ps1 seed
   ```
-`seed` outputs the generated test passwords and seeded credentials:
+`seed` prints the seeded accounts, never a password or an MFA secret. Every new user gets the password in
+`PBIP_DEMO_PASSWORD` if you set it (e.g. `PBIP_DEMO_PASSWORD=<one you choose> make seed`); without it, and only
+with `APP_ENV=local`, the `DEMO_PASSWORD` constant in `scripts/seed_dev.py`. Any other `APP_ENV` must set the
+variable (the CI E2E job generates one per run, see `docs/testing/e2e.md`). Existing users are skipped, so the
+password of an already-seeded database does not change.
 - Retail customer: `alice@demo.pbip` / `bob@demo.pbip`
 - Bank staff (analyst): `analyst@demo.pbip`
 - Admin: `admin@demo.pbip`

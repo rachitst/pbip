@@ -220,7 +220,7 @@ record.*
 * ✓ A review step appears before I confirm, then the real outcome is shown (posted, under review, or declined
   without any reason or score).
 
-**Status:** Implemented. Transfers have no Playwright E2E test yet (TASK-077).
+**Status:** Implemented. Browser journeys: `apps/web/e2e/journey-transfer.spec.ts` and `journey-fraud-review.spec.ts` (TASK-077).
 
 **Tests:**
 

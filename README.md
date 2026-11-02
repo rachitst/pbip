@@ -31,9 +31,11 @@ make dev-api      # terminal 1 -> http://localhost:8000/docs
 make dev-web      # terminal 2 -> http://localhost:5173
 ```
 Or the whole stack in Docker: `make up` -> https://localhost:8443 (local dev CA in `infra/certs/`, so the browser warns once; http://localhost:8080 redirects) (add `make up-all` for Grafana :3000,
-Prometheus :9090, MLflow :5000). Demo logins: `alice@demo.pbip` / `bob@demo.pbip`; the password is the `DEMO_PASSWORD` constant in
-`scripts/seed_dev.py` (never printed). Staff TOTP codes: `uv run python scripts/totp.py analyst@demo.pbip`
-(decrypts the MFA secret from the local database; no secrets file is written).
+Prometheus :9090, MLflow :5000). Demo logins: `alice@demo.pbip` / `bob@demo.pbip`; the password is `PBIP_DEMO_PASSWORD` if
+you set it for `make seed`, otherwise (APP_ENV=local only) the `DEMO_PASSWORD` constant in `scripts/seed_dev.py` (never
+printed). Staff TOTP codes: `uv run python scripts/totp.py analyst@demo.pbip`
+(decrypts the MFA secret from the local database; no secrets file is written). Browser journeys: `make test-e2e`
+([docs/testing/e2e.md](docs/testing/e2e.md)).
 
 ### 2. Prove it works
 ```bash

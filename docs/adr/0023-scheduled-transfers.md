@@ -363,9 +363,14 @@ For missed occurrences, every expired date receives its own 1:1 `SCHEDULED_TRANS
   Returns projected upcoming occurrences up to `until` (`scheduled_transfer_id`, `from_account_id`,
   `amount_minor`, `currency`, `occurrence_date`), computed in-memory from active instructions using the
   recurrence rules in section 3. The analytics module never reads payments repository internals.
-* **TASK-047 (#70, loans):** loan disbursal creates monthly repayment instructions through a clean service
-  method `create_scheduled_transfer(...)` in `modules/payments/service.py` (R16), avoiding any HTTP detour
-  or architectural layering violations when loan accounts are set up.
+* **TASK-047 (#70, loans):** loan disbursal creates its monthly repayment instruction through the module
+  function `create_loan_repayment_instruction(...)` in `modules/payments/service.py` (R16), called by the
+  loans service inside the loan application's transaction, avoiding any HTTP detour or layering violation
+  ([ADR-0024](0024-loan-disbursal-and-repayments.md)). It is not the customer-facing
+  `PaymentsService.create_scheduled_transfer`, so loan instructions skip that method's idempotency, capacity
+  and start-date checks.
+  *Correction (2 Nov 2026, #316): an earlier revision of this item named `create_scheduled_transfer(...)`;
+  the code on `main` uses `create_loan_repayment_instruction`.*
 
 ## Alternatives considered
 * **Reuse `create_transfer` as is (it commits)** - the transfer and the schedule update would be two
