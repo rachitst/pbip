@@ -1424,3 +1424,13 @@ a {
   padding: 0;
   list-style: none;
 }
+
+/* ---- Scheduled transfers (TASK-021) ------------------------------------------------------- */
+.row-note {
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.history {
+  margin-top: var(--space-5);
+}
