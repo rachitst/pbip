@@ -12,6 +12,7 @@ import { errorMessage } from "../lib/errors";
 import { Accounts } from "../pages/Accounts";
 import { NotFound } from "../pages/NotFound";
 import { Profile } from "../pages/Profile";
+import { Statements } from "../pages/Statements";
 import { AuditLog } from "../pages/staff/AuditLog";
 import { FraudAlert } from "../pages/staff/FraudAlert";
 import { FraudQueue } from "../pages/staff/FraudQueue";
@@ -32,6 +33,7 @@ const HOME_PATH: Record<Area, string> = { customer: "/accounts", staff: "/staff"
 function customerNav(me: UserOut): NavItem[] {
   const items: NavItem[] = [
     { to: "/accounts", label: "Accounts" },
+    { to: "/statements", label: "Statements" },
     { to: "/insights", label: "Spending & health" },
     { to: "/profile", label: "Profile & security" },
   ];
@@ -170,6 +172,7 @@ export const routes: RouteObject[] = [
         children: [
           { index: true, element: <Navigate to="/accounts" replace /> },
           { path: "accounts", element: <Accounts /> },
+          { path: "statements", element: <Statements /> },
           {
             path: "insights",
             element: (

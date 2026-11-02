@@ -14,6 +14,7 @@ Entries are recorded from the account's own perspective: DEBIT decreases, CREDIT
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import case, func, select
@@ -317,3 +318,35 @@ def list_account_entries(
         bound = TransactionEntry.seq > after_seq if newer else TransactionEntry.seq < after_seq
         stmt = stmt.where(bound)
     return [(entry, txn) for entry, txn in session.execute(stmt).all()]
+
+
+def entries_in_period(
+    session: Session, account_id: UUID, start: datetime, end: datetime, limit: int
+) -> list[tuple[TransactionEntry, Transaction]]:
+    """Read-only: an account's entries posted in ``[start, end)``, oldest first (statements).
+
+    Uses ``ix_transaction_entries_account_id_created_at``. The caller authorizes the account.
+    """
+    stmt = (
+        select(TransactionEntry, Transaction)
+        .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
+        .where(
+            TransactionEntry.account_id == account_id,
+            TransactionEntry.created_at >= start,
+            TransactionEntry.created_at < end,
+        )
+        .order_by(TransactionEntry.seq.asc())
+        .limit(limit)
+    )
+    return [(entry, txn) for entry, txn in session.execute(stmt).all()]
+
+
+def balance_before(session: Session, account_id: UUID, moment: datetime) -> int:
+    """Read-only: the ledger balance just before ``moment`` (0 if nothing was posted earlier)."""
+    value = session.execute(
+        select(TransactionEntry.balance_after)
+        .where(TransactionEntry.account_id == account_id, TransactionEntry.created_at < moment)
+        .order_by(TransactionEntry.seq.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    return int(value) if value is not None else 0
