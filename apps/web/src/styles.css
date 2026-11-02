@@ -1661,3 +1661,30 @@ input[type="range"] {
   flex-wrap: wrap;
   gap: var(--space-2);
 }
+
+/* FR-08 total balance overview at the top of /accounts (TASK-109). */
+.total-balance {
+  margin: var(--space-4) 0;
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.total-balance__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.total-balance__row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+}
+.total-balance__value {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-strong);
+}

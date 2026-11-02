@@ -13,6 +13,7 @@ import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 import { AccountTransactions } from "./AccountTransactions";
 import { SendMoney } from "./SendMoney";
+import { TotalBalance } from "./TotalBalance";
 
 export function Accounts() {
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts });
@@ -33,6 +34,7 @@ export function Accounts() {
   return (
     <div className="page">
       <PageHeader title="My accounts" />
+      <TotalBalance />
       {accounts.isPending && <LoadingState label="Loading accounts..." />}
       {accounts.isError && (
         <ErrorState

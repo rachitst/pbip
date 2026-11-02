@@ -56,6 +56,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/accounts/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Total balance across my accounts, per currency */
+        get: operations["get_my_accounts_summary_api_v1_accounts_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/accounts/{account_id}": {
         parameters: {
             query?: never;
@@ -1278,6 +1295,15 @@ export interface components {
             /** Status */
             status: string;
         };
+        /**
+         * AccountsSummaryOut
+         * @description FR-08 total balance overview. ``totals`` is empty when the customer holds no counted
+         *     account; it has one row per currency, ordered by currency code.
+         */
+        AccountsSummaryOut: {
+            /** Totals */
+            totals: components["schemas"]["CurrencyTotalOut"][];
+        };
         /** AdminCreateUserRequest */
         AdminCreateUserRequest: {
             /**
@@ -1772,6 +1798,33 @@ export interface components {
          * @enum {string}
          */
         ChurnRiskLevel: "LOW" | "MEDIUM" | "HIGH";
+        /**
+         * CurrencyTotalOut
+         * @description Totals for ONE currency: amounts in different currencies are never added together.
+         */
+        CurrencyTotalOut: {
+            /** Account Count */
+            account_count: number;
+            /**
+             * Available Minor
+             * @description Ledger minus held, ACTIVE accounts only: held amounts and frozen accounts are excluded; an arranged overdraft is not added
+             */
+            available_minor: number;
+            /** Currency */
+            currency: string;
+            /** Frozen Account Count */
+            frozen_account_count: number;
+            /**
+             * Held Minor
+             * @description Amount on hold (pending review) on the counted accounts
+             */
+            held_minor: number;
+            /**
+             * Ledger Balance Minor
+             * @description Posted balance of the counted ACTIVE and FROZEN accounts
+             */
+            ledger_balance_minor: number;
+        };
         /**
          * CustomerInsightDetail
          * @description One customer for the RM flyout: churn signals, health, recent volume and eligible products.
@@ -4053,6 +4106,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_accounts_summary_api_v1_accounts_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountsSummaryOut"];
                 };
             };
         };

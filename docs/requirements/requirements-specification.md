@@ -54,7 +54,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | ID | Requirement | Source | Status | Tasks | Gap |
 |---|---|---|---|---|---|
 | FR-07 | After login, the customer shall see every account with its available, ledger and held balance. | UC-02, section 5 "account summaries" | Implemented | TASK-019 | |
-| FR-08 | The dashboard shall show the total balance across the customer's accounts. | Section 5 "total balance overview" | Planned | TASK-109 (#283) | The total is computed for recommendations but not shown |
+| FR-08 | The dashboard shall show the total balance across the customer's accounts. | Section 5 "total balance overview" | Implemented | TASK-109 (#283) | `GET /api/v1/accounts/summary`, per currency, savings and current accounts only (see US-04) |
 | FR-09 | The customer shall see recent transactions for an account, paginated. | UC-02, section 5 | Implemented | TASK-008, TASK-019 | |
 | FR-10 | The customer shall see spending insights: category breakdown, month-over-month trends, daily burn rate. | UC-02, section 5 "spending insights" | Implemented | TASK-040, TASK-049 | |
 | FR-11 | The customer shall see financial health indicators: a 0-100 health score with components and tips, and a balance forecast labelled as a prediction. | Section 5 "financial health indicators" | Partial | TASK-041, TASK-042, TASK-049; TASK-050 | The forecast has an API but no chart |
@@ -180,7 +180,7 @@ delivered (TLS, #280).
 |---|---|
 | FR-02, FR-06 | Web screens for MFA enrolment and self-registration (owned by #201) |
 | FR-05 | Administration screen and application-configuration function (TASK-108, #282) |
-| FR-08 | Total-balance overview on the dashboard (TASK-109, #283) |
+| FR-08 | ~~Total-balance overview on the dashboard~~: done in TASK-109 (#283) |
 | FR-39 | "Show unusual expenses" in the assistant (TASK-110, #284) |
 | FR-55 | Existing products as a recommendation input (TASK-111, #285) |
 | FR-50 | The web app sending page visits and clickstream events (TASK-112, #286) |

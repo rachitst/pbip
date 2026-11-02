@@ -100,17 +100,27 @@ access.*
 
 * ✓ Each account shows its available, ledger and held balance.
 * ✓ I can open a new account (up to five).
-* ✗ A total balance across all accounts is shown.
+* ✓ A total balance across all accounts is shown: total available, ledger and held at the top of the page, computed
+  by the server from my own accounts (`GET /api/v1/accounts/summary`, TASK-109).
+  * One total per currency; different currencies are never added together.
+  * Savings and current accounts only. Loans are shown on `/loans`; fixed deposits are not an account type yet.
+  * Joint accounts count in full for each holder. Closed accounts are not counted. Frozen accounts count in the
+    ledger and held totals but not in "available", because they cannot pay out.
+  * "Available" is ledger minus the amounts on hold, as on each account; an arranged overdraft is not added.
 
-**Status:** Partial. The total-balance overview has no task.
+**Status:** Implemented.
 
 **Tests:**
 
-* `apps/web/src/pages/Accounts.test.tsx`: "restores the session, shows balances and the amount on hold";
+* `apps/web/src/pages/Accounts.test.tsx`: "restores the session, shows balances and the amount on hold",
+  "puts the server-computed total balance above the account list (TASK-109)";
+* `integration/test_account_summary.py` (exact totals, another customer's account excluded, frozen, closed, joint,
+  held amount), `unit/test_account_summary.py` (per currency, system accounts, overdraft),
+  `apps/web/src/pages/TotalBalance.test.tsx` (loading, error and retry, empty, per currency);
 * `integration/test_accounts.py`: `test_open_savings_account_success`, `test_open_account_enforces_limit_of_five`;
 * `apps/web/src/pages/OpenAccount.test.tsx`.
 
-**Tasks:** TASK-005, TASK-019 (Done).
+**Tasks:** TASK-005, TASK-019 (Done), TASK-109 (In Review).
 
 ### US-05 See my recent transactions (FR-09, FR-28)
 

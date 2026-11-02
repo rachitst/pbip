@@ -41,6 +41,29 @@ class AccountOut(BaseModel):
     available_minor: int
 
 
+class CurrencyTotalOut(BaseModel):
+    """Totals for ONE currency: amounts in different currencies are never added together."""
+
+    currency: str
+    ledger_balance_minor: int = Field(
+        description="Posted balance of the counted ACTIVE and FROZEN accounts"
+    )
+    held_minor: int = Field(description="Amount on hold (pending review) on the counted accounts")
+    available_minor: int = Field(
+        description="Ledger minus held, ACTIVE accounts only: held amounts and frozen accounts "
+        "are excluded; an arranged overdraft is not added"
+    )
+    account_count: int = Field(ge=0)
+    frozen_account_count: int = Field(ge=0)
+
+
+class AccountsSummaryOut(BaseModel):
+    """FR-08 total balance overview. ``totals`` is empty when the customer holds no counted
+    account; it has one row per currency, ordered by currency code."""
+
+    totals: list[CurrencyTotalOut]
+
+
 class EntryOut(BaseModel):
     entry_seq: int
     transaction_id: UUID

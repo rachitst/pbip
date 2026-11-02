@@ -22,3 +22,17 @@ def get_owned_account(session: Session, customer_id: UUID, account_id: UUID) -> 
     if account is None:
         raise NotFoundError("account not found")
     return account
+
+
+def list_owned_accounts(session: Session, customer_id: UUID) -> list[Account]:
+    """Every account the customer holds (PRIMARY or JOINT), oldest first; nobody else's."""
+    return list(
+        session.execute(
+            select(Account)
+            .join(AccountHolder, AccountHolder.account_id == Account.id)
+            .where(AccountHolder.customer_id == customer_id)
+            .order_by(Account.created_at)
+        )
+        .scalars()
+        .all()
+    )

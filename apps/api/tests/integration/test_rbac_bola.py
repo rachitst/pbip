@@ -33,6 +33,7 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("delete", "/api/v1/customers/me/date-of-birth"),
         ("put", "/api/v1/customers/me/recommendations-consent"),
         ("get", "/api/v1/accounts"),
+        ("get", "/api/v1/accounts/summary"),
         ("post", "/api/v1/accounts"),
         ("get", "/api/v1/payees"),
         ("get", "/api/v1/bills/billers"),
@@ -118,6 +119,7 @@ def test_staff_have_no_customer_profile(
         == 403
     )
     assert client.get("/api/v1/accounts", headers=analyst.headers).status_code == 403
+    assert client.get("/api/v1/accounts/summary", headers=analyst.headers).status_code == 403
     assert client.get("/api/v1/bills/payments", headers=analyst.headers).status_code == 403
     assert client.get("/api/v1/transfers/scheduled", headers=analyst.headers).status_code == 403
     assert (
@@ -556,6 +558,13 @@ def test_listings_only_contain_the_callers_own_objects(
     listed = client.get("/api/v1/accounts", headers=alice.headers).json()
     assert [a["id"] for a in listed] == [str(alice.account_id)]
     assert str(bob.account_id) not in str(listed)
+    # TASK-109: the total is Alice's balance alone, and a smuggled customer id is ignored.
+    summary = client.get(
+        f"/api/v1/accounts/summary?customer_id={bob.customer_id}", headers=alice.headers
+    ).json()
+    assert [(t["ledger_balance_minor"], t["account_count"]) for t in summary["totals"]] == [
+        (10_000, 1)
+    ]
 
     alice_dev = client.post(
         "/api/v1/customers/devices",
