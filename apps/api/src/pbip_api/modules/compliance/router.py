@@ -5,9 +5,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Path, Query
 from pydantic import BaseModel
+from redis import Redis
 from sqlalchemy.orm import Session
 
 from pbip_api.core.db import get_session
+from pbip_api.core.redis import get_redis
 from pbip_api.modules.auth.dependencies import (
     Principal,
     get_clock,
@@ -111,10 +113,14 @@ def list_exceptions(
     _principal: Principal = Depends(compliance_gate),
     session: Session = Depends(get_session),
     clock: Callable[[], float] = Depends(get_clock),
+    redis_client: Redis = Depends(get_redis),
 ) -> ComplianceExceptionsOut:
-    """TASK-100 dashboard data. Re-verifies the audit chain, like ``/audit-logs/verify``."""
+    """TASK-100 dashboard data. The audit chain is fully verified at most once per 5 minutes
+    (cached, ADR-0027); ``/audit-logs/verify`` still verifies on demand."""
     now = datetime.fromtimestamp(clock(), tz=UTC)
-    view = exceptions_view(session, now, days, kind=kind, status=status_filter, limit=limit)
+    view = exceptions_view(
+        session, now, days, kind=kind, status=status_filter, limit=limit, chain_cache=redis_client
+    )
     return dashboard_out(view, now)
 
 

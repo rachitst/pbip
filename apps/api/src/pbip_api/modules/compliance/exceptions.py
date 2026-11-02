@@ -18,12 +18,16 @@ audit-chain lock, so two officers cannot both acknowledge the same exception.
 Output is identifiers, amounts, codes and times only: no names, emails, account numbers or IPs.
 """
 
+import json
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
+import structlog
+from redis import Redis
+from redis.exceptions import RedisError
 from sqlalchemy import ColumnElement, Select, String, case, cast, func, literal, select, union_all
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
@@ -32,7 +36,7 @@ from sqlalchemy.sql.selectable import Subquery
 from pbip_api.core.errors import ConflictError, NotFoundError
 from pbip_api.modules.auth.models import SecurityEvent, SecurityEventType
 from pbip_api.modules.compliance.models import AuditLog
-from pbip_api.modules.compliance.service import AuditService
+from pbip_api.modules.compliance.service import AuditService, ChainStatus
 from pbip_api.modules.fraud.models import AlertStatus, FraudAlert, FraudEvent
 from pbip_api.modules.ledger.models import Transaction
 
@@ -213,9 +217,41 @@ def _status_from(ack: Step | None, res: Step | None) -> ExceptionStatus:
     return ExceptionStatus.ACKNOWLEDGED if ack is not None else ExceptionStatus.OPEN
 
 
-def _chain(session: Session) -> _Chain:
-    """Re-verify the audit chain; a failure is one exception keyed by the first bad sequence."""
+# A full chain verification reads every audit row. The dashboard runs it at most once per TTL
+# (ADR-0027), however many officers load the page; /audit-logs/verify still verifies on demand.
+_logger = structlog.get_logger(__name__)
+CHAIN_CACHE_KEY = "compliance:audit-chain:v1"
+CHAIN_CACHE_TTL_SECONDS = 300
+
+
+def chain_status(session: Session, cache: Redis | None) -> ChainStatus:
+    """The audit chain's state, from the cache when fresh; Redis failures fall back to verifying."""
+    if cache is not None:
+        try:
+            raw = cache.get(CHAIN_CACHE_KEY)
+        except RedisError:
+            raw = None
+        if raw:
+            data = json.loads(raw)
+            return ChainStatus(data["valid"], data["checked"], data["first_invalid_seq"])
     status = AuditService(session).verify_chain()
+    if cache is not None:
+        payload = {
+            "valid": status.valid,
+            "checked": status.checked,
+            "first_invalid_seq": status.first_invalid_seq,
+        }
+        try:
+            cache.set(CHAIN_CACHE_KEY, json.dumps(payload), ex=CHAIN_CACHE_TTL_SECONDS)
+        except RedisError:
+            # The cache is an optimisation: the verified result is still returned.
+            _logger.warning("audit_chain_cache_write_failed")
+    return status
+
+
+def _chain(session: Session, cache: Redis | None = None) -> _Chain:
+    """The audit chain; a failure is one exception keyed by the first bad sequence."""
+    status = chain_status(session, cache)
     if status.valid or status.first_invalid_seq is None:
         return _Chain(status.valid, status.checked, status.first_invalid_seq, None)
     seq = status.first_invalid_seq
@@ -307,6 +343,7 @@ def exceptions_view(
     kind: ExceptionKind | None = None,
     status: ExceptionStatus | None = None,
     limit: int = 50,
+    chain_cache: Redis | None = None,
 ) -> ExceptionsView:
     """Indicators over the last ``window_days`` and the matching exceptions, newest first.
 
@@ -314,7 +351,7 @@ def exceptions_view(
     whatever the window, because it stays true until the chain is investigated.
     """
     src = _sources(now - timedelta(days=window_days))
-    chain = _chain(session)
+    chain = _chain(session, chain_cache)
     sla_cutoff = now - ACKNOWLEDGE_SLA
     counts, late = _counts(session, src, chain.record, sla_cutoff)
     query = _with_state(src).subquery()

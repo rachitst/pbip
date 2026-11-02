@@ -1,5 +1,5 @@
 # ADR 0027: Compliance exceptions from existing facts, and an aggregate-only behavioural dashboard
-- Status: Proposed (needs owner approval before merge: new staff endpoints, audit log used as workflow state)
+- Status: Accepted (product owner, 2026-11-02, with the two conditions under "Owner conditions")
 - Date: 2026-11-02
 - Deciders: Architecture Team
 
@@ -38,6 +38,23 @@ chain (`AuditService.verify_chain`), `fraud_alerts`, `customer_segments`, ledger
    per-customer view stays the RM insights page; the dashboard links a segment to it only for roles that may open it.
 5. **Cross-module reads follow the TASK-099 precedent**: reporting queries read other modules' models directly, as
    `fraud/monitoring.py` and `analytics/repository.py` already do; they never write to them.
+
+## Owner conditions (2026-11-02) and how they are met
+1. **Derive the current state from the latest event per exception with an indexed query, with no
+   full audit-log scan per page load.** An exception's state is read with `DISTINCT ON` over the
+   `exception`-type audit rows only, which uses the existing `ix_audit_logs_resource (resource_type,
+   resource_id)` index. The hash-chain check that produces `AUDIT_CHAIN_FAILURE` is the only full
+   read. It now runs at most once per `CHAIN_CACHE_TTL_SECONDS` (300 s, Redis) however many
+   officers load the page (`chain_status`), so a tampered row shows up within 5 minutes.
+   `GET /audit-logs/verify` still verifies on demand. Test:
+   `test_page_loads_reuse_the_cached_chain_verification` (3 loads, 1 verification; it fails
+   without the cache).
+2. **A resolved exception can only change again through a new audited event.** RESOLVED is
+   terminal: acknowledging or resolving it again is a 409, checked while holding the audit-chain
+   lock. Every change is itself an append-only audit row, written in the same transaction, so no
+   state exists outside the audit trail. Tests:
+   `test_acknowledge_then_resolve_is_audited_with_actor_and_reason` and
+   `test_concurrent_acknowledgements_record_exactly_one`.
 
 ## Consequences
 * No schema change. The exceptions screen costs one chain verification per load; with a very large audit log this

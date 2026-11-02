@@ -19,6 +19,8 @@ from pbip_api.core.errors import ConflictError
 from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.compliance.exceptions import (
     ACKNOWLEDGED_ACTION,
+    CHAIN_CACHE_KEY,
+    CHAIN_CACHE_TTL_SECONDS,
     RESOLVED_ACTION,
     RESOURCE_TYPE,
     ExceptionAction,
@@ -26,6 +28,7 @@ from pbip_api.modules.compliance.exceptions import (
     apply_action,
 )
 from pbip_api.modules.compliance.models import AuditLog
+from pbip_api.modules.compliance.service import AuditService
 from pbip_api.modules.fraud.dependencies import get_fraud_scorer
 from pbip_ml.fraud.contract import FraudDecision
 from pbip_ml.fraud.testing import FixedDecisionScorer
@@ -281,6 +284,32 @@ def test_a_tampered_audit_chain_is_an_exception_that_can_be_worked(
     # another sequence number is not an exception that exists
     other = client.post(f"{URL}/AUDIT_CHAIN_FAILURE/{seq + 1000}/acknowledge", headers=officer.headers, json={"reason": "nope"})  # fmt: skip
     assert other.status_code == 404
+
+
+def test_page_loads_reuse_the_cached_chain_verification(
+    client: TestClient,
+    make_staff: Callable[..., Actor],
+    fake_redis: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR-0027 condition: no full audit-log scan per page load. The chain is verified once and
+    reused for CHAIN_CACHE_TTL_SECONDS; when the entry expires the next load verifies again."""
+    officer = make_staff(RoleName.COMPLIANCE_OFFICER)
+    calls: list[int] = []
+    real = AuditService.verify_chain
+
+    def counting(self: AuditService) -> Any:
+        calls.append(1)
+        return real(self)
+
+    monkeypatch.setattr(AuditService, "verify_chain", counting)
+    for _ in range(3):
+        assert client.get(URL, headers=officer.headers).status_code == 200
+    assert len(calls) == 1
+    assert fake_redis.ttl(CHAIN_CACHE_KEY) <= CHAIN_CACHE_TTL_SECONDS
+    fake_redis.delete(CHAIN_CACHE_KEY)  # what expiry does
+    assert client.get(URL, headers=officer.headers).status_code == 200
+    assert len(calls) == 2
 
 
 def test_unknown_or_malformed_exceptions_are_404_and_bad_input_is_422(
