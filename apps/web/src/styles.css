@@ -1424,6 +1424,17 @@ a {
   align-items: end;
 }
 
+/* ---- Payees and bill payments (TASK-020) ---------------------------------------------------- */
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+.receipt {
+  margin-top: var(--space-4);
+}
+
 /* ---- Statements (TASK-074) --------------------------------------------------------------- */
 .field-row {
   display: grid;

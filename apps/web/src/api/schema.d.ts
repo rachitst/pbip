@@ -911,7 +911,8 @@ export interface paths {
         delete: operations["delete_payee_api_v1_payees__payee_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Rename or re-nickname a payee; a new name must be verified again */
+        patch: operations["update_payee_api_v1_payees__payee_id__patch"];
         trace?: never;
     };
     "/api/v1/payees/{payee_id}/verify": {
@@ -2601,6 +2602,17 @@ export interface components {
             status: string;
             /** Verified At */
             verified_at: string | null;
+        };
+        /**
+         * PayeeUpdate
+         * @description Only the name and nickname can change. Account number and bank code are not accepted at
+         *     all (``extra="forbid"`` -> 422): a different account is a different payee.
+         */
+        PayeeUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Nickname */
+            nickname?: string | null;
         };
         /** PayeeVerificationOut */
         PayeeVerificationOut: {
@@ -4865,6 +4877,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_payee_api_v1_payees__payee_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payee_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PayeeUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PayeeOut"];
+                };
             };
             /** @description Validation Error */
             422: {
