@@ -9,7 +9,7 @@ import { MeContext } from "../../shell/MeContext";
 import { json, noContent, urlOf } from "../../test-utils";
 import { FraudAlert } from "./FraudAlert";
 import { FraudQueue } from "./FraudQueue";
-import { barWidths, parseReasons, plainMessage } from "./fraudFormat";
+import { barWidths, parseReasons, plainMessage, plainReasonText } from "./fraudFormat";
 
 const analyst: UserOut = {
   id: "u-fa",
@@ -114,6 +114,16 @@ describe("reason formatting", () => {
     const second = model[1];
     if (!second) throw new Error("expected two model reasons");
     expect(plainMessage(second)).toBe("Amount is 9.0x the customer's 30-day average");
+    expect(plainReasonText("Payee was added 1175 minutes ago and INR 45,000.00 is large")).toBe(
+      "Payee was added about 19 hours ago and INR 45,000.00 is large",
+    );
+    expect(plainReasonText("Payee was added 0 minutes ago")).toBe(
+      "Payee was added less than a minute ago",
+    );
+    expect(plainReasonText("Payee was added 4 minutes ago")).toBe("Payee was added 4 minutes ago");
+    expect(plainReasonText("Payee was added 2880 minutes ago")).toBe(
+      "Payee was added about 2 days ago",
+    );
     const widths = barWidths(reasons);
     expect(model.map((r) => widths.get(r))).toEqual([100, 50]);
   });
