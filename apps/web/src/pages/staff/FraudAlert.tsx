@@ -4,7 +4,7 @@ import { Link, useParams } from "react-router";
 import { api } from "../../api/client";
 import type { AlertDetail } from "../../api/client";
 import { errorMessage } from "../../lib/errors";
-import { formatDate, formatDateTime } from "../../lib/format";
+import { formatDate, formatDateTime, formatRelative, kycLabel } from "../../lib/format";
 import { transactionStatus } from "../../lib/status";
 import { Alert } from "../../ui/Alert";
 import { Amount } from "../../ui/Amount";
@@ -88,10 +88,12 @@ function Context({ alert }: { alert: AlertDetail }) {
         <StatusBadge status={transactionStatus(alert.transaction_status)} />
       </dd>
       <dt>Raised</dt>
-      <dd>{formatDateTime(alert.created_at)}</dd>
+      <dd>
+        {formatRelative(alert.created_at)} ({formatDateTime(alert.created_at)})
+      </dd>
       <dt>Scored by</dt>
       <dd>
-        {alert.model_version} in {alert.latency_ms.toFixed(1)} ms
+        Model version {alert.model_version}, in {alert.latency_ms.toFixed(1)} milliseconds
       </dd>
     </dl>
   );
@@ -148,7 +150,7 @@ export function FraudAlert() {
   return (
     <div className="page">
       <PageHeader
-        title={`Risk ${a.risk_score}: ${DECISION_LABEL[a.decision] ?? a.decision}`}
+        title={`Risk ${a.risk_score} of 100: ${DECISION_LABEL[a.decision] ?? a.decision}`}
         description="Every point of the score is explained below."
         actions={<StatusBadge status={status} />}
       />
@@ -183,9 +185,9 @@ export function FraudAlert() {
                 <dt>Name</dt>
                 <dd>{a.customer.full_name}</dd>
                 <dt>KYC</dt>
-                <dd>{a.customer.kyc_status}</dd>
+                <dd>{kycLabel(a.customer.kyc_status)}</dd>
                 <dt>Segment</dt>
-                <dd>{a.customer.segment ?? "—"}</dd>
+                <dd>{a.customer.segment ?? "Not assigned"}</dd>
                 <dt>Customer since</dt>
                 <dd>{formatDate(a.customer.customer_since)}</dd>
               </dl>
@@ -234,8 +236,10 @@ export function FraudAlert() {
         </section>
       ) : (
         <Alert tone="info">
-          Resolved {a.resolved_at ? formatDateTime(a.resolved_at) : ""}
-          {a.resolution_note ? `: ${a.resolution_note}` : "."}
+          {a.resolved_at
+            ? `An analyst resolved this alert ${formatRelative(a.resolved_at)} (${formatDateTime(a.resolved_at)})`
+            : "This alert has been resolved"}
+          {a.resolution_note ? `. Note: ${a.resolution_note}` : "."}
         </Alert>
       )}
       <ConfirmDialog

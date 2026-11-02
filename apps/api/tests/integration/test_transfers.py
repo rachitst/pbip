@@ -361,11 +361,15 @@ def test_review_holds_funds_and_analyst_release_posts_the_transfer(
 
     analyst = make_staff(RoleName.FRAUD_ANALYST)
     alert = client.get("/api/v1/fraud/alerts", headers=analyst.headers).json()[0]
+    # The queue names the customer and the leading reason, so an analyst can triage from it.
+    assert alert["customer_name"] == "Test Customer"
+    assert alert["top_reason"] == "Test scorer forced REVIEW"
     detail = client.get(f"/api/v1/fraud/alerts/{alert['id']}", headers=analyst.headers).json()
     assert (
         detail["risk_score"] == 72
         and detail["model_version"] == "test-double-fixed"
         and detail["reasons"]
+        and detail["customer_name"] == "Test Customer"
     )
 
     released = client.post(

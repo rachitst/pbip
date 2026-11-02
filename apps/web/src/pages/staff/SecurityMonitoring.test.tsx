@@ -167,13 +167,13 @@ describe("Open investigations panel", () => {
   it("counts open alerts by severity, says how long the oldest waited and links to it", () => {
     renderWith(<OpenAlertsPanel panel={full.open_alerts} />);
     expect(screen.getByText("3 open alerts")).toBeInTheDocument();
-    expect(screen.getByText("3 hours")).toBeInTheDocument();
+    expect(screen.getByText("about 3 hours")).toBeInTheDocument();
     expect(screen.getByLabelText("High severity: 1 open alert of 3")).toHaveAttribute("value", "1");
     expect(screen.getByLabelText("Medium severity: 2 open alerts of 3")).toHaveAttribute(
       "value",
       "2",
     );
-    expect(screen.getByRole("link", { name: "3 hours ago" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "about 3 hours ago" })).toHaveAttribute(
       "href",
       `/staff/fraud/${ALERT_OPEN}`,
     );
@@ -192,7 +192,7 @@ describe("Open investigations panel", () => {
     };
     const { unmount } = renderWith(<OpenAlertsPanel panel={one} />);
     expect(screen.getByText("1 open alert")).toBeInTheDocument();
-    expect(screen.getByText("1 hour")).toBeInTheDocument();
+    expect(screen.getByText("about 1 hour")).toBeInTheDocument();
     unmount();
     renderWith(<OpenAlertsPanel panel={empty.open_alerts} />);
     expect(screen.getByText(/No open alerts/)).toBeInTheDocument();
@@ -206,7 +206,7 @@ describe("High-risk customers panel", () => {
     const top = rowOf(screen.getByTitle(CUSTOMER));
     expect(top.getByText("c0ffee00")).toBeInTheDocument();
     expect(top.getByText("95")).toBeInTheDocument();
-    expect(top.getByText("1 hour ago")).toBeInTheDocument();
+    expect(top.getByText("about 1 hour ago")).toBeInTheDocument();
     expect(top.getByRole("link", { name: /Open the alert for customer c0ffee00/ })).toHaveAttribute(
       "href",
       `/staff/fraud/${ALERT_OPEN}`,
@@ -214,7 +214,7 @@ describe("High-risk customers panel", () => {
     expect(top.getByText("Review")).toBeInTheDocument(); // still has open alerts
     const second = rowOf(screen.getByText("b0b00000"));
     expect(second.getByText("View")).toBeInTheDocument(); // nothing left open
-    expect(second.getByText("2 days ago")).toBeInTheDocument();
+    expect(second.getByText("about 2 days ago")).toBeInTheDocument();
   });
 
   it("has an empty state that names the window", () => {

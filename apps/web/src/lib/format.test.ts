@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { countOf, formatDate, formatDateTime, formatDuration, formatRelative } from "./format";
+import {
+  countOf,
+  formatDate,
+  formatDateTime,
+  formatDuration,
+  formatRelative,
+  kycLabel,
+} from "./format";
 
 describe("date formatting", () => {
   it("formats dates and date-times in the bank's locale", () => {
@@ -17,20 +24,28 @@ describe("relative times and counts", () => {
     expect(formatRelative("2026-11-01T12:00:05Z", now)).toBe("just now"); // clock skew
     expect(formatRelative("2026-11-01T11:59:00Z", now)).toBe("1 minute ago");
     expect(formatRelative("2026-11-01T11:15:00Z", now)).toBe("45 minutes ago");
-    expect(formatRelative("2026-11-01T11:00:00Z", now)).toBe("1 hour ago");
-    expect(formatRelative("2026-11-01T09:00:00Z", now)).toBe("3 hours ago");
+    expect(formatRelative("2026-11-01T11:00:00Z", now)).toBe("about 1 hour ago");
+    expect(formatRelative("2026-11-01T09:00:00Z", now)).toBe("about 3 hours ago");
     expect(formatRelative("2026-10-31T12:00:00Z", now)).toBe("yesterday");
-    expect(formatRelative("2026-10-29T12:00:00Z", now)).toBe("3 days ago");
+    expect(formatRelative("2026-10-29T12:00:00Z", now)).toBe("about 3 days ago");
   });
 
   it("states durations and counts in words", () => {
     expect(formatDuration(30)).toBe("less than a minute");
     expect(formatDuration(60)).toBe("1 minute");
-    expect(formatDuration(7_200)).toBe("2 hours");
-    expect(formatDuration(86_400)).toBe("1 day");
+    expect(formatDuration(7_200)).toBe("about 2 hours");
+    expect(formatDuration(86_400)).toBe("about 1 day");
     expect(countOf(0, "alert")).toBe("0 alerts");
     expect(countOf(1, "alert")).toBe("1 alert");
     expect(countOf(2, "alert")).toBe("2 alerts");
     expect(countOf(12_345, "event")).toBe("12,345 events");
+  });
+});
+
+describe("kycLabel", () => {
+  it("states each KYC status as a sentence fragment, not an enum", () => {
+    expect(kycLabel("PENDING")).toBe("Identity not yet verified");
+    expect(kycLabel("VERIFIED")).toBe("Identity verified");
+    expect(kycLabel("REJECTED")).toBe("Identity check failed");
   });
 });
