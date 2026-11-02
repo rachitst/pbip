@@ -8037,7 +8037,7 @@
     },
     "/api/v1/compliance/exceptions": {
       "get": {
-        "description": "TASK-100 dashboard data. Re-verifies the audit chain, like ``/audit-logs/verify``.",
+        "description": "TASK-100 dashboard data. The audit chain is fully verified at most once per 5 minutes\n(cached, ADR-0027); ``/audit-logs/verify`` still verifies on demand.",
         "operationId": "list_exceptions_api_v1_compliance_exceptions_get",
         "parameters": [
           {

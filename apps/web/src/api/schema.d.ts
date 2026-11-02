@@ -581,7 +581,8 @@ export interface paths {
         };
         /**
          * Exceptions (blocked payments, lockouts, audit-chain failures) and SLA indicators
-         * @description TASK-100 dashboard data. Re-verifies the audit chain, like ``/audit-logs/verify``.
+         * @description TASK-100 dashboard data. The audit chain is fully verified at most once per 5 minutes
+         *     (cached, ADR-0027); ``/audit-logs/verify`` still verifies on demand.
          */
         get: operations["list_exceptions_api_v1_compliance_exceptions_get"];
         put?: never;
