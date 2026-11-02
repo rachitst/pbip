@@ -34,6 +34,9 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("post", f"/api/v1/transfers/scheduled/{uuid.uuid4()}/cancel"),
         ("post", f"/api/v1/transfers/scheduled/{uuid.uuid4()}/pause"),
         ("post", f"/api/v1/transfers/scheduled/{uuid.uuid4()}/resume"),
+        ("get", "/api/v1/loans"),
+        ("post", "/api/v1/loans/apply"),
+        ("get", f"/api/v1/loans/{uuid.uuid4()}"),
         ("get", "/api/v1/fraud/alerts"),
         ("get", "/api/v1/fraud/stats"),
         ("get", "/api/v1/fraud/monitoring"),
@@ -440,6 +443,42 @@ def test_bola_customer_b_cannot_touch_customer_a_objects(
     assert schedule.status_code == 200 and schedule.json()["status"] == "ACTIVE"
     inbox = client.get("/api/v1/notifications", headers=alice.headers).json()
     assert inbox["unread_count"] == 1 and inbox["items"][0]["read"] is False
+
+
+def test_bola_loans_are_only_visible_to_their_borrower(
+    client: TestClient, db: Session, make_customer: Callable[..., Actor]
+) -> None:
+    """TASK-047: loans are read through loans/policy with the AUTHENTICATED customer id."""
+    alice = make_customer(funds=1_00_000_00)  # income for an eligible loan
+    mallory = make_customer(funds=1_00_000_00)
+    product = "10000000-0000-4000-a000-000000000001"  # personal loan (catalogue)
+
+    def apply(actor: Actor, account_id: str) -> Any:
+        return client.post(
+            "/api/v1/loans/apply",
+            headers={**actor.headers, "Idempotency-Key": uuid.uuid4().hex},
+            json={
+                "product_id": product,
+                "amount_minor": 1_00_000_00,
+                "tenure_months": 12,
+                "account_id": account_id,
+            },
+        )
+
+    victim = apply(alice, str(alice.account_id))
+    assert victim.status_code == 201, victim.text
+    loan_id = victim.json()["id"]
+    h = mallory.headers
+    attempts = {
+        "get victim loan": client.get(f"/api/v1/loans/{loan_id}", headers=h),
+        "get non-existent loan": client.get(f"/api/v1/loans/{uuid.uuid4()}", headers=h),
+        "disburse INTO victim account": apply(mallory, str(alice.account_id)),
+    }
+    for name, response in attempts.items():
+        assert response.status_code == 404, f"{name}: expected 404 got {response.status_code}"
+    assert client.get("/api/v1/loans", headers=h).json() == []
+    own = client.get(f"/api/v1/accounts/{alice.account_id}", headers=alice.headers).json()
+    assert own["ledger_balance_minor"] == 2_00_000_00  # income + one loan, nothing from Mallory
 
 
 def test_listings_only_contain_the_callers_own_objects(

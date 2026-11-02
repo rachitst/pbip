@@ -31,6 +31,7 @@ from pbip_api.modules.fraud.dependencies import build_fraud_scorer
 from pbip_api.modules.fraud.hybrid import load_engine
 from pbip_api.modules.ledger.models import TransactionStatus
 from pbip_api.modules.ledger.service import AccountNotActiveError, InsufficientFundsError
+from pbip_api.modules.loans import service as loans_service
 from pbip_api.modules.notifications import service as notifications
 from pbip_api.modules.payments.models import (
     ScheduledTransfer,
@@ -320,6 +321,50 @@ def _execute_due_occurrence(
     return ScheduledExecutionOutcome.BLOCK
 
 
+def _execute_loan_repayment(
+    session: Session,
+    instruction: ScheduledTransfer,
+    now_date: date,
+) -> ScheduledExecutionOutcome:
+    """Collect a loan's due and overdue instalments (ADR-0024).
+
+    Not a transfer: the money goes to the bank under the loan's terms, so there is no payee check,
+    fraud score or daily limit. Insufficient funds keeps ``next_run_date`` (so the next tick and
+    every later day retries the arrears); an inactive account pauses the instruction.
+    """
+    if instruction.loan_id is None:
+        raise ValueError("not a loan repayment instruction")
+    try:
+        outcome = loans_service.collect_due_instalments(
+            session, loan_id=instruction.loan_id, on_date=now_date
+        )
+    except InsufficientFundsError as exc:
+        session.rollback()
+        return _handle_transient_failure(session, instruction.id, now_date, exc)
+    except (AccountNotActiveError, NotFoundError, UnprocessableError, ConflictError) as exc:
+        session.rollback()
+        return _handle_permanent_failure(session, instruction.id, exc)
+
+    if outcome.closed or outcome.next_due_date is None:
+        instruction.status = ScheduledTransferStatus.COMPLETED
+    else:
+        instruction.next_run_date = outcome.next_due_date
+    if outcome.transaction is not None:
+        instruction.last_run_date = now_date
+        instruction.last_transaction_id = outcome.transaction.id
+    instruction.failure_count = 0
+    instruction.last_failure_reason = None
+    session.commit()
+    # Nothing due (a re-run after the instalments were paid) posts nothing: count it as a replay.
+    result = (
+        ScheduledExecutionOutcome.POSTED
+        if outcome.transaction is not None
+        else ScheduledExecutionOutcome.REPLAY
+    )
+    SCHEDULED_TRANSFERS_TOTAL.labels(outcome=result.value).inc()
+    return result
+
+
 def _handle_transient_failure(
     session: Session,
     instruction_id: UUID,
@@ -463,6 +508,11 @@ def execute_scheduled_instruction(
         or instruction.next_run_date > now_date
     ):
         return ScheduledExecutionOutcome.SKIPPED_INACTIVE
+
+    if instruction.loan_id is not None:
+        # Before the missed-occurrence recovery on purpose: a loan's arrears are collected, not
+        # skipped (ADR-0024).
+        return _execute_loan_repayment(session, instruction, now_date)
 
     if instruction.next_run_date < now_date:
         return _recover_missed_occurrences(session, instruction, now_date)

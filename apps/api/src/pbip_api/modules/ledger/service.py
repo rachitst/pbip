@@ -261,6 +261,64 @@ def deposit(
     return transaction
 
 
+def disburse_loan(
+    session: Session,
+    *,
+    account_id: UUID,
+    amount: int,
+    currency: str,
+    initiated_by_user_id: UUID,
+    reference: str,
+) -> Transaction:
+    """Pay out an approved loan: DEBIT the bank's clearing account, CREDIT the customer (ADR-0024).
+
+    Its own type (never DEPOSIT or TRANSFER) keeps borrowed money out of the customer's ledger
+    "income" (``analytics.repository.INCOME_TYPES``), which eligibility reads. Locks both
+    accounts in sorted order before the header is inserted (``create_transaction``).
+    """
+    transaction = create_transaction(
+        session,
+        type_=TransactionType.LOAN_DISBURSAL,
+        amount=amount,
+        currency=currency,
+        debit_account_id=SYSTEM_CLEARING_ID,
+        credit_account_id=account_id,
+        initiated_by_user_id=initiated_by_user_id,
+        reference=reference,
+    )
+    post_transaction(session, transaction, transfer_legs(transaction))
+    return transaction
+
+
+def collect_loan_repayment(
+    session: Session,
+    *,
+    account_id: UUID,
+    amount: int,
+    currency: str,
+    initiated_by_user_id: UUID,
+    reference: str,
+) -> Transaction:
+    """Collect loan instalments: DEBIT the customer, CREDIT the bank's clearing account (ADR-0024).
+
+    Raises ``InsufficientFundsError`` / ``AccountNotActiveError`` like any debit; the caller rolls
+    back and the scheduler retries (missed-repayment rules in ADR-0024).
+    """
+    transaction = create_transaction(
+        session,
+        type_=TransactionType.LOAN_REPAYMENT,
+        amount=amount,
+        currency=currency,
+        debit_account_id=account_id,
+        credit_account_id=SYSTEM_CLEARING_ID,
+        initiated_by_user_id=initiated_by_user_id,
+        reference=reference,
+        channel="SCHEDULED",
+    )
+    post_transaction(session, transaction, transfer_legs(transaction))
+    return transaction
+
+
 def reverse_transaction(
     session: Session, original_id: UUID, actor_user_id: UUID | None, reason: str
 ) -> Transaction:

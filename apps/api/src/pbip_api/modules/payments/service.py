@@ -53,6 +53,7 @@ from pbip_api.modules.payees.policy import get_owned_payee
 from pbip_api.modules.payments.models import (
     ScheduledTransfer,
     ScheduledTransferStatus,
+    ScheduleFrequency,
     SchedulePauseReason,
 )
 from pbip_api.modules.payments.policy import get_owned_scheduled_transfer
@@ -664,6 +665,7 @@ class PaymentsService:
                 ScheduledTransfer.status.in_(
                     (ScheduledTransferStatus.ACTIVE, ScheduledTransferStatus.PAUSED)
                 ),
+                ScheduledTransfer.loan_id.is_(None),  # loan repayments are not the customer's
             )
         ).scalar_one()
         if live >= self.settings.max_active_scheduled_transfers_per_customer:
@@ -795,6 +797,7 @@ class PaymentsService:
         instruction = get_owned_scheduled_transfer(
             self.session, customer_id, scheduled_transfer_id, for_update=True
         )
+        _refuse_loan_instruction(instruction)
         if instruction.status == ScheduledTransferStatus.CANCELLED:
             raise ConflictError("scheduled transfer is already cancelled")
         if instruction.status == ScheduledTransferStatus.COMPLETED:
@@ -831,6 +834,7 @@ class PaymentsService:
         instruction = get_owned_scheduled_transfer(
             self.session, customer_id, scheduled_transfer_id, for_update=True
         )
+        _refuse_loan_instruction(instruction)
         if instruction.status == ScheduledTransferStatus.PAUSED:
             raise ConflictError("scheduled transfer is already paused")
         if instruction.status == ScheduledTransferStatus.CANCELLED:
@@ -884,6 +888,11 @@ class PaymentsService:
         if source.status != AccountStatus.ACTIVE:
             raise UnprocessableError("source account is not active")
 
+        today = utcnow().date()
+        if instruction.loan_id is not None:
+            # A loan's arrears are owed, not skipped: collect them on the next run (ADR-0024).
+            return self._resume_loan_instruction(instruction, user_id, today, meta)
+
         cmd = TransferCommand(
             from_account_id=instruction.from_account_id,
             amount_minor=instruction.amount,
@@ -894,7 +903,6 @@ class PaymentsService:
         )
         self._resolve_destination(customer, cmd, source)
 
-        today = utcnow().date()
         next_run: date | None = instruction.next_run_date
         while next_run is not None and next_run < today:
             next_run = compute_next_occurrence(
@@ -933,9 +941,83 @@ class PaymentsService:
         self.session.commit()
         return instruction
 
+    def _resume_loan_instruction(
+        self,
+        instruction: ScheduledTransfer,
+        user_id: UUID,
+        today: date,
+        meta: RequestMeta | None,
+    ) -> ScheduledTransfer:
+        instruction.status = ScheduledTransferStatus.ACTIVE
+        instruction.next_run_date = max(instruction.next_run_date, today)
+        instruction.pause_reason = None
+        instruction.failure_count = 0
+        instruction.last_failure_reason = None
+        self.audit.record(
+            user_id,
+            "SCHEDULED_TRANSFER_RESUMED",
+            "scheduled_transfer",
+            str(instruction.id),
+            ip=meta.ip if meta is not None else None,
+            request_id=meta.request_id if meta is not None else None,
+            details={
+                "next_run_date": instruction.next_run_date.isoformat(),
+                "status": instruction.status.value,
+                "loan_id": str(instruction.loan_id),
+            },
+        )
+        self.session.commit()
+        return instruction
+
     # ------------------------------------------------------------- projections
     def upcoming_occurrences(self, customer_id: UUID, until: date) -> list[UpcomingOccurrence]:
         """Project upcoming occurrences for customer's active instructions (R15)."""
         from pbip_api.modules.payments.recurrence import upcoming_occurrences
 
         return upcoming_occurrences(self.session, customer_id, until)
+
+
+def _refuse_loan_instruction(instruction: ScheduledTransfer) -> None:
+    """A loan's repayment instruction is part of the loan contract: it ends when the loan is
+    repaid, never because the customer cancelled or paused it (ADR-0024)."""
+    if instruction.loan_id is not None:
+        raise ConflictError("loan repayments cannot be paused or cancelled")
+
+
+def create_loan_repayment_instruction(
+    session: Session,
+    *,
+    customer_id: UUID,
+    user_id: UUID,
+    account_id: UUID,
+    loan_id: UUID,
+    emi_minor: int,
+    currency: str,
+    first_due: date,
+    last_due: date,
+    reference: str,
+) -> ScheduledTransfer:
+    """The loan's monthly repayment instruction, inserted in the CALLER's transaction (ADR-0024).
+
+    The loans service calls this inside ``apply`` after the accounts are locked, so the loan, its
+    schedule, this instruction and the disbursal commit together. The engine dispatches on
+    ``loan_id`` and collects every due instalment (``loans.service.collect_due_instalments``).
+    """
+    instruction = ScheduledTransfer(
+        customer_id=customer_id,
+        user_id=user_id,
+        from_account_id=account_id,
+        loan_id=loan_id,
+        amount=emi_minor,
+        currency=currency,
+        reference=reference,
+        frequency=ScheduleFrequency.MONTHLY,
+        status=ScheduledTransferStatus.ACTIVE,
+        start_date=first_due,
+        end_date=last_due,
+        next_run_date=first_due,
+        failure_count=0,
+    )
+    session.add(instruction)
+    session.flush()
+    return instruction

@@ -422,13 +422,14 @@ guessing.*
 
 * ✓ The catalogue lists the products.
 * ✓ The EMI calculation returns an exact integer-paise schedule.
-* ✗ I can use a loan calculator in the web app.
+* ✓ I can use a loan calculator in the web app (`/loans`: principal and tenure sliders, EMI from the server).
 
-**Status:** Partial. The UI is TASK-051.
+**Status:** Implemented (in review).
 
-**Tests:** `integration/test_loans.py::test_catalogue_and_emi_schedule`; `unit/test_loan_emi.py::test_known_emi_values`.
+**Tests:** `integration/test_loans.py::test_catalogue_and_emi_schedule`; `unit/test_loan_emi.py::test_known_emi_values`;
+`apps/web/src/pages/Loans.test.tsx`.
 
-**Tasks:** TASK-045 (Done); TASK-051 (Todo).
+**Tasks:** TASK-045 (Done); TASK-051 (In review).
 
 ### US-20 Know whether I am eligible, and why (FR-30, FR-31)
 
@@ -456,15 +457,20 @@ and a rewards card.
 
 **Acceptance criteria:**
 
-* ✗ An application creates a repayment schedule.
-* ✗ Disbursal posts through the ledger.
-* ✗ The active loan shows its remaining balance and upcoming EMIs.
+* ✓ An application re-checks eligibility and creates the full repayment schedule in one transaction.
+* ✓ Disbursal posts through the ledger (DEBIT clearing, CREDIT my account); a retried submit never disburses twice.
+* ✓ Monthly EMIs are collected by the scheduled transfers engine; a missed EMI is retried, not skipped (ADR-0024).
+* ✓ The active loan shows its remaining balance, amortisation progress and upcoming EMIs (web `/loans`).
 
-**Status:** Planned.
+**Status:** Implemented (in review).
 
-**Tests:** none yet.
+**Tests** (`integration/test_loan_applications.py`): `test_apply_disburses_books_the_schedule_and_links_repayments`,
+`test_not_eligible_is_refused_with_plain_reasons_and_leaves_no_state`,
+`test_concurrent_duplicate_applies_create_exactly_one_loan_and_one_disbursal`,
+`test_a_repayment_marks_the_right_instalment_paid_and_reduces_the_balance`,
+`test_a_missed_repayment_is_retried_and_arrears_are_collected_together`; `apps/web/src/pages/Loans.test.tsx`.
 
-**Tasks:** TASK-047, TASK-051 (Todo).
+**Tasks:** TASK-047, TASK-051 (In review).
 
 ## UC-07 Investment recommendation
 

@@ -28,6 +28,8 @@ class TransactionType(StrEnum):
     REVERSAL = "REVERSAL"
     FEE = "FEE"
     BILL_PAYMENT = "BILL_PAYMENT"
+    LOAN_DISBURSAL = "LOAN_DISBURSAL"  # clearing -> customer (ADR-0024); never counted as income
+    LOAN_REPAYMENT = "LOAN_REPAYMENT"  # customer -> clearing, collected by the scheduler (ADR-0024)
 
 
 class TransactionStatus(StrEnum):

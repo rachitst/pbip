@@ -23,6 +23,7 @@ from pbip_api.modules.customers import models as _customers  # noqa: E402, F401
 from pbip_api.modules.events import models as _events  # noqa: E402, F401
 from pbip_api.modules.fraud import models as _fraud  # noqa: E402, F401
 from pbip_api.modules.ledger import models as _ledger  # noqa: E402, F401
+from pbip_api.modules.loans import models as _loans  # noqa: E402, F401
 from pbip_api.modules.notifications import models as _notifications  # noqa: E402, F401
 from pbip_api.modules.payees import models as _payees  # noqa: E402, F401
 from pbip_api.modules.payments import models as _payments  # noqa: E402, F401
