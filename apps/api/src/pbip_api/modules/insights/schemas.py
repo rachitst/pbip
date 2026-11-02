@@ -1,4 +1,5 @@
-"""Pydantic schemas for Relationship Manager behavioral insights (TASK-056)."""
+"""Pydantic schemas for Relationship Manager behavioral insights (TASK-056) and assignment
+(ADR-0032)."""
 
 from datetime import datetime
 from enum import StrEnum
@@ -22,6 +23,13 @@ class ChurnRiskLevel(StrEnum):
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
+
+
+class InsightScope(StrEnum):
+    """ASSIGNED: only the caller's portfolio (an RM). ALL: every customer (an administrator)."""
+
+    ASSIGNED = "ASSIGNED"
+    ALL = "ALL"
 
 
 class CustomerInsightItem(BaseModel):
@@ -77,6 +85,9 @@ class CustomerInsightsListResponse(BaseModel):
     )
     total: int = Field(..., ge=0, description="Total matching customers count")
     evaluated_at: datetime = Field(..., description="Server evaluation timestamp in UTC")
+    scope: InsightScope = Field(
+        ..., description="ASSIGNED: the caller's own customers only; ALL: every customer (admin)"
+    )
 
 
 class HealthSummary(BaseModel):
@@ -113,6 +124,16 @@ class RecommendedProduct(BaseModel):
     reasons: list[str]
 
 
+class AssignedRm(BaseModel):
+    """The relationship manager responsible for a customer (ADR-0032)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    rm_user_id: UUID
+    rm_email: str
+    assigned_at: datetime
+
+
 class CustomerInsightDetail(BaseModel):
     """One customer for the RM flyout: churn signals, health, recent volume and eligible products.
 
@@ -131,6 +152,9 @@ class CustomerInsightDetail(BaseModel):
         default_factory=list, description="Every eligible product, best first"
     )
     evaluated_at: datetime
+    assigned_rm: AssignedRm | None = Field(
+        default=None, description="The relationship manager now responsible; null if unassigned"
+    )
 
 
 _NOTE_WHITESPACE = frozenset("\t\n\r")
@@ -182,3 +206,33 @@ class InteractionListResponse(BaseModel):
 
     items: list[InteractionOut]
     total: int = Field(..., ge=0)
+
+
+class RmAssignmentRequest(BaseModel):
+    """Assign (or reassign) a customer to an active relationship manager (ADMIN only)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rm_user_id: UUID
+
+
+class RmAssignmentOut(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    customer_id: UUID
+    assigned_rm: AssignedRm
+
+
+class RelationshipManagerOut(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    user_id: UUID
+    email: str
+
+
+class RelationshipManagerListResponse(BaseModel):
+    """Active staff with the RELATIONSHIP_MANAGER role, for the admin's assignment picker."""
+
+    model_config = ConfigDict(frozen=True)
+
+    items: list[RelationshipManagerOut]
