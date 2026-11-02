@@ -170,12 +170,12 @@ Across modules, code calls the other module's `service` or `policy` functions on
 | `insights` | Relationship-manager churn signals; staff route of the aggregate behavioural dashboard (queries in `analytics/behaviour.py`, ADR-0027) | `/insights/customers`, `/insights/behaviour` | Partial |
 | `recommendations` | Rule-based product recommendations with reasons (`rules-v1`) | `/recommendations` | Partial: customer carousel on `/accounts` (TASK-062, #328); age band from `customers.service.recommendation_age_band`, `unknown` without date of birth and consent (TASK-107) |
 | `loans` | Catalogue (3 products), EMI schedule, explainable eligibility; idempotent application with ledger disbursal, stored schedule and a repayment instruction on the scheduled transfers engine ([ADR-0024](../adr/0024-loan-disbursal-and-repayments.md)) | `/loans*` | Implemented (API and web) |
-| `assistant` | Read-only tool registry, rules-first router, Ollama adapter, guard, sanitiser, output filter, SSE | `/assistant/*` | Implemented (5 tools). FAQ, product and investment tools Planned (TASK-105) |
+| `assistant` | Read-only tool registry, rules-first router, Ollama adapter, guard, sanitiser, output filter, SSE | `/assistant/*` | Implemented (6 tools, including unusual expenses: TASK-110, #331). FAQ, product and investment tools Planned (TASK-105) |
 | `events` | Clickstream batch ingestion into monthly partitions | `/events/batch` | Partial: the web app does not send events yet (TASK-055 In Progress) |
 | `compliance` | Hash-chained audit log read and verify; exceptions (blocked payments, lockouts, chain failures) with audited acknowledge/resolve and SLA indicators (ADR-0027) | `/compliance/audit-logs*`, `/compliance/exceptions*` | Implemented |
 | `health` | Liveness and readiness (DB + Redis) | `/api/health/live`, `/api/health/ready` | Implemented |
 | `statements` | PDF/CSV statements | none (empty package) | Planned (TASK-016, TASK-074) |
-| `wealth` | Seeded catalogue (fixed deposits, illustrative funds and gold bond, risk filter); exact quarterly-compounded deposit maths; idempotent fixed-deposit booking and closure through the ledger (`SYS-FIXED-DEPOSITS`), maturity and portfolio computed on read ([ADR-0025](../adr/0025-wealth-catalogue-and-fixed-deposits.md)) | `/wealth/products`, `/wealth/fixed-deposits*`, `/wealth/portfolio` | Implemented (API and web `/wealth`); insurance (TASK-096), risk profile (TASK-097) and comparison (TASK-098) Planned |
+| `wealth` | Seeded catalogue (fixed deposits, illustrative funds and gold bond, risk filter); exact quarterly-compounded deposit maths; idempotent fixed-deposit booking and closure through the ledger (`SYS-FIXED-DEPOSITS`), maturity and portfolio computed on read ([ADR-0025](../adr/0025-wealth-catalogue-and-fixed-deposits.md)) | `/wealth/products`, `/wealth/fixed-deposits*`, `/wealth/portfolio` | Implemented (API and web `/wealth`, #327); insurance (TASK-096) and comparison (TASK-098) Planned; the risk band (TASK-097, #326) is recorded but does not filter the catalogue |
 
 Scheduled and recurring transfers live in the `payments` module (`scheduled_service.py`, table `scheduled_transfers`,
 migration `0014`, [ADR-0023](../adr/0023-scheduled-transfers.md)); the Celery job is in section 4.2.
@@ -201,14 +201,18 @@ source of API types.
 **Customer screens on `main`:**
 
 * login with the MFA code step;
-* accounts with balances, open account, expandable ledger history;
+* accounts with balances, the total balance per currency (TASK-109, #330), open account, expandable ledger history,
+  and the product recommendations carousel (TASK-062, #328);
 * send money: source-account choice, verified payees, a review/confirm dialog, a TOTP step-up modal and the real outcome (posted, under review, declined without reasons);
 * insights (spending, trends, health score);
-* profile, devices and password change;
+* profile, devices and password change, the risk-profile questionnaire and the date of birth and recommendations
+  consent (TASK-097, TASK-107, #326);
+* wealth: portfolio, allocation, fixed deposits with booking and closure, catalogue (TASK-063 to TASK-065, #327);
 * the notification bell;
 * the assistant drawer, streamed over SSE.
 
-**Staff screens:** a staff home page, the fraud alert queue and alert detail (plain-language reasons, SHAP bars, customer profile, release/reject), and the compliance audit log.
+**Staff screens:** a staff home page, the fraud alert queue and alert detail (plain-language reasons, SHAP bars, customer profile, release/reject), the compliance audit log, compliance exceptions with regulatory indicators (`/staff/compliance`) and the
+behavioural analytics dashboard (`/staff/behaviour`) (TASK-100, TASK-101, #325).
 
 Every other screen is Planned under the task named in section 4.1.
 
@@ -226,7 +230,7 @@ Every other screen is Planned under the task named in section 4.1.
 
 | Store | What lives there | Notes |
 |---|---|---|
-| PostgreSQL `public` | 30 tables (33 with the 3 `synthetic` tables below; `alembic_version` and clickstream partitions are not counted, as in the LLD): identity and sessions, customers and devices, accounts, ledger, holds, idempotency keys, payees, bills, scheduled transfers, loans and instalments, fraud events and alerts, notifications and outbox, hash-chained audit log, security events, RM interactions, analytics aggregates, segments, clickstream (monthly range partitions), assistant messages | Full diagram: [er-diagram.md](er-diagram.md) (generated, CI-checked). Integer minor units for money. CHECK constraints for enums and ranges. Triggers keep `transaction_entries` immutable and balanced and `audit_logs` append-only |
+| PostgreSQL `public` | 32 tables (35 with the 3 `synthetic` tables below; `alembic_version` and clickstream partitions are not counted, as in the LLD): identity and sessions, customers and devices, accounts, ledger, holds, idempotency keys, payees, bills, scheduled transfers, loans and instalments, fraud events and alerts, notifications and outbox, hash-chained audit log, security events, RM interactions, wealth catalogue and fixed deposits, analytics aggregates, segments, clickstream (monthly range partitions), assistant messages | Full diagram: [er-diagram.md](er-diagram.md) (generated, CI-checked). Integer minor units for money. CHECK constraints for enums and ranges. Triggers keep `transaction_entries` immutable and balanced and `audit_logs` append-only |
 | PostgreSQL `synthetic` | Generation runs, synthetic customers, synthetic transactions | Training data only, never read on the request path ([ADR-0009](../adr/0009-synthetic-dataset-schema.md)) |
 | Redis | Celery broker and result backend (results expire after 1 h); fixed-window rate limits `rl:{name}:{subject}`; sorted-set velocity windows for transfers and login failures | Not a system of record. Rate limits fail open if Redis is down. Velocity falls back to PostgreSQL ([ADR-0020](../adr/0020-device-network-signals-and-velocity-counters.md)). Idempotency is in PostgreSQL, not Redis ([ADR-0003](../adr/0003-idempotency-in-postgresql.md)) |
 | Fraud model directory | `lightgbm.txt`, `isolation_forest.joblib`, `hybrid_params.json`, `manifest.json` (SHA-256 of each file) | Built by `make fraud-model` into `models/fraud`; mounted read-only into `api` in the dev compose. Read once per process when `FRAUD_SCORER=hybrid`. A damaged or missing artefact means rules-only |
