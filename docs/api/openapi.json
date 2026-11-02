@@ -171,6 +171,18 @@
             "title": "Customer Id",
             "type": "string"
           },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Full name of the customer who made the payment",
+            "title": "Customer Name"
+          },
           "decision": {
             "title": "Decision",
             "type": "string"
@@ -247,6 +259,18 @@
             "title": "Status",
             "type": "string"
           },
+          "top_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "First recorded reason: bank rules first, then the model's strongest factor",
+            "title": "Top Reason"
+          },
           "transaction_id": {
             "format": "uuid",
             "title": "Transaction Id",
@@ -310,6 +334,18 @@
             "title": "Currency",
             "type": "string"
           },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Full name of the customer who made the payment",
+            "title": "Customer Name"
+          },
           "decision": {
             "title": "Decision",
             "type": "string"
@@ -330,6 +366,18 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "top_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "First recorded reason: bank rules first, then the model's strongest factor",
+            "title": "Top Reason"
           },
           "transaction_status": {
             "title": "Transaction Status",

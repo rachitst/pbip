@@ -1059,6 +1059,11 @@ export interface components {
              * Format: uuid
              */
             customer_id: string;
+            /**
+             * Customer Name
+             * @description Full name of the customer who made the payment
+             */
+            customer_name?: string | null;
             /** Decision */
             decision: string;
             /** Features */
@@ -1091,6 +1096,11 @@ export interface components {
             /** Status */
             status: string;
             /**
+             * Top Reason
+             * @description First recorded reason: bank rules first, then the model's strongest factor
+             */
+            top_reason?: string | null;
+            /**
              * Transaction Id
              * Format: uuid
              */
@@ -1116,6 +1126,11 @@ export interface components {
             created_at: string;
             /** Currency */
             currency: string;
+            /**
+             * Customer Name
+             * @description Full name of the customer who made the payment
+             */
+            customer_name?: string | null;
             /** Decision */
             decision: string;
             /**
@@ -1129,6 +1144,11 @@ export interface components {
             severity: string;
             /** Status */
             status: string;
+            /**
+             * Top Reason
+             * @description First recorded reason: bank rules first, then the model's strongest factor
+             */
+            top_reason?: string | null;
             /** Transaction Status */
             transaction_status: string;
         };
