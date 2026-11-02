@@ -1411,6 +1411,25 @@ a {
   font-size: var(--text-sm);
 }
 
+/* ---- Statements (TASK-074) --------------------------------------------------------------- */
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--space-3);
+}
+.choice-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  border: 0;
+}
+.choice-group legend {
+  margin-bottom: var(--space-2);
+  font-weight: var(--weight-medium);
+}
+
 /* ---- MFA enrolment (#201) ------------------------------------------------------------------ */
 .secret,
 .recovery-codes code {
