@@ -112,7 +112,9 @@ One `uv` workspace (`apps/api`, `ml`, `data-gen`) with a single `uv.lock`.
 
 ## 4. Data model
 
-Implemented (20 tables, migration `0001`). Money columns are `BIGINT` minor units.
+Implemented: 33 tables, 30 in the operational `public` schema and 3 in the ML `synthetic` schema (counting
+convention as in the LLD: `alembic_version` and the monthly partitions of `clickstream_events` are not counted).
+Migration `0001` created the first 20; later migrations added the rest. Money columns are `BIGINT` minor units.
 The sketch below is the original core design; the complete, CI-checked diagram generated from the
 migrated schema (every table, key and relationship) is [`architecture/er-diagram.md`](architecture/er-diagram.md).
 Per-table constraints, triggers, state machines and lock order: [`architecture/LLD.md`](architecture/LLD.md).
@@ -260,7 +262,9 @@ entries, a new account has none, and a zero-value header is forbidden (`CHECK am
 
 **Lifecycle (state machine).** `INITIATED` (transient) -> `POSTED` | `PENDING_STEP_UP` | `PENDING_REVIEW` |
 `DECLINED`; `PENDING_STEP_UP` -> `POSTED` (valid TOTP); `PENDING_REVIEW` -> `POSTED` (analyst RELEASE: hold
-captured) | `DECLINED` (analyst REJECT: hold released); `POSTED` -> `REVERSED` (compensating `REVERSAL`).
+captured) | `DECLINED` (analyst REJECT: hold released); `POSTED` -> `REVERSED` (compensating `REVERSAL`). `REVERSED` is
+**reserved**: `ledger.reverse_transaction` exists and is tested, but no route, job or script calls it yet, and
+`bill_payments.status = 'REVERSED'` is allowed by the CHECK but never set (LLD section 6).
 STEP_UP for a customer without MFA escalates to REVIEW (never a dead end).
 
 **Transfer sequence** (`POST /api/v1/transfers`, one DB transaction):
