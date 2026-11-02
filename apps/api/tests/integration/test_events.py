@@ -7,8 +7,11 @@ Verifies:
 - Authentication and authorization (401 unauthenticated, 403 staff)
 """
 
+import json
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
@@ -17,6 +20,7 @@ from pbip_api.core.config import Settings, get_settings
 from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.events.models import ClickstreamEvent
 from pbip_api.modules.events.partitions import ensure_monthly_partitions
+from pbip_ml.recommendations import PRODUCT_CATALOGUE
 from pbip_test_support import Actor
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -310,3 +314,48 @@ def test_partition_job_creates_future_months_so_events_avoid_the_default_partiti
         for name in ("2027_04", "2027_05", "2027_06"):
             db.execute(text(f"DROP TABLE IF EXISTS clickstream_events_{name}"))
         db.commit()
+
+
+# TASK-112: the batch the web tracker builds. `apps/web/src/telemetry/tracker.test.ts` asserts the
+# tracker produces exactly this file, so this test proves a real client batch is accepted.
+_CLIENT_BATCH = Path(__file__).resolve().parents[4] / "apps/web/src/telemetry/__fixtures__"
+
+
+def test_a_batch_built_by_the_web_tracker_is_accepted_and_stored_as_sent(
+    client: TestClient, make_customer: Callable[..., Actor], db: Session
+) -> None:
+    alice = make_customer()
+    batch = json.loads((_CLIENT_BATCH / "client-batch.json").read_text(encoding="utf-8"))
+    now = datetime.now(UTC)
+    for event in batch["events"]:  # fresh ids and a time inside the accepted window
+        event["event_id"] = str(uuid4())
+        event["event_timestamp"] = now.isoformat()
+    resp = client.post("/api/v1/events/batch", json=batch, headers=alice.headers)
+    assert resp.status_code == 202, resp.text
+    assert (resp.json()["accepted"], resp.json()["duplicates"]) == (len(batch["events"]), 0)
+
+    stored = db.scalars(
+        select(ClickstreamEvent).where(ClickstreamEvent.customer_id == alice.customer_id)
+    ).all()
+
+    def key(event_type: str, page: str | None, properties: object) -> tuple[str, str, str]:
+        return (event_type, page or "", json.dumps(properties, sort_keys=True))
+
+    sent = sorted(key(e["event_type"], e["page_url"], e["properties"]) for e in batch["events"])
+    assert sorted(key(e.event_type, e.page_url, e.properties) for e in stored) == sent
+    # the recommendation click names a catalogue product, which TASK-101 counts
+    clicked = [e.properties["product_id"] for e in stored if e.event_type == "product_clicked"]
+    assert clicked
+    assert set(clicked) <= {str(p.product_id) for p in PRODUCT_CATALOGUE}
+
+
+@pytest.mark.parametrize("page", ["/accounts/:accountId", "/staff/fraud/:alertId"])
+def test_route_templates_are_accepted_as_the_page(
+    client: TestClient, make_customer: Callable[..., Actor], page: str
+) -> None:
+    """TASK-112: the web app sends route templates, never the ids in the path."""
+    alice = make_customer()
+    resp = client.post(
+        "/api/v1/events/batch", json={"events": [_event(page_url=page)]}, headers=alice.headers
+    )
+    assert resp.status_code == 202, resp.text
