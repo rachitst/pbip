@@ -10,6 +10,7 @@ export type RecommendationAction =
  * different handling, so the action is chosen by id. An id that is not listed here falls back to
  * "unavailable", never to a guessed flow. */
 const SAVINGS_ACCOUNT_ID = "00000000-0000-4000-a000-000000000001";
+const FIXED_DEPOSIT_ID = "00000000-0000-4000-a000-000000000002";
 const CREDIT_LINE_ID = "00000000-0000-4000-a000-000000000003";
 
 /** The open-account form on /accounts reads this parameter to preselect the account type. */
@@ -29,6 +30,9 @@ export function recommendationAction(item: ProductRecommendationItem): Recommend
       // PBIP has no credit-line application; the loans page is the borrowing flow that exists, so
       // the label names that page rather than promising a credit-line eligibility check.
       return { kind: "navigate", to: "/loans", label: "See our loans" };
+    case FIXED_DEPOSIT_ID:
+      // TASK-064: fixed deposits are booked on the wealth page, from the real catalogue.
+      return { kind: "navigate", to: "/wealth", label: "See fixed deposits" };
     default:
       return { kind: "unavailable", note: NOT_AVAILABLE_NOTE };
   }

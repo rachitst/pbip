@@ -624,6 +624,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/customers/me/date-of-birth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set my date of birth (optional; age 18 to 120) */
+        put: operations["put_my_date_of_birth_api_v1_customers_me_date_of_birth_put"];
+        post?: never;
+        /** Delete my date of birth */
+        delete: operations["delete_my_date_of_birth_api_v1_customers_me_date_of_birth_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers/me/demographics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get my date of birth, derived age band and recommendations consent */
+        get: operations["get_my_demographics_api_v1_customers_me_demographics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers/me/recommendations-consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Grant or withdraw consent to use my age band for product recommendations */
+        put: operations["put_my_recommendations_consent_api_v1_customers_me_recommendations_consent_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers/me/risk-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get my risk-tolerance profile (band, answers and when it was assessed) */
+        get: operations["get_my_risk_profile_api_v1_customers_me_risk_profile_get"];
+        /** Answer the risk-tolerance questionnaire and store the resulting band */
+        put: operations["put_my_risk_profile_api_v1_customers_me_risk_profile_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/events/batch": {
         parameters: {
             query?: never;
@@ -1180,6 +1250,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/wealth/fixed-deposits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My fixed deposits */
+        get: operations["list_fixed_deposits_api_v1_wealth_fixed_deposits_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/fixed-deposits/book": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Book a fixed deposit from one of my accounts (idempotent) */
+        post: operations["book_fixed_deposit_api_v1_wealth_fixed_deposits_book_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/fixed-deposits/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exact maturity preview for a fixed deposit (books nothing) */
+        post: operations["quote_fixed_deposit_api_v1_wealth_fixed_deposits_quote_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/fixed-deposits/{deposit_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One of my fixed deposits */
+        get: operations["get_fixed_deposit_api_v1_wealth_fixed_deposits__deposit_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/fixed-deposits/{deposit_id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close one of my fixed deposits: maturity payout, or premature with the penalty rate */
+        post: operations["close_fixed_deposit_api_v1_wealth_fixed_deposits__deposit_id__close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/portfolio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My portfolio: cash, deposits with accrued interest, and allocation */
+        get: operations["get_portfolio_api_v1_wealth_portfolio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Wealth catalogue: fixed deposits, mutual funds and the sovereign gold bond */
+        get: operations["list_products_api_v1_wealth_products_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1222,6 +1411,11 @@ export interface components {
             /** Roles */
             roles: string[];
         };
+        /**
+         * AgeBand
+         * @enum {string}
+         */
+        AgeBand: "18-25" | "26-35" | "36-50" | "51-59" | "60+" | "unknown";
         /**
          * AlertCustomer
          * @description What an analyst needs to judge the alert; no contact details or date of birth.
@@ -1350,6 +1544,21 @@ export interface components {
             top_reason?: string | null;
             /** Transaction Status */
             transaction_status: string;
+        };
+        /** AllocationSlice */
+        AllocationSlice: {
+            /**
+             * Asset Class
+             * @enum {string}
+             */
+            asset_class: "CASH" | "DEPOSITS" | "FUNDS";
+            /**
+             * Share Bps
+             * @description Share of the total; the slices sum to 10000 (0 if empty)
+             */
+            share_bps: number;
+            /** Value Minor */
+            value_minor: number;
         };
         /** AssistantHistory */
         AssistantHistory: {
@@ -1906,6 +2115,18 @@ export interface components {
              */
             segment: "HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER";
         };
+        /**
+         * DateOfBirthIn
+         * @description Self-declared date of birth (ADR-0015). The age must be 18 to 120 on the bank's date.
+         */
+        DateOfBirthIn: {
+            /**
+             * Date Of Birth
+             * Format: date
+             * @description ISO date, YYYY-MM-DD
+             */
+            date_of_birth: string;
+        };
         /** DayCounts */
         DayCounts: {
             /** Allow */
@@ -1939,6 +2160,103 @@ export interface components {
              * @description True: the lab may run here. Outside local/test the endpoint answers 404
              */
             enabled: boolean;
+        };
+        /**
+         * DemographicsOut
+         * @description The customer's own date of birth and consent state. Returned to the owner only.
+         */
+        DemographicsOut: {
+            /** @description Band derived from the date of birth today */
+            age_band: components["schemas"]["AgeBand"];
+            /** Consent Granted At */
+            consent_granted_at: string | null;
+            /**
+             * Consent Policy Version
+             * @description Policy version the current consent was given under
+             */
+            consent_policy_version: string | null;
+            /**
+             * Current Policy Version
+             * @description Policy version a new consent agrees to
+             */
+            current_policy_version: string;
+            /** Date Of Birth */
+            date_of_birth: string | null;
+            /**
+             * Recommendations Consent
+             * @description Whether the age band may be used to tailor product recommendations
+             */
+            recommendations_consent: boolean;
+        };
+        /** DepositBookRequest */
+        DepositBookRequest: {
+            /**
+             * Account Id
+             * Format: uuid
+             * @description One of MY accounts: funds the deposit, receives the payout
+             */
+            account_id: string;
+            /** Amount Minor */
+            amount_minor: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Tenure Months */
+            tenure_months: number;
+        };
+        /** DepositQuoteOut */
+        DepositQuoteOut: {
+            /** Annual Rate Bps */
+            annual_rate_bps: number;
+            /** Apy Bps */
+            apy_bps: number;
+            /** Lock In Months */
+            lock_in_months: number;
+            /** Maturity Amount Minor */
+            maturity_amount_minor: number;
+            /**
+             * Maturity Date
+             * Format: date
+             */
+            maturity_date: string;
+            /** Maturity Interest Minor */
+            maturity_interest_minor: number;
+            /** Premature Penalty Bps */
+            premature_penalty_bps: number | null;
+            /** Principal Minor */
+            principal_minor: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Product Name */
+            product_name: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /** Tenure Months */
+            tenure_months: number;
+        };
+        /**
+         * DepositTermsRequest
+         * @description No rate, maturity or customer from the client: the rate comes from the catalogue, the
+         *     maturity from ``deposit_math`` and the customer from the session (ADR-0025).
+         */
+        DepositTermsRequest: {
+            /** Amount Minor */
+            amount_minor: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Tenure Months */
+            tenure_months: number;
         };
         /**
          * DeviceOut
@@ -2048,6 +2366,12 @@ export interface components {
             /** Tenure Months */
             tenure_months: number;
         };
+        /**
+         * EmergencyFund
+         * @description Months of essential spending the customer could cover without investments.
+         * @enum {string}
+         */
+        EmergencyFund: "UNDER_3_MONTHS" | "THREE_TO_6_MONTHS" | "OVER_6_MONTHS";
         /** EmiOut */
         EmiOut: {
             /** Annual Rate Bps */
@@ -2264,6 +2588,96 @@ export interface components {
              * @description Length of the trailing window used
              */
             window_months: number;
+        };
+        /** FixedDepositOut */
+        FixedDepositOut: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /**
+             * Accrued Interest Minor
+             * @description Interest earned to today at the contract rate (paid interest once closed)
+             */
+            accrued_interest_minor: number;
+            /** Annual Rate Bps */
+            annual_rate_bps: number;
+            /**
+             * Booked At
+             * Format: date-time
+             */
+            booked_at: string;
+            /**
+             * Booking Transaction Id
+             * Format: uuid
+             */
+            booking_transaction_id: string;
+            /** Can Close Now */
+            can_close_now: boolean;
+            /** Closed On */
+            closed_on: string | null;
+            /** Closure Kind */
+            closure_kind: ("MATURED" | "PREMATURE") | null;
+            /** Closure Transaction Id */
+            closure_transaction_id: string | null;
+            /** Currency */
+            currency: string;
+            /**
+             * Days To Maturity
+             * @description Bank days until maturity; 0 once matured
+             */
+            days_to_maturity: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Interest Transaction Id */
+            interest_transaction_id: string | null;
+            /**
+             * Lock In Until
+             * Format: date
+             */
+            lock_in_until: string;
+            /** Maturity Amount Minor */
+            maturity_amount_minor: number;
+            /**
+             * Maturity Date
+             * Format: date
+             */
+            maturity_date: string;
+            /** Maturity Interest Minor */
+            maturity_interest_minor: number;
+            /** Paid Interest Minor */
+            paid_interest_minor: number | null;
+            /**
+             * Payout If Closed Today Minor
+             * @description What closing today would pay (premature penalty applied); None if it cannot
+             */
+            payout_if_closed_today_minor: number | null;
+            /** Principal Minor */
+            principal_minor: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Product Name */
+            product_name: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * Status
+             * @description MATURED = active and the maturity date reached: ready to withdraw
+             * @enum {string}
+             */
+            status: "ACTIVE" | "MATURED" | "CLOSED";
+            /** Tenure Months */
+            tenure_months: number;
         };
         /** FlaggedEvent */
         FlaggedEvent: {
@@ -2530,6 +2944,22 @@ export interface components {
          * @enum {string}
          */
         InteractionOutcome: "INTERESTED" | "NOT_INTERESTED" | "FOLLOW_UP" | "NO_ANSWER" | "INFORMATION_SENT" | "ACCOUNT_REVIEW";
+        /**
+         * InvestmentExperience
+         * @enum {string}
+         */
+        InvestmentExperience: "NONE" | "SOME" | "EXTENSIVE";
+        /**
+         * InvestmentGoal
+         * @enum {string}
+         */
+        InvestmentGoal: "PROTECT_SAVINGS" | "STEADY_GROWTH" | "MAXIMUM_GROWTH";
+        /**
+         * InvestmentHorizon
+         * @description How long the customer expects to leave money invested.
+         * @enum {string}
+         */
+        InvestmentHorizon: "UNDER_1_YEAR" | "ONE_TO_5_YEARS" | "OVER_5_YEARS";
         /** LiveResponse */
         LiveResponse: {
             /**
@@ -2832,6 +3262,12 @@ export interface components {
             /** Password */
             password: string;
         };
+        /**
+         * LossReaction
+         * @description What the customer would do if their investments fell 20% in a year.
+         * @enum {string}
+         */
+        LossReaction: "SELL_EVERYTHING" | "WAIT_AND_HOLD" | "INVEST_MORE";
         /** MfaConfirmRequest */
         MfaConfirmRequest: {
             /** Code */
@@ -3102,6 +3538,52 @@ export interface components {
             name_match: "MATCH" | "NO_MATCH" | "NOT_CHECKED";
             payee: components["schemas"]["PayeeOut"];
         };
+        /** PortfolioOut */
+        PortfolioOut: {
+            /**
+             * Accrued Interest Minor
+             * @description Interest earned to date on open deposits
+             */
+            accrued_interest_minor: number;
+            /** Allocation */
+            allocation: components["schemas"]["AllocationSlice"][];
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+            /**
+             * Cash Minor
+             * @description Ledger balance of my INR accounts
+             */
+            cash_minor: number;
+            /**
+             * Currency
+             * @constant
+             */
+            currency: "INR";
+            /**
+             * Deposits Value Minor
+             * @description Principal + accrued interest
+             */
+            deposits_value_minor: number;
+            /**
+             * Funds Minor
+             * @description Fund holdings: PBIP sells no fund units, so always 0
+             */
+            funds_minor: number;
+            /**
+             * Invested Principal Minor
+             * @description Principal of my open fixed deposits
+             */
+            invested_principal_minor: number;
+            /** Open Deposits */
+            open_deposits: number;
+            /** Projected Maturity Value Minor */
+            projected_maturity_value_minor: number;
+            /** Total Minor */
+            total_minor: number;
+        };
         /**
          * ProductRecommendationItem
          * @description A single personalized product recommendation with explainable reasons.
@@ -3160,6 +3642,14 @@ export interface components {
              * @enum {string}
              */
             status: "ok" | "degraded";
+        };
+        /**
+         * RecommendationsConsentIn
+         * @description Grant (true) or withdraw (false) consent to use the date of birth for recommendations.
+         */
+        RecommendationsConsentIn: {
+            /** Granted */
+            granted: boolean;
         };
         /**
          * RecommendationsResponse
@@ -3225,6 +3715,61 @@ export interface components {
             full_name: string;
             /** Password */
             password: string;
+        };
+        /**
+         * RiskBand
+         * @enum {string}
+         */
+        RiskBand: "LOW" | "MODERATE" | "HIGH";
+        /**
+         * RiskLevel
+         * @enum {string}
+         */
+        RiskLevel: "LOW" | "MODERATE" | "HIGH";
+        /**
+         * RiskProfileOut
+         * @description The customer's current risk band and the answers that produced it; nulls until assessed.
+         */
+        RiskProfileOut: {
+            answers: components["schemas"]["RiskQuestionnaire"] | null;
+            /**
+             * Assessed At
+             * @description When the band was last assessed
+             */
+            assessed_at: string | null;
+            /** @description LOW, MODERATE or HIGH; null if never assessed */
+            band: components["schemas"]["RiskBand"] | null;
+            /**
+             * Max Score
+             * @description Highest possible score
+             */
+            max_score: number;
+            /**
+             * Questionnaire Version
+             * @description Questionnaire version that scored these answers
+             */
+            questionnaire_version: string | null;
+            /**
+             * Score
+             * @description Sum of the answer points
+             */
+            score: number | null;
+        };
+        /**
+         * RiskQuestionnaire
+         * @description The five risk-tolerance questions (TASK-097). Every answer is an enumerated choice.
+         */
+        RiskQuestionnaire: {
+            /** @description Months of essential spending you could cover without investments */
+            emergency_fund: components["schemas"]["EmergencyFund"];
+            /** @description Your experience of market-linked investments */
+            investment_experience: components["schemas"]["InvestmentExperience"];
+            /** @description What matters most for your investments */
+            investment_goal: components["schemas"]["InvestmentGoal"];
+            /** @description How long you expect to keep money invested */
+            investment_horizon: components["schemas"]["InvestmentHorizon"];
+            /** @description What you would do if your investments fell 20% in a year */
+            loss_reaction: components["schemas"]["LossReaction"];
         };
         /** RiskyPayee */
         RiskyPayee: {
@@ -3745,6 +4290,69 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** WealthProductOut */
+        WealthProductOut: {
+            /**
+             * Annual Rate Bps
+             * @description Indicative, simulated annual rate (deposits) or coupon (gold bond); None when market-linked
+             */
+            annual_rate_bps: number | null;
+            /**
+             * Apy Bps
+             * @description Annualised yield: quarterly compounding for deposits, the coupon for the gold bond; None for market-linked funds (PBIP has no market data)
+             */
+            apy_bps: number | null;
+            /**
+             * Bookable
+             * @description Only fixed deposits can be booked online
+             */
+            bookable: boolean;
+            /** Catalogue Version */
+            catalogue_version: string;
+            /** Code */
+            code: string;
+            /** Description */
+            description: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Max Amount Minor */
+            max_amount_minor: number | null;
+            /** Min Amount Minor */
+            min_amount_minor: number | null;
+            /** Min Lock In Months */
+            min_lock_in_months: number;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes: string;
+            /** Premature Closure Allowed */
+            premature_closure_allowed: boolean;
+            /** Premature Penalty Bps */
+            premature_penalty_bps: number | null;
+            /**
+             * Product Type
+             * @enum {string}
+             */
+            product_type: "FIXED_DEPOSIT" | "MUTUAL_FUND" | "SOVEREIGN_GOLD_BOND";
+            /**
+             * Risk Level
+             * @enum {string}
+             */
+            risk_level: "LOW" | "MODERATE" | "HIGH";
+            /**
+             * Tenures Months
+             * @description Empty for open-ended funds
+             */
+            tenures_months: number[];
+            /**
+             * Yield Basis
+             * @enum {string}
+             */
+            yield_basis: "GUARANTEED" | "FIXED_COUPON" | "MARKET_LINKED";
         };
     };
     responses: never;
@@ -4880,6 +5488,163 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CustomerProfileOut"];
+                };
+            };
+        };
+    };
+    put_my_date_of_birth_api_v1_customers_me_date_of_birth_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DateOfBirthIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemographicsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_my_date_of_birth_api_v1_customers_me_date_of_birth_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_my_demographics_api_v1_customers_me_demographics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemographicsOut"];
+                };
+            };
+        };
+    };
+    put_my_recommendations_consent_api_v1_customers_me_recommendations_consent_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecommendationsConsentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemographicsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_risk_profile_api_v1_customers_me_risk_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RiskProfileOut"];
+                };
+            };
+        };
+    };
+    put_my_risk_profile_api_v1_customers_me_risk_profile_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RiskQuestionnaire"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RiskProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -6041,6 +6806,215 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TransferOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_fixed_deposits_api_v1_wealth_fixed_deposits_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedDepositOut"][];
+                };
+            };
+        };
+    };
+    book_fixed_deposit_api_v1_wealth_fixed_deposits_book_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical request; retrying with the same key never duplicates. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepositBookRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedDepositOut"];
+                };
+            };
+            /** @description Insufficient funds, terms not offered or invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    quote_fixed_deposit_api_v1_wealth_fixed_deposits_quote_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepositTermsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DepositQuoteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_fixed_deposit_api_v1_wealth_fixed_deposits__deposit_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deposit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedDepositOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    close_fixed_deposit_api_v1_wealth_fixed_deposits__deposit_id__close_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical request; retrying with the same key never duplicates. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                deposit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedDepositOut"];
+                };
+            };
+            /** @description Already closed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Still inside its lock-in period */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_portfolio_api_v1_wealth_portfolio_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioOut"];
+                };
+            };
+        };
+    };
+    list_products_api_v1_wealth_products_get: {
+        parameters: {
+            query?: {
+                /** @description Only this risk level */
+                risk_level?: components["schemas"]["RiskLevel"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WealthProductOut"][];
                 };
             };
             /** @description Validation Error */

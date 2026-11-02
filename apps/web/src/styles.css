@@ -1711,3 +1711,10 @@ input[type="range"] {
     scroll-snap-type: none;
   }
 }
+
+/* ---- Profile: date of birth and consent (TASK-107) ---------------------------------------- */
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

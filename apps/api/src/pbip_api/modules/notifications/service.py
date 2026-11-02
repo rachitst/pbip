@@ -25,6 +25,9 @@ SCHEDULED_TRANSFER_PAUSED = "SCHEDULED_TRANSFER_PAUSED"
 # Loans (ADR-0024): both link to the ledger transaction, like transfers.
 LOAN_DISBURSED = "LOAN_DISBURSED"
 LOAN_REPAYMENT_POSTED = "LOAN_REPAYMENT_POSTED"
+# Fixed deposits (ADR-0025): link to the booking / principal payout transaction.
+FIXED_DEPOSIT_BOOKED = "FIXED_DEPOSIT_BOOKED"
+FIXED_DEPOSIT_CLOSED = "FIXED_DEPOSIT_CLOSED"
 # Security notifications for events the auth and customers modules already record (#45).
 PASSWORD_CHANGED = "PASSWORD_CHANGED"  # noqa: S105  # pragma: allowlist secret - an event type name
 MFA_ENABLED = "MFA_ENABLED"
@@ -42,6 +45,8 @@ _TRANSFER_TYPES = {
     BILL_PAYMENT_UNDER_REVIEW,
     LOAN_DISBURSED,
     LOAN_REPAYMENT_POSTED,
+    FIXED_DEPOSIT_BOOKED,
+    FIXED_DEPOSIT_CLOSED,
 }
 _SCHEDULED_TRANSFER_TYPES = {
     SCHEDULED_TRANSFER_FAILED,
@@ -203,6 +208,9 @@ def _transfer_text(event: OutboxEvent) -> tuple[str, str] | None:
         )
     if event.event_type == LOAN_REPAYMENT_POSTED:
         return "Loan EMI paid", f"Your loan EMI of {amount} was collected from your account."
+    deposit = _deposit_text(event, amount)
+    if deposit is not None:
+        return deposit
     name = event.payload.get("biller_name")
     to_biller = f" to {name}" if isinstance(name, str) and name else ""
     if event.event_type == BILL_PAYMENT_POSTED:
@@ -216,6 +224,24 @@ def _transfer_text(event: OutboxEvent) -> tuple[str, str] | None:
         return (
             "Bill payment not completed",
             f"Your bill payment of {amount}{to_biller} could not be completed.",
+        )
+    return None
+
+
+def _deposit_text(event: OutboxEvent, amount: str) -> tuple[str, str] | None:
+    currency = str(event.payload["currency"])
+    if event.event_type == FIXED_DEPOSIT_BOOKED:
+        at_maturity = format_minor(int(event.payload["maturity_amount_minor"]), currency)
+        matures = date.fromisoformat(str(event.payload["maturity_date"])).strftime("%d %b %Y")
+        return (
+            "Fixed deposit booked",
+            f"Your fixed deposit of {amount} was booked. It matures on {matures} at {at_maturity}.",
+        )
+    if event.event_type == FIXED_DEPOSIT_CLOSED:
+        interest = format_minor(int(event.payload["interest_minor"]), currency)
+        return (
+            "Fixed deposit closed",
+            f"{amount}, including {interest} interest, was credited to your account.",
         )
     return None
 

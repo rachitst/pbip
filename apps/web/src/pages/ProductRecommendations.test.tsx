@@ -201,18 +201,29 @@ describe("product recommendations on the accounts page", () => {
   });
 
   it("offers no action for a product PBIP cannot open yet", async () => {
-    recommendations = () => Promise.resolve(json(200, response([fixedDeposit, familyCover])));
+    recommendations = () => Promise.resolve(json(200, response([familyCover])));
     renderApp();
     const region = await section();
-    for (const name of ["Fixed deposit", "Family protection cover"]) {
-      const card = within(
-        (await region.findByRole("heading", { name })).closest("li") ?? document.body,
-      );
-      expect(card.getByText(NOT_AVAILABLE_NOTE)).toBeInTheDocument();
-      expect(card.getAllByRole("button").map((b) => b.textContent)).toEqual([
-        "Why this was recommended for you",
-      ]);
-    }
+    const card = within(
+      (await region.findByRole("heading", { name: "Family protection cover" })).closest("li") ??
+        document.body,
+    );
+    expect(card.getByText(NOT_AVAILABLE_NOTE)).toBeInTheDocument();
+    expect(card.getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "Why this was recommended for you",
+    ]);
+  });
+
+  it("sends a fixed deposit to the wealth page, where deposits are booked (TASK-064)", async () => {
+    const user = userEvent.setup();
+    recommendations = () => Promise.resolve(json(200, response([fixedDeposit])));
+    renderApp();
+    const region = await section();
+    const heading = await region.findByRole("heading", { name: "Fixed deposit" });
+    const card = within(heading.closest("li") ?? heading);
+    expect(card.queryByText(NOT_AVAILABLE_NOTE)).toBeNull();
+    await user.click(card.getByRole("button", { name: "See fixed deposits: Fixed deposit" }));
+    expect(window.location.pathname).toBe("/wealth");
   });
 });
 
