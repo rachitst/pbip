@@ -11,7 +11,7 @@ that the endpoint may add one low-balance notification per account and month.
 import calendar
 import time
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
 import structlog
@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from pbip_api.core.db import utcnow
 from pbip_api.core.errors import NotFoundError, UnprocessableError
 from pbip_api.modules.accounts.service import mask_account_number
-from pbip_api.modules.analytics import behaviour, projection, repository
+from pbip_api.modules.analytics import behaviour, projection, repository, unusual
 from pbip_api.modules.analytics.health import compute_financial_health_score
 from pbip_api.modules.analytics.models import MonthlyCategorySpending
 from pbip_api.modules.analytics.policy import verify_account_ownership
@@ -524,6 +524,62 @@ def get_transaction_volume(
     one from the client.
     """
     return repository.transaction_volume(session, customer_id, as_of - window, as_of)
+
+
+# Public face of the TASK-110 rule for other modules (they use the service, not its internals).
+UnusualCategory = unusual.UnusualCategory
+UnusualTransaction = unusual.UnusualTransaction
+UNUSUAL_BASELINE_MONTHS = unusual.BASELINE_MONTHS
+UNUSUAL_CATEGORY_RATIO = unusual.CATEGORY_RATIO
+UNUSUAL_TRANSACTION_RATIO = unusual.TRANSACTION_RATIO
+UNUSUAL_MIN_EXCESS_MINOR = unusual.MIN_EXCESS_MINOR
+
+
+@dataclass(frozen=True)
+class UnusualExpenses:
+    """Unusual spend of one owned account in a calendar month against its own baseline."""
+
+    currency: str
+    year: int
+    month: int
+    baseline_months: list[tuple[int, int]]  # oldest first
+    findings: unusual.UnusualFindings
+
+
+class NotEnoughSpendingHistoryError(UnprocessableError):
+    code = "not_enough_spending_history"
+
+
+def get_unusual_expenses(
+    session: Session, customer_id: UUID, account_id: UUID, year: int, month: int
+) -> UnusualExpenses:
+    """TASK-110: the month's categories and payments well above this customer's usual level.
+
+    The rule and its thresholds are in :mod:`analytics.unusual`. Read-only; one query over the
+    period and its three baseline months.
+    """
+    account = verify_account_ownership(session, customer_id, account_id)
+    baseline_months = sorted(
+        previous_closed_months(datetime(year, month, 1, tzinfo=UTC), unusual.BASELINE_MONTHS)
+    )
+    start = repository.month_window(*baseline_months[0])[0]
+    period_start, period_end = repository.month_window(year, month)
+    owned = repository.owned_account_ids(session, customer_id)
+    debits = repository.spend_debits(session, account.id, owned, start, period_end)
+    baseline = [d for d in debits if d.posted_at < period_start]
+    if unusual.baseline_months_with_spend(baseline) < unusual.MIN_BASELINE_MONTHS:
+        raise NotEnoughSpendingHistoryError(
+            f"I need spending in at least {unusual.MIN_BASELINE_MONTHS} of the "
+            f"{unusual.BASELINE_MONTHS} months before this one to know what is usual for you."
+        )
+    period = [d for d in debits if d.posted_at >= period_start]
+    return UnusualExpenses(
+        currency=account.currency,
+        year=year,
+        month=month,
+        baseline_months=baseline_months,
+        findings=unusual.find_unusual(period, baseline),
+    )
 
 
 def get_behaviour_analytics(

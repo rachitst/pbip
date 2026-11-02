@@ -14,6 +14,7 @@ import re
 from dataclasses import dataclass, field
 
 from pbip_api.modules.assistant.tools import (
+    DEFAULT_TENURE_MONTHS,
     MAX_ACCOUNTS,
     MAX_TRANSACTIONS,
     SpendCategory,
@@ -38,6 +39,14 @@ _FORECAST = re.compile(
     _I,
 )
 _LOAN = re.compile(r"\b(loan|emi|borrow|mortgage|afford)\b", _I)
+# A loan is named (not just "afford"): only then is "how much can I borrow?" answered without an
+# amount (FR-38). "Can I afford a holiday?" stays unanswered rather than becoming a loan quote.
+_LOAN_NAMED = re.compile(r"\b(loans?|emis?|borrow(ing)?|mortgage|finance)\b", _I)
+_UNUSUAL = re.compile(
+    r"\b(unusual(ly)?|unexpected|abnormal|anomal(y|ies|ous)|out of the ordinary|spik(e|es|ed)"
+    r"|higher than (usual|normal)|more than (usual|normal)|bigger than (usual|normal))\b",
+    _I,
+)
 _TRANSACTIONS = re.compile(r"\b(transactions?|recent|history|statement|last \d+)\b", _I)
 _SPEND = re.compile(r"\b(spend|spent|spending|expenses?|expenditure|cost me)\b", _I)
 _BALANCE = re.compile(r"\b(balance|accounts?|how much (money )?(do i have|is in|have i got))\b", _I)
@@ -91,7 +100,6 @@ _CATEGORY_WORDS: tuple[tuple[SpendCategory, re.Pattern[str]], ...] = tuple(
         (SpendCategory.FEES, r"\b(fees?|charges?)\b"),
     )
 )
-_DEFAULT_TENURE = {LoanType.PERSONAL: 36, LoanType.AUTO: 60, LoanType.HOME: 240}
 
 
 def _account(message: str) -> int:
@@ -147,21 +155,22 @@ def _loan(message: str) -> Route:
         loan_type = LoanType.AUTO
     else:
         loan_type = LoanType.PERSONAL
-    years, months = _YEARS.search(message), _MONTHS.search(message)
-    tenure = (
-        int(years.group(1)) * 12
-        if years
-        else int(months.group(1))
-        if months
-        else _DEFAULT_TENURE[loan_type]
-    )
+    tenure = parse_tenure(message) or DEFAULT_TENURE_MONTHS[loan_type]
+    arguments: dict[str, object] = {"loan_type": loan_type.value, "tenure_months": tenure}
     amount = parse_rupees(message)
-    if amount is None:
-        return Route(None)
-    return Route(
-        ToolName.LOAN_AFFORDABILITY,
-        {"loan_type": loan_type.value, "amount_rupees": amount, "tenure_months": tenure},
-    )
+    if amount is not None:
+        return Route(ToolName.LOAN_AFFORDABILITY, {**arguments, "amount_rupees": amount})
+    if _LOAN_NAMED.search(message):
+        return Route(ToolName.LOAN_AFFORDABILITY, arguments)  # FR-38: suggest, or ask why not
+    return Route(None)
+
+
+def parse_tenure(message: str) -> int | None:
+    """Tenure in months the customer wrote ("5 years" -> 60, "18 months" -> 18), or None."""
+    years, months = _YEARS.search(message), _MONTHS.search(message)
+    if years:
+        return int(years.group(1)) * 12
+    return int(months.group(1)) if months else None
 
 
 def _transactions(message: str) -> Route:
@@ -182,6 +191,11 @@ def _spend(message: str) -> Route:
     return Route(ToolName.SPEND, _with_account(message, arguments))
 
 
+def _unusual(message: str) -> Route:
+    period = SpendPeriod.LAST_MONTH if _LAST_MONTH.search(message) else SpendPeriod.THIS_MONTH
+    return Route(ToolName.UNUSUAL_EXPENSES, _with_account(message, {"period": period.value}))
+
+
 def _intents(message: str) -> list[ToolName]:
     """Every intent whose keywords appear, most specific first."""
     found = [
@@ -189,11 +203,16 @@ def _intents(message: str) -> list[ToolName]:
         for tool, rx in (
             (ToolName.BALANCE_FORECAST, _FORECAST),
             (ToolName.LOAN_AFFORDABILITY, _LOAN),
+            (ToolName.UNUSUAL_EXPENSES, _UNUSUAL),
             (ToolName.RECENT_TRANSACTIONS, _TRANSACTIONS),
             (ToolName.SPEND, _SPEND),
         )
         if rx.search(message)
     ]
+    # "unusual expenses" / "unexpected transactions" name ONE intent: the unusual-expense check
+    # is the more specific reading of the spend and transaction keywords it contains.
+    if ToolName.UNUSUAL_EXPENSES in found:
+        found = [t for t in found if t not in (ToolName.SPEND, ToolName.RECENT_TRANSACTIONS)]
     # "account" appears in questions about anything ("spend on my second account"), so the
     # balance intent counts only when nothing more specific was named.
     if not found and _BALANCE.search(message):
@@ -204,8 +223,9 @@ def _intents(message: str) -> list[ToolName]:
 def clear_route(message: str) -> Route | None:
     """The fast path: exactly one intent and its arguments parse. Otherwise None (ask the LLM).
 
-    "spending and recent transactions" names two intents, "can I get a loan?" has no amount:
-    both are unclear and go to the model (or, without one, to :func:`route`).
+    "spending and recent transactions" names two intents: unclear, so it goes to the model (or,
+    without one, to :func:`route`). "Can I get a loan?" without an amount is clear since FR-38:
+    the loan tool suggests the largest eligible amount or says why it cannot.
     """
     if len(_intents(message)) != 1 or _THIRD_PARTY.search(message):
         return None
@@ -221,6 +241,8 @@ def route(message: str) -> Route:
         )
     if _LOAN.search(message):
         return _loan(message)
+    if _UNUSUAL.search(message):
+        return _unusual(message)
     if _TRANSACTIONS.search(message):
         return _transactions(message)
     if _SPEND.search(message):
