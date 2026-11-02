@@ -2338,7 +2338,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #100 | **Sprint:** 6 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Sun 01 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (set when merged; PR #319) | **Status:** In Review | **Risk:** Medium (1.1 days of slack before downstream work is delayed)
+- **Start:** Sun 01 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** Mon 02 Nov (#319, b2d892d) | **Status:** Done | **Risk:** Medium (1.1 days of slack before downstream work is delayed)
 - **Depends on:** TASK-019 (#42, Kalpak), TASK-036 (#59, Kalpak), TASK-037 (#60, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-019, TASK-036, TASK-037
 - **Goal:** Automated browser end-to-end tests covering login, money transfer, fraud review, and BOLA rejection.
@@ -2351,10 +2351,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Journey 4: Cross-customer BOLA probe verified: modifying URL parameter returns 404
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #100`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Journey 1: Customer registers, enrolls MFA, logs in, and deposits opening balance
-  - [ ] Journey 2: Customer executes transfer with Idempotency-Key; verify ledger entry in UI
-  - [ ] Journey 3: Customer executes high-risk transfer -> held -> staff analyst releases transfer
-  - [ ] Journey 4: Cross-customer BOLA probe verified: modifying URL parameter returns 404
+  - [x] Journey 1: Customer registers, enrolls MFA, logs in, and deposits opening balance (`journey-onboarding.spec.ts`; the opening balance is a ledger deposit by `scripts/e2e_fund.py`, there is no customer-facing deposit)
+  - [x] Journey 2: Customer executes transfer with Idempotency-Key; verify ledger entry in UI
+  - [x] Journey 3: Customer executes high-risk transfer -> held -> staff analyst releases transfer
+  - [x] Journey 4: Cross-customer BOLA probe verified: modifying URL parameter returns 404 (`journey-bola.spec.ts`; Session 3 additions: step-up, reject, scheduled transfer and assistant journeys, see `docs/testing/e2e.md`)
 - **Definition of done (evidence):** Runs headlessly in CI against full Docker Compose stack with zero flakiness.
 - **Required checks:**
   - Automated: the suite itself runs in CI or via a documented command and asserts its thresholds; Vitest + Testing Library covering loading, empty, error and success states; Playwright journey for critical flows; types only from `schema.d.ts`
