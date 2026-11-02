@@ -8,6 +8,7 @@ safety net behind object-level authorization (docs/PROJECT_BLUEPRINT.md section 
 import pytest
 from fastapi.routing import APIRoute
 from pbip_api.main import ROUTERS
+from pbip_api.modules.compliance.router import compliance_gate
 from pbip_api.modules.fraud.router import analyst_gate
 from pbip_api.modules.insights.router import rm_gate
 from pbip_test_support import build_app
@@ -93,6 +94,7 @@ def test_every_insights_route_is_behind_the_mfa_rm_gate() -> None:
     insights_routes = [r for r in _all_api_routes() if r.path.startswith("/api/v1/insights/")]
     assert {
         "/api/v1/insights/customers",
+        "/api/v1/insights/behaviour",
         "/api/v1/insights/customers/{customer_id}",
         "/api/v1/insights/customers/{customer_id}/interactions",
     } <= {r.path for r in insights_routes}
@@ -102,3 +104,24 @@ def test_every_insights_route_is_behind_the_mfa_rm_gate() -> None:
         if rm_gate not in {d.call for d in route.dependant.dependencies}
     ]
     assert not offenders, f"Insights routes without the MFA RM gate: {offenders}"
+
+
+def test_every_compliance_route_is_behind_the_mfa_compliance_gate() -> None:
+    """Audit history and the exceptions dashboard (TASK-048, TASK-100) are compliance work.
+
+    ``compliance_gate`` is ``require_roles(COMPLIANCE_OFFICER, ADMIN, mfa=True)``; a new compliance
+    route with a weaker gate (or only authentication) fails here.
+    """
+    routes = [r for r in _all_api_routes() if r.path.startswith("/api/v1/compliance/")]
+    assert {
+        "/api/v1/compliance/audit-logs",
+        "/api/v1/compliance/exceptions",
+        "/api/v1/compliance/exceptions/{kind}/{ref}/acknowledge",
+        "/api/v1/compliance/exceptions/{kind}/{ref}/resolve",
+    } <= {r.path for r in routes}
+    offenders = [
+        f"{sorted(route.methods)} {route.path}"
+        for route in routes
+        if compliance_gate not in {d.call for d in route.dependant.dependencies}
+    ]
+    assert not offenders, f"Compliance routes without the MFA compliance gate: {offenders}"

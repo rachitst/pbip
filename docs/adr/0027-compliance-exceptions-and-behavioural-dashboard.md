@@ -1,0 +1,50 @@
+# ADR 0027: Compliance exceptions from existing facts, and an aggregate-only behavioural dashboard
+- Status: Proposed (needs owner approval before merge: new staff endpoints, audit log used as workflow state)
+- Date: 2026-11-02
+- Deciders: Architecture Team
+
+## Context
+UC-12 (requirements section 5) asks for two internal dashboards that did not exist:
+
+* **Compliance & Risk** (TASK-100, #183): system-generated alerts, exception management (blocked transfers,
+  lockouts, audit-chain verification failures) with acknowledge and resolve actions that are audited with actor and
+  reason, and regulatory indicators (reviews pending past SLA, unresolved exceptions).
+* **Behavioural Analytics** (TASK-101, #184): segment distribution, spending patterns by segment, product affinity
+  (holdings and recommendation interactions) and engagement (clickstream), filterable by segment and period, with no
+  per-customer drill-down without the RM role.
+
+The facts already exist: `fraud_events` (decision `BLOCK`), `security_events` (`ACCOUNT_LOCKED`), the audit hash
+chain (`AuditService.verify_chain`), `fraud_alerts`, `customer_segments`, ledger entries, accounts, loans and
+`clickstream_events`. What was missing is a place to keep an exception's workflow state, and the queries.
+
+## Decision
+1. **Exceptions are derived, not copied.** `modules/compliance/exceptions.py` reads blocked payments and lockouts from
+   their owning tables in one `UNION ALL`, and re-verifies the audit chain on each request (the same O(n) walk as
+   `GET /compliance/audit-logs/verify`). A chain failure is one exception keyed by the first failing sequence number;
+   it is a standing condition, so it is listed whatever the period.
+2. **Workflow state lives in the audit log, not a new table.** Acknowledge and resolve append an audit row
+   (`COMPLIANCE_EXCEPTION_ACKNOWLEDGED` / `..._RESOLVED`, resource `compliance_exception`, id `KIND:ref`, details
+   `{kind, ref, previous_status, reason}`), and the status shown is read back from those rows (first row per action).
+   So "every action is audited with actor and reason" holds by construction, the history cannot be edited (append-only
+   trigger and hash chain), and no migration is needed. The read-and-append runs under the audit-chain advisory lock
+   (`AuditService.lock_chain`, re-entrant within the transaction), so concurrent officers cannot both acknowledge.
+   OPEN -> ACKNOWLEDGED -> RESOLVED, and OPEN -> RESOLVED; anything else is 409. Unknown or malformed exceptions are 404.
+3. **Service levels are the bank's own constants**: a fraud review should be decided within 24 hours and an exception
+   acknowledged within 24 hours (`REVIEW_SLA`, `ACKNOWLEDGE_SLA`). No regulator in the requirements prescribes these
+   numbers; the API returns them with the indicators so the screen states them.
+4. **Behavioural analytics are aggregates only.** `modules/analytics/behaviour.py` returns counts, sums, averages and
+   shares per segment, never a customer id. The route is `GET /api/v1/insights/behaviour` behind the existing RM gate
+   (`RELATIONSHIP_MANAGER`, `ADMIN`, MFA), so the route-policy test that guards every insights route covers it. The
+   per-customer view stays the RM insights page; the dashboard links a segment to it only for roles that may open it.
+5. **Cross-module reads follow the TASK-099 precedent**: reporting queries read other modules' models directly, as
+   `fraud/monitoring.py` and `analytics/repository.py` already do; they never write to them.
+
+## Consequences
+* No schema change. The exceptions screen costs one chain verification per load; with a very large audit log this
+  should move to a scheduled verification whose result is stored (a background job, which would need its own ADR).
+* If the chain is broken at sequence N and later tampered again further on, only N is reported until N is repaired,
+  because verification stops at the first failure.
+* Engagement and recommendation-click panels are only as good as the clickstream: the web app does not send events
+  yet (US-30), so on the demo data those panels show their empty state rather than invented numbers.
+* Spend is INR only (every customer account is INR) and excludes reversals and moves between the customer's own
+  accounts; segment averages are the features the weekly job stored, so they are as old as the last run.

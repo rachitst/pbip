@@ -1654,3 +1654,46 @@ input[type="range"] {
   width: 100%;
   accent-color: var(--brand);
 }
+
+/* Staff dashboards (TASK-100, TASK-101): headline numbers, each with its definition visible. */
+.metric-grid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  margin: 0 0 var(--space-4);
+}
+.metric {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+.metric--warning {
+  border-left-color: var(--warn);
+}
+.metric--danger {
+  border-left-color: var(--danger);
+}
+.metric dt {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.metric dd {
+  margin: 0;
+}
+.metric__value {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-strong);
+  font-variant-numeric: tabular-nums;
+}
+.metric__definition {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.plain-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+}

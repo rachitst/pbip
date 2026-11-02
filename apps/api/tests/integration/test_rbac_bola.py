@@ -48,6 +48,9 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("get", "/api/v1/fraud/monitoring"),
         ("get", "/api/v1/fraud/demo-lab"),
         ("get", "/api/v1/compliance/audit-logs"),
+        ("get", "/api/v1/compliance/exceptions"),
+        ("post", f"/api/v1/compliance/exceptions/ACCOUNT_LOCKOUT/{uuid.uuid4()}/acknowledge"),
+        ("post", f"/api/v1/compliance/exceptions/ACCOUNT_LOCKOUT/{uuid.uuid4()}/resolve"),
         ("get", "/api/v1/notifications"),
         ("post", "/api/v1/notifications/mark-all-read"),
         ("post", f"/api/v1/notifications/{uuid.uuid4()}/read"),
@@ -63,6 +66,7 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("get", "/api/v1/recommendations"),
         ("post", "/api/v1/events/batch"),
         ("get", "/api/v1/insights/customers"),
+        ("get", "/api/v1/insights/behaviour"),
         ("get", f"/api/v1/insights/customers/{uuid.uuid4()}"),
         ("get", f"/api/v1/insights/customers/{uuid.uuid4()}/interactions"),
         ("post", f"/api/v1/insights/customers/{uuid.uuid4()}/interactions"),
@@ -80,7 +84,9 @@ def test_customer_cannot_use_staff_endpoints(
     assert client.get("/api/v1/fraud/monitoring", headers=alice.headers).status_code == 403
     assert client.get("/api/v1/fraud/demo-lab", headers=alice.headers).status_code == 403
     assert client.get("/api/v1/compliance/audit-logs", headers=alice.headers).status_code == 403
+    assert client.get("/api/v1/compliance/exceptions", headers=alice.headers).status_code == 403
     assert client.get("/api/v1/insights/customers", headers=alice.headers).status_code == 403
+    assert client.get("/api/v1/insights/behaviour", headers=alice.headers).status_code == 403
     own = f"/api/v1/insights/customers/{alice.customer_id}"
     assert client.get(own, headers=alice.headers).status_code == 403
     assert client.get(f"{own}/interactions", headers=alice.headers).status_code == 403
@@ -209,6 +215,17 @@ def test_roles_are_separated_between_staff_functions(
     assert (
         client.get("/api/v1/compliance/audit-logs", headers=compliance.headers).status_code == 200
     )
+    # TASK-100/101: exceptions are compliance work, behavioural analytics is RM work
+    rm = make_staff(RoleName.RELATIONSHIP_MANAGER)
+    exceptions, behaviour = "/api/v1/compliance/exceptions", "/api/v1/insights/behaviour"
+    ack = f"{exceptions}/ACCOUNT_LOCKOUT/{uuid.uuid4()}/acknowledge"
+    for staff in (analyst, rm):
+        assert client.get(exceptions, headers=staff.headers).status_code == 403
+        assert client.post(ack, headers=staff.headers, json={"reason": "x" * 5}).status_code == 403
+    for staff in (analyst, compliance):
+        assert client.get(behaviour, headers=staff.headers).status_code == 403
+    assert client.get(exceptions, headers=compliance.headers).status_code == 200
+    assert client.get(behaviour, headers=rm.headers).status_code == 200
 
 
 def test_admin_can_create_staff_and_it_is_audited(

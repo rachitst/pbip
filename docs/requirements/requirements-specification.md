@@ -128,7 +128,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | FR-54 | Recommendations shall use demographics. | UC-12 input | Planned | TASK-107 | Limited by ADR-0015 to a consented age band; currently always `unknown` |
 | FR-55 | Recommendations shall take existing products into account. | UC-12 input | Planned | TASK-111 (#285) | Products already held are not an input |
 | FR-56 | A relationship manager shall see customers ranked by churn risk, with signals and the top eligible product. | Section 6 (relationship manager) | Partial | TASK-056; TASK-066 | API only; no UI |
-| FR-57 | Staff shall see a behavioural analytics dashboard: segmentation, spending patterns, product affinity, engagement. | Section 5 | Planned | TASK-101 | |
+| FR-57 | Staff shall see a behavioural analytics dashboard: segmentation, spending patterns, product affinity, engagement. | Section 5 | Implemented (in review) | TASK-101 | Engagement needs clickstream events the web app does not send yet |
 
 ### 2.8 Monitoring and compliance (UC-13, section 5)
 
@@ -136,7 +136,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 |---|---|---|---|---|---|
 | FR-58 | Security staff shall see high-risk customers, active alerts, login anomalies, fraud events and open investigations. | UC-13 | Implemented | TASK-099 | `GET /api/v1/fraud/monitoring` and the `/staff/monitoring` page (fraud analysts and admins, with MFA); ids and aggregates only |
 | FR-59 | A compliance officer shall read the audit history and verify its integrity. | Section 5 "audit history" | Implemented | TASK-048 | |
-| FR-60 | Compliance shall see system-generated alerts, exception management and regulatory monitoring. | Section 5 | Planned | TASK-100 | |
+| FR-60 | Compliance shall see system-generated alerts, exception management and regulatory monitoring. | Section 5 | Implemented (in review) | TASK-100 | SLAs are the bank's own 24 h assumption (ADR-0027) |
 
 ## 3. Non-functional requirements (section 8)
 

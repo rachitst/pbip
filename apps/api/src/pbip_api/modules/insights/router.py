@@ -1,12 +1,21 @@
 """FastAPI router for Relationship Manager behavioral insights (TASK-056, TASK-066)."""
 
+from collections.abc import Callable
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from pbip_api.core.db import get_session
-from pbip_api.modules.auth.dependencies import Principal, get_request_meta, require_roles
+from pbip_api.modules.analytics import service as analytics_service
+from pbip_api.modules.analytics.schemas import BehaviourAnalyticsResponse, BehaviourSegment
+from pbip_api.modules.auth.dependencies import (
+    Principal,
+    get_clock,
+    get_request_meta,
+    require_roles,
+)
 from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.auth.service import RequestMeta
 from pbip_api.modules.insights import service
@@ -60,6 +69,24 @@ def get_prioritized_customer_insights(
         offset=offset,
         min_loan_propensity=min_loan_propensity,
     )
+
+
+@router.get(
+    "/behaviour",
+    response_model=BehaviourAnalyticsResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Behavioural analytics: segment mix, spending, product affinity, engagement",
+)
+def get_behaviour_analytics(
+    days: int = Query(30, ge=7, le=180, description="Period: the last N days (clickstream: 180)"),
+    segment: BehaviourSegment | None = Query(None, description="Only this segment"),
+    _principal: Principal = Depends(rm_gate),
+    session: Session = Depends(get_session),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> BehaviourAnalyticsResponse:
+    """TASK-101 aggregates (RM or admin, MFA). No customer ids: drill-down is ``/customers``."""
+    now = datetime.fromtimestamp(clock(), tz=UTC)
+    return analytics_service.get_behaviour_analytics(session, now, days, segment)
 
 
 @router.get(

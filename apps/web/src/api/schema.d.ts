@@ -572,6 +572,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/compliance/exceptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Exceptions (blocked payments, lockouts, audit-chain failures) and SLA indicators
+         * @description TASK-100 dashboard data. Re-verifies the audit chain, like ``/audit-logs/verify``.
+         */
+        get: operations["list_exceptions_api_v1_compliance_exceptions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/exceptions/{kind}/{ref}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Acknowledge an open exception (audited with actor and reason) */
+        post: operations["acknowledge_exception_api_v1_compliance_exceptions__kind___ref__acknowledge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/exceptions/{kind}/{ref}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve an exception (audited with actor and reason) */
+        post: operations["resolve_exception_api_v1_compliance_exceptions__kind___ref__resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/customers/devices": {
         parameters: {
             query?: never;
@@ -749,6 +803,26 @@ export interface paths {
          * @description Aggregates only, cached in Redis for 60 seconds per window (TASK-035).
          */
         get: operations["get_stats_api_v1_fraud_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/insights/behaviour": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Behavioural analytics: segment mix, spending, product affinity, engagement
+         * @description TASK-101 aggregates (RM or admin, MFA). No customer ids: drill-down is ``/customers``.
+         */
+        get: operations["get_behaviour_analytics_api_v1_insights_behaviour_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1222,6 +1296,15 @@ export interface components {
             /** Roles */
             roles: string[];
         };
+        /** AffinityPanel */
+        AffinityPanel: {
+            /** Products */
+            products: string[];
+            /** Recommendation Clicks */
+            recommendation_clicks: components["schemas"]["ProductClicks"][];
+            /** Segments */
+            segments: components["schemas"]["SegmentAffinity"][];
+        };
         /**
          * AlertCustomer
          * @description What an analyst needs to judge the alert; no contact details or date of birth.
@@ -1387,6 +1470,15 @@ export interface components {
             tool_call?: components["schemas"]["StreamToolCall"] | null;
             tool_result?: components["schemas"]["StreamToolResult"] | null;
         };
+        /** AuditChainOut */
+        AuditChainOut: {
+            /** Checked */
+            checked: number;
+            /** First Invalid Seq */
+            first_invalid_seq: number | null;
+            /** Valid */
+            valid: boolean;
+        };
         /** AuditLogOut */
         AuditLogOut: {
             /** Action */
@@ -1507,6 +1599,41 @@ export interface components {
              * Format: date
              */
             date: string;
+        };
+        /**
+         * BehaviourAnalyticsResponse
+         * @description TASK-101: segment mix, spending, product affinity and engagement; aggregates only.
+         */
+        BehaviourAnalyticsResponse: {
+            affinity: components["schemas"]["AffinityPanel"];
+            /** Currency */
+            currency: string;
+            engagement: components["schemas"]["EngagementPanel"];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Period Days */
+            period_days: number;
+            /**
+             * Period End
+             * Format: date-time
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date-time
+             */
+            period_start: string;
+            /**
+             * Segment
+             * @description Segment filter, or null for all
+             */
+            segment: ("HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER" | "UNSEGMENTED") | null;
+            segments: components["schemas"]["SegmentDistribution"];
+            /** Spending */
+            spending: components["schemas"]["SegmentSpend"][];
         };
         /** BillPaymentOut */
         BillPaymentOut: {
@@ -1697,6 +1824,21 @@ export interface components {
          * @enum {string}
          */
         ChurnRiskLevel: "LOW" | "MEDIUM" | "HIGH";
+        /** ComplianceExceptionsOut */
+        ComplianceExceptionsOut: {
+            audit_chain: components["schemas"]["AuditChainOut"];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            indicators: components["schemas"]["RegulatoryIndicators"];
+            /**
+             * Items
+             * @description Matching exceptions, newest first
+             */
+            items: components["schemas"]["ExceptionOut"][];
+        };
         /**
          * CustomerInsightDetail
          * @description One customer for the RM flyout: churn signals, health, recent volume and eligible products.
@@ -1905,6 +2047,18 @@ export interface components {
              * @enum {string}
              */
             segment: "HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER";
+        };
+        /** DailyEngagement */
+        DailyEngagement: {
+            /** Active Customers */
+            active_customers: number;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Events */
+            events: number;
         };
         /** DayCounts */
         DayCounts: {
@@ -2118,6 +2272,44 @@ export interface components {
             /** Upper 95 Minor */
             upper_95_minor: number;
         };
+        /** EngagementPanel */
+        EngagementPanel: {
+            /**
+             * Active Customers
+             * @description Customers with at least one event in the period
+             */
+            active_customers: number;
+            /** Active Share Pct */
+            active_share_pct: number;
+            /**
+             * Avg Session Seconds
+             * @description Mean of last minus first event time per session (one-event sessions are 0)
+             */
+            avg_session_seconds: number;
+            /** By Event Type */
+            by_event_type: components["schemas"]["EventTypeCount"][];
+            /** By Segment */
+            by_segment: components["schemas"]["SegmentEngagement"][];
+            /**
+             * Customers
+             * @description Customers in scope (all, or the filtered segment)
+             */
+            customers: number;
+            /**
+             * Daily
+             * @description Days (UTC) with at least one event
+             */
+            daily: components["schemas"]["DailyEngagement"][];
+            /** Events */
+            events: number;
+            /** Events Per Session */
+            events_per_session: number;
+            /**
+             * Sessions
+             * @description Distinct (customer, session id) pairs in the period
+             */
+            sessions: number;
+        };
         /** EntriesPage */
         EntriesPage: {
             /** Has More */
@@ -2200,6 +2392,107 @@ export interface components {
              * @description UTC server timestamp of receipt
              */
             received_at: string;
+        };
+        /** EventTypeCount */
+        EventTypeCount: {
+            /** Event Type */
+            event_type: string;
+            /** Events */
+            events: number;
+        };
+        /**
+         * ExceptionActionRequest
+         * @description Why the officer acknowledges or resolves; stored in the audit log with the actor.
+         */
+        ExceptionActionRequest: {
+            /** Reason */
+            reason: string;
+        };
+        /** ExceptionCounts */
+        ExceptionCounts: {
+            /** Acknowledged */
+            ACKNOWLEDGED: number;
+            /** Open */
+            OPEN: number;
+            /** Resolved */
+            RESOLVED: number;
+        };
+        /**
+         * ExceptionKind
+         * @enum {string}
+         */
+        ExceptionKind: "BLOCKED_TRANSFER" | "ACCOUNT_LOCKOUT" | "AUDIT_CHAIN_FAILURE";
+        /** ExceptionOut */
+        ExceptionOut: {
+            acknowledged: components["schemas"]["ExceptionStepOut"] | null;
+            /**
+             * Amount Minor
+             * @description Blocked payments only
+             */
+            amount_minor?: number | null;
+            /** Currency */
+            currency?: string | null;
+            /**
+             * First Invalid Seq
+             * @description Audit chain failures only
+             */
+            first_invalid_seq?: number | null;
+            /**
+             * Id
+             * @description KIND:reference; stable, used in the action URLs
+             */
+            id: string;
+            kind: components["schemas"]["ExceptionKind"];
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * Reason Codes
+             * @description Fraud rule/model codes of a blocked payment
+             */
+            reason_codes?: string[];
+            /**
+             * Ref
+             * @description Fraud event id, security event id, or first failing audit sequence number
+             */
+            ref: string;
+            resolved: components["schemas"]["ExceptionStepOut"] | null;
+            /**
+             * Risk Score
+             * @description Blocked payments only
+             */
+            risk_score?: number | null;
+            status: components["schemas"]["ExceptionStatus"];
+            /** Transaction Type */
+            transaction_type?: string | null;
+        };
+        /**
+         * ExceptionStatus
+         * @enum {string}
+         */
+        ExceptionStatus: "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
+        /** ExceptionStepOut */
+        ExceptionStepOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /**
+             * By User Id
+             * @description Staff user who took the step
+             */
+            by_user_id: string | null;
+            /** Reason */
+            reason: string;
+        };
+        /** ExceptionsByKind */
+        ExceptionsByKind: {
+            ACCOUNT_LOCKOUT: components["schemas"]["ExceptionCounts"];
+            AUDIT_CHAIN_FAILURE: components["schemas"]["ExceptionCounts"];
+            BLOCKED_TRANSFER: components["schemas"]["ExceptionCounts"];
         };
         /**
          * FinancialHealthComponents
@@ -3102,6 +3395,40 @@ export interface components {
             name_match: "MATCH" | "NO_MATCH" | "NOT_CHECKED";
             payee: components["schemas"]["PayeeOut"];
         };
+        /** ProductClicks */
+        ProductClicks: {
+            /**
+             * Clicks
+             * @description product_clicked events in the period
+             */
+            clicks: number;
+            /**
+             * Customers
+             * @description Distinct customers who clicked
+             */
+            customers: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Product Type */
+            product_type: string;
+            /** Title */
+            title: string;
+        };
+        /** ProductHolding */
+        ProductHolding: {
+            /** Holders */
+            holders: number;
+            /** Product */
+            product: string;
+            /**
+             * Share Pct
+             * @description holders / customers in the segment, percent
+             */
+            share_pct: number;
+        };
         /**
          * ProductRecommendationItem
          * @description A single personalized product recommendation with explainable reasons.
@@ -3225,6 +3552,41 @@ export interface components {
             full_name: string;
             /** Password */
             password: string;
+        };
+        /** RegulatoryIndicators */
+        RegulatoryIndicators: {
+            /** Acknowledge Sla Hours */
+            acknowledge_sla_hours: number;
+            by_kind: components["schemas"]["ExceptionsByKind"];
+            /** Oldest Review At */
+            oldest_review_at: string | null;
+            /** Review Sla Hours */
+            review_sla_hours: number;
+            /**
+             * Reviews Past Sla
+             * @description Fraud alerts still OPEN that were raised more than review_sla_hours ago
+             */
+            reviews_past_sla: number;
+            /**
+             * Reviews Pending
+             * @description Fraud alerts still OPEN (held payments), any age
+             */
+            reviews_pending: number;
+            /**
+             * Unacknowledged Past Sla
+             * @description OPEN exceptions that occurred more than acknowledge_sla_hours ago
+             */
+            unacknowledged_past_sla: number;
+            /**
+             * Unresolved Exceptions
+             * @description OPEN + ACKNOWLEDGED exceptions in the window
+             */
+            unresolved_exceptions: number;
+            /**
+             * Window Days
+             * @description Exceptions that occurred in the last N days are counted
+             */
+            window_days: number;
         };
         /** RiskyPayee */
         RiskyPayee: {
@@ -3382,6 +3744,101 @@ export interface components {
             high_risk_window_days: number;
             login_anomalies: components["schemas"]["LoginAnomalies"];
             open_alerts: components["schemas"]["OpenAlertsPanel"];
+        };
+        /** SegmentAffinity */
+        SegmentAffinity: {
+            /** Customers */
+            customers: number;
+            /** Holdings */
+            holdings: components["schemas"]["ProductHolding"][];
+            /**
+             * Segment
+             * @enum {string}
+             */
+            segment: "HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER" | "UNSEGMENTED";
+        };
+        /** SegmentDistribution */
+        SegmentDistribution: {
+            /** Items */
+            items: components["schemas"]["SegmentShare"][];
+            /**
+             * Last Segmented At
+             * @description Latest weekly segmentation write
+             */
+            last_segmented_at: string | null;
+            /** Total Customers */
+            total_customers: number;
+        };
+        /** SegmentEngagement */
+        SegmentEngagement: {
+            /** Active Customers */
+            active_customers: number;
+            /** Active Share Pct */
+            active_share_pct: number;
+            /** Customers */
+            customers: number;
+            /**
+             * Segment
+             * @enum {string}
+             */
+            segment: "HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER" | "UNSEGMENTED";
+        };
+        /**
+         * SegmentShare
+         * @description One segment's size and the average RFM features the weekly job stored for it.
+         */
+        SegmentShare: {
+            /** Avg Discretionary Ratio */
+            avg_discretionary_ratio: number | null;
+            /** Avg Monthly Spend Minor */
+            avg_monthly_spend_minor: number | null;
+            /** Avg Monthly Transactions */
+            avg_monthly_transactions: number | null;
+            /**
+             * Avg Recency Days
+             * @description Days since last transaction (job input)
+             */
+            avg_recency_days: number | null;
+            /** Avg Savings Ratio */
+            avg_savings_ratio: number | null;
+            /** Customers */
+            customers: number;
+            /**
+             * Segment
+             * @enum {string}
+             */
+            segment: "HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER" | "UNSEGMENTED";
+            /**
+             * Share Pct
+             * @description Share of all customers, percent, one decimal
+             */
+            share_pct: number;
+        };
+        /** SegmentSpend */
+        SegmentSpend: {
+            /**
+             * Avg Spend Per Spender Minor
+             * @description spend_minor // spenders (floor)
+             */
+            avg_spend_per_spender_minor: number;
+            /** By Type */
+            by_type: components["schemas"]["TypeSpend"][];
+            /** Customers */
+            customers: number;
+            /**
+             * Segment
+             * @enum {string}
+             */
+            segment: "HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER" | "UNSEGMENTED";
+            /** Spend Minor */
+            spend_minor: number;
+            /**
+             * Spenders
+             * @description Customers with at least one spend entry in the period
+             */
+            spenders: number;
+            /** Transactions */
+            transactions: number;
         };
         /**
          * SpendingBreakdownResponse
@@ -3689,6 +4146,15 @@ export interface components {
              * @description One of MY OWN other accounts
              */
             to_account_id?: string | null;
+        };
+        /** TypeSpend */
+        TypeSpend: {
+            /** Spend Minor */
+            spend_minor: number;
+            /** Transaction Type */
+            transaction_type: string;
+            /** Transactions */
+            transactions: number;
         };
         /** UnlockResultOut */
         UnlockResultOut: {
@@ -4778,6 +5244,145 @@ export interface operations {
             };
         };
     };
+    list_exceptions_api_v1_compliance_exceptions_get: {
+        parameters: {
+            query?: {
+                /** @description Window: exceptions of the last N days */
+                days?: number;
+                /** @description Only this kind */
+                kind?: components["schemas"]["ExceptionKind"] | null;
+                /** @description Only this status */
+                status?: components["schemas"]["ExceptionStatus"] | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceExceptionsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_exception_api_v1_compliance_exceptions__kind___ref__acknowledge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["schemas"]["ExceptionKind"];
+                /** @description Reference from the list */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExceptionActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExceptionOut"];
+                };
+            };
+            /** @description No such exception */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Already acknowledged or resolved */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_exception_api_v1_compliance_exceptions__kind___ref__resolve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["schemas"]["ExceptionKind"];
+                /** @description Reference from the list */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExceptionActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExceptionOut"];
+                };
+            };
+            /** @description No such exception */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Already acknowledged or resolved */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_my_devices_api_v1_customers_devices_get: {
         parameters: {
             query?: never;
@@ -5081,6 +5686,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FraudStats"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_behaviour_analytics_api_v1_insights_behaviour_get: {
+        parameters: {
+            query?: {
+                /** @description Period: the last N days (clickstream: 180) */
+                days?: number;
+                /** @description Only this segment */
+                segment?: ("HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER" | "UNSEGMENTED") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BehaviourAnalyticsResponse"];
                 };
             };
             /** @description Validation Error */

@@ -34,6 +34,12 @@ export type AlertSummary = components["schemas"]["AlertSummary"];
 export type AlertDetail = components["schemas"]["AlertDetail"];
 export type FraudStats = components["schemas"]["FraudStats"];
 export type SecurityMonitoring = components["schemas"]["SecurityMonitoring"];
+export type ComplianceExceptionsOut = components["schemas"]["ComplianceExceptionsOut"];
+export type ExceptionOut = components["schemas"]["ExceptionOut"];
+export type ExceptionKind = components["schemas"]["ExceptionKind"];
+export type ExceptionStatus = components["schemas"]["ExceptionStatus"];
+export type BehaviourAnalytics = components["schemas"]["BehaviourAnalyticsResponse"];
+export type BehaviourSegment = NonNullable<BehaviourAnalytics["segment"]>;
 export type DemoLabStatus = components["schemas"]["DemoLabStatus"];
 export type SpendingBreakdownResponse = components["schemas"]["SpendingBreakdownResponse"];
 export type CustomerInsightsListResponse = components["schemas"]["CustomerInsightsListResponse"];
@@ -432,6 +438,31 @@ export const api = {
     }),
   fraudStats: (days: number) => apiFetch<FraudStats>(`/api/v1/fraud/stats?days=${days}`),
   securityMonitoring: () => apiFetch<SecurityMonitoring>("/api/v1/fraud/monitoring"),
+  complianceExceptions: (filters: {
+    days: number;
+    kind?: ExceptionKind | undefined;
+    status?: ExceptionStatus | undefined;
+  }) => {
+    const params = new URLSearchParams({ days: String(filters.days) });
+    if (filters.kind) params.set("kind", filters.kind);
+    if (filters.status) params.set("status", filters.status);
+    return apiFetch<ComplianceExceptionsOut>(`/api/v1/compliance/exceptions?${params.toString()}`);
+  },
+  actOnException: (
+    kind: ExceptionKind,
+    ref: string,
+    action: "acknowledge" | "resolve",
+    reason: string,
+  ) =>
+    apiFetch<ExceptionOut>(
+      `/api/v1/compliance/exceptions/${encodeURIComponent(kind)}/${encodeURIComponent(ref)}/${action}`,
+      { method: "POST", body: JSON.stringify({ reason }) },
+    ),
+  behaviourAnalytics: (days: number, segment?: BehaviourSegment) => {
+    const params = new URLSearchParams({ days: String(days) });
+    if (segment) params.set("segment", segment);
+    return apiFetch<BehaviourAnalytics>(`/api/v1/insights/behaviour?${params.toString()}`);
+  },
   spendingBreakdown: (accountId: string, year?: number, month?: number) => {
     const params = new URLSearchParams({ account_id: accountId });
     if (year !== undefined) params.set("year", String(year));
