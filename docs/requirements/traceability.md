@@ -83,7 +83,7 @@ the tests that prove them, in [user-stories.md](user-stories.md).
 | CI: package, deploy, smoke test | Unverified | 082 (Done), #198 | Deploy gated off; never run against a host (no staging host exists; first deployment tracked in #198) |
 | Deployment scripts, monitoring configuration | Unverified | 082 (Done), 069 #92, #198 | Not deployed |
 | Requirements specification, user stories | Verified | 104 #187 | [requirements-specification.md](requirements-specification.md), [user-stories.md](user-stories.md) |
-| HLD, LLD, ER diagram | Partial | 053 #76 (Done: [HLD](../architecture/HLD.md)), 106 #189 (Done: [ER diagram](../architecture/er-diagram.md), generated from the migrated schema, drift-checked in CI), 027 #50 (Todo) | LLD (TASK-027, waits for TASK-015) |
+| HLD, LLD, ER diagram | Partial | 053 #76 (Done: [HLD](../architecture/HLD.md)), 106 #189 (Done: [ER diagram](../architecture/er-diagram.md), generated from the migrated schema, drift-checked in CI), 027 #50 (In Review: [LLD](../architecture/LLD.md)) | LLD awaiting review (TASK-027) |
 | Deployment guide, support guide | Verified | 013, 075 (Done) | |
 | User manual | Missing | 092 #115 | |
 | Peer reviews | Partial | | Ruleset requires 0 approvals; by product-owner decision (2026-10-30) completed tasks are not reopened only because a fix lacks an independent review |
