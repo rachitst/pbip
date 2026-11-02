@@ -127,10 +127,15 @@ triggers.
 
 ### 3.2 Customers and devices (`api/modules/customers/models.py`)
 
-**`customers`** (0001)
-* Key columns: `full_name`, `date_of_birth`, `phone_enc` (encrypted), `kyc_status`, `segment`, `risk_profile`.
+**`customers`** (0001, 0018)
+* Key columns: `full_name`, `date_of_birth`, `phone_enc` (encrypted), `kyc_status`, `segment`, `risk_profile` with
+  `risk_score`, `risk_answers` (JSONB), `risk_questionnaire_version`, `risk_assessed_at` (TASK-097, all set together),
+  and `recommendations_consent_at` with `recommendations_consent_policy` (TASK-107, NULL = no consent).
 * FK: `user_id -> users` `RESTRICT`, unique (`uq_customers_user_id`): one customer per user.
-* CHECK: `ck_customers_kyc_status_valid` `kyc_status IN ('PENDING','VERIFIED','REJECTED')`.
+* CHECK: `ck_customers_kyc_status_valid` `kyc_status IN ('PENDING','VERIFIED','REJECTED')`;
+  `ck_customers_risk_profile_valid` (LOW, MODERATE, HIGH), `ck_customers_risk_score_range` (0-10),
+  `ck_customers_risk_assessment_complete` (band, score, answers, version and time all set or all NULL),
+  `ck_customers_recommendations_consent_complete` (consent time and policy version together).
 
 **`devices`** (0001)
 * Key columns: `fingerprint_hash`, `label`, `first_seen_at`, `last_seen_at`, `trusted`.
