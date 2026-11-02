@@ -20,7 +20,8 @@ from pbip_api.modules.insights.schemas import (
 
 router = APIRouter(prefix="/api/v1/insights", tags=["insights"])
 
-_require_rm_or_admin = require_roles(
+# Public so the route-policy registry test can prove every insights route uses it.
+rm_gate = require_roles(
     RoleName.RELATIONSHIP_MANAGER,
     RoleName.ADMIN,
     mfa=True,
@@ -47,7 +48,7 @@ def get_prioritized_customer_insights(
     # Each row on the page runs the recommendation rules, so pages are small.
     limit: int = Query(20, ge=1, le=25, description="Page size"),
     offset: int = Query(0, ge=0, le=100_000, description="Page offset"),
-    principal: Principal = Depends(_require_rm_or_admin),
+    principal: Principal = Depends(rm_gate),
     session: Session = Depends(get_session),
 ) -> CustomerInsightsListResponse:
     """One page of customers ordered by churn risk (RM or admin with an MFA-verified session)."""
@@ -69,7 +70,7 @@ def get_prioritized_customer_insights(
 )
 def get_customer_insight_detail(
     customer_id: UUID,
-    _principal: Principal = Depends(_require_rm_or_admin),
+    _principal: Principal = Depends(rm_gate),
     session: Session = Depends(get_session),
 ) -> CustomerInsightDetail:
     """Detail behind the RM flyout (RM or admin with an MFA-verified session)."""
@@ -85,7 +86,7 @@ def get_customer_insight_detail(
 def list_customer_interactions(
     customer_id: UUID,
     limit: int = Query(20, ge=1, le=service.MAX_INTERACTIONS_PAGE, description="How many"),
-    _principal: Principal = Depends(_require_rm_or_admin),
+    _principal: Principal = Depends(rm_gate),
     session: Session = Depends(get_session),
 ) -> InteractionListResponse:
     return service.list_interactions(session, customer_id, limit)
@@ -101,7 +102,7 @@ def list_customer_interactions(
 def log_customer_interaction(
     customer_id: UUID,
     body: InteractionCreate,
-    principal: Principal = Depends(_require_rm_or_admin),
+    principal: Principal = Depends(rm_gate),
     session: Session = Depends(get_session),
     meta: RequestMeta = Depends(get_request_meta),
 ) -> InteractionOut:
