@@ -158,7 +158,7 @@ Across modules, code calls the other module's `service` or `policy` functions on
 | Module | Responsibility | Main endpoints (`/api/v1`) | Status |
 |---|---|---|---|
 | `auth` | Registration, password login, TOTP MFA and recovery codes, refresh rotation, logout, password change, admin user and lockout management | `/auth/*`, `/admin/users*` | Implemented (API). No web registration or MFA-enrolment screens (no task) |
-| `customers` | Profile, device fingerprints | `/customers/me`, `/customers/devices*` | Implemented |
+| `customers` | Profile, device fingerprints, risk-tolerance questionnaire (TASK-097), consented date of birth and the only age-band derivation (TASK-107, ADR-0015) | `/customers/me`, `/customers/me/risk-profile`, `/customers/me/demographics`, `/customers/me/date-of-birth`, `/customers/me/recommendations-consent`, `/customers/devices*` | Implemented |
 | `accounts` | Open and list accounts; ledger history with keyset pagination | `/accounts*` | Implemented. Search and filter Planned (TASK-017) |
 | `ledger` | The only writer of balances, holds and entries (no router) | none | Implemented ([ADR-0002](../adr/0002-double-entry-ledger.md)) |
 | `payees` | Add, list, get, delete, confirmation-of-payee verify | `/payees*` | Partial: no edit (TASK-094), no UI (TASK-020) |
@@ -168,7 +168,7 @@ Across modules, code calls the other module's `service` or `policy` functions on
 | `notifications` | Inbox, read state, outbox relay target | `/notifications*` | Implemented (API and web bell) |
 | `analytics` | Spending, trends, health score, balance forecast, segment; nightly and weekly jobs | `/analytics/*` | Implemented. Forecast UI Planned (TASK-050) |
 | `insights` | Relationship-manager churn signals; staff route of the aggregate behavioural dashboard (queries in `analytics/behaviour.py`, ADR-0027) | `/insights/customers`, `/insights/behaviour` | Partial |
-| `recommendations` | Rule-based product recommendations with reasons (`rules-v1`) | `/recommendations` | Partial: no UI (TASK-062); age band fixed to `unknown` until TASK-107 |
+| `recommendations` | Rule-based product recommendations with reasons (`rules-v1`) | `/recommendations` | Partial: no UI (TASK-062); age band from `customers.service.recommendation_age_band`, `unknown` without date of birth and consent (TASK-107) |
 | `loans` | Catalogue (3 products), EMI schedule, explainable eligibility; idempotent application with ledger disbursal, stored schedule and a repayment instruction on the scheduled transfers engine ([ADR-0024](../adr/0024-loan-disbursal-and-repayments.md)) | `/loans*` | Implemented (API and web) |
 | `assistant` | Read-only tool registry, rules-first router, Ollama adapter, guard, sanitiser, output filter, SSE | `/assistant/*` | Implemented (5 tools). FAQ, product and investment tools Planned (TASK-105) |
 | `events` | Clickstream batch ingestion into monthly partitions | `/events/batch` | Partial: the web app does not send events yet (TASK-055 In Progress) |

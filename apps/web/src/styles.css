@@ -1697,3 +1697,10 @@ input[type="range"] {
   list-style: none;
   font-size: var(--text-sm);
 }
+
+/* ---- Profile: date of birth and consent (TASK-107) ---------------------------------------- */
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

@@ -26,6 +26,12 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
     for method, path in [
         ("get", "/api/v1/customers/me"),
         ("get", "/api/v1/customers/devices"),
+        ("get", "/api/v1/customers/me/risk-profile"),
+        ("put", "/api/v1/customers/me/risk-profile"),
+        ("get", "/api/v1/customers/me/demographics"),
+        ("put", "/api/v1/customers/me/date-of-birth"),
+        ("delete", "/api/v1/customers/me/date-of-birth"),
+        ("put", "/api/v1/customers/me/recommendations-consent"),
         ("get", "/api/v1/accounts"),
         ("post", "/api/v1/accounts"),
         ("get", "/api/v1/payees"),
@@ -111,6 +117,12 @@ def test_staff_have_no_customer_profile(
     analyst = make_staff(RoleName.FRAUD_ANALYST)
     assert client.get("/api/v1/customers/me", headers=analyst.headers).status_code == 403
     assert client.get("/api/v1/customers/devices", headers=analyst.headers).status_code == 403
+    for path in ("/api/v1/customers/me/risk-profile", "/api/v1/customers/me/demographics"):
+        assert client.get(path, headers=analyst.headers).status_code == 403, path
+    assert (
+        client.delete("/api/v1/customers/me/date-of-birth", headers=analyst.headers).status_code
+        == 403
+    )
     assert client.get("/api/v1/accounts", headers=analyst.headers).status_code == 403
     assert client.get("/api/v1/bills/payments", headers=analyst.headers).status_code == 403
     assert client.get("/api/v1/transfers/scheduled", headers=analyst.headers).status_code == 403
@@ -599,3 +611,32 @@ def test_listings_only_contain_the_callers_own_objects(
     bills_listed = client.get("/api/v1/bills/payments", headers=alice.headers).json()
     assert [b["id"] for b in bills_listed] == [alice_bill["id"]]
     assert bob_bill["id"] not in [b["id"] for b in bills_listed]
+
+    # TASK-097 / TASK-107: "me" routes have no id to swap, and a smuggled customer id is ignored.
+    client.put(
+        "/api/v1/customers/me/risk-profile",
+        headers=alice.headers,
+        json={
+            "investment_horizon": "OVER_5_YEARS",
+            "loss_reaction": "INVEST_MORE",
+            "investment_goal": "MAXIMUM_GROWTH",
+            "investment_experience": "EXTENSIVE",
+            "emergency_fund": "OVER_6_MONTHS",
+        },
+    )
+    client.put(
+        "/api/v1/customers/me/date-of-birth",
+        headers=alice.headers,
+        json={"date_of_birth": "1970-05-05"},
+    )
+    as_alice = f"customer_id={alice.customer_id}"
+    bob_risk = client.get(f"/api/v1/customers/me/risk-profile?{as_alice}", headers=bob.headers)
+    assert bob_risk.status_code == 200 and bob_risk.json()["band"] is None
+    bob_demo = client.get(f"/api/v1/customers/me/demographics?{as_alice}", headers=bob.headers)
+    assert bob_demo.status_code == 200 and bob_demo.json()["date_of_birth"] is None
+    assert (
+        client.get("/api/v1/customers/me/demographics", headers=alice.headers).json()[
+            "date_of_birth"
+        ]
+        == "1970-05-05"
+    )

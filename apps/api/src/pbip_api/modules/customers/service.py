@@ -3,21 +3,45 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from sqlalchemy import Boolean, func, literal_column, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from pbip_api.core.calendar import bank_today
 from pbip_api.core.config import Settings
 from pbip_api.core.crypto import CryptoError, FieldCipher
 from pbip_api.core.db import utcnow
+from pbip_api.core.errors import UnprocessableError
 from pbip_api.modules.auth.models import User
 from pbip_api.modules.auth.service import RequestMeta
 from pbip_api.modules.compliance.service import AuditService
+from pbip_api.modules.customers.demographics import (
+    CONSENT_PURPOSE,
+    DEMOGRAPHICS_POLICY_VERSION,
+    MAX_AGE,
+    MIN_AGE,
+    AgeBand,
+    age_band,
+    is_allowed_date_of_birth,
+)
 from pbip_api.modules.customers.models import Customer, Device
-from pbip_api.modules.customers.schemas import CustomerProfileOut, DeviceOut
+from pbip_api.modules.customers.risk import (
+    MAX_SCORE,
+    QUESTIONNAIRE_VERSION,
+    RiskAnswers,
+    RiskBand,
+    score_answers,
+)
+from pbip_api.modules.customers.schemas import (
+    CustomerProfileOut,
+    DemographicsOut,
+    DeviceOut,
+    RiskProfileOut,
+    RiskQuestionnaire,
+)
 from pbip_api.modules.notifications import service as notifications
 
 
@@ -39,6 +63,48 @@ def to_device_out(device: Device, now: datetime | None = None) -> DeviceOut:
         last_seen_at=device.last_seen_at,
         trusted=device.trusted,
         device_age_days=age_days,
+    )
+
+
+def recommendation_age_band(session: Session, customer_id: UUID, today: date) -> AgeBand:
+    """The only way another module learns anything about a customer's age (ADR-0015).
+
+    Returns the derived band when the customer has BOTH a date of birth and a recorded consent,
+    and ``unknown`` otherwise. The date itself never leaves this module.
+    """
+    row = session.execute(
+        select(Customer.date_of_birth, Customer.recommendations_consent_at).where(
+            Customer.id == customer_id
+        )
+    ).one_or_none()
+    if row is None or row.recommendations_consent_at is None:
+        return AgeBand.UNKNOWN
+    return age_band(row.date_of_birth, today)
+
+
+def _risk_profile_out(customer: Customer) -> RiskProfileOut:
+    return RiskProfileOut(
+        band=RiskBand(customer.risk_profile) if customer.risk_profile else None,
+        score=customer.risk_score,
+        max_score=MAX_SCORE,
+        answers=(
+            RiskQuestionnaire.model_validate(customer.risk_answers)
+            if customer.risk_answers is not None
+            else None
+        ),
+        questionnaire_version=customer.risk_questionnaire_version,
+        assessed_at=customer.risk_assessed_at,
+    )
+
+
+def _demographics_out(customer: Customer, today: date) -> DemographicsOut:
+    return DemographicsOut(
+        date_of_birth=customer.date_of_birth,
+        age_band=age_band(customer.date_of_birth, today),
+        recommendations_consent=customer.recommendations_consent_at is not None,
+        consent_granted_at=customer.recommendations_consent_at,
+        consent_policy_version=customer.recommendations_consent_policy,
+        current_policy_version=DEMOGRAPHICS_POLICY_VERSION,
     )
 
 
@@ -151,3 +217,122 @@ class CustomerService:
             .scalars()
             .all()
         )
+
+    def _lock(self, customer: Customer) -> Customer:
+        """Re-read the caller's row FOR UPDATE so concurrent edits serialise (no lost update,
+        and the no-op checks below see the committed state)."""
+        return self.session.execute(
+            select(Customer)
+            .where(Customer.id == customer.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).scalar_one()
+
+    def _audit_customer(
+        self, customer: Customer, action: str, meta: RequestMeta, details: dict[str, object]
+    ) -> None:
+        self.audit.record(
+            actor_user_id=customer.user_id,
+            action=action,
+            resource_type="customer",
+            resource_id=str(customer.id),
+            ip=meta.ip,
+            request_id=meta.request_id,
+            details=details,
+        )
+
+    def get_risk_profile(self, customer: Customer) -> RiskProfileOut:
+        return _risk_profile_out(customer)
+
+    def assess_risk_profile(
+        self, customer: Customer, questionnaire: RiskQuestionnaire, now: datetime, meta: RequestMeta
+    ) -> RiskProfileOut:
+        """Score the answers and store band, score, answers and time together (TASK-097).
+
+        Every submission is a new assessment, so it is always stored and audited, even when the
+        band is unchanged: the assessment date is what a suitability check relies on.
+        """
+        answers = RiskAnswers(**questionnaire.model_dump())
+        assessment = score_answers(answers)
+        row = self._lock(customer)
+        previous = row.risk_profile
+        row.risk_profile = assessment.band.value
+        row.risk_score = assessment.score
+        row.risk_answers = answers.as_dict()
+        row.risk_questionnaire_version = QUESTIONNAIRE_VERSION
+        row.risk_assessed_at = now
+        self._audit_customer(
+            row,
+            "RISK_PROFILE_ASSESSED",
+            meta,
+            {
+                "band": assessment.band.value,
+                "previous_band": previous,
+                "score": assessment.score,
+                "questionnaire_version": QUESTIONNAIRE_VERSION,
+                "answers": answers.as_dict(),
+            },
+        )
+        self.session.commit()
+        return _risk_profile_out(row)
+
+    def get_demographics(self, customer: Customer, today: date) -> DemographicsOut:
+        return _demographics_out(customer, today)
+
+    def set_date_of_birth(
+        self, customer: Customer, date_of_birth: date, now: datetime, meta: RequestMeta
+    ) -> DemographicsOut:
+        """Store the self-declared date of birth. The audit row records THAT it changed and the
+        policy version, never the date itself (the audit trail is visible to staff)."""
+        today = bank_today(now)
+        if not is_allowed_date_of_birth(date_of_birth, today):
+            raise UnprocessableError(
+                f"date of birth must give an age between {MIN_AGE} and {MAX_AGE}"
+            )
+        row = self._lock(customer)
+        if row.date_of_birth != date_of_birth:
+            replaced = row.date_of_birth is not None
+            row.date_of_birth = date_of_birth
+            self._audit_customer(
+                row,
+                "DATE_OF_BIRTH_SET",
+                meta,
+                {"policy_version": DEMOGRAPHICS_POLICY_VERSION, "replaced_existing": replaced},
+            )
+        self.session.commit()
+        return _demographics_out(row, today)
+
+    def delete_date_of_birth(self, customer: Customer, meta: RequestMeta) -> None:
+        """Erase the date of birth on request (ADR-0015 rule 7); the consent record is kept."""
+        row = self._lock(customer)
+        if row.date_of_birth is not None:
+            row.date_of_birth = None
+            self._audit_customer(
+                row, "DATE_OF_BIRTH_DELETED", meta, {"policy_version": DEMOGRAPHICS_POLICY_VERSION}
+            )
+        self.session.commit()
+
+    def set_recommendations_consent(
+        self, customer: Customer, granted: bool, now: datetime, meta: RequestMeta
+    ) -> DemographicsOut:
+        """Grant or withdraw the separate ADR-0015 consent. Withdrawal takes effect at once:
+        ``recommendation_age_band`` reads this column on every recommendation request.
+        Re-granting under the same policy version changes nothing and is not re-audited."""
+        row = self._lock(customer)
+        already = (
+            row.recommendations_consent_policy == DEMOGRAPHICS_POLICY_VERSION
+            if granted
+            else row.recommendations_consent_at is None
+        )
+        if not already:
+            action = "GRANTED" if granted else "WITHDRAWN"
+            row.recommendations_consent_at = now if granted else None
+            row.recommendations_consent_policy = DEMOGRAPHICS_POLICY_VERSION if granted else None
+            self._audit_customer(
+                row,
+                f"RECOMMENDATIONS_CONSENT_{action}",
+                meta,
+                {"policy_version": DEMOGRAPHICS_POLICY_VERSION, "purpose": CONSENT_PURPOSE},
+            )
+        self.session.commit()
+        return _demographics_out(row, bank_today(now))

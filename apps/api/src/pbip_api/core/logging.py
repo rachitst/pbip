@@ -42,6 +42,9 @@ _SENSITIVE_KEY_PARTS = (
     "full_name",
     "date_of_birth",
     "phone",
+    # ADR-0015 / TASK-107: a date of birth under any spelling (birth_date, dob, ...).
+    "birth",
+    "dob",
 )
 
 _JWT_RE = re.compile(r"eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}")
