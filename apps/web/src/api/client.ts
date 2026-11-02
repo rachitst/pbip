@@ -129,6 +129,26 @@ async function readBody<T>(path: string, response: Response): Promise<T> {
   return (response.status === 204 ? undefined : await response.json()) as T;
 }
 
+/** Authenticated GET of a file (statements): the bearer token never goes into a URL, so the
+ * download is fetched as a blob and handed to the browser. Same refresh retry as apiFetch. */
+export async function apiDownload(
+  path: string,
+  retry = true,
+): Promise<{ blob: Blob; filename: string | null }> {
+  const headers = new Headers();
+  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+  const response = await fetch(path, { headers, credentials: "include" });
+  if (response.status === 401 && retry && accessToken !== null) {
+    if (await refreshSession()) return apiDownload(path, false);
+    accessToken = null;
+    onSessionLost?.();
+  }
+  if (!response.ok) throw await toError(response);
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? null;
+  return { blob: await response.blob(), filename };
+}
+
 /** A call made as ANOTHER principal with an explicit bearer token (the staff fraud demo lab,
  * TASK-081, acting as a demo customer). Cookies are omitted both ways, so the signed-in staff
  * session (memory token + HttpOnly refresh cookie) is neither sent nor replaced. No refresh:
@@ -228,6 +248,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
     }),
+  /** UC-03 / TASK-016: dates are YYYY-MM-DD (bank days, IST). */
+  statement: (accountId: string, start: string, end: string, format: "pdf" | "csv") =>
+    apiDownload(
+      `/api/v1/accounts/${encodeURIComponent(accountId)}/statements?${new URLSearchParams({
+        start_date: start,
+        end_date: end,
+        format,
+      }).toString()}`,
+    ),
   payees: () => apiFetch<PayeeOut[]>("/api/v1/payees"),
   /** One Idempotency-Key per user intent; reuse the SAME key when retrying the same submit. */
   transfer: (

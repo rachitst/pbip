@@ -328,6 +328,16 @@ def test_bola_customer_b_cannot_touch_customer_a_objects(
         "analytics health-score non-existent account": client.get(
             f"/api/v1/analytics/health-score?account_id={uuid.uuid4()}", headers=h
         ),
+        "statement for victim account": client.get(
+            f"/api/v1/accounts/{ids['account']}/statements",
+            headers=h,
+            params={"start_date": "2026-01-01", "end_date": "2026-01-31"},
+        ),
+        "statement for non-existent account": client.get(
+            f"/api/v1/accounts/{uuid.uuid4()}/statements",
+            headers=h,
+            params={"start_date": "2026-01-01", "end_date": "2026-01-31"},
+        ),
         "get payee": client.get(f"/api/v1/payees/{ids['payee']}", headers=h),
         "verify payee": client.post(f"/api/v1/payees/{ids['payee']}/verify", headers=h),
         "delete payee": client.delete(f"/api/v1/payees/{ids['payee']}", headers=h),

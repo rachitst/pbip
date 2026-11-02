@@ -73,6 +73,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/accounts/{account_id}/statements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download a statement for one of my accounts (PDF or CSV) */
+        get: operations["download_statement_api_v1_accounts__account_id__statements_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/accounts/{account_id}/transactions": {
         parameters: {
             query?: never;
@@ -3099,6 +3116,11 @@ export interface components {
              */
             top_categories_increasing?: components["schemas"]["CategoryShiftItem"][];
         };
+        /**
+         * StatementFormat
+         * @enum {string}
+         */
+        StatementFormat: "csv" | "pdf";
         /** StepUpRequest */
         StepUpRequest: {
             /** Code */
@@ -3493,6 +3515,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_statement_api_v1_accounts__account_id__statements_get: {
+        parameters: {
+            query: {
+                /** @description First day of the period (IST), inclusive */
+                start_date: string;
+                /** @description Last day of the period (IST), inclusive; not in the future */
+                end_date: string;
+                format?: components["schemas"]["StatementFormat"];
+            };
+            header?: never;
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The statement file (attachment) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": unknown;
+                    "text/csv": unknown;
                 };
             };
             /** @description Validation Error */
