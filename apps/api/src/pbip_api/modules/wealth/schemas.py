@@ -123,3 +123,50 @@ class PortfolioOut(BaseModel):
     total_minor: int
     open_deposits: int
     allocation: list[AllocationSlice]
+
+
+InsuranceTypeLiteral = Literal["TERM_LIFE", "HEALTH"]
+
+
+class IndicativePremiumOut(BaseModel):
+    """ONE illustrative figure at a stated reference profile, never a quote for this customer
+    (PBIP does no underwriting, ADR-0028)."""
+
+    annual_premium_minor: int = Field(description="Indicative, simulated annual premium (paise)")
+    reference_cover_minor: int = Field(description="Cover the premium is stated for")
+    reference_age: int = Field(description="Age at entry the premium is stated for")
+    reference_term_years: int = Field(description="Policy term the premium is stated for")
+
+
+class AgeBandHintOut(BaseModel):
+    age_band: Literal["18-25", "26-35", "36-50", "51-59", "60+"]
+    whole_band_eligible: bool = Field(
+        description="False when only some ages in the band are inside the entry ages"
+    )
+
+
+class InsuranceEligibilityOut(BaseModel):
+    """Hints from the product's own rules only: the customer's data is not read."""
+
+    min_entry_age: int
+    max_entry_age: int
+    max_cover_age: int | None = Field(
+        description="Cover ends at this age; None: renewable for life"
+    )
+    age_bands: list[AgeBandHintOut] = Field(description="Profile age bands that can apply")
+
+
+class InsuranceProductOut(BaseModel):
+    id: UUID
+    code: str
+    insurance_type: InsuranceTypeLiteral
+    name: str
+    description: str
+    currency: Literal["INR"]
+    cover_min_minor: int = Field(description="Smallest cover (sum insured/assured) offered")
+    cover_max_minor: int = Field(description="Largest cover offered")
+    policy_terms_years: list[int] = Field(description="Terms offered; [1] for yearly renewal")
+    indicative_premium: IndicativePremiumOut
+    eligibility: InsuranceEligibilityOut
+    notes: str
+    catalogue_version: str
