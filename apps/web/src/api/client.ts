@@ -4,6 +4,10 @@ export type TokenResponse = components["schemas"]["TokenResponse"];
 export type AccountOut = components["schemas"]["AccountOut"];
 export type PayeeOut = components["schemas"]["PayeeOut"];
 export type TransferOut = components["schemas"]["TransferOut"];
+export type PayeeVerificationOut = components["schemas"]["PayeeVerificationOut"];
+export type PayeeUpdate = components["schemas"]["PayeeUpdate"];
+export type BillerOut = components["schemas"]["BillerOut"];
+export type BillPaymentOut = components["schemas"]["BillPaymentOut"];
 export type UserOut = components["schemas"]["UserOut"];
 export type MfaEnrollmentOut = components["schemas"]["MfaEnrollmentOut"];
 export type RecoveryCodesOut = components["schemas"]["RecoveryCodesOut"];
@@ -22,7 +26,6 @@ export type AlertDetail = components["schemas"]["AlertDetail"];
 export type FraudStats = components["schemas"]["FraudStats"];
 export type SecurityMonitoring = components["schemas"]["SecurityMonitoring"];
 export type DemoLabStatus = components["schemas"]["DemoLabStatus"];
-export type PayeeVerificationOut = components["schemas"]["PayeeVerificationOut"];
 export type SpendingBreakdownResponse = components["schemas"]["SpendingBreakdownResponse"];
 export type CustomerInsightsListResponse = components["schemas"]["CustomerInsightsListResponse"];
 export type CustomerInsightItem = components["schemas"]["CustomerInsightItem"];
@@ -119,10 +122,10 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}, retry = 
 }
 
 async function readBody<T>(path: string, response: Response): Promise<T> {
-  // Transfer bodies for 202 (pending) and 403 (declined) carry state the UI must show. They are
-  // plain JSON; a problem+json 403 (e.g. a non-customer token) is an error, not a transfer.
+  // Transfer and bill-payment bodies for 202 (pending) and 403 (declined) carry state the UI must
+  // show. They are plain JSON; a problem+json 403 (e.g. a non-customer token) is an error.
   const isTransferState =
-    path.startsWith("/api/v1/transfers") &&
+    (path.startsWith("/api/v1/transfers") || path === "/api/v1/bills/pay") &&
     (response.status === 202 || response.status === 403) &&
     !isProblem(response);
   if (!response.ok && !isTransferState) throw await toError(response);
@@ -258,6 +261,40 @@ export const api = {
       }).toString()}`,
     ),
   payees: () => apiFetch<PayeeOut[]>("/api/v1/payees"),
+  addPayee: (body: {
+    name: string;
+    account_number: string;
+    bank_code: string;
+    nickname: string | null;
+  }) => apiFetch<PayeeOut>("/api/v1/payees", { method: "POST", body: JSON.stringify(body) }),
+  verifyPayee: (payeeId: string) =>
+    apiFetch<PayeeVerificationOut>(`/api/v1/payees/${encodeURIComponent(payeeId)}/verify`, {
+      method: "POST",
+    }),
+  updatePayee: (payeeId: string, body: PayeeUpdate) =>
+    apiFetch<PayeeOut>(`/api/v1/payees/${encodeURIComponent(payeeId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  removePayee: (payeeId: string) =>
+    apiFetch<undefined>(`/api/v1/payees/${encodeURIComponent(payeeId)}`, { method: "DELETE" }),
+  billers: () => apiFetch<BillerOut[]>("/api/v1/bills/billers"),
+  billPayments: () => apiFetch<BillPaymentOut[]>("/api/v1/bills/payments?limit=20"),
+  /** Same one-key-per-intent rule as ``transfer``. 202 (held) and 403 (declined) are outcomes. */
+  payBill: (
+    body: {
+      from_account_id: string;
+      biller_id: string;
+      consumer_reference: string;
+      amount_minor: number;
+    },
+    idempotencyKey: string,
+  ) =>
+    apiFetch<BillPaymentOut>("/api/v1/bills/pay", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(body),
+    }),
   /** One Idempotency-Key per user intent; reuse the SAME key when retrying the same submit. */
   transfer: (
     body: {

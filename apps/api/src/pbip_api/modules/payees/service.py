@@ -13,6 +13,8 @@ from pbip_api.core.db import utcnow
 from pbip_api.core.errors import ConflictError, UnprocessableError
 from pbip_api.modules.accounts.models import Account, AccountHolder, AccountType
 from pbip_api.modules.accounts.service import is_valid_account_number
+from pbip_api.modules.auth.service import RequestMeta
+from pbip_api.modules.compliance.service import AuditService
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.ledger.models import Transaction
 from pbip_api.modules.payees.models import Payee, PayeeStatus
@@ -73,6 +75,45 @@ class PayeeService:
             .scalars()
             .all()
         )
+
+    def update(
+        self,
+        payee: Payee,
+        actor_user_id: UUID,
+        changes: dict[str, str | None],
+        meta: RequestMeta,
+    ) -> Payee:
+        """Rename or re-nickname an owned payee (TASK-094).
+
+        A new name has not passed the name check, so the payee drops back to unverified and cannot
+        receive money until ``verify`` succeeds again. Only field names are audited, not values.
+        """
+        if payee.status == PayeeStatus.BLOCKED:
+            raise ConflictError("payee is blocked")
+        if "name" in changes and changes["name"] is None:
+            raise UnprocessableError("payee name cannot be empty")
+        changed: list[str] = []
+        new_name = changes.get("name")
+        if new_name is not None and new_name.strip() != payee.name:
+            payee.name = new_name.strip()
+            payee.status = PayeeStatus.PENDING_VERIFICATION
+            payee.verified_at = None
+            changed.append("name")
+        if "nickname" in changes and changes["nickname"] != payee.nickname:
+            payee.nickname = changes["nickname"]
+            changed.append("nickname")
+        if changed:
+            AuditService(self.session).record(
+                actor_user_id,
+                "PAYEE_UPDATED",
+                "payee",
+                str(payee.id),
+                ip=meta.ip,
+                request_id=meta.request_id,
+                details={"fields": changed, "reverification_required": "name" in changed},
+            )
+        self.session.commit()
+        return payee
 
     def verify(self, payee: Payee) -> NameMatch:
         """Internal payees: compare the typed name with the real holder's name (never revealed).

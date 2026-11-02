@@ -238,6 +238,8 @@ Re-evaluate the cost on the production hardware before go-live; the rehash-on-lo
 
 **Rule:** every new customer-scoped endpoint must be added to the BOLA matrix before the PR is merged (AGENTS.md §5).
 
+6. **Payee edit cannot redirect money (TASK-094).** `PATCH /api/v1/payees/{id}` accepts only `name` and `nickname` (`extra="forbid"`: an account number or bank code in the body is a 422), so an attacker with a session cannot quietly point a trusted payee at a different account. Renaming resets the payee to unverified, so it cannot receive money until the name check passes again. Every edit is audited (`PAYEE_UPDATED`, field names only). Tests: `test_payee_edit.py`, plus "edit payee" in the BOLA matrix.
+
 ---
 
 ## 7. Fraud Evasion Threats
