@@ -17,6 +17,7 @@ import { Dialog } from "../../ui/Dialog";
 import { Field } from "../../ui/Field";
 import { ErrorState, LoadingState } from "../../ui/States";
 import { StatusBadge } from "../../ui/StatusBadge";
+import { RmAssignmentControl } from "./RmAssignmentControl";
 import {
   CHANNEL_LABEL,
   CHURN_LABEL,
@@ -35,12 +36,19 @@ interface CustomerFlyoutProps {
   customerId: string;
   name: string;
   onClose: () => void;
+  /** ADMIN may assign the customer to a relationship manager (ADR-0032). */
+  canAssign?: boolean;
 }
 
 /** TASK-066: one customer's detail and outreach log in a side panel (native <dialog>, so focus is
  * trapped and Esc closes it). Everything shown comes from the insights API; nothing is stored in
  * the browser. */
-export function CustomerFlyout({ customerId, name, onClose }: CustomerFlyoutProps) {
+export function CustomerFlyout({
+  customerId,
+  name,
+  onClose,
+  canAssign = false,
+}: CustomerFlyoutProps) {
   const detail = useQuery({
     queryKey: ["insights", "customer", customerId],
     queryFn: () => api.customerInsightDetail(customerId),
@@ -59,7 +67,16 @@ export function CustomerFlyout({ customerId, name, onClose }: CustomerFlyoutProp
           }}
         />
       )}
-      {detail.data && <Indicators detail={detail.data} />}
+      {detail.data && (
+        <>
+          <RmAssignmentControl
+            customerId={customerId}
+            assigned={detail.data.assigned_rm}
+            canAssign={canAssign}
+          />
+          <Indicators detail={detail.data} />
+        </>
+      )}
       <OutreachLog customerId={customerId} />
     </Dialog>
   );
@@ -218,7 +235,7 @@ function OutreachLog({ customerId }: { customerId: string }) {
         </Field>
         <Field
           label="Note"
-          hint={`Kept on the customer's record and visible to other relationship managers. ${String(NOTE_MAX - note.length)} characters left.`}
+          hint={`Kept on the customer's record: the relationship manager who looks after them next can read it. ${String(NOTE_MAX - note.length)} characters left.`}
           error={noteError}
         >
           {(control) => (
