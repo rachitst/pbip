@@ -97,7 +97,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Ledger entries for one of my accounts (keyset pagination) */
+        /**
+         * Ledger entries for one of my accounts (keyset pagination)
+         * @description Filters keep the same keyset cursor: send the same filters with ``cursor`` for the next
+         *     page of the filtered list (TASK-017).
+         */
         get: operations["list_my_account_entries_api_v1_accounts__account_id__transactions_get"];
         put?: never;
         post?: never;
@@ -2005,6 +2009,11 @@ export interface components {
              */
             next_cursor: string | null;
         };
+        /**
+         * EntryDirection
+         * @enum {string}
+         */
+        EntryDirection: "DEBIT" | "CREDIT";
         /** EntryOut */
         EntryOut: {
             /** Amount Minor */
@@ -3586,6 +3595,18 @@ export interface operations {
                 cursor?: string | null;
                 /** @description older: newest first, walking back; newer: oldest first, walking forward */
                 direction?: components["schemas"]["PageDirection"];
+                /** @description First bank day (IST) */
+                start_date?: string | null;
+                /** @description To this bank day (IST), inclusive */
+                end_date?: string | null;
+                /** @description Paise, inclusive */
+                min_amount?: number | null;
+                /** @description Paise, inclusive */
+                max_amount?: number | null;
+                /** @description DEBIT (money out) or CREDIT (money in) */
+                type?: components["schemas"]["EntryDirection"] | null;
+                /** @description Case-insensitive text in the payment reference */
+                search?: string | null;
             };
             header?: never;
             path: {
