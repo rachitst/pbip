@@ -8,6 +8,8 @@
 3. Each recommendation carries reasons built from the customer's own figures, in INR.
 4. ADR-0015: the age band is never used for ranking; it can only add an eligibility reason, and it
    stays "unknown" until consented date of birth exists (TASK-107).
+5. ADR-0030 (TASK-111): a product the customer already holds is not offered again, unless a
+   top-up rule allows it, and then the first reason says it is a top-up and why.
 """
 
 import math
@@ -17,6 +19,8 @@ from uuid import UUID
 from pbip_ml.recommendations.contract import (
     BankingProduct,
     CustomerRecommendationContext,
+    HeldProduct,
+    HeldProductKind,
     ProductType,
     Recommendation,
 )
@@ -235,25 +239,84 @@ _REASONS: dict[UUID, Callable[[CustomerRecommendationContext], list[str]]] = {
 }
 
 
+# ADR-0030: the held kinds that mean the customer already has a catalogue product. The credit line
+# and a personal loan meet the same need (unsecured personal borrowing). The rewards card and the
+# family cover have no held kind: PBIP issues no cards or insurance, so nobody holds one.
+_HELD_AS: dict[UUID, frozenset[HeldProductKind]] = {
+    SAVINGS_ACCOUNT_ID: frozenset({HeldProductKind.SAVINGS_ACCOUNT}),
+    FIXED_DEPOSIT_ID: frozenset({HeldProductKind.FIXED_DEPOSIT}),
+    CREDIT_LINE_ID: frozenset({HeldProductKind.PERSONAL_LOAN}),
+}
+
+# A further deposit only once the cash left after the held ones still covers this many months of
+# spending: three times the deposit's own 2-month eligibility floor, so a top-up never eats the
+# emergency buffer.
+DEPOSIT_TOP_UP_BUFFER_MONTHS = 6.0
+
+
+def _deposit_top_up(held: list[HeldProduct], ctx: CustomerRecommendationContext) -> str | None:
+    if ctx.buffer_months < DEPOSIT_TOP_UP_BUFFER_MONTHS:
+        return None
+    count = len(held)
+    principal = format_inr(sum(item.amount_minor for item in held))
+    plural = "s" if count > 1 else ""
+    return (
+        f"You already hold {count} fixed deposit{plural} ({principal}); this is a top-up because "
+        f"your balance still covers {ctx.buffer_months:.1f} months of spending, above the "
+        f"{DEPOSIT_TOP_UP_BUFFER_MONTHS:.0f} months we look for before suggesting another deposit."
+    )
+
+
+# Products that may be offered again to a holder, each with the rule that explains why. None of
+# the others is: one savings account is enough, and a second unsecured borrowing product on top of
+# an active personal loan is not suggested (the loans page still takes applications).
+_TOP_UPS: dict[UUID, Callable[[list[HeldProduct], CustomerRecommendationContext], str | None]] = {
+    FIXED_DEPOSIT_ID: _deposit_top_up,
+}
+
+
+def held_product_rule(
+    product: BankingProduct, ctx: CustomerRecommendationContext
+) -> tuple[bool, str | None]:
+    """``(offer, top_up_reason)``: a held product is offered only with the reason a rule gives."""
+    kinds = _HELD_AS.get(product.product_id, frozenset())
+    held = [item for item in ctx.held_products if item.kind in kinds]
+    if not held:
+        return True, None
+    top_up = _TOP_UPS.get(product.product_id)
+    reason = top_up(held, ctx) if top_up else None
+    return reason is not None, reason
+
+
 def generate_recommendations(
     ctx: CustomerRecommendationContext,
     catalogue: tuple[BankingProduct, ...] = PRODUCT_CATALOGUE,
     top_k: int = 3,
     model_version: str = MODEL_VERSION,
 ) -> list[Recommendation]:
-    """Eligible products only, ordered by relevance, each with reasons from the customer's data."""
-    eligible = [product for product in catalogue if evaluate_eligibility(product, ctx)]
-    ranked = sorted(eligible, key=lambda product: relevance_score(product, ctx), reverse=True)
+    """Eligible products only, ordered by relevance, each with reasons from the customer's data.
+
+    Held products are dropped unless a top-up rule allows them; the top-up reason comes first so
+    the customer always sees why a product they hold is offered again (ADR-0030).
+    """
+    offers: list[tuple[BankingProduct, list[str]]] = []
+    for product in catalogue:
+        if not evaluate_eligibility(product, ctx):
+            continue
+        offer, top_up_reason = held_product_rule(product, ctx)
+        if offer:
+            offers.append((product, [top_up_reason] if top_up_reason else []))
+    ranked = sorted(offers, key=lambda pair: relevance_score(pair[0], ctx), reverse=True)
     return [
         Recommendation(
             product_id=product.product_id,
             product_type=product.product_type,
             score=relevance_score(product, ctx),
-            reasons=_REASONS[product.product_id](ctx)[:3],
+            reasons=[*held_reasons, *_REASONS[product.product_id](ctx)[:3]],
             model_version=model_version,
             title=product.title,
             description=product.description,
             cta_label=product.cta_label,
         )
-        for product in ranked[:top_k]
+        for product, held_reasons in ranked[:top_k]
     ]
