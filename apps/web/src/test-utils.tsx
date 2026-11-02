@@ -43,6 +43,14 @@ export const account = {
   available_minor: 1_000_000,
 };
 
+/** GET /recommendations with nothing to suggest: the accounts page asks for it (TASK-062). */
+export const noRecommendations = {
+  customer_id: "cust-1",
+  recommendations: [],
+  model_version: "rules-v1",
+  evaluated_at: "2026-11-02T09:00:00Z",
+};
+
 /** GET /auth/me for a customer (UserOut). */
 export const customerMe = {
   id: "user-1",

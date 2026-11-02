@@ -31,13 +31,11 @@ def _describe() -> str:
 
 
 def _arg(name: str, spec: dict[str, object]) -> str:
+    any_of = spec.get("anyOf")
+    if isinstance(any_of, list):  # optional argument: describe its non-null branch
+        branch = next((b for b in any_of if isinstance(b, dict) and b.get("type") != "null"), {})
+        spec = {**spec, **branch}
     enum = spec.get("enum")
-    if enum is None:
-        any_of = spec.get("anyOf")
-        if isinstance(any_of, list):
-            enum = next(
-                (b.get("enum") for b in any_of if isinstance(b, dict) and "enum" in b), None
-            )
     if isinstance(enum, list):
         return f"{name} one of {'|'.join(str(v) for v in enum)}"
     low, high = spec.get("minimum"), spec.get("maximum")

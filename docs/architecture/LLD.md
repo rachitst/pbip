@@ -425,8 +425,8 @@ not an error. Tests: `tests/integration/test_events.py::test_events_partition_ro
 
 **`assistant_messages`** (0009, `api/modules/assistant/models.py`). FK `customer_id -> customers` `CASCADE`.
 CHECKs: `role IN ('user','assistant')`, `char_length(content) <= 2000`, `tool_name IS NULL OR tool_name IN
-('get_account_summary','get_recent_transactions','get_spend','get_balance_forecast','get_loan_affordability')`
-(the approved tool registry, AGENTS.md section 9). Index `(customer_id, created_at)`.
+('get_account_summary','get_recent_transactions','get_spend','get_balance_forecast','get_loan_affordability',
+'get_unusual_expenses')` (the approved tool registry, AGENTS.md section 9; 0018 added the last one). Index `(customer_id, created_at)`.
 
 **`rm_interactions`** (0015, `api/modules/insights/models.py`,
 [ADR-0022](../adr/0022-rm-insights-detail-and-outreach-log.md)). FKs `customer_id -> customers` `CASCADE`,
@@ -482,6 +482,7 @@ fire on `TRUNCATE`; no `public` table has a TRUNCATE guard.
 | 0016 | `20261102_0016_loans.py` | `loans`, `loan_instalments`, `scheduled_transfers.loan_id`, loan transaction types (ADR-0024). Its downgrade fails on purpose if loan rows exist: ledger history is never deleted to make a downgrade pass |
 | 0017 | `20261102_0017_customer_risk_profile_and_consent.py` | `customers` risk-tolerance columns (band, answers, score, questionnaire version, assessed at) and the ADR-0015 recommendations consent (timestamp, policy version); nothing backfilled (TASK-097, TASK-107) |
 | 0018 | `20261102_0018_wealth_catalogue_and_fixed_deposits.py` | `wealth_products` (seeded), `fixed_deposits`, `SYS-FIXED-DEPOSITS`, deposit transaction types (ADR-0025). Its downgrade fails on purpose if deposit transactions exist |
+| 0019 | `20261102_0019_assistant_unusual_expenses_tool.py` | Widens the `assistant_messages.tool_name` CHECK for `get_unusual_expenses` (TASK-110); no new table |
 
 Every migration has a downgrade; CI runs up, down, up and `alembic check`. One head is enforced by
 `tests/unit/test_migration_heads.py`.

@@ -168,7 +168,7 @@ Across modules, code calls the other module's `service` or `policy` functions on
 | `notifications` | Inbox, read state, outbox relay target | `/notifications*` | Implemented (API and web bell) |
 | `analytics` | Spending, trends, health score, balance forecast, segment; nightly and weekly jobs | `/analytics/*` | Implemented. Forecast UI Planned (TASK-050) |
 | `insights` | Relationship-manager churn signals; staff route of the aggregate behavioural dashboard (queries in `analytics/behaviour.py`, ADR-0027) | `/insights/customers`, `/insights/behaviour` | Partial |
-| `recommendations` | Rule-based product recommendations with reasons (`rules-v1`) | `/recommendations` | Partial: no UI (TASK-062); age band from `customers.service.recommendation_age_band`, `unknown` without date of birth and consent (TASK-107) |
+| `recommendations` | Rule-based product recommendations with reasons (`rules-v1`) | `/recommendations` | Partial: customer carousel on `/accounts` (TASK-062, #328); age band from `customers.service.recommendation_age_band`, `unknown` without date of birth and consent (TASK-107) |
 | `loans` | Catalogue (3 products), EMI schedule, explainable eligibility; idempotent application with ledger disbursal, stored schedule and a repayment instruction on the scheduled transfers engine ([ADR-0024](../adr/0024-loan-disbursal-and-repayments.md)) | `/loans*` | Implemented (API and web) |
 | `assistant` | Read-only tool registry, rules-first router, Ollama adapter, guard, sanitiser, output filter, SSE | `/assistant/*` | Implemented (5 tools). FAQ, product and investment tools Planned (TASK-105) |
 | `events` | Clickstream batch ingestion into monthly partitions | `/events/batch` | Partial: the web app does not send events yet (TASK-055 In Progress) |
@@ -346,7 +346,10 @@ tool for the authenticated customer and writes the answer ([ADR-0018](../adr/001
 4. Ollama `qwen2.5:1.5b-instruct` with grammar-constrained JSON and a 4 s timeout, only for unclear questions;
 5. deterministic rules if the model fails.
 
-**Tools:** `get_account_summary`, `get_recent_transactions`, `get_spend`, `get_balance_forecast`, `get_loan_affordability`.
+**Tools:** `get_account_summary`, `get_recent_transactions`, `get_spend`, `get_balance_forecast`,
+`get_loan_affordability` (amount optional: without one it suggests the largest eligible amount, FR-38), and
+`get_unusual_expenses(account, period)` (TASK-110: categories and single payments well above the customer's own
+3-month baseline; rule in `analytics/unusual.py`).
 
 The details and the adversarial suite are in [ai-assistant-security.md](../security/ai-assistant-security.md).
 

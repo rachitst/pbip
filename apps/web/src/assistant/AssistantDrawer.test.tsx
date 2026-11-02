@@ -185,6 +185,28 @@ describe("ReplyText", () => {
   });
 });
 
+describe("unusual expenses replies (TASK-110)", () => {
+  it("have a tool indicator label and render grouped lists with the merchant as plain text", () => {
+    expect(TOOL_LABELS.get_unusual_expenses).toBe("Comparing with your usual spending...");
+    render(
+      <ReplyText
+        text={[
+          "Unusual spending in October 2026 on Savings ••1234, compared with July 2026 to September 2026:",
+          "Categories above your usual level:",
+          "- Shopping: INR 14,000.00 (2 payment(s)) against a usual INR 2,000.00 a month - 7.0x, INR 12,000.00 more.",
+          "Unusually large payments:",
+          "- 20 Oct: INR 12,000.00 \u201c<script>alert(1)</script>\u201d (shopping) - 6.0x your usual shopping payment of INR 2,000.00 (median of 3).",
+        ].join("\n")}
+      />,
+    );
+    expect(screen.getAllByRole("list")).toHaveLength(2);
+    const items = screen.getAllByRole("listitem");
+    expect(items[0]).toHaveTextContent("Shopping: INR 14,000.00");
+    expect(items[1]).toHaveTextContent("\u201c<script>alert(1)</script>\u201d");
+    expect(document.querySelector("script")).toBeNull();
+  });
+});
+
 describe("parseFrame", () => {
   it("parses known events and drops unknown or malformed ones", () => {
     expect(parseFrame('event: token\ndata: {"text":"hi"}')).toEqual({

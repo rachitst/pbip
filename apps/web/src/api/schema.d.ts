@@ -4662,7 +4662,7 @@ export interface components {
          * ToolName
          * @enum {string}
          */
-        ToolName: "get_account_summary" | "get_recent_transactions" | "get_spend" | "get_balance_forecast" | "get_loan_affordability";
+        ToolName: "get_account_summary" | "get_recent_transactions" | "get_spend" | "get_balance_forecast" | "get_loan_affordability" | "get_unusual_expenses";
         /**
          * TransactionVolumeOut
          * @description Posted money movements with other parties; own-account moves and reversals excluded.

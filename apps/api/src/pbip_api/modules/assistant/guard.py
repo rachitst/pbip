@@ -57,7 +57,13 @@ _PAST_TENSE_SPEND = re.compile(
 _OTHER = re.compile(
     r"\b(another|other|someone|somebody|different)\s*(else'?s?|customer|user|person|people)"
     r"|\b(customer|user|client|account)[\s_-]*(id|number|no)\b"
-    r"|\b(?!my\b|your\b|our\b)[a-z]+'s\s+(balance|account|accounts|transactions|spending|loan)",
+    # "<name>'s [up to two words] <banking noun>": "Bob's unusual expenses"; not "this month's",
+    # "what's my balance" or "my account's transactions"
+    r"|\b(?!(?:my|your|our)\b|(?:month|week|year|today|yesterday|day|what|that|it|there"
+    r"|here|who|how|where|let|he|she|account|bank|card)'s)[a-z]+'s"
+    r"(?:\s{1,3}(?!(?:my|your|our|the|this|that)\b)[a-z]+){0,2}?\s{1,3}"
+    r"(balance|account|accounts|transactions|spending|spend"
+    r"|expenses?|payments?|loans?|statements?)\b",
     _I,
 )
 _SQL = re.compile(

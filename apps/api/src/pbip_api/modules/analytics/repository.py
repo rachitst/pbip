@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, aliased
 from pbip_api.modules.accounts.models import Account, AccountHolder, AccountType
 from pbip_api.modules.analytics.categorization import categorize_transaction, is_debt_repayment
 from pbip_api.modules.analytics.models import CustomerSegment, MonthlyCategorySpending
+from pbip_api.modules.analytics.unusual import Debit
 from pbip_api.modules.auth.models import User
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.events.models import ClickstreamEvent
@@ -209,6 +210,46 @@ def compute_monthly_spending_from_entries(
     ]
     records.sort(key=lambda r: r.total_amount_minor, reverse=True)
     return records
+
+
+def spend_debits(
+    session: Session, account_id: UUID, owned: set[UUID], start: datetime, end: datetime
+) -> list[Debit]:
+    """Spend debits of an account in ``[start, end)``, oldest first (unusual expenses, TASK-110).
+
+    Same definition of spend as the monthly breakdown (POSTED, not a REVERSAL), minus moves to the
+    customer's own accounts: moving money between pockets is not an expense. Uses
+    ``ix_transaction_entries_account_id_created_at``.
+    """
+    stmt = (
+        select(
+            TransactionEntry.amount,
+            TransactionEntry.created_at,
+            Transaction.reference,
+            Transaction.type,
+            Transaction.credit_account_id,
+        )
+        .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
+        .where(
+            TransactionEntry.account_id == account_id,
+            TransactionEntry.direction == EntryDirection.DEBIT,
+            TransactionEntry.created_at >= start,
+            TransactionEntry.created_at < end,
+            Transaction.status == TransactionStatus.POSTED,
+            Transaction.type != TransactionType.REVERSAL,
+        )
+        .order_by(TransactionEntry.created_at, TransactionEntry.seq)
+    )
+    return [
+        Debit(
+            amount_minor=int(amount),
+            category=categorize_transaction(reference, str(tx_type)),
+            reference=reference,
+            posted_at=created_at.astimezone(UTC),
+        )
+        for amount, created_at, reference, tx_type, credit_account in session.execute(stmt).all()
+        if credit_account not in owned
+    ]
 
 
 def try_lock_materialization(session: Session) -> bool:

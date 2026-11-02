@@ -180,14 +180,16 @@ habits.*
 
 * ✓ The API returns at most three products, each with reasons built from my own figures.
 * ✓ The results are scoped to the authenticated customer.
-* ✗ The dashboard shows the suggestions with "why this was recommended".
+* ✓ The dashboard shows the suggestions with "why this was recommended".
 
-**Status:** Partial. The UI is TASK-062.
+**Status:** Partial until TASK-062 (PR #328) merges: the carousel on `/accounts` shows each product with its
+reasons behind a keyboard disclosure.
 
 **Tests:** `integration/test_recommendations.py::test_recommendations_are_scoped_to_the_authenticated_customer`,
-`test_recommendations_use_the_customers_real_figures_and_ignore_date_of_birth_without_consent`.
+`test_recommendations_use_the_customers_real_figures_and_ignore_date_of_birth_without_consent`;
+`apps/web/src/pages/ProductRecommendations.test.tsx`.
 
-**Tasks:** TASK-054 (In Progress); TASK-062 (Todo).
+**Tasks:** TASK-054 (In Progress); TASK-062 (In Review, PR #328).
 
 ## UC-03 Download account statement
 
@@ -466,7 +468,7 @@ and a rewards card.
 **Tests** (`integration/test_loans.py`): `test_eligible_with_explained_figures`,
 `test_rejected_when_dti_would_exceed_half_of_income`, `test_rejected_after_a_recent_lockout`.
 
-**Tasks:** TASK-046 (Done); TASK-054 (In Progress), TASK-062 (Todo).
+**Tasks:** TASK-046 (Done); TASK-054 (In Progress), TASK-062 (In Review, PR #328).
 
 ### US-21 Apply for and track a loan (FR-32)
 
@@ -547,25 +549,31 @@ navigating reports.*
 
 **Acceptance criteria:**
 
-* ✓ Balance, recent-transaction, spending (including last month), forecast and loan-affordability-with-an-amount
-  questions are answered from my own data.
+* ✓ Balance, recent-transaction, spending (including last month), forecast and loan-affordability questions are
+  answered from my own data.
 * ✓ Clear questions never call the model.
 * ✓ Answers stream into the chat drawer.
 * ✓ If the model is down or wrong, deterministic rules answer.
-* ✗ "Can I afford a personal loan?" without an amount is answered. Today it returns help text, by design: no amount is
-  invented.
+* ✓ "Can I afford a personal loan?" without an amount is answered (FR-38): the assistant offers the largest amount
+  the TASK-046 eligibility rules allow for the product's default tenure (personal 36, car 60, home 240 months, or the
+  tenure I name), with the EMI, the catalogue rate and the eligibility reasons. When eligibility cannot be computed
+  (no income history, or a sign-in lockout in the last 90 days) it says which and asks for an amount; when existing
+  repayments leave no room it says so. No amount or tenure the model invented is used.
 
-**Status:** Partial.
+**Status:** Implemented.
 
 **Tests:**
 
 * `integration/test_assistant.py`: `test_rules_engine_answers_each_tool_from_own_data`,
   `test_fallback_takes_over_when_the_model_is_down_or_wrong`,
-  `test_a_loan_amount_the_customer_never_wrote_is_not_answered`;
+  `test_a_loan_amount_the_customer_never_wrote_is_not_answered`,
+  `test_a_loan_without_an_amount_suggests_the_largest_eligible_one`,
+  `test_a_loan_without_an_amount_asks_for_one_when_eligibility_cannot_be_computed`,
+  `test_a_loan_without_an_amount_when_repayments_leave_no_room`;
 * `unit/test_assistant_routing.py::test_clear_questions_take_the_fast_path`;
 * `apps/web/src/assistant/AssistantDrawer.test.tsx`.
 
-**Tasks:** TASK-057 to TASK-061 (Done).
+**Tasks:** TASK-057 to TASK-061 (Done); TASK-110 (#284, FR-38 without an amount).
 
 ### US-25 Get help, product discovery, investment ideas and unusual-expense explanations (FR-39, FR-40)
 
@@ -576,13 +584,20 @@ unusual expenses.*
 
 * ✗ The read-only tools `get_faq_answer`, `list_products` and `get_investment_suggestions` exist.
 * ✗ Investment suggestions use my risk profile.
-* ✗ "Show unusual expenses" returns anomalous transactions.
+* ✓ "Show unusual expenses" (FR-39) lists, for this or last month, the categories at least 1.5x my average month of
+  the previous three and the single payments at least 3x my usual (median) payment in that category, each at least
+  INR 1,000 above usual and each with the figures that make it unusual. Merchant names are quoted data, stripped and
+  capped. Rule: `analytics/unusual.py`.
 
-**Status:** Planned. The FAQ, product and investment tools are TASK-105. Unusual expenses has no task.
+**Status:** Partial. Unusual expenses are done (TASK-110); the FAQ, product and investment tools are TASK-105.
 
-**Tests:** none yet.
+**Tests:** `unit/test_unusual_expenses.py`; `integration/test_assistant.py`:
+`test_unusual_expenses_lists_exactly_the_items_outside_the_own_baseline`,
+`test_unusual_expenses_when_nothing_stands_out_or_history_is_short`; `integration/test_assistant_adversarial.py`:
+`test_injection_in_a_merchant_name_stays_quoted_data_and_selects_nothing`,
+`test_cross_customer_unusual_expense_probes_never_return_the_victims_items`.
 
-**Tasks:** TASK-105 (Todo).
+**Tasks:** TASK-110 (#284, In Review); TASK-105 (Todo).
 
 ### US-26 Trust that the assistant cannot be abused (FR-41)
 
@@ -790,7 +805,7 @@ behaviour, spending, demographics and what I already hold.*
 * `integration/test_recommendations.py` (`test_engine_gets_the_age_band_only_with_consent_and_never_the_date`);
 * `integration/test_demographics.py`; `apps/web/src/pages/DemographicsSection.test.tsx`.
 
-**Tasks:** TASK-054 (In Progress); TASK-107 (In Review); TASK-062 (Todo).
+**Tasks:** TASK-054 (In Progress); TASK-062 (In Review, PR #328); TASK-107 (Done #326).
 
 ## UC-13 Security monitoring dashboard
 
@@ -866,6 +881,6 @@ acknowledge and resolve, with indicators of overdue reviews.*
 
 | Status | Stories |
 |---|---|
-| Implemented | US-02, US-05, US-09, US-10, US-17, US-18, US-26, US-28, US-29, US-31, US-34, US-35, US-36 |
-| Partial | US-01, US-03, US-04, US-06, US-07, US-11, US-13, US-14, US-19, US-20, US-23, US-24, US-27, US-30, US-32, US-33 |
-| Planned | US-08, US-12, US-15, US-16, US-21, US-22, US-25 |
+| Implemented | US-02, US-05, US-09, US-10, US-17, US-18, US-24, US-26, US-28, US-29, US-31, US-34, US-35, US-36 |
+| Partial | US-01, US-03, US-04, US-06, US-07, US-11, US-13, US-14, US-19, US-20, US-23, US-25, US-27, US-30, US-32, US-33 |
+| Planned | US-08, US-12, US-15, US-16, US-21, US-22 |

@@ -79,6 +79,8 @@ export type LoanApplyRequest = components["schemas"]["LoanApplyRequest"];
 export type LoanSummaryOut = components["schemas"]["LoanSummaryOut"];
 export type LoanOut = components["schemas"]["LoanOut"];
 export type LoanInstalmentOut = components["schemas"]["LoanInstalmentOut"];
+export type RecommendationsResponse = components["schemas"]["RecommendationsResponse"];
+export type ProductRecommendationItem = components["schemas"]["ProductRecommendationItem"];
 export type WealthProductOut = components["schemas"]["WealthProductOut"];
 export type DepositQuoteOut = components["schemas"]["DepositQuoteOut"];
 export type DepositBookRequest = components["schemas"]["DepositBookRequest"];
@@ -404,6 +406,8 @@ export const api = {
       body: JSON.stringify({ code }),
     }),
   loanProducts: () => apiFetch<LoanProductOut[]>("/api/v1/loans/products"),
+  /** TASK-054: at most three products for the signed-in customer, each with its reasons. */
+  recommendations: () => apiFetch<RecommendationsResponse>("/api/v1/recommendations"),
   /** The server computes every EMI (exact integer paise); the browser never does money maths. */
   calculateEmi: (productId: string, principalMinor: number, tenureMonths: number) =>
     apiFetch<EmiOut>("/api/v1/loans/calculate-emi", {

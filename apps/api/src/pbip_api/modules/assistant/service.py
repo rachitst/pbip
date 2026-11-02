@@ -62,8 +62,8 @@ _logger = structlog.get_logger(__name__)
 
 HELP_TEXT = (
     "I can tell you your balance, your recent transactions, what you spent this month or last "
-    "month (by category too), a predicted balance up to 30 days ahead, and whether a loan is "
-    'affordable - for example: "Can I afford a 5 lakh car loan over 5 years?"'
+    "month (by category too), any unusual expenses, a predicted balance up to 30 days ahead, and "
+    'whether a loan is affordable - for example: "Can I afford a 5 lakh car loan over 5 years?"'
 )
 UNAVAILABLE_TEXT = "I couldn't get that information right now. Please try again shortly."
 
@@ -212,15 +212,21 @@ class AssistantService:
 
 
 def _grounded(route: Route, message: str) -> Route:
-    """Refuse model-invented figures: a loan check needs an amount the customer actually wrote.
+    """Refuse model-invented figures: a loan amount or tenure the customer never wrote is dropped.
 
     Measured with qwen2.5:1.5b: "can I get a loan?" came back as a 1 lakh / 12 month loan the
-    customer never mentioned, and the server would have answered for it. Without an amount in the
-    message the customer gets the help text, which shows how to ask.
+    customer never mentioned. The server answers for figures the customer actually wrote; without
+    an amount the loan tool suggests the largest eligible one or asks for one (FR-38).
     """
-    if route.tool is ToolName.LOAN_AFFORDABILITY and fallback.parse_rupees(message) is None:
-        return Route(None)
-    return route
+    if route.tool is not ToolName.LOAN_AFFORDABILITY:
+        return route
+    arguments = {k: v for k, v in route.arguments.items() if k == "loan_type"}
+    amount, tenure = fallback.parse_rupees(message), fallback.parse_tenure(message)
+    if amount is not None and "amount_rupees" in route.arguments:
+        arguments["amount_rupees"] = route.arguments["amount_rupees"]
+    if tenure is not None and "tenure_months" in route.arguments:
+        arguments["tenure_months"] = route.arguments["tenure_months"]
+    return Route(route.tool, arguments)
 
 
 def stream_chat(
