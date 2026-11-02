@@ -342,15 +342,16 @@ person.*
 
 **Acceptance criteria:**
 
-* ✗ I can create, list and cancel schedules.
-* ✗ Each occurrence runs exactly once, with key `sched-{id}-{date}`.
-* ✗ Insufficient funds notify me without breaking the schedule.
+* ✓ I can create, list and cancel schedules (API; the screens are TASK-021).
+* ✓ Each occurrence runs exactly once, with key `sched-{id}-{date}`.
+* ✓ Insufficient funds notify me without breaking the schedule.
 
-**Status:** Planned.
+**Status:** API implemented (ADR-0023); UI planned.
 
-**Tests:** none yet.
+**Tests:** `integration/test_scheduled_transfers_engine.py::test_concurrent_workers_on_one_due_occurrence_post_it_exactly_once`,
+`::test_insufficient_funds_retryable_failure_and_same_day_retry`; `integration/test_scheduled_transfers_api.py`.
 
-**Tasks:** TASK-015, TASK-021 (Todo).
+**Tasks:** TASK-015 (in review), TASK-021 (Todo).
 
 ### US-16 Search my transactions (FR-14)
 
