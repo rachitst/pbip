@@ -5,30 +5,31 @@ it loads the artifacts written by ``python -m pbip_ml.fraud.train`` and turns on
 platform data into the exact feature row the models were trained on (the TASK-024 online
 features, proven identical to the offline pipeline, plus amount/hour/device/direction).
 
-Artifact safety: ``isolation_forest.joblib`` is a pickle, and unpickling runs code. Load only
-from an operator-controlled directory (``FRAUD_MODEL_DIR``), never from a path a request can
-influence. ``manifest.json`` (SHA-256 per file, written by the training CLI) is checked first,
-so a corrupted or half-copied artifact is refused. It does not stop someone who can write the
-directory, because they could rewrite the manifest too (threat model T29).
+Artifact safety: ``isolation_forest.joblib`` is a pickle, and unpickling can run code. It is read
+by the allow-listed unpickler in ``artifacts`` (ADR-0033), and only from an operator-controlled
+directory (``FRAUD_MODEL_DIR``), never from a path a request can influence. ``manifest.json``
+(SHA-256 per file, written by the training CLI) is checked first, so a corrupted or half-copied
+artifact is refused. It does not stop someone who can write the directory, because they could
+rewrite the manifest too (threat model T34).
 """
 
 import hashlib
 import json
 import math
+import pickle
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID
 
-import joblib
 import lightgbm as lgb
 import pandas as pd
 
+from pbip_ml.fraud.artifacts import load_anomaly_model
 from pbip_ml.fraud.features import CurrentTransfer, PastTransfer, online_features
 from pbip_ml.fraud.hybrid import HybridParams, HybridResult, HybridScorer
 from pbip_ml.fraud.rules import RuleContext, default_registry
-from pbip_ml.fraud.training import AnomalyModel
 
 ARTIFACTS = ("lightgbm.txt", "isolation_forest.joblib", "hybrid_params.json")
 MANIFEST = "manifest.json"
@@ -59,14 +60,20 @@ def load(directory: Path) -> HybridScorer:
                 raise ModelLoadError(f"{name} does not match {MANIFEST}")
         params = HybridParams.from_json((directory / "hybrid_params.json").read_text("utf-8"))
         booster = lgb.Booster(model_file=str(directory / "lightgbm.txt"))
-        # Unpickling runs code: only ever an operator-set directory (see the module docstring).
-        anomaly = joblib.load(directory / "isolation_forest.joblib")
+        # Allow-listed unpickler (ADR-0033), and still only an operator-set directory.
+        anomaly = load_anomaly_model(directory / "isolation_forest.joblib")
     except ModelLoadError:
         raise
-    except (OSError, ValueError, TypeError, KeyError, lgb.basic.LightGBMError) as exc:
+    except (
+        OSError,
+        ValueError,
+        TypeError,
+        KeyError,
+        EOFError,
+        pickle.UnpicklingError,
+        lgb.basic.LightGBMError,
+    ) as exc:
         raise ModelLoadError(type(exc).__name__) from exc
-    if not isinstance(anomaly, AnomalyModel):
-        raise ModelLoadError("isolation_forest.joblib is not an AnomalyModel")
     return HybridScorer(params, booster, anomaly, default_registry())
 
 
