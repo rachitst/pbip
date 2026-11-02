@@ -394,8 +394,8 @@ not an error. Tests: `tests/integration/test_events.py::test_events_partition_ro
 
 **`assistant_messages`** (0009, `api/modules/assistant/models.py`). FK `customer_id -> customers` `CASCADE`.
 CHECKs: `role IN ('user','assistant')`, `char_length(content) <= 2000`, `tool_name IS NULL OR tool_name IN
-('get_account_summary','get_recent_transactions','get_spend','get_balance_forecast','get_loan_affordability')`
-(the approved tool registry, AGENTS.md section 9). Index `(customer_id, created_at)`.
+('get_account_summary','get_recent_transactions','get_spend','get_balance_forecast','get_loan_affordability',
+'get_unusual_expenses')` (the approved tool registry, AGENTS.md section 9; 0018 added the last one). Index `(customer_id, created_at)`.
 
 **`rm_interactions`** (0015, `api/modules/insights/models.py`,
 [ADR-0022](../adr/0022-rm-insights-detail-and-outreach-log.md)). FKs `customer_id -> customers` `CASCADE`,

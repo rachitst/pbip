@@ -24,7 +24,8 @@ class AssistantMessage(Base):
         CheckConstraint(f"char_length(content) <= {MAX_STORED_CHARS}", name="content_length"),
         CheckConstraint(
             "tool_name IS NULL OR tool_name IN ('get_account_summary', 'get_recent_transactions', "
-            "'get_spend', 'get_balance_forecast', 'get_loan_affordability')",
+            "'get_spend', 'get_balance_forecast', 'get_loan_affordability', "
+            "'get_unusual_expenses')",
             name="tool_name_valid",
         ),
     )

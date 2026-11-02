@@ -2,6 +2,7 @@
 
 import time
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -125,3 +126,55 @@ def reset_tracing() -> None:
     tracing._in_memory_exporter = None
     trace._TRACER_PROVIDER = None
     trace._TRACER_PROVIDER_SET_ONCE._done = False
+
+
+def post_spend_at(
+    engine: Engine, account_id: UUID, amount: int, reference: str, when: datetime
+) -> UUID:
+    """Post a spend debit through the ledger service, then date it ``when`` (history fixtures).
+
+    Spending baselines need months of history, but entries take ``now()`` when posted. The money
+    goes through ``ledger.create_transaction``/``post_transaction`` like any payment (balances,
+    balance check and seq untouched); only the timestamps of that one transaction are moved,
+    with the append-only trigger lifted for this statement inside the same database transaction
+    (as the audit tamper test does). Test-only: production never rewrites a ledger timestamp.
+    """
+    from pbip_api.modules.ledger import service as ledger
+    from pbip_api.modules.ledger.models import TransactionType
+    from sqlalchemy.orm import sessionmaker
+
+    with sessionmaker(bind=engine)() as session:
+        txn = ledger.create_transaction(
+            session,
+            type_=TransactionType.BILL_PAYMENT,
+            amount=amount,
+            currency="INR",
+            debit_account_id=account_id,
+            credit_account_id=ledger.SYSTEM_CLEARING_ID,
+            reference=reference,
+        )
+        ledger.post_transaction(session, txn, ledger.transfer_legs(txn))
+        session.commit()
+        txn_id = txn.id
+    with engine.begin() as connection:
+        connection.execute(
+            text("ALTER TABLE transaction_entries DISABLE TRIGGER transaction_entries_immutable")
+        )
+        connection.execute(
+            text("UPDATE transaction_entries SET created_at = :when WHERE transaction_id = :id"),
+            {"when": when, "id": txn_id},
+        )
+        connection.execute(
+            text("UPDATE transactions SET created_at = :when, posted_at = :when WHERE id = :id"),
+            {"when": when, "id": txn_id},
+        )
+        connection.execute(
+            text("ALTER TABLE transaction_entries ENABLE TRIGGER transaction_entries_immutable")
+        )
+    return txn_id
+
+
+def month_start(now: datetime, months_back: int) -> datetime:
+    """Midnight UTC on the 1st of the calendar month ``months_back`` months before ``now``'s."""
+    index = now.year * 12 + now.month - 1 - months_back
+    return datetime(index // 12, index % 12 + 1, 1, tzinfo=UTC)

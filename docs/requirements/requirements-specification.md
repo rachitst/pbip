@@ -99,8 +99,8 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | ID | Requirement | Source | Status | Tasks | Gap |
 |---|---|---|---|---|---|
 | FR-37 | The customer shall ask natural-language questions about their own balances, transactions, spending and forecast, in a chat drawer with streamed answers. | UC-08, section 5 "natural language queries", "spending analysis explanations" | Implemented | TASK-057 to TASK-061 | |
-| FR-38 | The assistant shall answer "Can I afford a personal loan?" | UC-08 example | Partial | TASK-057 | Answered only when the customer states an amount; with no amount it replies with help text |
-| FR-39 | The assistant shall answer "Show unusual expenses." | UC-08 example | Planned | TASK-110 (#284) | It currently returns the spending total; there is no anomaly tool |
+| FR-38 | The assistant shall answer "Can I afford a personal loan?" | UC-08 example | Implemented | TASK-057, TASK-046, TASK-110 (#284) | |
+| FR-39 | The assistant shall answer "Show unusual expenses." | UC-08 example | Implemented | TASK-110 (#284) | |
 | FR-40 | The assistant shall suggest investment options, support product discovery and answer FAQs. | UC-08 example, section 5 | Planned | TASK-105 | |
 | FR-41 | The assistant shall be read-only, act only on the authenticated customer's data, refuse money movement, other-customer, SQL and instruction-override requests, and audit every tool call. | Section 8 security (applied to UC-08) | Implemented | TASK-059, TASK-067, TASK-076 | |
 

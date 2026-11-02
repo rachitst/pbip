@@ -31,7 +31,7 @@ from pbip_api.modules.accounts.models import Account
 from pbip_api.modules.analytics import service as analytics_service
 from pbip_api.modules.assistant.sanitize import untrusted_block
 from pbip_api.modules.loans import service as loans_service
-from pbip_api.modules.loans.catalogue import PRODUCTS, LoanType
+from pbip_api.modules.loans.catalogue import PRODUCTS, LoanProduct, LoanType
 
 MAX_ACCOUNTS = 10
 MAX_TRANSACTIONS = 20
@@ -44,6 +44,7 @@ class ToolName(StrEnum):
     SPEND = "get_spend"
     BALANCE_FORECAST = "get_balance_forecast"
     LOAN_AFFORDABILITY = "get_loan_affordability"
+    UNUSUAL_EXPENSES = "get_unusual_expenses"
 
 
 class SpendPeriod(StrEnum):
@@ -98,11 +99,20 @@ class ForecastArgs(AccountArgs):
     horizon_days: Literal[7, 14, 30] = 30
 
 
+class UnusualExpensesArgs(AccountArgs):
+    period: SpendPeriod = SpendPeriod.THIS_MONTH
+
+
+# A sensible tenure per product when the customer names none (all offered by the catalogue).
+DEFAULT_TENURE_MONTHS = {LoanType.PERSONAL: 36, LoanType.AUTO: 60, LoanType.HOME: 240}
+
+
 class LoanArgs(_Args):
     loan_type: LoanType = LoanType.PERSONAL
     # Whole rupees, not paise: small models get minor units wrong by a factor of 100.
-    amount_rupees: int = Field(ge=10_000, le=5_00_00_000)
-    tenure_months: int = Field(ge=12, le=360)
+    # None (FR-38): no amount was named; the answer is the largest eligible amount, or a question.
+    amount_rupees: int | None = Field(default=None, ge=10_000, le=5_00_00_000)
+    tenure_months: int | None = Field(default=None, ge=12, le=360)
 
 
 @dataclass(frozen=True)
@@ -242,10 +252,13 @@ def balance_forecast(ctx: ToolContext, raw: Mapping[str, object]) -> ToolReply:
 def loan_affordability(ctx: ToolContext, raw: Mapping[str, object]) -> ToolReply:
     args = LoanArgs.model_validate(raw)
     product = next(p for p in PRODUCTS if p.loan_type == args.loan_type)
-    amount_minor = args.amount_rupees * _PAISE_PER_RUPEE
-    if args.tenure_months not in product.tenures_months:
+    tenure = args.tenure_months or DEFAULT_TENURE_MONTHS[args.loan_type]
+    if tenure not in product.tenures_months:
         offered = ", ".join(str(m) for m in product.tenures_months)
         raise ToolInputError(f"A {product.name.lower()} is offered over {offered} months.")
+    if args.amount_rupees is None:
+        return _loan_suggestion(ctx, product, tenure)
+    amount_minor = args.amount_rupees * _PAISE_PER_RUPEE
     if not product.min_amount_minor <= amount_minor <= product.max_amount_minor:
         raise ToolInputError(
             f"A {product.name.lower()} is for {format_minor(product.min_amount_minor)} to "
@@ -257,15 +270,128 @@ def loan_affordability(ctx: ToolContext, raw: Mapping[str, object]) -> ToolReply
         user_id=ctx.user_id,
         product_id=product.id,
         amount_minor=amount_minor,
-        tenure_months=args.tenure_months,
+        tenure_months=tenure,
         now=ctx.now,
     )
     verdict = "likely to be eligible" if result.status == "ELIGIBLE" else "not eligible right now"
     return ToolReply(
         f"For a {product.name.lower()} of {format_minor(amount_minor)} over "
-        f"{args.tenure_months} months you are {verdict}. " + " ".join(result.reasons),
+        f"{tenure} months you are {verdict}. " + " ".join(result.reasons),
         "/loans",
     )
+
+
+_ASK_EXAMPLE = 'for example: "Can I afford a 2 lakh personal loan over 3 years?"'
+
+
+def _loan_suggestion(ctx: ToolContext, product: LoanProduct, tenure: int) -> ToolReply:
+    """FR-38: no amount named. Offer the TASK-046 maximum, or ask for an amount and say why."""
+    found = loans_service.suggest_loan(
+        ctx.session,
+        customer_id=ctx.customer_id,
+        user_id=ctx.user_id,
+        product_id=product.id,
+        tenure_months=tenure,
+        now=ctx.now,
+    )
+    name, reasons = product.name.lower(), " ".join(found.reasons)
+    if found.status == "ASK_AMOUNT":
+        return ToolReply(
+            f"I can't suggest a {name} amount right now: {reasons} Tell me the amount you have "
+            f"in mind and I'll check it, {_ASK_EXAMPLE}",
+            "/loans",
+        )
+    if found.status == "NOT_AFFORDABLE":
+        return ToolReply(f"A {name} isn't affordable right now. {reasons}", "/loans")
+    rate = f"{found.product.annual_rate_bps // 100}.{found.product.annual_rate_bps % 100:02d}%"
+    return ToolReply(
+        f"You didn't name an amount, so here is the most you could borrow: a {name} of up to "
+        f"{format_minor(found.amount_minor)} over {found.tenure_months} months, an EMI of "
+        f"{format_minor(found.emi_minor)} at the catalogue rate from {rate} a year. {reasons} "
+        f"This is an estimate, not an offer; ask with an amount to check a different loan.",
+        "/loans",
+    )
+
+
+# Fixed wording of the rule (TASK-110); the thresholds come from the analytics service.
+def _times(amount: int, usual: int) -> str:
+    """The multiple for display only, one decimal place, rounded down (never overstated)."""
+    tenths = amount * 10 // usual
+    return f"{tenths // 10}.{tenths % 10}x"
+
+
+_BASELINE_MONTHS = analytics_service.UNUSUAL_BASELINE_MONTHS
+_UNUSUAL_RULE = (
+    f"Unusual means a category at least {_times(*analytics_service.UNUSUAL_CATEGORY_RATIO)} "
+    f"your monthly average of the previous {_BASELINE_MONTHS} months, or a single payment at "
+    f"least {_times(*analytics_service.UNUSUAL_TRANSACTION_RATIO)} your usual payment in that "
+    "category - and in both cases at least "
+    f"{format_minor(analytics_service.UNUSUAL_MIN_EXCESS_MINOR)} more."
+)
+
+
+def _months_label(months: list[tuple[int, int]]) -> str:
+    (y1, m1), (y2, m2) = months[0], months[-1]
+    return f"{_MONTH_NAMES[m1 - 1]} {y1} to {_MONTH_NAMES[m2 - 1]} {y2}"
+
+
+def _category_line(item: analytics_service.UnusualCategory, money: str) -> str:
+    spent = format_minor(item.spent_minor, money)
+    count = f"{item.transaction_count} payment(s)"
+    if item.usual_minor == 0:
+        return (
+            f"- {item.category.title()}: {spent} ({count}); nothing in the previous "
+            f"{_BASELINE_MONTHS} months."
+        )
+    usual = format_minor(item.usual_minor, money)
+    more = format_minor(item.spent_minor - item.usual_minor, money)
+    times = _times(item.spent_minor, item.usual_minor)
+    return (
+        f"- {item.category.title()}: {spent} ({count}) against a usual {usual} a month - "
+        f"{times}, {more} more."
+    )
+
+
+def _transaction_line(item: analytics_service.UnusualTransaction, money: str) -> str:
+    # The reference is written by others (merchant, payer): quoted, stripped, capped (s10).
+    what = untrusted_block(item.reference) or "no reference"
+    return (
+        f"- {item.posted_at:%d %b}: {format_minor(item.amount_minor, money)} {what} "
+        f"({item.category}) - {_times(item.amount_minor, item.usual_minor)} your usual "
+        f"{item.category} payment of {format_minor(item.usual_minor, money)} "
+        f"(median of {item.baseline_count})."
+    )
+
+
+def unusual_expenses(ctx: ToolContext, raw: Mapping[str, object]) -> ToolReply:
+    args = UnusualExpensesArgs.model_validate(raw)
+    account = _own_account(ctx, args.account)
+    year, month = _month(ctx.now, args.period)
+    result = analytics_service.get_unusual_expenses(
+        ctx.session, ctx.customer_id, account.id, year, month
+    )
+    found, money = result.findings, result.currency
+    period = f"{_MONTH_NAMES[month - 1]} {year}"
+    baseline = _months_label(result.baseline_months)
+    if not found.categories and not found.transactions:
+        return ToolReply(
+            f"Nothing unusual in {period} on {_label(account)}: every category and payment was "
+            f"within your usual range for {baseline}. {_UNUSUAL_RULE}",
+            "/insights",
+        )
+    lines = [f"Unusual spending in {period} on {_label(account)}, compared with {baseline}:"]
+    if found.categories:
+        lines.append("Categories above your usual level:")
+        lines.extend(_category_line(c, money) for c in found.categories)
+        if found.more_categories:
+            lines.append(f"- and {found.more_categories} more categor(ies).")
+    if found.transactions:
+        lines.append("Unusually large payments:")
+        lines.extend(_transaction_line(t, money) for t in found.transactions)
+        if found.more_transactions:
+            lines.append(f"- and {found.more_transactions} more payment(s).")
+    lines.append(_UNUSUAL_RULE)
+    return ToolReply("\n".join(lines), "/insights")
 
 
 REGISTRY: dict[ToolName, Tool] = {
@@ -297,9 +423,17 @@ REGISTRY: dict[ToolName, Tool] = {
         ),
         Tool(
             ToolName.LOAN_AFFORDABILITY,
-            "Whether a loan of a given type, amount (whole rupees) and tenure is affordable.",
+            "Whether a loan of a given type, amount (whole rupees) and tenure is affordable; "
+            "without an amount, the largest affordable amount.",
             LoanArgs,
             loan_affordability,
+        ),
+        Tool(
+            ToolName.UNUSUAL_EXPENSES,
+            "Categories and single payments this month or last month that are well above the "
+            "customer's own usual level.",
+            UnusualExpensesArgs,
+            unusual_expenses,
         ),
     )
 }
