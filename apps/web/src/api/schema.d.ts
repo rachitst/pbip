@@ -957,7 +957,7 @@ export interface paths {
         /** List my scheduled transfers */
         get: operations["list_scheduled_transfers_api_v1_transfers_scheduled_get"];
         put?: never;
-        /** Create a recurring transfer instruction */
+        /** Create a recurring transfer instruction (idempotent) */
         post: operations["create_scheduled_transfer_api_v1_transfers_scheduled_post"];
         delete?: never;
         options?: never;
@@ -4940,7 +4940,10 @@ export interface operations {
     create_scheduled_transfer_api_v1_transfers_scheduled_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Unique per logical request; retrying with the same key never duplicates. */
+                "Idempotency-Key": string;
+            };
             path?: never;
             cookie?: never;
         };

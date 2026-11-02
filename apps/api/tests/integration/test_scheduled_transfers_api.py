@@ -8,13 +8,16 @@ from datetime import date, timedelta
 from typing import Any
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.db import utcnow
 from pbip_api.modules.accounts.models import Account, AccountType
 from pbip_api.modules.accounts.service import open_account
 from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.compliance.models import AuditLog
 from pbip_api.modules.ledger.models import Transaction, TransactionType
+from pbip_api.modules.payments import scheduled_service
 from pbip_api.modules.payments.models import (
     ScheduledTransfer,
     ScheduledTransferStatus,
@@ -32,6 +35,17 @@ from sqlalchemy.orm import Session
 pytestmark = pytest.mark.integration
 
 AMOUNT = 15_000
+
+
+@pytest.fixture(autouse=True)
+def _worker_settings(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
+    """The racing worker reads ``get_settings()``; use the generated test settings (no env secrets)."""
+    monkeypatch.setattr(scheduled_service, "get_settings", lambda: settings)
+
+
+def _idem(actor: Actor) -> dict[str, str]:
+    """Creating a standing order is idempotent like a transfer: a fresh key per logical request."""
+    return {**actor.headers, "Idempotency-Key": uuid.uuid4().hex}
 
 
 @pytest.fixture
@@ -63,7 +77,7 @@ def test_create_scheduled_transfer_success_payee(
 
     res = client.post(
         "/api/v1/transfers/scheduled",
-        headers=alice.headers,
+        headers=_idem(alice),
         json={
             "from_account_id": str(alice.account_id),
             "amount_minor": AMOUNT,
@@ -114,7 +128,7 @@ def test_create_scheduled_transfer_success_own_account(
 
     res = client.post(
         "/api/v1/transfers/scheduled",
-        headers=alice.headers,
+        headers=_idem(alice),
         json={
             "from_account_id": str(alice.account_id),
             "amount_minor": 20_000,
@@ -143,7 +157,7 @@ def test_create_scheduled_transfer_does_not_post_ledger_transaction(
 
     res = client.post(
         "/api/v1/transfers/scheduled",
-        headers=alice.headers,
+        headers=_idem(alice),
         json={
             "from_account_id": str(alice.account_id),
             "amount_minor": AMOUNT,
@@ -179,7 +193,7 @@ def test_create_scheduled_transfer_invalid_inputs(
     # 1. Invalid frequency
     res = client.post(
         "/api/v1/transfers/scheduled",
-        headers=alice.headers,
+        headers=_idem(alice),
         json={
             "from_account_id": str(alice.account_id),
             "amount_minor": AMOUNT,
@@ -194,7 +208,7 @@ def test_create_scheduled_transfer_invalid_inputs(
     # 2. Start date in past
     res = client.post(
         "/api/v1/transfers/scheduled",
-        headers=alice.headers,
+        headers=_idem(alice),
         json={
             "from_account_id": str(alice.account_id),
             "amount_minor": AMOUNT,
@@ -209,7 +223,7 @@ def test_create_scheduled_transfer_invalid_inputs(
     # 3. End date before start date
     res = client.post(
         "/api/v1/transfers/scheduled",
-        headers=alice.headers,
+        headers=_idem(alice),
         json={
             "from_account_id": str(alice.account_id),
             "amount_minor": AMOUNT,
@@ -225,7 +239,7 @@ def test_create_scheduled_transfer_invalid_inputs(
     # 4. Amount <= 0
     res = client.post(
         "/api/v1/transfers/scheduled",
-        headers=alice.headers,
+        headers=_idem(alice),
         json={
             "from_account_id": str(alice.account_id),
             "amount_minor": 0,
@@ -240,7 +254,7 @@ def test_create_scheduled_transfer_invalid_inputs(
     # 5. Missing both payee_id and to_account_id
     res = client.post(
         "/api/v1/transfers/scheduled",
-        headers=alice.headers,
+        headers=_idem(alice),
         json={
             "from_account_id": str(alice.account_id),
             "amount_minor": AMOUNT,
@@ -254,7 +268,7 @@ def test_create_scheduled_transfer_invalid_inputs(
     # 6. Both payee_id and to_account_id supplied
     res = client.post(
         "/api/v1/transfers/scheduled",
-        headers=alice.headers,
+        headers=_idem(alice),
         json={
             "from_account_id": str(alice.account_id),
             "amount_minor": AMOUNT,
@@ -280,7 +294,7 @@ def test_create_scheduled_transfer_unauthorized_source_account(
     # Mallory attempts to create schedule using Alice's account
     res = client.post(
         "/api/v1/transfers/scheduled",
-        headers=mallory.headers,
+        headers=_idem(mallory),
         json={
             "from_account_id": str(alice.account_id),
             "amount_minor": AMOUNT,
@@ -316,7 +330,7 @@ def test_list_and_get_scheduled_transfers_with_bola_isolation(
     # Alice creates 2 schedules
     r1 = client.post(
         "/api/v1/transfers/scheduled",
-        headers=alice.headers,
+        headers=_idem(alice),
         json={
             "from_account_id": str(alice.account_id),
             "amount_minor": 10_000,
@@ -328,7 +342,7 @@ def test_list_and_get_scheduled_transfers_with_bola_isolation(
     ).json()
     r2 = client.post(
         "/api/v1/transfers/scheduled",
-        headers=alice.headers,
+        headers=_idem(alice),
         json={
             "from_account_id": str(alice.account_id),
             "amount_minor": 20_000,
@@ -342,7 +356,7 @@ def test_list_and_get_scheduled_transfers_with_bola_isolation(
     # Bob creates 1 schedule
     r3 = client.post(
         "/api/v1/transfers/scheduled",
-        headers=bob.headers,
+        headers=_idem(bob),
         json={
             "from_account_id": str(bob.account_id),
             "amount_minor": 30_000,
@@ -389,7 +403,7 @@ def test_list_scheduled_transfers_pagination_and_status_filter(
     for i in range(5):
         client.post(
             "/api/v1/transfers/scheduled",
-            headers=alice.headers,
+            headers=_idem(alice),
             json={
                 "from_account_id": str(alice.account_id),
                 "amount_minor": 10_000 + i,
@@ -430,7 +444,7 @@ def test_cancel_scheduled_transfer_endpoints(
     # 1. Cancel via POST /cancel
     st1 = client.post(
         "/api/v1/transfers/scheduled",
-        headers=alice.headers,
+        headers=_idem(alice),
         json={
             "from_account_id": str(alice.account_id),
             "amount_minor": AMOUNT,
@@ -464,7 +478,7 @@ def test_cancel_scheduled_transfer_endpoints(
     # 2. Cancel via DELETE alias
     st2 = client.post(
         "/api/v1/transfers/scheduled",
-        headers=alice.headers,
+        headers=_idem(alice),
         json={
             "from_account_id": str(alice.account_id),
             "amount_minor": AMOUNT,
@@ -490,7 +504,7 @@ def test_cancel_completed_instruction_returns_409(
 
     st = client.post(
         "/api/v1/transfers/scheduled",
-        headers=alice.headers,
+        headers=_idem(alice),
         json={
             "from_account_id": str(alice.account_id),
             "amount_minor": AMOUNT,
@@ -527,7 +541,7 @@ def test_pause_and_resume_lifecycle(
 
     st = client.post(
         "/api/v1/transfers/scheduled",
-        headers=alice.headers,
+        headers=_idem(alice),
         json={
             "from_account_id": str(alice.account_id),
             "amount_minor": AMOUNT,
@@ -577,7 +591,7 @@ def test_resume_fraud_block_fails_with_409(
 
     st = client.post(
         "/api/v1/transfers/scheduled",
-        headers=alice.headers,
+        headers=_idem(alice),
         json={
             "from_account_id": str(alice.account_id),
             "amount_minor": AMOUNT,
@@ -599,7 +613,7 @@ def test_resume_fraud_block_fails_with_409(
     # Customer resume fails with 409
     res = client.post(f"/api/v1/transfers/scheduled/{st['id']}/resume", headers=alice.headers)
     assert res.status_code == 409
-    assert "requires fraud analyst clearance" in res.json()["title"]
+    assert "cannot be resumed" in res.json()["title"]
 
 
 def test_resume_roll_forward_past_due_date(
@@ -613,7 +627,7 @@ def test_resume_roll_forward_past_due_date(
 
     st = client.post(
         "/api/v1/transfers/scheduled",
-        headers=alice.headers,
+        headers=_idem(alice),
         json={
             "from_account_id": str(alice.account_id),
             "amount_minor": AMOUNT,
@@ -689,7 +703,7 @@ def test_cancel_racing_with_worker_execution(
 ) -> None:
     """Proves that customer cancel and worker execution serialise cleanly without deadlock."""
     alice, _, payee = pair
-    today = date(2026, 11, 1)
+    today = utcnow().date()  # resume rolls next_run_date forward against the real UTC date
 
     with Session(migrated_engine) as session:
         inst = ScheduledTransfer(
@@ -747,7 +761,7 @@ def test_pause_racing_with_worker_execution(
 ) -> None:
     """Proves customer pause and worker execution serialise cleanly without deadlock."""
     alice, _, payee = pair
-    today = date(2026, 11, 1)
+    today = utcnow().date()  # resume rolls next_run_date forward against the real UTC date
 
     with Session(migrated_engine) as session:
         inst = ScheduledTransfer(
@@ -833,7 +847,7 @@ def test_resume_racing_with_worker_execution(
 ) -> None:
     """Proves customer resume and worker execution serialise cleanly without deadlock."""
     alice, _, payee = pair
-    today = date(2026, 11, 1)
+    today = utcnow().date()  # resume rolls next_run_date forward against the real UTC date
 
     with Session(migrated_engine) as session:
         inst = ScheduledTransfer(
@@ -918,3 +932,163 @@ def test_resume_racing_with_worker_execution(
             .all()
         )
         assert len(txs_after) == 1
+
+
+# =============================================================================
+# F. Idempotent creation, bounded dates and capacity (review of #296)
+# =============================================================================
+
+
+def _rent_order(alice: Actor, payee: dict[str, Any], **overrides: Any) -> dict[str, Any]:
+    start = (utcnow() + timedelta(days=1)).date()
+    body: dict[str, Any] = {
+        "from_account_id": str(alice.account_id),
+        "amount_minor": AMOUNT,
+        "payee_id": payee["id"],
+        "frequency": "MONTHLY",
+        "start_date": start.isoformat(),
+    }
+    return body | overrides
+
+
+def test_create_is_idempotent_so_a_retried_request_never_makes_a_second_standing_order(
+    client: TestClient,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    migrated_engine: Engine,
+) -> None:
+    alice, _, payee = pair
+    headers = _idem(alice)
+    first = client.post(
+        "/api/v1/transfers/scheduled", headers=headers, json=_rent_order(alice, payee)
+    )
+    again = client.post(
+        "/api/v1/transfers/scheduled", headers=headers, json=_rent_order(alice, payee)
+    )
+
+    assert first.status_code == 201, first.text
+    assert again.status_code == 201, again.text
+    assert again.headers.get("Idempotent-Replayed") == "true"
+    assert again.json() == first.json()
+    with Session(migrated_engine) as session:
+        rows = session.execute(
+            select(ScheduledTransfer).where(ScheduledTransfer.customer_id == alice.customer_id)
+        ).scalars()
+        assert len(list(rows)) == 1
+
+    # The same key with a different body is a key reuse, not a replay.
+    reused = client.post(
+        "/api/v1/transfers/scheduled",
+        headers=headers,
+        json=_rent_order(alice, payee, amount_minor=AMOUNT + 1),
+    )
+    assert reused.status_code == 422
+    # And without a key there is no create at all.
+    missing = client.post(
+        "/api/v1/transfers/scheduled", headers=alice.headers, json=_rent_order(alice, payee)
+    )
+    assert missing.status_code == 422
+
+
+def test_concurrent_creates_with_one_key_make_exactly_one_standing_order(
+    client: TestClient,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    migrated_engine: Engine,
+) -> None:
+    alice, _, payee = pair
+    headers = _idem(alice)
+    barrier = threading.Barrier(4)
+
+    def create() -> int:
+        barrier.wait()
+        response = client.post(
+            "/api/v1/transfers/scheduled", headers=headers, json=_rent_order(alice, payee)
+        )
+        return response.status_code
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        codes = list(pool.map(lambda _: create(), range(4)))
+
+    assert codes == [201] * 4
+    with Session(migrated_engine) as session:
+        count = len(
+            list(
+                session.execute(
+                    select(ScheduledTransfer.id).where(
+                        ScheduledTransfer.customer_id == alice.customer_id
+                    )
+                ).scalars()
+            )
+        )
+    assert count == 1
+
+
+def test_start_and_end_dates_are_bounded(
+    client: TestClient, pair: tuple[Actor, Actor, dict[str, Any]]
+) -> None:
+    alice, _, payee = pair
+    today = utcnow().date()
+    too_far = (today + timedelta(days=367)).isoformat()
+    in_a_year = today + timedelta(days=366)
+
+    late_start = client.post(
+        "/api/v1/transfers/scheduled",
+        headers=_idem(alice),
+        json=_rent_order(alice, payee, start_date=too_far),
+    )
+    assert late_start.status_code == 422
+    endless = client.post(
+        "/api/v1/transfers/scheduled",
+        headers=_idem(alice),
+        json=_rent_order(
+            alice,
+            payee,
+            start_date=in_a_year.isoformat(),
+            end_date=(in_a_year + timedelta(days=3_661)).isoformat(),
+        ),
+    )
+    assert endless.status_code == 422
+    longest = client.post(
+        "/api/v1/transfers/scheduled",
+        headers=_idem(alice),
+        json=_rent_order(
+            alice,
+            payee,
+            start_date=in_a_year.isoformat(),
+            end_date=(in_a_year + timedelta(days=3_660)).isoformat(),
+        ),
+    )
+    assert longest.status_code == 201, longest.text
+
+
+def test_live_standing_orders_per_customer_are_capped(
+    app: FastAPI,
+    client: TestClient,
+    settings: Settings,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+) -> None:
+    alice, _, payee = pair
+    capped = settings.model_copy(update={"max_active_scheduled_transfers_per_customer": 2})
+    app.dependency_overrides[get_settings] = lambda: capped
+    try:
+        first = client.post(
+            "/api/v1/transfers/scheduled", headers=_idem(alice), json=_rent_order(alice, payee)
+        )
+        second = client.post(
+            "/api/v1/transfers/scheduled", headers=_idem(alice), json=_rent_order(alice, payee)
+        )
+        third = client.post(
+            "/api/v1/transfers/scheduled", headers=_idem(alice), json=_rent_order(alice, payee)
+        )
+        assert [first.status_code, second.status_code, third.status_code] == [201, 201, 409]
+
+        # A cancelled order no longer counts.
+        cancelled = client.delete(
+            f"/api/v1/transfers/scheduled/{first.json()['id']}", headers=alice.headers
+        )
+        assert cancelled.status_code == 200
+        fourth = client.post(
+            "/api/v1/transfers/scheduled", headers=_idem(alice), json=_rent_order(alice, payee)
+        )
+        assert fourth.status_code == 201, fourth.text
+    finally:
+        app.dependency_overrides.pop(get_settings, None)

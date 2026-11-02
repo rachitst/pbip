@@ -25,7 +25,7 @@ Architectural goals, in priority order:
 Existing building blocks this design reuses (on `main` at `89ec2d6`):
 * `PaymentsService.create_transfer` - user advisory lock (`pg_advisory_xact_lock(hashtext(user_id))`),
   idempotency row on `uq_idempotency_keys_user_key`, `get_owned_account` / `get_owned_payee`, fraud
-  scoring (`BaselineRulesScorer`), daily limit, ledger posting, outbox event, audit, `commit()`.
+  scoring (the configured `FraudScorer`), daily limit, ledger posting, outbox event, audit, `commit()`.
 * `ledger.lock_accounts` - `FOR UPDATE` in sorted id order; `InsufficientFundsError` from
   `post_transaction` and `place_hold`.
 * `notifications.enqueue` (transactional outbox) and `relay_outbox` (Beat, every 10 s).
@@ -85,14 +85,23 @@ non-owned and non-existent are both **404**. Staff (no customer profile) get **4
 | `POST /scheduled` | validate and create; audit `SCHEDULED_TRANSFER_CREATED` | -> `ACTIVE`, `next_run_date = start_date`, `pause_reason = NULL` |
 | `GET /scheduled` | the customer's instructions | - |
 | `GET /scheduled/{id}` | one owned instruction | - |
-| `DELETE /scheduled/{id}` | cancel; audit `SCHEDULED_TRANSFER_CANCELLED` | `ACTIVE`/`PAUSED` -> `CANCELLED` (terminal), `pause_reason = NULL` |
+| `DELETE /scheduled/{id}` (alias `POST /scheduled/{id}/cancel`) | cancel; audit `SCHEDULED_TRANSFER_CANCELLED` | `ACTIVE`/`PAUSED` -> `CANCELLED` (terminal), `pause_reason = NULL` |
 | `POST /scheduled/{id}/pause` | pause (approved decision 1); audit `SCHEDULED_TRANSFER_PAUSED` | `ACTIVE` -> `PAUSED`, `pause_reason = 'CUSTOMER'` |
 | `POST /scheduled/{id}/resume` | resume (approved decision 1); audit `SCHEDULED_TRANSFER_RESUMED` | `PAUSED` -> `ACTIVE`, `pause_reason = NULL` (see R1/R5 below) |
 
 Creation validation: owned ACTIVE source account; destination is a VERIFIED owned payee or a different
 owned account (same rules as `_resolve_destination`); `0 < amount <= max_transfer_minor`; currency
-matches the source; `start_date >= today (UTC)`; `end_date >= start_date` when given. Creation moves no
-money, so it does not take an `Idempotency-Key`; executions do (section 5).
+matches the source; `today (UTC) <= start_date <= today + 366 days`; `start_date <= end_date <=
+start_date + 3660 days` when given (a standing order is bounded in time).
+
+**Creation is idempotent (amended in review of #296).** Creating an instruction moves no money by
+itself, but it pays out on every occurrence, so a retried or double-submitted create would double every
+future payment. `POST /scheduled` therefore requires the `Idempotency-Key` header like
+`POST /api/v1/transfers`: same user lock, same `idempotency_keys` table, a request hash that includes an
+`"op": "scheduled_transfer.create"` field (so a key reused across the two endpoints is a 422 reuse error,
+never a replay of the other endpoint), and the stored `201` body is replayed with
+`Idempotent-Replayed: true`. Proved by `test_create_is_idempotent_so_a_retried_request_never_makes_a_second_standing_order`
+and the real-threads `test_concurrent_creates_with_one_key_make_exactly_one_standing_order`.
 
 **Lifecycle and Transition Rules:**
 * **DELETE response (R2):** returns `200 OK` with the cancelled instruction object so the client UI can
@@ -106,15 +115,13 @@ money, so it does not take an `Idempotency-Key`; executions do (section 5).
   auto-paused due to a fraud BLOCK, the engine sets `status = 'PAUSED'` and `pause_reason = 'FRAUD_BLOCK'`.
   The customer `POST /scheduled/{id}/resume` endpoint checks `pause_reason`: if it is `'FRAUD_BLOCK'`, it
   strictly rejects the request with `409 Conflict` (detail: "Scheduled transfer is locked following a
-  security decline and requires fraud analyst clearance").
-  *Explicit authorized clearance:* resolving or closing a fraud alert alone does NOT automatically clear
-  the scheduled instruction's fraud lock. Clearing the fraud lock is an explicit authorized staff operation
-  requiring `require_roles([FRAUD_ANALYST, ADMIN], mfa=True)` (e.g. `POST /api/v1/fraud/scheduled-transfers/{id}/clear-lock`),
-  which sets `pause_reason = 'CUSTOMER'` (keeping `status = 'PAUSED'`) and logs an audit entry.
-  *Resuming after clearance:* once explicitly cleared, the instruction remains `PAUSED` until explicitly
-  resumed. Upon resuming, the schedule strictly adheres to the no-backlog rule (section 7): if
-  `next_run_date < today (UTC)`, `next_run_date` is rolled forward to the earliest occurrence `>= today`.
-  Resuming must **never** execute an expired occurrence or create a catch-up backlog.
+  security decline and cannot be resumed; cancel it and contact the bank").
+  *Not in this change:* a staff "clear the fraud lock" operation (`require_roles([FRAUD_ANALYST, ADMIN],
+  mfa=True)`, setting `pause_reason = 'CUSTOMER'` with an audit row) is deliberately **not implemented**
+  here; resolving a fraud alert does not unlock the instruction. Until that follow-up exists the
+  customer's recourse is to cancel the instruction (and create a new one once the bank has cleared
+  them), so a blocked standing order can never restart unattended. When it is added, resuming after
+  clearance must follow the no-backlog rule (section 7).
 * **Customer resume policy for CUSTOMER_ACTION_REQUIRED:** when an instruction was auto-paused due to a
   permanent failure (`pause_reason = 'CUSTOMER_ACTION_REQUIRED'`, e.g. source account frozen/closed or
   payee deleted/unverified), the customer may invoke `POST /scheduled/{id}/resume` only AFTER resolving
@@ -123,12 +130,13 @@ money, so it does not take an `Idempotency-Key`; executions do (section 5).
   `VERIFIED` owned payee. If validation fails, resuming is rejected with `422 Unprocessable` / `409 Conflict`
   explaining the unmet requirement. If validation succeeds, `status` becomes `ACTIVE`, `pause_reason` is
   cleared to `NULL`, and `next_run_date` rolls forward to `>= today` if in the past.
-* **Customer capacity (R6):** capacity is bounded via configurable application settings
-  (`Settings.max_active_scheduled_transfers_per_customer`, e.g. defaulting to 20 in dev/local) rather
-  than a hardcoded DB limit, allowing operational tuning without schema changes.
-* **List query (R7):** `GET /scheduled` returns an envelope `items: list[ScheduledTransferResponse]`
-  ordered by `next_run_date ASC, created_at DESC`. Keyset cursor pagination can be introduced if
-  customer volumes require it.
+* **Customer capacity (R6):** at most `Settings.max_active_scheduled_transfers_per_customer` (default 20)
+  live (`ACTIVE` or `PAUSED`) instructions per customer, counted under the user lock; one more is
+  `409 Conflict`. Cancelled and completed instructions do not count.
+* **List query (R7):** `GET /scheduled` returns a JSON array of `ScheduledTransferOut`, newest first
+  (`created_at DESC, id DESC`), with `status` filter and `limit` (1-100, default 50) / `offset`. A
+  customer holds at most a few dozen instructions (R6), so offset paging is adequate here; this is not
+  ledger-like data that needs a keyset cursor.
 
 ### 3. Recurrence rules (UTC)
 All dates are UTC calendar dates (`utcnow().date()`), matching Celery (`timezone="UTC"`) and the daily
@@ -333,6 +341,10 @@ For missed occurrences, every expired date receives its own 1:1 `SCHEDULED_TRANS
 * **Authorization:** the job only executes instructions created through the authorized API; at execution
   it re-validates ownership, account status and payee status against the stored `customer_id`, so a payee
   deleted or unverified after creation is not paid (see R11).
+* **Same scorer as a request:** the worker builds its `PaymentsService` with the same seam as
+  `POST /api/v1/transfers` (`fraud.dependencies.build_fraud_scorer`, velocity counters, GeoIP resolver),
+  and loads the model once per worker process (`load_engine`, cached), so `FRAUD_SCORER=hybrid` scores
+  scheduled runs with the model too (`test_worker_uses_the_configured_fraud_scorer`).
 * **Fail safe:** fraud scoring runs on every execution; a scorer failure follows the existing fail-safe
   rule (rules-only, never allow-all).
 * **No sensitive data** in logs, metrics labels or notifications (ids, amounts, codes only).

@@ -112,18 +112,23 @@ def create_transfer(
     "/scheduled",
     response_model=ScheduledTransferOut,
     status_code=201,
-    summary="Create a recurring transfer instruction",
+    summary="Create a recurring transfer instruction (idempotent)",
 )
 def create_scheduled_transfer(
     body: ScheduledTransferCreate,
+    idempotency_key: IdempotencyKeyHeader,
     principal: Principal = Depends(get_current_principal),
     customer: Customer = Depends(get_current_customer),
     service: PaymentsService = Depends(get_payments_service),
     meta: RequestMeta = Depends(get_request_meta),
-) -> ScheduledTransferOut:
-    return to_scheduled_transfer_out(
+) -> JSONResponse:
+    return _respond(
         service.create_scheduled_transfer(
-            customer=customer, user_id=principal.user_id, command=body, meta=meta
+            customer=customer,
+            user_id=principal.user_id,
+            command=body,
+            idempotency_key=idempotency_key,
+            meta=meta,
         )
     )
 

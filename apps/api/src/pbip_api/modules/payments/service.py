@@ -57,10 +57,13 @@ from pbip_api.modules.payments.models import (
 )
 from pbip_api.modules.payments.policy import get_owned_scheduled_transfer
 from pbip_api.modules.payments.recurrence import UpcomingOccurrence, compute_next_occurrence
-from pbip_api.modules.payments.schemas import ScheduledTransferCreate
+from pbip_api.modules.payments.schemas import ScheduledTransferCreate, to_scheduled_transfer_out
 
 # Wrong step-up codes for ONE transfer before it goes to an analyst instead (TASK-037).
 STEP_UP_MAX_FAILURES = 3
+# Sane bounds for a standing order (ADR-0023): first run within a year, last within ten years.
+SCHEDULE_MAX_LEAD_DAYS = 366
+SCHEDULE_MAX_SPAN_DAYS = 3_660
 
 
 class LimitExceededError(UnprocessableError):
@@ -622,15 +625,81 @@ class PaymentsService:
         customer: Customer,
         user_id: UUID,
         command: ScheduledTransferCreate,
+        idempotency_key: str,
         meta: RequestMeta | None = None,
-    ) -> ScheduledTransfer:
-        """Create a scheduled transfer instruction (ADR-0023). Moves no money."""
-        today = utcnow().date()
-        if command.start_date < today:
-            raise UnprocessableError("start_date cannot be in the past")
+    ) -> TransferResult:
+        """Create a scheduled transfer instruction (ADR-0023). Moves no money itself, but every
+        instruction pays out on each occurrence, so a retried create must not make a second one:
+        it is idempotent like ``POST /api/v1/transfers`` (same user lock, same key table)."""
+        self._validate_schedule_dates(command)
         if command.amount_minor > self.settings.max_transfer_minor:
             raise LimitExceededError("amount exceeds the per-transfer limit")
 
+        self._lock_user(user_id)
+        idem_id, replay = self._begin_idempotent(
+            user_id, idempotency_key, self._schedule_request_hash(user_id, command)
+        )
+        if replay is not None:
+            return replay
+        self._enforce_schedule_capacity(customer.id)
+        instruction = self._insert_scheduled_transfer(customer, user_id, command, meta)
+        outcome = TransferResult(
+            201, to_scheduled_transfer_out(instruction).model_dump(mode="json")
+        )
+        row = self.session.get(IdempotencyKey, idem_id)
+        if row is None:
+            raise RuntimeError("idempotency row vanished")
+        row.response_status = outcome.status_code
+        row.response_body = outcome.body
+        self.session.commit()
+        return outcome
+
+    def _enforce_schedule_capacity(self, customer_id: UUID) -> None:
+        """Counted under the user lock, so two concurrent creates cannot both squeeze in."""
+        live = self.session.execute(
+            select(func.count())
+            .select_from(ScheduledTransfer)
+            .where(
+                ScheduledTransfer.customer_id == customer_id,
+                ScheduledTransfer.status.in_(
+                    (ScheduledTransferStatus.ACTIVE, ScheduledTransferStatus.PAUSED)
+                ),
+            )
+        ).scalar_one()
+        if live >= self.settings.max_active_scheduled_transfers_per_customer:
+            raise ConflictError("too many scheduled transfers; cancel one before adding another")
+
+    @staticmethod
+    def _validate_schedule_dates(command: ScheduledTransferCreate) -> None:
+        today = utcnow().date()
+        if command.start_date < today:
+            raise UnprocessableError("start_date cannot be in the past")
+        if command.start_date > today + timedelta(days=SCHEDULE_MAX_LEAD_DAYS):
+            raise UnprocessableError("start_date must be within one year")
+        if command.end_date is not None and command.end_date > command.start_date + timedelta(
+            days=SCHEDULE_MAX_SPAN_DAYS
+        ):
+            raise UnprocessableError("end_date must be within ten years of start_date")
+
+    @staticmethod
+    def _schedule_request_hash(user_id: UUID, command: ScheduledTransferCreate) -> str:
+        """Distinct from ``_request_hash`` (the "op" field), so a key reused across the two
+        endpoints is a 422 reuse error, never a replay of the other endpoint's response."""
+        canonical = json.dumps(
+            {"op": "scheduled_transfer.create", "user": str(user_id)}
+            | command.model_dump(mode="json"),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(canonical.encode()).hexdigest()
+
+    def _insert_scheduled_transfer(
+        self,
+        customer: Customer,
+        user_id: UUID,
+        command: ScheduledTransferCreate,
+        meta: RequestMeta | None,
+    ) -> ScheduledTransfer:
         source = get_owned_account(self.session, customer.id, command.from_account_id)
         if source.status != AccountStatus.ACTIVE:
             raise UnprocessableError("source account is not active")
@@ -689,7 +758,6 @@ class PaymentsService:
                 "end_date": instruction.end_date.isoformat() if instruction.end_date else None,
             },
         )
-        self.session.commit()
         return instruction
 
     def list_scheduled_transfers(
@@ -808,8 +876,8 @@ class PaymentsService:
             raise ConflictError("completed scheduled transfer cannot be resumed")
         if instruction.pause_reason == SchedulePauseReason.FRAUD_BLOCK:
             raise ConflictError(
-                "Scheduled transfer is locked following a security decline "
-                "and requires fraud analyst clearance"
+                "Scheduled transfer was stopped after a security decline and cannot be resumed; "
+                "cancel it and contact the bank"
             )
 
         source = get_owned_account(self.session, customer.id, instruction.from_account_id)

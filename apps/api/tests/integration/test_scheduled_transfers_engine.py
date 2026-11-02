@@ -1,21 +1,26 @@
 """PostgreSQL integration tests for scheduled transfer execution engine (TASK-015 / ADR-0023)."""
 
+import threading
 import uuid
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from typing import Any
 from unittest.mock import patch
 
 import pytest
-from pbip_api.core.config import get_settings
+from pbip_api.core.config import Settings
 from pbip_api.modules.accounts.models import Account, AccountStatus
 from pbip_api.modules.auth.dependencies import get_field_cipher, get_password_service
 from pbip_api.modules.auth.service import AuthService
 from pbip_api.modules.compliance.models import AuditLog
+from pbip_api.modules.fraud.models import FraudEvent
 from pbip_api.modules.ledger import service as ledger
 from pbip_api.modules.ledger.models import IdempotencyKey, Transaction, TransactionStatus
 from pbip_api.modules.notifications.models import Notification, OutboxEvent
 from pbip_api.modules.notifications.service import relay_outbox
+from pbip_api.modules.payees.models import Payee, PayeeStatus
+from pbip_api.modules.payments import scheduled_service
 from pbip_api.modules.payments.models import (
     ScheduledTransfer,
     ScheduledTransferStatus,
@@ -39,6 +44,13 @@ from sqlalchemy.orm import Session
 pytestmark = pytest.mark.integration
 
 AMOUNT = 10_000
+
+
+@pytest.fixture(autouse=True)
+def _worker_settings(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
+    """The worker reads ``get_settings()`` (the process environment); tests use the generated
+    test settings instead, so they need no secrets in the environment (CI has none)."""
+    monkeypatch.setattr(scheduled_service, "get_settings", lambda: settings)
 
 
 @pytest.fixture
@@ -472,6 +484,7 @@ def test_recovery_rolls_back_atomically_on_error(
 def test_fraud_block_pauses_and_advances(
     migrated_engine: Engine,
     pair: tuple[Actor, Actor, dict[str, Any]],
+    settings: Settings,
 ) -> None:
     alice, _, payee = pair
     today = date(2026, 11, 1)
@@ -483,7 +496,6 @@ def test_fraud_block_pauses_and_advances(
     scorer = FixedDecisionScorer(FraudDecision.BLOCK)
 
     with Session(migrated_engine) as session:
-        settings = get_settings()
         auth = AuthService(
             session,
             settings,
@@ -528,6 +540,7 @@ def test_fraud_block_pauses_and_advances(
 def test_fraud_step_up_converts_to_review_with_hold(
     migrated_engine: Engine,
     pair: tuple[Actor, Actor, dict[str, Any]],
+    settings: Settings,
 ) -> None:
     alice, _, payee = pair
     today = date(2026, 11, 1)
@@ -539,7 +552,6 @@ def test_fraud_step_up_converts_to_review_with_hold(
     scorer = FixedDecisionScorer(FraudDecision.STEP_UP)
 
     with Session(migrated_engine) as session:
-        settings = get_settings()
         auth = AuthService(
             session,
             settings,
@@ -759,3 +771,223 @@ def test_process_due_scheduled_transfers_orchestrator(
 
     results = process_due_scheduled_transfers(migrated_engine, today_utc=today)
     assert results[ScheduledExecutionOutcome.POSTED.value] == 2
+
+
+# =============================================================================
+# Review of #296: same rules as POST /api/v1/transfers, exactly-once under concurrency
+# =============================================================================
+
+
+def _service(session: Session, decision: FraudDecision, settings: Settings) -> PaymentsService:
+    auth = AuthService(
+        session, settings, get_password_service(settings), get_field_cipher(settings)
+    )
+    return PaymentsService(session, settings, FixedDecisionScorer(decision), auth)
+
+
+def _transactions_from(session: Session, account_id: uuid.UUID) -> list[Transaction]:
+    return list(
+        session.execute(select(Transaction).where(Transaction.debit_account_id == account_id))
+        .scalars()
+        .all()
+    )
+
+
+def test_concurrent_workers_on_one_due_occurrence_post_it_exactly_once(
+    migrated_engine: Engine,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+) -> None:
+    """Real threads, real PostgreSQL: duplicate Celery deliveries racing for one occurrence."""
+    alice, bob, payee = pair
+    today = date(2026, 11, 1)
+    with Session(migrated_engine) as session:
+        inst_id = _create_instruction(session, alice, payee, next_run_date=today).id
+
+    workers = 6
+    barrier = threading.Barrier(workers)
+
+    def run(_: int) -> ScheduledExecutionOutcome:
+        with Session(migrated_engine, expire_on_commit=False) as session:
+            barrier.wait()
+            return execute_scheduled_instruction(session, inst_id, today_utc=today)
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        outcomes = list(pool.map(run, range(workers)))
+
+    assert outcomes.count(ScheduledExecutionOutcome.POSTED) == 1, outcomes
+    assert set(outcomes) <= {
+        ScheduledExecutionOutcome.POSTED,
+        ScheduledExecutionOutcome.SKIPPED_LOCKED,
+        ScheduledExecutionOutcome.SKIPPED_INACTIVE,
+    }
+    with Session(migrated_engine) as session:
+        assert len(_transactions_from(session, alice.account_id)) == 1
+        src = session.get(Account, alice.account_id)
+        dst = session.get(Account, bob.account_id)
+        assert src is not None and dst is not None
+        assert src.ledger_balance == 100_000 - AMOUNT
+        assert dst.ledger_balance == AMOUNT
+        row = session.get(ScheduledTransfer, inst_id)
+        assert row is not None and row.next_run_date == date(2026, 11, 2)
+
+
+def test_overlapping_beat_ticks_and_a_retried_task_never_post_twice(
+    migrated_engine: Engine,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+) -> None:
+    """Two whole polling runs at once (a slow tick overlapping the next), then a redelivery."""
+    alice, _, payee = pair
+    today = date(2026, 11, 1)
+    with Session(migrated_engine) as session:
+        for _ in range(3):
+            _create_instruction(session, alice, payee, next_run_date=today)
+
+    barrier = threading.Barrier(2)
+
+    def tick(_: int) -> dict[str, int]:
+        barrier.wait()
+        return process_due_scheduled_transfers(migrated_engine, today_utc=today)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        runs = list(pool.map(tick, range(2)))
+    retried = process_due_scheduled_transfers(migrated_engine, today_utc=today)
+
+    assert sum(run[ScheduledExecutionOutcome.POSTED.value] for run in runs) == 3
+    assert retried[ScheduledExecutionOutcome.POSTED.value] == 0
+    with Session(migrated_engine) as session:
+        assert len(_transactions_from(session, alice.account_id)) == 3
+        src = session.get(Account, alice.account_id)
+        assert src is not None and src.ledger_balance == 100_000 - 3 * AMOUNT
+
+
+def test_a_scheduled_run_is_fraud_scored_and_its_feature_snapshot_persisted(
+    migrated_engine: Engine,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    settings: Settings,
+) -> None:
+    alice, _, payee = pair
+    today = date(2026, 11, 1)
+    with Session(migrated_engine) as session:
+        inst_id = _create_instruction(session, alice, payee, next_run_date=today).id
+
+    with Session(migrated_engine) as session:
+        outcome = execute_scheduled_instruction(
+            session,
+            inst_id,
+            today_utc=today,
+            payments_service=_service(session, FraudDecision.REVIEW, settings),
+        )
+    assert outcome == ScheduledExecutionOutcome.REVIEW
+
+    with Session(migrated_engine) as session:
+        row = session.get(ScheduledTransfer, inst_id)
+        assert row is not None and row.last_transaction_id is not None
+        events = (
+            session.execute(
+                select(FraudEvent).where(FraudEvent.transaction_id == row.last_transaction_id)
+            )
+            .scalars()
+            .all()
+        )
+        assert len(events) == 1
+        assert events[0].decision == FraudDecision.REVIEW.value
+        tx = session.get(Transaction, row.last_transaction_id)
+        assert tx is not None and tx.status == TransactionStatus.PENDING_REVIEW
+        held = session.execute(
+            select(OutboxEvent).where(OutboxEvent.event_type == "TRANSFER_UNDER_REVIEW")
+        ).scalars()
+        assert len(list(held)) == 1  # the customer's bell says the run is held
+
+
+def test_a_fraud_block_declines_the_run_and_tells_the_customer(
+    migrated_engine: Engine,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    settings: Settings,
+) -> None:
+    alice, bob, payee = pair
+    today = date(2026, 11, 1)
+    with Session(migrated_engine) as session:
+        inst_id = _create_instruction(session, alice, payee, next_run_date=today).id
+
+    with Session(migrated_engine) as session:
+        outcome = execute_scheduled_instruction(
+            session,
+            inst_id,
+            today_utc=today,
+            payments_service=_service(session, FraudDecision.BLOCK, settings),
+        )
+    assert outcome == ScheduledExecutionOutcome.BLOCK
+
+    with Session(migrated_engine) as session:
+        row = session.get(ScheduledTransfer, inst_id)
+        assert row is not None and row.last_transaction_id is not None
+        tx = session.get(Transaction, row.last_transaction_id)
+        assert tx is not None and tx.status == TransactionStatus.DECLINED
+        dst = session.get(Account, bob.account_id)
+        assert dst is not None and dst.ledger_balance == 0
+        types = set(session.execute(select(OutboxEvent.event_type)).scalars())
+        assert {"TRANSFER_DECLINED", "SCHEDULED_TRANSFER_PAUSED"} <= types
+
+
+def test_the_daily_limit_applies_to_a_scheduled_run_and_it_retries_the_same_day(
+    migrated_engine: Engine,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    settings: Settings,
+) -> None:
+    alice, _, payee = pair
+    today = date(2026, 11, 1)
+    limited = settings.model_copy(update={"daily_transfer_limit_minor": AMOUNT - 1})
+    with Session(migrated_engine) as session:
+        inst_id = _create_instruction(session, alice, payee, next_run_date=today).id
+
+    with Session(migrated_engine) as session:
+        outcome = execute_scheduled_instruction(
+            session,
+            inst_id,
+            today_utc=today,
+            payments_service=_service(session, FraudDecision.ALLOW, limited),
+        )
+    assert outcome == ScheduledExecutionOutcome.RETRYABLE_FAILURE
+
+    with Session(migrated_engine) as session:
+        row = session.get(ScheduledTransfer, inst_id)
+        assert row is not None
+        assert row.status == ScheduledTransferStatus.ACTIVE
+        assert row.next_run_date == today  # retried later today, never skipped silently
+        assert row.last_failure_reason == "daily_limit_exceeded"
+        assert _transactions_from(session, alice.account_id) == []
+        failed = session.execute(
+            select(OutboxEvent).where(OutboxEvent.event_type == "SCHEDULED_TRANSFER_FAILED")
+        ).scalars()
+        assert len(list(failed)) == 1
+
+
+def test_a_payee_that_is_no_longer_verified_is_not_paid_and_the_order_pauses(
+    migrated_engine: Engine,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+) -> None:
+    alice, bob, payee = pair
+    today = date(2026, 11, 1)
+    with Session(migrated_engine) as session:
+        inst_id = _create_instruction(session, alice, payee, next_run_date=today).id
+        stored = session.get(Payee, uuid.UUID(str(payee["id"])))
+        assert stored is not None
+        stored.status = PayeeStatus.PENDING_VERIFICATION  # e.g. edited, awaiting re-verification
+        session.commit()
+
+    with Session(migrated_engine) as session:
+        outcome = execute_scheduled_instruction(session, inst_id, today_utc=today)
+    assert outcome == ScheduledExecutionOutcome.PERMANENT_FAILURE
+
+    with Session(migrated_engine) as session:
+        row = session.get(ScheduledTransfer, inst_id)
+        assert row is not None
+        assert row.status == ScheduledTransferStatus.PAUSED
+        assert row.pause_reason == SchedulePauseReason.CUSTOMER_ACTION_REQUIRED
+        assert _transactions_from(session, alice.account_id) == []
+        dst = session.get(Account, bob.account_id)
+        assert dst is not None and dst.ledger_balance == 0
+        paused = session.execute(
+            select(OutboxEvent).where(OutboxEvent.event_type == "SCHEDULED_TRANSFER_PAUSED")
+        ).scalars()
+        assert len(list(paused)) == 1

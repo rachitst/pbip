@@ -3,6 +3,8 @@
 import time
 from datetime import date
 from enum import StrEnum
+from functools import cache
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import structlog
@@ -13,6 +15,7 @@ from sqlalchemy.orm import Session
 from pbip_api.core.config import get_settings
 from pbip_api.core.db import get_engine, utcnow
 from pbip_api.core.errors import ConflictError, NotFoundError, UnprocessableError
+from pbip_api.core.geoip import resolver_for
 from pbip_api.core.metrics import (
     SCHEDULED_MISSED_OCCURRENCES_TOTAL,
     SCHEDULED_TRANSFERS_TOTAL,
@@ -24,7 +27,8 @@ from pbip_api.modules.auth.dependencies import get_field_cipher, get_password_se
 from pbip_api.modules.auth.service import AuthService
 from pbip_api.modules.compliance.service import AuditService
 from pbip_api.modules.customers.models import Customer
-from pbip_api.modules.fraud.baseline import BaselineRulesScorer
+from pbip_api.modules.fraud.dependencies import build_fraud_scorer
+from pbip_api.modules.fraud.hybrid import load_engine
 from pbip_api.modules.ledger.models import TransactionStatus
 from pbip_api.modules.ledger.service import AccountNotActiveError, InsufficientFundsError
 from pbip_api.modules.notifications import service as notifications
@@ -43,6 +47,9 @@ from pbip_api.modules.payments.service import (
     TransferChannel,
     TransferCommand,
 )
+
+if TYPE_CHECKING:  # the model stack loads only when the hybrid flag is on (fraud/hybrid.py)
+    from pbip_ml.fraud.hybrid import HybridScorer
 
 logger = structlog.get_logger(__name__)
 
@@ -80,17 +87,36 @@ def lock_user_xact(session: Session, user_id: UUID) -> None:
     )
 
 
+@cache
+def _worker_fraud_engine() -> "HybridScorer | None":
+    """The model stack, loaded once per worker process like ``app.state.fraud_engine`` in the API.
+
+    ``load_engine`` returns None for ``FRAUD_SCORER=rules`` and on any load failure (rules-only
+    fail-safe, never allow-all), so the worker can never be less strict than a request.
+    """
+    return load_engine(get_settings())
+
+
 def _build_default_payments_service(session: Session) -> PaymentsService:
+    """Wire the same collaborators ``POST /api/v1/transfers`` gets (``payments/router.py``)."""
     settings = get_settings()
-    passwords = get_password_service(settings)
-    cipher = get_field_cipher(settings)
-    try:
-        counters: VelocityCounters | None = VelocityCounters(get_redis())
-    except Exception:
-        counters = None
-    auth = AuthService(session, settings, passwords, cipher, velocity=counters)
-    scorer = BaselineRulesScorer(session, counters)
-    return PaymentsService(session, settings, scorer, auth, counters=counters)
+    counters = VelocityCounters(get_redis())  # an unreachable Redis falls back to PostgreSQL
+    auth = AuthService(
+        session,
+        settings,
+        get_password_service(settings),
+        get_field_cipher(settings),
+        velocity=counters,
+    )
+    scorer = build_fraud_scorer(session, settings, _worker_fraud_engine(), counters)
+    return PaymentsService(
+        session,
+        settings,
+        scorer,
+        auth,
+        resolver_for(settings.geoip_country_db_path),
+        counters,
+    )
 
 
 def _recover_missed_occurrences(
