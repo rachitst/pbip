@@ -1,11 +1,12 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
+import { newPassword } from "./support";
 
 // The routed shell (ADR-0016) against the full stack: real URLs, reload, back, role areas, the
 // skip link and the collapsed navigation at phone width. One customer is registered for the file
 // and each test signs in once: registration and login are rate limited per IP (10/h, 10/min) and
 // sprint1.spec.ts shares that budget.
-const PASSWORD = `${crypto.randomUUID()}Aa1!`;
+const PASSWORD = newPassword();
 const EMAIL = `e2e-shell-${Date.now().toString(36)}@example.com`;
 
 test.describe.configure({ mode: "serial" });

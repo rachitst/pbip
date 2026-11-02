@@ -15,6 +15,7 @@ from pbip_api.core.passwords_blocklist import (
     validate_not_breached_or_common,
 )
 from pbip_api.core.security import validate_password_strength
+from pbip_test_support import generated_password
 
 pytestmark = pytest.mark.unit
 
@@ -127,3 +128,17 @@ def test_normalisation_is_linear_on_adversarial_input() -> None:
     started = time.perf_counter()
     normalize_password_core(adversarial)
     assert time.perf_counter() - started < 0.5
+
+
+def test_raw_uuid_passwords_can_hold_a_keyboard_run_the_policy_rejects() -> None:
+    """Why test helpers must not build passwords as ``f"{uuid4()}Aa1!"``: this exact value came
+    from the failing CI run on PR #344 (``...-234566968386`` holds ``23456``)."""
+    assert has_keyboard_sequence("b4c60a4d-433b-44d0-a198-234566968386Aa1!")
+
+
+def test_generated_test_passwords_always_pass_the_full_policy() -> None:
+    """The shared generator splits the hex into groups of four, so no 5-character run can form."""
+    for _ in range(5_000):
+        password = generated_password()
+        validate_password_strength(password, "e2e-owner-tag@example.com")
+        assert check_common_or_breached(password) is None
