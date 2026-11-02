@@ -74,9 +74,9 @@ The use-case document lists six actors. Here is the support for each:
 | Actor | Role in code | What exists | Status |
 |---|---|---|---|
 | Retail customer | `CUSTOMER` (plus a customer profile) | Web app and API | Partial (see [traceability](../requirements/traceability.md)) |
-| Relationship manager | `RELATIONSHIP_MANAGER` | `GET /api/v1/insights/customers` | Partial: no UI (TASK-066) |
+| Relationship manager | `RELATIONSHIP_MANAGER` | `GET /api/v1/insights/customers`; behavioural analytics dashboard (`GET /api/v1/insights/behaviour`, `/staff/behaviour`, TASK-101) | Partial |
 | Fraud analyst | `FRAUD_ANALYST` | Alert queue and alert detail screens (`/staff/fraud`) with release/reject; telemetry API `GET /fraud/stats` | Implemented. The telemetry charts are part of the security dashboard (TASK-099, Planned) |
-| Compliance officer | `COMPLIANCE_OFFICER` | Audit-log API and web page with chain verification | Implemented (audit); alerts and exceptions Planned (TASK-100) |
+| Compliance officer | `COMPLIANCE_OFFICER` | Audit-log API and web page with chain verification; exceptions and regulatory indicators (`/compliance/exceptions`, `/staff/compliance`, TASK-100, ADR-0027) | Implemented |
 | Banking administrator | `ADMIN` | Create staff users, inspect and clear lockouts (API) | Partial: no configuration UI (no task) |
 | AI assistant | none; it acts as the customer | Read-only tools with the customer id injected server-side | Implemented (narrow scope; TASK-105 for FAQ, product discovery and investments) |
 
@@ -167,15 +167,15 @@ Across modules, code calls the other module's `service` or `policy` functions on
 | `fraud` | Baseline rules, hybrid scorer adapter, event persistence, alert queue, telemetry (decisions over time, top reasons, masked risky payees; 60 s Redis cache) | `/fraud/alerts*`, `/fraud/stats` | Implemented (API and analyst web screens) |
 | `notifications` | Inbox, read state, outbox relay target | `/notifications*` | Implemented (API and web bell) |
 | `analytics` | Spending, trends, health score, balance forecast, segment; nightly and weekly jobs | `/analytics/*` | Implemented. Forecast UI Planned (TASK-050) |
-| `insights` | Relationship-manager churn signals | `/insights/customers` | Partial: no UI (TASK-066) |
+| `insights` | Relationship-manager churn signals; staff route of the aggregate behavioural dashboard (queries in `analytics/behaviour.py`, ADR-0027) | `/insights/customers`, `/insights/behaviour` | Partial |
 | `recommendations` | Rule-based product recommendations with reasons (`rules-v1`) | `/recommendations` | Partial: no UI (TASK-062); age band from `customers.service.recommendation_age_band`, `unknown` without date of birth and consent (TASK-107) |
 | `loans` | Catalogue (3 products), EMI schedule, explainable eligibility; idempotent application with ledger disbursal, stored schedule and a repayment instruction on the scheduled transfers engine ([ADR-0024](../adr/0024-loan-disbursal-and-repayments.md)) | `/loans*` | Implemented (API and web) |
 | `assistant` | Read-only tool registry, rules-first router, Ollama adapter, guard, sanitiser, output filter, SSE | `/assistant/*` | Implemented (5 tools). FAQ, product and investment tools Planned (TASK-105) |
 | `events` | Clickstream batch ingestion into monthly partitions | `/events/batch` | Partial: the web app does not send events yet (TASK-055 In Progress) |
-| `compliance` | Hash-chained audit log read and verify | `/compliance/audit-logs*` | Implemented |
+| `compliance` | Hash-chained audit log read and verify; exceptions (blocked payments, lockouts, chain failures) with audited acknowledge/resolve and SLA indicators (ADR-0027) | `/compliance/audit-logs*`, `/compliance/exceptions*` | Implemented |
 | `health` | Liveness and readiness (DB + Redis) | `/api/health/live`, `/api/health/ready` | Implemented |
 | `statements` | PDF/CSV statements | none (empty package) | Planned (TASK-016, TASK-074) |
-| `wealth` | Deposits, funds, insurance, comparison | none (empty package) | Planned (TASK-063, TASK-064, TASK-065, TASK-096, TASK-097, TASK-098) |
+| `wealth` | Seeded catalogue (fixed deposits, illustrative funds and gold bond, risk filter); exact quarterly-compounded deposit maths; idempotent fixed-deposit booking and closure through the ledger (`SYS-FIXED-DEPOSITS`), maturity and portfolio computed on read ([ADR-0025](../adr/0025-wealth-catalogue-and-fixed-deposits.md)) | `/wealth/products`, `/wealth/fixed-deposits*`, `/wealth/portfolio` | Implemented (API and web `/wealth`); insurance (TASK-096), risk profile (TASK-097) and comparison (TASK-098) Planned |
 
 Scheduled and recurring transfers live in the `payments` module (`scheduled_service.py`, table `scheduled_transfers`,
 migration `0014`, [ADR-0023](../adr/0023-scheduled-transfers.md)); the Celery job is in section 4.2.

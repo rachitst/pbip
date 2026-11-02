@@ -520,15 +520,23 @@ compare them, so that I can invest sensibly.*
 * ✓ The recommendation engine suggests a fixed deposit or an index-fund SIP only when income, savings ratio, buffer
   and balance qualify.
 * ✗ The suggestions use my risk tolerance.
-* ✗ A wealth catalogue lists FDs, funds and bonds.
+* ✓ A wealth catalogue lists FDs, funds and a sovereign gold bond with tenure, APY and lock-in, filterable by risk
+  level; funds state no yield because PBIP has no market data (TASK-063, ADR-0025).
+* ✓ I can book a fixed deposit from my account with an exact maturity preview, see it with a maturity countdown in
+  my portfolio, and withdraw it at maturity or close it early at the penalty rate (TASK-064, TASK-065).
 * ✗ Insurance products are listed.
 * ✗ Two to four products can be compared side by side.
 
 **Status:** Partial.
 
-**Tests:** `ml/tests/test_recommendations.py::test_eligibility_exclusion_for_high_debt_ratio`.
+**Tests:** `ml/tests/test_recommendations.py::test_eligibility_exclusion_for_high_debt_ratio`;
+`test_wealth.py::test_catalogue_lists_deposits_funds_and_the_gold_bond_with_yield_and_lock_in`,
+`test_catalogue_filters_by_risk_level`, `test_booking_posts_one_balanced_entry_and_stores_the_deposit`,
+`test_premature_closure_pays_the_penalty_rate_and_balances`,
+`test_maturity_is_computed_on_read_and_pays_exactly_the_projected_amount`; `test_wealth_deposit_math.py`;
+`Wealth.test.tsx`.
 
-**Tasks:** TASK-054 (In Progress); TASK-063, TASK-064, TASK-065, TASK-096, TASK-097, TASK-098 (Todo).
+**Tasks:** TASK-054 (In Progress); TASK-063, TASK-064, TASK-065 (In review); TASK-096, TASK-097, TASK-098 (Todo).
 
 ## UC-08 AI assistant interaction
 
@@ -706,7 +714,7 @@ behavioural profiles reflect real engagement.*
 `test_events_reject_extra_fields_free_text_and_urls`, `test_no_ip_address_or_user_agent_is_stored`,
 `test_events_partition_routing_across_months`.
 
-**Tasks:** TASK-055 (In Progress); TASK-101 (Todo).
+**Tasks:** TASK-055 (In Progress); TASK-101 (In Review: reads the events; the web app still sends none).
 
 ### US-31 Build a behavioural profile from spend and income (FR-52)
 
@@ -739,7 +747,10 @@ behavioural dashboard, so that I contact the right people.*
   loan propensity; a customer detail shows the 30-day volume, health score, churn score and eligible products;
   calls and notes are logged server-side and audited (TASK-066, ADR-0022). RMs see every customer: there is
   no RM-to-customer assignment.
-* ✗ A behavioural dashboard shows segments, affinity and engagement.
+* ✓ A behavioural dashboard (`/staff/behaviour`, `GET /insights/behaviour`, TASK-101) shows the segment mix, spend by
+  segment, product holdings and recommendation clicks, and clickstream engagement, filtered by segment and period;
+  aggregates only, with a per-segment link to the RM leads (`integration/test_behaviour_analytics.py`,
+  `BehaviourAnalytics.test.tsx`).
 
 **Status:** Partial.
 
@@ -750,7 +761,7 @@ behavioural dashboard, so that I contact the right people.*
 `test_logged_interaction_is_listed_shared_and_audited_without_the_note`); `security/test_route_policy_registry.py`
 (`test_every_insights_route_is_behind_the_mfa_rm_gate`); web `RMInsights.test.tsx`, `routing.test.tsx`.
 
-**Tasks:** TASK-056 (In Progress); TASK-066 (In Review); TASK-101 (Todo).
+**Tasks:** TASK-056 (In Progress); TASK-066 (In Review); TASK-101 (In Review).
 
 ## UC-12 Product recommendation engine
 
@@ -833,14 +844,21 @@ acknowledge and resolve, with indicators of overdue reviews.*
 
 **Acceptance criteria:**
 
-* ✗ An exceptions list with acknowledge and resolve actions, each audited.
-* ✗ SLA and unresolved-count indicators.
+* ✓ COMPLIANCE_OFFICER or ADMIN with MFA lists blocked payments, lockouts and audit-chain failures (`/staff/compliance`)
+  and acknowledges or resolves each; every action is an audit row with the actor and the reason, and the status is
+  read back from those rows (ADR-0027).
+* ✓ Indicators: unresolved exceptions in the period, exceptions not acknowledged within 24 hours, fraud reviews open
+  past 24 hours, and the audit chain status; each shown with its definition.
 
-**Status:** Planned.
+**Status:** Implemented (in review).
 
-**Tests:** none yet.
+**Tests:** `integration/test_compliance_exceptions.py` (`test_exceptions_and_indicators_are_exact_on_known_events`,
+`test_acknowledge_then_resolve_is_audited_with_actor_and_reason`, `test_a_tampered_audit_chain_is_an_exception_that_can_be_worked`,
+`test_concurrent_acknowledgements_record_exactly_one`, `test_compliance_exceptions_need_compliance_or_admin_with_mfa`,
+`test_exceptions_response_carries_no_customer_pii`); `security/test_route_policy_registry.py`
+(`test_every_compliance_route_is_behind_the_mfa_compliance_gate`); web `ComplianceDashboard.test.tsx`.
 
-**Tasks:** TASK-100 (Todo).
+**Tasks:** TASK-100 (In Review).
 
 ---
 
@@ -848,6 +866,6 @@ acknowledge and resolve, with indicators of overdue reviews.*
 
 | Status | Stories |
 |---|---|
-| Implemented | US-02, US-05, US-09, US-10, US-17, US-18, US-26, US-28, US-29, US-31, US-34, US-35 |
+| Implemented | US-02, US-05, US-09, US-10, US-17, US-18, US-26, US-28, US-29, US-31, US-34, US-35, US-36 |
 | Partial | US-01, US-03, US-04, US-06, US-07, US-11, US-13, US-14, US-19, US-20, US-23, US-24, US-27, US-30, US-32, US-33 |
-| Planned | US-08, US-12, US-15, US-16, US-21, US-22, US-25, US-36 |
+| Planned | US-08, US-12, US-15, US-16, US-21, US-22, US-25 |

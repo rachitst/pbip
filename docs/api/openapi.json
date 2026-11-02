@@ -109,6 +109,38 @@
         "title": "AdminCreateUserRequest",
         "type": "object"
       },
+      "AffinityPanel": {
+        "properties": {
+          "products": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Products",
+            "type": "array"
+          },
+          "recommendation_clicks": {
+            "items": {
+              "$ref": "#/components/schemas/ProductClicks"
+            },
+            "title": "Recommendation Clicks",
+            "type": "array"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/SegmentAffinity"
+            },
+            "title": "Segments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "products",
+          "segments",
+          "recommendation_clicks"
+        ],
+        "title": "AffinityPanel",
+        "type": "object"
+      },
       "AgeBand": {
         "enum": [
           "18-25",
@@ -427,6 +459,35 @@
         "title": "AlertSummary",
         "type": "object"
       },
+      "AllocationSlice": {
+        "properties": {
+          "asset_class": {
+            "enum": [
+              "CASH",
+              "DEPOSITS",
+              "FUNDS"
+            ],
+            "title": "Asset Class",
+            "type": "string"
+          },
+          "share_bps": {
+            "description": "Share of the total; the slices sum to 10000 (0 if empty)",
+            "title": "Share Bps",
+            "type": "integer"
+          },
+          "value_minor": {
+            "title": "Value Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "asset_class",
+          "value_minor",
+          "share_bps"
+        ],
+        "title": "AllocationSlice",
+        "type": "object"
+      },
       "AssistantHistory": {
         "properties": {
           "items": {
@@ -538,6 +599,36 @@
           }
         },
         "title": "AssistantStreamFrames",
+        "type": "object"
+      },
+      "AuditChainOut": {
+        "properties": {
+          "checked": {
+            "title": "Checked",
+            "type": "integer"
+          },
+          "first_invalid_seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Invalid Seq"
+          },
+          "valid": {
+            "title": "Valid",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "valid",
+          "checked",
+          "first_invalid_seq"
+        ],
+        "title": "AuditChainOut",
         "type": "object"
       },
       "AuditLogOut": {
@@ -774,6 +865,84 @@
           "balance_minor"
         ],
         "title": "BalanceHistoryPoint",
+        "type": "object"
+      },
+      "BehaviourAnalyticsResponse": {
+        "description": "TASK-101: segment mix, spending, product affinity and engagement; aggregates only.",
+        "properties": {
+          "affinity": {
+            "$ref": "#/components/schemas/AffinityPanel"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "engagement": {
+            "$ref": "#/components/schemas/EngagementPanel"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "period_days": {
+            "title": "Period Days",
+            "type": "integer"
+          },
+          "period_end": {
+            "format": "date-time",
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "format": "date-time",
+            "title": "Period Start",
+            "type": "string"
+          },
+          "segment": {
+            "anyOf": [
+              {
+                "enum": [
+                  "HIGH_NET_WORTH",
+                  "BUDGET_CONSCIOUS",
+                  "FREQUENT_TRANSACTOR",
+                  "DISCRETIONARY_SPENDER",
+                  "INACTIVE_SAVER",
+                  "UNSEGMENTED"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Segment filter, or null for all",
+            "title": "Segment"
+          },
+          "segments": {
+            "$ref": "#/components/schemas/SegmentDistribution"
+          },
+          "spending": {
+            "items": {
+              "$ref": "#/components/schemas/SegmentSpend"
+            },
+            "title": "Spending",
+            "type": "array"
+          }
+        },
+        "required": [
+          "generated_at",
+          "period_days",
+          "period_start",
+          "period_end",
+          "segment",
+          "currency",
+          "segments",
+          "spending",
+          "affinity",
+          "engagement"
+        ],
+        "title": "BehaviourAnalyticsResponse",
         "type": "object"
       },
       "BillPaymentOut": {
@@ -1136,6 +1305,37 @@
         ],
         "title": "ChurnRiskLevel",
         "type": "string"
+      },
+      "ComplianceExceptionsOut": {
+        "properties": {
+          "audit_chain": {
+            "$ref": "#/components/schemas/AuditChainOut"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "indicators": {
+            "$ref": "#/components/schemas/RegulatoryIndicators"
+          },
+          "items": {
+            "description": "Matching exceptions, newest first",
+            "items": {
+              "$ref": "#/components/schemas/ExceptionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "generated_at",
+          "indicators",
+          "audit_chain",
+          "items"
+        ],
+        "title": "ComplianceExceptionsOut",
+        "type": "object"
       },
       "CurrencyTotalOut": {
         "description": "Totals for ONE currency: amounts in different currencies are never added together.",
@@ -1536,6 +1736,30 @@
         "title": "CustomerSegmentResponse",
         "type": "object"
       },
+      "DailyEngagement": {
+        "properties": {
+          "active_customers": {
+            "title": "Active Customers",
+            "type": "integer"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "events": {
+            "title": "Events",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day",
+          "active_customers",
+          "events"
+        ],
+        "title": "DailyEngagement",
+        "type": "object"
+      },
       "DateOfBirthIn": {
         "additionalProperties": false,
         "description": "Self-declared date of birth (ADR-0015). The age must be 18 to 120 on the bank's date.",
@@ -1693,6 +1917,150 @@
           "current_policy_version"
         ],
         "title": "DemographicsOut",
+        "type": "object"
+      },
+      "DepositBookRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "description": "One of MY accounts: funds the deposit, receives the payout",
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "amount_minor": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 10000000000.0,
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "tenure_months": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 120.0,
+            "title": "Tenure Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "product_id",
+          "amount_minor",
+          "tenure_months",
+          "account_id"
+        ],
+        "title": "DepositBookRequest",
+        "type": "object"
+      },
+      "DepositQuoteOut": {
+        "properties": {
+          "annual_rate_bps": {
+            "title": "Annual Rate Bps",
+            "type": "integer"
+          },
+          "apy_bps": {
+            "title": "Apy Bps",
+            "type": "integer"
+          },
+          "lock_in_months": {
+            "title": "Lock In Months",
+            "type": "integer"
+          },
+          "maturity_amount_minor": {
+            "title": "Maturity Amount Minor",
+            "type": "integer"
+          },
+          "maturity_date": {
+            "format": "date",
+            "title": "Maturity Date",
+            "type": "string"
+          },
+          "maturity_interest_minor": {
+            "title": "Maturity Interest Minor",
+            "type": "integer"
+          },
+          "premature_penalty_bps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Premature Penalty Bps"
+          },
+          "principal_minor": {
+            "title": "Principal Minor",
+            "type": "integer"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "product_name": {
+            "title": "Product Name",
+            "type": "string"
+          },
+          "start_date": {
+            "format": "date",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "tenure_months": {
+            "title": "Tenure Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "product_id",
+          "product_name",
+          "principal_minor",
+          "tenure_months",
+          "annual_rate_bps",
+          "apy_bps",
+          "start_date",
+          "maturity_date",
+          "maturity_interest_minor",
+          "maturity_amount_minor",
+          "lock_in_months",
+          "premature_penalty_bps"
+        ],
+        "title": "DepositQuoteOut",
+        "type": "object"
+      },
+      "DepositTermsRequest": {
+        "additionalProperties": false,
+        "description": "No rate, maturity or customer from the client: the rate comes from the catalogue, the\nmaturity from ``deposit_math`` and the customer from the session (ADR-0025).",
+        "properties": {
+          "amount_minor": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 10000000000.0,
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "tenure_months": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 120.0,
+            "title": "Tenure Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "product_id",
+          "amount_minor",
+          "tenure_months"
+        ],
+        "title": "DepositTermsRequest",
         "type": "object"
       },
       "DeviceOut": {
@@ -2043,6 +2411,78 @@
         "title": "EndOfMonthProjection",
         "type": "object"
       },
+      "EngagementPanel": {
+        "properties": {
+          "active_customers": {
+            "description": "Customers with at least one event in the period",
+            "title": "Active Customers",
+            "type": "integer"
+          },
+          "active_share_pct": {
+            "title": "Active Share Pct",
+            "type": "number"
+          },
+          "avg_session_seconds": {
+            "description": "Mean of last minus first event time per session (one-event sessions are 0)",
+            "title": "Avg Session Seconds",
+            "type": "integer"
+          },
+          "by_event_type": {
+            "items": {
+              "$ref": "#/components/schemas/EventTypeCount"
+            },
+            "title": "By Event Type",
+            "type": "array"
+          },
+          "by_segment": {
+            "items": {
+              "$ref": "#/components/schemas/SegmentEngagement"
+            },
+            "title": "By Segment",
+            "type": "array"
+          },
+          "customers": {
+            "description": "Customers in scope (all, or the filtered segment)",
+            "title": "Customers",
+            "type": "integer"
+          },
+          "daily": {
+            "description": "Days (UTC) with at least one event",
+            "items": {
+              "$ref": "#/components/schemas/DailyEngagement"
+            },
+            "title": "Daily",
+            "type": "array"
+          },
+          "events": {
+            "title": "Events",
+            "type": "integer"
+          },
+          "events_per_session": {
+            "title": "Events Per Session",
+            "type": "number"
+          },
+          "sessions": {
+            "description": "Distinct (customer, session id) pairs in the period",
+            "title": "Sessions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "events",
+          "sessions",
+          "active_customers",
+          "customers",
+          "active_share_pct",
+          "events_per_session",
+          "avg_session_seconds",
+          "by_event_type",
+          "by_segment",
+          "daily"
+        ],
+        "title": "EngagementPanel",
+        "type": "object"
+      },
       "EntriesPage": {
         "properties": {
           "has_more": {
@@ -2204,6 +2644,257 @@
         "title": "EventBatchResponse",
         "type": "object"
       },
+      "EventTypeCount": {
+        "properties": {
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "events": {
+            "title": "Events",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "event_type",
+          "events"
+        ],
+        "title": "EventTypeCount",
+        "type": "object"
+      },
+      "ExceptionActionRequest": {
+        "additionalProperties": false,
+        "description": "Why the officer acknowledges or resolves; stored in the audit log with the actor.",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "ExceptionActionRequest",
+        "type": "object"
+      },
+      "ExceptionCounts": {
+        "properties": {
+          "ACKNOWLEDGED": {
+            "title": "Acknowledged",
+            "type": "integer"
+          },
+          "OPEN": {
+            "title": "Open",
+            "type": "integer"
+          },
+          "RESOLVED": {
+            "title": "Resolved",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "OPEN",
+          "ACKNOWLEDGED",
+          "RESOLVED"
+        ],
+        "title": "ExceptionCounts",
+        "type": "object"
+      },
+      "ExceptionKind": {
+        "enum": [
+          "BLOCKED_TRANSFER",
+          "ACCOUNT_LOCKOUT",
+          "AUDIT_CHAIN_FAILURE"
+        ],
+        "title": "ExceptionKind",
+        "type": "string"
+      },
+      "ExceptionOut": {
+        "properties": {
+          "acknowledged": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExceptionStepOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "amount_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Blocked payments only",
+            "title": "Amount Minor"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "first_invalid_seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Audit chain failures only",
+            "title": "First Invalid Seq"
+          },
+          "id": {
+            "description": "KIND:reference; stable, used in the action URLs",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ExceptionKind"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "reason_codes": {
+            "description": "Fraud rule/model codes of a blocked payment",
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "ref": {
+            "description": "Fraud event id, security event id, or first failing audit sequence number",
+            "title": "Ref",
+            "type": "string"
+          },
+          "resolved": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExceptionStepOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "risk_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Blocked payments only",
+            "title": "Risk Score"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ExceptionStatus"
+          },
+          "transaction_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transaction Type"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "ref",
+          "occurred_at",
+          "status",
+          "acknowledged",
+          "resolved"
+        ],
+        "title": "ExceptionOut",
+        "type": "object"
+      },
+      "ExceptionStatus": {
+        "enum": [
+          "OPEN",
+          "ACKNOWLEDGED",
+          "RESOLVED"
+        ],
+        "title": "ExceptionStatus",
+        "type": "string"
+      },
+      "ExceptionStepOut": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "by_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Staff user who took the step",
+            "title": "By User Id"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "by_user_id",
+          "at",
+          "reason"
+        ],
+        "title": "ExceptionStepOut",
+        "type": "object"
+      },
+      "ExceptionsByKind": {
+        "properties": {
+          "ACCOUNT_LOCKOUT": {
+            "$ref": "#/components/schemas/ExceptionCounts"
+          },
+          "AUDIT_CHAIN_FAILURE": {
+            "$ref": "#/components/schemas/ExceptionCounts"
+          },
+          "BLOCKED_TRANSFER": {
+            "$ref": "#/components/schemas/ExceptionCounts"
+          }
+        },
+        "required": [
+          "BLOCKED_TRANSFER",
+          "ACCOUNT_LOCKOUT",
+          "AUDIT_CHAIN_FAILURE"
+        ],
+        "title": "ExceptionsByKind",
+        "type": "object"
+      },
       "FinancialHealthComponents": {
         "description": "Component-wise breakdown of the financial health score.",
         "properties": {
@@ -2308,6 +2999,205 @@
           "components"
         ],
         "title": "FinancialHealthScoreResponse",
+        "type": "object"
+      },
+      "FixedDepositOut": {
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "accrued_interest_minor": {
+            "description": "Interest earned to today at the contract rate (paid interest once closed)",
+            "title": "Accrued Interest Minor",
+            "type": "integer"
+          },
+          "annual_rate_bps": {
+            "title": "Annual Rate Bps",
+            "type": "integer"
+          },
+          "booked_at": {
+            "format": "date-time",
+            "title": "Booked At",
+            "type": "string"
+          },
+          "booking_transaction_id": {
+            "format": "uuid",
+            "title": "Booking Transaction Id",
+            "type": "string"
+          },
+          "can_close_now": {
+            "title": "Can Close Now",
+            "type": "boolean"
+          },
+          "closed_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed On"
+          },
+          "closure_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "MATURED",
+                  "PREMATURE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closure Kind"
+          },
+          "closure_transaction_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closure Transaction Id"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "days_to_maturity": {
+            "description": "Bank days until maturity; 0 once matured",
+            "title": "Days To Maturity",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "interest_transaction_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interest Transaction Id"
+          },
+          "lock_in_until": {
+            "format": "date",
+            "title": "Lock In Until",
+            "type": "string"
+          },
+          "maturity_amount_minor": {
+            "title": "Maturity Amount Minor",
+            "type": "integer"
+          },
+          "maturity_date": {
+            "format": "date",
+            "title": "Maturity Date",
+            "type": "string"
+          },
+          "maturity_interest_minor": {
+            "title": "Maturity Interest Minor",
+            "type": "integer"
+          },
+          "paid_interest_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid Interest Minor"
+          },
+          "payout_if_closed_today_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What closing today would pay (premature penalty applied); None if it cannot",
+            "title": "Payout If Closed Today Minor"
+          },
+          "principal_minor": {
+            "title": "Principal Minor",
+            "type": "integer"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "product_name": {
+            "title": "Product Name",
+            "type": "string"
+          },
+          "start_date": {
+            "format": "date",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "status": {
+            "description": "MATURED = active and the maturity date reached: ready to withdraw",
+            "enum": [
+              "ACTIVE",
+              "MATURED",
+              "CLOSED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tenure_months": {
+            "title": "Tenure Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "product_id",
+          "product_name",
+          "status",
+          "account_id",
+          "currency",
+          "principal_minor",
+          "annual_rate_bps",
+          "tenure_months",
+          "start_date",
+          "maturity_date",
+          "days_to_maturity",
+          "maturity_interest_minor",
+          "maturity_amount_minor",
+          "accrued_interest_minor",
+          "lock_in_until",
+          "can_close_now",
+          "payout_if_closed_today_minor",
+          "closure_kind",
+          "paid_interest_minor",
+          "closed_on",
+          "booking_transaction_id",
+          "closure_transaction_id",
+          "interest_transaction_id",
+          "booked_at"
+        ],
+        "title": "FixedDepositOut",
         "type": "object"
       },
       "FlaggedEvent": {
@@ -4104,6 +4994,139 @@
         "title": "PayeeVerificationOut",
         "type": "object"
       },
+      "PortfolioOut": {
+        "properties": {
+          "accrued_interest_minor": {
+            "description": "Interest earned to date on open deposits",
+            "title": "Accrued Interest Minor",
+            "type": "integer"
+          },
+          "allocation": {
+            "items": {
+              "$ref": "#/components/schemas/AllocationSlice"
+            },
+            "title": "Allocation",
+            "type": "array"
+          },
+          "as_of": {
+            "format": "date",
+            "title": "As Of",
+            "type": "string"
+          },
+          "cash_minor": {
+            "description": "Ledger balance of my INR accounts",
+            "title": "Cash Minor",
+            "type": "integer"
+          },
+          "currency": {
+            "const": "INR",
+            "title": "Currency",
+            "type": "string"
+          },
+          "deposits_value_minor": {
+            "description": "Principal + accrued interest",
+            "title": "Deposits Value Minor",
+            "type": "integer"
+          },
+          "funds_minor": {
+            "description": "Fund holdings: PBIP sells no fund units, so always 0",
+            "title": "Funds Minor",
+            "type": "integer"
+          },
+          "invested_principal_minor": {
+            "description": "Principal of my open fixed deposits",
+            "title": "Invested Principal Minor",
+            "type": "integer"
+          },
+          "open_deposits": {
+            "title": "Open Deposits",
+            "type": "integer"
+          },
+          "projected_maturity_value_minor": {
+            "title": "Projected Maturity Value Minor",
+            "type": "integer"
+          },
+          "total_minor": {
+            "title": "Total Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "currency",
+          "as_of",
+          "cash_minor",
+          "invested_principal_minor",
+          "accrued_interest_minor",
+          "deposits_value_minor",
+          "projected_maturity_value_minor",
+          "funds_minor",
+          "total_minor",
+          "open_deposits",
+          "allocation"
+        ],
+        "title": "PortfolioOut",
+        "type": "object"
+      },
+      "ProductClicks": {
+        "properties": {
+          "clicks": {
+            "description": "product_clicked events in the period",
+            "title": "Clicks",
+            "type": "integer"
+          },
+          "customers": {
+            "description": "Distinct customers who clicked",
+            "title": "Customers",
+            "type": "integer"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "product_type": {
+            "title": "Product Type",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "product_id",
+          "title",
+          "product_type",
+          "clicks",
+          "customers"
+        ],
+        "title": "ProductClicks",
+        "type": "object"
+      },
+      "ProductHolding": {
+        "properties": {
+          "holders": {
+            "title": "Holders",
+            "type": "integer"
+          },
+          "product": {
+            "title": "Product",
+            "type": "string"
+          },
+          "share_pct": {
+            "description": "holders / customers in the segment, percent",
+            "title": "Share Pct",
+            "type": "number"
+          }
+        },
+        "required": [
+          "product",
+          "holders",
+          "share_pct"
+        ],
+        "title": "ProductHolding",
+        "type": "object"
+      },
       "ProductRecommendationItem": {
         "description": "A single personalized product recommendation with explainable reasons.",
         "properties": {
@@ -4329,6 +5352,71 @@
         "title": "RegisterRequest",
         "type": "object"
       },
+      "RegulatoryIndicators": {
+        "properties": {
+          "acknowledge_sla_hours": {
+            "title": "Acknowledge Sla Hours",
+            "type": "integer"
+          },
+          "by_kind": {
+            "$ref": "#/components/schemas/ExceptionsByKind"
+          },
+          "oldest_review_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Review At"
+          },
+          "review_sla_hours": {
+            "title": "Review Sla Hours",
+            "type": "integer"
+          },
+          "reviews_past_sla": {
+            "description": "Fraud alerts still OPEN that were raised more than review_sla_hours ago",
+            "title": "Reviews Past Sla",
+            "type": "integer"
+          },
+          "reviews_pending": {
+            "description": "Fraud alerts still OPEN (held payments), any age",
+            "title": "Reviews Pending",
+            "type": "integer"
+          },
+          "unacknowledged_past_sla": {
+            "description": "OPEN exceptions that occurred more than acknowledge_sla_hours ago",
+            "title": "Unacknowledged Past Sla",
+            "type": "integer"
+          },
+          "unresolved_exceptions": {
+            "description": "OPEN + ACKNOWLEDGED exceptions in the window",
+            "title": "Unresolved Exceptions",
+            "type": "integer"
+          },
+          "window_days": {
+            "description": "Exceptions that occurred in the last N days are counted",
+            "title": "Window Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window_days",
+          "review_sla_hours",
+          "acknowledge_sla_hours",
+          "unresolved_exceptions",
+          "unacknowledged_past_sla",
+          "reviews_pending",
+          "reviews_past_sla",
+          "oldest_review_at",
+          "by_kind"
+        ],
+        "title": "RegulatoryIndicators",
+        "type": "object"
+      },
       "RiskBand": {
         "enum": [
           "LOW",
@@ -4336,6 +5424,15 @@
           "HIGH"
         ],
         "title": "RiskBand",
+        "type": "string"
+      },
+      "RiskLevel": {
+        "enum": [
+          "LOW",
+          "MODERATE",
+          "HIGH"
+        ],
+        "title": "RiskLevel",
         "type": "string"
       },
       "RiskProfileOut": {
@@ -4846,6 +5943,261 @@
           "fraud_events"
         ],
         "title": "SecurityMonitoring",
+        "type": "object"
+      },
+      "SegmentAffinity": {
+        "properties": {
+          "customers": {
+            "title": "Customers",
+            "type": "integer"
+          },
+          "holdings": {
+            "items": {
+              "$ref": "#/components/schemas/ProductHolding"
+            },
+            "title": "Holdings",
+            "type": "array"
+          },
+          "segment": {
+            "enum": [
+              "HIGH_NET_WORTH",
+              "BUDGET_CONSCIOUS",
+              "FREQUENT_TRANSACTOR",
+              "DISCRETIONARY_SPENDER",
+              "INACTIVE_SAVER",
+              "UNSEGMENTED"
+            ],
+            "title": "Segment",
+            "type": "string"
+          }
+        },
+        "required": [
+          "segment",
+          "customers",
+          "holdings"
+        ],
+        "title": "SegmentAffinity",
+        "type": "object"
+      },
+      "SegmentDistribution": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SegmentShare"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "last_segmented_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Latest weekly segmentation write",
+            "title": "Last Segmented At"
+          },
+          "total_customers": {
+            "title": "Total Customers",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_customers",
+          "last_segmented_at",
+          "items"
+        ],
+        "title": "SegmentDistribution",
+        "type": "object"
+      },
+      "SegmentEngagement": {
+        "properties": {
+          "active_customers": {
+            "title": "Active Customers",
+            "type": "integer"
+          },
+          "active_share_pct": {
+            "title": "Active Share Pct",
+            "type": "number"
+          },
+          "customers": {
+            "title": "Customers",
+            "type": "integer"
+          },
+          "segment": {
+            "enum": [
+              "HIGH_NET_WORTH",
+              "BUDGET_CONSCIOUS",
+              "FREQUENT_TRANSACTOR",
+              "DISCRETIONARY_SPENDER",
+              "INACTIVE_SAVER",
+              "UNSEGMENTED"
+            ],
+            "title": "Segment",
+            "type": "string"
+          }
+        },
+        "required": [
+          "segment",
+          "customers",
+          "active_customers",
+          "active_share_pct"
+        ],
+        "title": "SegmentEngagement",
+        "type": "object"
+      },
+      "SegmentShare": {
+        "description": "One segment's size and the average RFM features the weekly job stored for it.",
+        "properties": {
+          "avg_discretionary_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Discretionary Ratio"
+          },
+          "avg_monthly_spend_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Monthly Spend Minor"
+          },
+          "avg_monthly_transactions": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Monthly Transactions"
+          },
+          "avg_recency_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Days since last transaction (job input)",
+            "title": "Avg Recency Days"
+          },
+          "avg_savings_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Savings Ratio"
+          },
+          "customers": {
+            "title": "Customers",
+            "type": "integer"
+          },
+          "segment": {
+            "enum": [
+              "HIGH_NET_WORTH",
+              "BUDGET_CONSCIOUS",
+              "FREQUENT_TRANSACTOR",
+              "DISCRETIONARY_SPENDER",
+              "INACTIVE_SAVER",
+              "UNSEGMENTED"
+            ],
+            "title": "Segment",
+            "type": "string"
+          },
+          "share_pct": {
+            "description": "Share of all customers, percent, one decimal",
+            "title": "Share Pct",
+            "type": "number"
+          }
+        },
+        "required": [
+          "segment",
+          "customers",
+          "share_pct",
+          "avg_recency_days",
+          "avg_monthly_transactions",
+          "avg_monthly_spend_minor",
+          "avg_savings_ratio",
+          "avg_discretionary_ratio"
+        ],
+        "title": "SegmentShare",
+        "type": "object"
+      },
+      "SegmentSpend": {
+        "properties": {
+          "avg_spend_per_spender_minor": {
+            "description": "spend_minor // spenders (floor)",
+            "title": "Avg Spend Per Spender Minor",
+            "type": "integer"
+          },
+          "by_type": {
+            "items": {
+              "$ref": "#/components/schemas/TypeSpend"
+            },
+            "title": "By Type",
+            "type": "array"
+          },
+          "customers": {
+            "title": "Customers",
+            "type": "integer"
+          },
+          "segment": {
+            "enum": [
+              "HIGH_NET_WORTH",
+              "BUDGET_CONSCIOUS",
+              "FREQUENT_TRANSACTOR",
+              "DISCRETIONARY_SPENDER",
+              "INACTIVE_SAVER",
+              "UNSEGMENTED"
+            ],
+            "title": "Segment",
+            "type": "string"
+          },
+          "spend_minor": {
+            "title": "Spend Minor",
+            "type": "integer"
+          },
+          "spenders": {
+            "description": "Customers with at least one spend entry in the period",
+            "title": "Spenders",
+            "type": "integer"
+          },
+          "transactions": {
+            "title": "Transactions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "segment",
+          "customers",
+          "spenders",
+          "spend_minor",
+          "transactions",
+          "avg_spend_per_spender_minor",
+          "by_type"
+        ],
+        "title": "SegmentSpend",
         "type": "object"
       },
       "SpendingBreakdownResponse": {
@@ -5497,6 +6849,29 @@
         "title": "TransferRequest",
         "type": "object"
       },
+      "TypeSpend": {
+        "properties": {
+          "spend_minor": {
+            "title": "Spend Minor",
+            "type": "integer"
+          },
+          "transaction_type": {
+            "title": "Transaction Type",
+            "type": "string"
+          },
+          "transactions": {
+            "title": "Transactions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "transaction_type",
+          "spend_minor",
+          "transactions"
+        ],
+        "title": "TypeSpend",
+        "type": "object"
+      },
       "UnlockResultOut": {
         "properties": {
           "failed_login_count": {
@@ -5657,6 +7032,162 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "WealthProductOut": {
+        "properties": {
+          "annual_rate_bps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Indicative, simulated annual rate (deposits) or coupon (gold bond); None when market-linked",
+            "title": "Annual Rate Bps"
+          },
+          "apy_bps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Annualised yield: quarterly compounding for deposits, the coupon for the gold bond; None for market-linked funds (PBIP has no market data)",
+            "title": "Apy Bps"
+          },
+          "bookable": {
+            "description": "Only fixed deposits can be booked online",
+            "title": "Bookable",
+            "type": "boolean"
+          },
+          "catalogue_version": {
+            "title": "Catalogue Version",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "max_amount_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Amount Minor"
+          },
+          "min_amount_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Amount Minor"
+          },
+          "min_lock_in_months": {
+            "title": "Min Lock In Months",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "title": "Notes",
+            "type": "string"
+          },
+          "premature_closure_allowed": {
+            "title": "Premature Closure Allowed",
+            "type": "boolean"
+          },
+          "premature_penalty_bps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Premature Penalty Bps"
+          },
+          "product_type": {
+            "enum": [
+              "FIXED_DEPOSIT",
+              "MUTUAL_FUND",
+              "SOVEREIGN_GOLD_BOND"
+            ],
+            "title": "Product Type",
+            "type": "string"
+          },
+          "risk_level": {
+            "enum": [
+              "LOW",
+              "MODERATE",
+              "HIGH"
+            ],
+            "title": "Risk Level",
+            "type": "string"
+          },
+          "tenures_months": {
+            "description": "Empty for open-ended funds",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Tenures Months",
+            "type": "array"
+          },
+          "yield_basis": {
+            "enum": [
+              "GUARANTEED",
+              "FIXED_COUPON",
+              "MARKET_LINKED"
+            ],
+            "title": "Yield Basis",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "product_type",
+          "name",
+          "description",
+          "risk_level",
+          "yield_basis",
+          "annual_rate_bps",
+          "apy_bps",
+          "tenures_months",
+          "min_lock_in_months",
+          "min_amount_minor",
+          "max_amount_minor",
+          "premature_closure_allowed",
+          "premature_penalty_bps",
+          "bookable",
+          "notes",
+          "catalogue_version"
+        ],
+        "title": "WealthProductOut",
         "type": "object"
       }
     },
@@ -7482,6 +9013,257 @@
         ]
       }
     },
+    "/api/v1/compliance/exceptions": {
+      "get": {
+        "description": "TASK-100 dashboard data. The audit chain is fully verified at most once per 5 minutes\n(cached, ADR-0027); ``/audit-logs/verify`` still verifies on demand.",
+        "operationId": "list_exceptions_api_v1_compliance_exceptions_get",
+        "parameters": [
+          {
+            "description": "Window: exceptions of the last N days",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "description": "Window: exceptions of the last N days",
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Only this kind",
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ExceptionKind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this kind",
+              "title": "Kind"
+            }
+          },
+          {
+            "description": "Only this status",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ExceptionStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this status",
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComplianceExceptionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Exceptions (blocked payments, lockouts, audit-chain failures) and SLA indicators",
+        "tags": [
+          "compliance"
+        ]
+      }
+    },
+    "/api/v1/compliance/exceptions/{kind}/{ref}/acknowledge": {
+      "post": {
+        "operationId": "acknowledge_exception_api_v1_compliance_exceptions__kind___ref__acknowledge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ExceptionKind"
+            }
+          },
+          {
+            "description": "Reference from the list",
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "description": "Reference from the list",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9-]+$",
+              "title": "Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExceptionActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExceptionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such exception"
+          },
+          "409": {
+            "description": "Already acknowledged or resolved"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Acknowledge an open exception (audited with actor and reason)",
+        "tags": [
+          "compliance"
+        ]
+      }
+    },
+    "/api/v1/compliance/exceptions/{kind}/{ref}/resolve": {
+      "post": {
+        "operationId": "resolve_exception_api_v1_compliance_exceptions__kind___ref__resolve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ExceptionKind"
+            }
+          },
+          {
+            "description": "Reference from the list",
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "description": "Reference from the list",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9-]+$",
+              "title": "Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExceptionActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExceptionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such exception"
+          },
+          "409": {
+            "description": "Already acknowledged or resolved"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Resolve an exception (audited with actor and reason)",
+        "tags": [
+          "compliance"
+        ]
+      }
+    },
     "/api/v1/customers/devices": {
       "get": {
         "operationId": "list_my_devices_api_v1_customers_devices_get",
@@ -8206,6 +9988,85 @@
         "summary": "Fraud telemetry: decisions over time, hold rate, top reasons, risky payees",
         "tags": [
           "fraud"
+        ]
+      }
+    },
+    "/api/v1/insights/behaviour": {
+      "get": {
+        "description": "TASK-101 aggregates (RM or admin, MFA). No customer ids: drill-down is ``/customers``.",
+        "operationId": "get_behaviour_analytics_api_v1_insights_behaviour_get",
+        "parameters": [
+          {
+            "description": "Period: the last N days (clickstream: 180)",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "description": "Period: the last N days (clickstream: 180)",
+              "maximum": 180,
+              "minimum": 7,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Only this segment",
+            "in": "query",
+            "name": "segment",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "HIGH_NET_WORTH",
+                    "BUDGET_CONSCIOUS",
+                    "FREQUENT_TRANSACTOR",
+                    "DISCRETIONARY_SPENDER",
+                    "INACTIVE_SAVER",
+                    "UNSEGMENTED"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this segment",
+              "title": "Segment"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BehaviourAnalyticsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Behavioural analytics: segment mix, spending, product affinity, engagement",
+        "tags": [
+          "insights"
         ]
       }
     },
@@ -9783,6 +11644,329 @@
         "summary": "Complete a flagged transfer with a TOTP code",
         "tags": [
           "payments"
+        ]
+      }
+    },
+    "/api/v1/wealth/fixed-deposits": {
+      "get": {
+        "operationId": "list_fixed_deposits_api_v1_wealth_fixed_deposits_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FixedDepositOut"
+                  },
+                  "title": "Response List Fixed Deposits Api V1 Wealth Fixed Deposits Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "My fixed deposits",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/fixed-deposits/book": {
+      "post": {
+        "operationId": "book_fixed_deposit_api_v1_wealth_fixed_deposits_book_post",
+        "parameters": [
+          {
+            "description": "Unique per logical request; retrying with the same key never duplicates.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Unique per logical request; retrying with the same key never duplicates.",
+              "maxLength": 128,
+              "minLength": 8,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DepositBookRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixedDepositOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Insufficient funds, terms not offered or invalid request"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Book a fixed deposit from one of my accounts (idempotent)",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/fixed-deposits/quote": {
+      "post": {
+        "operationId": "quote_fixed_deposit_api_v1_wealth_fixed_deposits_quote_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DepositTermsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepositQuoteOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Exact maturity preview for a fixed deposit (books nothing)",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/fixed-deposits/{deposit_id}": {
+      "get": {
+        "operationId": "get_fixed_deposit_api_v1_wealth_fixed_deposits__deposit_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deposit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Deposit Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixedDepositOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "One of my fixed deposits",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/fixed-deposits/{deposit_id}/close": {
+      "post": {
+        "operationId": "close_fixed_deposit_api_v1_wealth_fixed_deposits__deposit_id__close_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deposit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Deposit Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Unique per logical request; retrying with the same key never duplicates.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Unique per logical request; retrying with the same key never duplicates.",
+              "maxLength": 128,
+              "minLength": 8,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixedDepositOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "Already closed"
+          },
+          "422": {
+            "description": "Still inside its lock-in period"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Close one of my fixed deposits: maturity payout, or premature with the penalty rate",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/portfolio": {
+      "get": {
+        "operationId": "get_portfolio_api_v1_wealth_portfolio_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "My portfolio: cash, deposits with accrued interest, and allocation",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/products": {
+      "get": {
+        "operationId": "list_products_api_v1_wealth_products_get",
+        "parameters": [
+          {
+            "description": "Only this risk level",
+            "in": "query",
+            "name": "risk_level",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/RiskLevel"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this risk level",
+              "title": "Risk Level"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WealthProductOut"
+                  },
+                  "title": "Response List Products Api V1 Wealth Products Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Wealth catalogue: fixed deposits, mutual funds and the sovereign gold bond",
+        "tags": [
+          "wealth"
         ]
       }
     }

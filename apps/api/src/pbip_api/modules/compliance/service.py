@@ -62,6 +62,14 @@ class AuditService:
     def __init__(self, session: Session) -> None:
         self.session = session
 
+    def lock_chain(self) -> None:
+        """Serialise with every other audit writer until the caller's transaction ends.
+
+        Re-entrant inside one transaction, so a use case may take it before reading state it then
+        records (TASK-100: an exception's status is read and changed under the same lock).
+        """
+        self.session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _AUDIT_LOCK_KEY})
+
     def record(
         self,
         actor_user_id: UUID | None,
@@ -75,7 +83,7 @@ class AuditService:
     ) -> AuditLog:
         """Append an audit row in the CALLER'S transaction (rolls back with the business change)."""
         details = details or {}
-        self.session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _AUDIT_LOCK_KEY})
+        self.lock_chain()
         prev_hash = (
             self.session.execute(select(AuditLog.hash).order_by(AuditLog.seq.desc()).limit(1))
             .scalars()
