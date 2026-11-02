@@ -25,6 +25,7 @@ SCHEDULED_TRANSFER_PAUSED = "SCHEDULED_TRANSFER_PAUSED"
 PASSWORD_CHANGED = "PASSWORD_CHANGED"  # noqa: S105  # pragma: allowlist secret - an event type name
 MFA_ENABLED = "MFA_ENABLED"
 DEVICE_REGISTERED = "DEVICE_REGISTERED"
+STATEMENT_DOWNLOADED = "STATEMENT_DOWNLOADED"
 
 _TRANSFER_TYPES = {
     TRANSFER_POSTED,
@@ -66,6 +67,44 @@ def enqueue_security(session: Session, event_type: str, user_id: UUID) -> None:
     if event_type not in _SECURITY_TEXT:
         raise ValueError(f"not a security notification type: {event_type}")
     enqueue(session, event_type, {"user_id": str(user_id)})
+
+
+def enqueue_statement(
+    session: Session,
+    user_id: UUID,
+    account_id: UUID,
+    account_masked: str,
+    period: dict[str, str],
+    file_format: str,
+) -> None:
+    """Tell the customer a statement left the bank (UC-03): a security notice, like a new device."""
+    enqueue(
+        session,
+        STATEMENT_DOWNLOADED,
+        {
+            "user_id": str(user_id),
+            "account_id": str(account_id),
+            "account_masked": account_masked,
+            "start": period["start"],
+            "end": period["end"],
+            "format": file_format,
+        },
+    )
+
+
+def _statement(event: OutboxEvent, user_id: UUID) -> Notification:
+    p = event.payload
+    return Notification(
+        user_id=user_id,
+        type=STATEMENT_DOWNLOADED,
+        title="Statement downloaded",
+        body=(
+            f"A {str(p['format']).upper()} statement for account {p['account_masked']} "
+            f"({p['start']} to {p['end']}) was downloaded. If this wasn't you, contact the bank."
+        ),
+        resource_type="security",
+        account_id=_uuid_or_none(p.get("account_id")),
+    )
 
 
 def _transfer_text(event: OutboxEvent) -> tuple[str, str] | None:
@@ -162,6 +201,8 @@ def _notification(event: OutboxEvent) -> Notification | None:
             # events enqueued before #45 carry no account id: the link opens Accounts instead
             account_id=_uuid_or_none(event.payload.get("account_id")),
         )
+    if event.event_type == STATEMENT_DOWNLOADED:
+        return _statement(event, user_id)
     if event.event_type in _SCHEDULED_TRANSFER_TYPES:
         text = _scheduled_transfer_text(event)
         if text is None:

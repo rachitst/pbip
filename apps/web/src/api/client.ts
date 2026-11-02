@@ -1,9 +1,13 @@
-import type { components } from "./schema";
+import type { components, operations } from "./schema";
 
 export type TokenResponse = components["schemas"]["TokenResponse"];
 export type AccountOut = components["schemas"]["AccountOut"];
 export type PayeeOut = components["schemas"]["PayeeOut"];
 export type TransferOut = components["schemas"]["TransferOut"];
+export type PayeeVerificationOut = components["schemas"]["PayeeVerificationOut"];
+export type PayeeUpdate = components["schemas"]["PayeeUpdate"];
+export type BillerOut = components["schemas"]["BillerOut"];
+export type BillPaymentOut = components["schemas"]["BillPaymentOut"];
 export type UserOut = components["schemas"]["UserOut"];
 export type MfaEnrollmentOut = components["schemas"]["MfaEnrollmentOut"];
 export type RecoveryCodesOut = components["schemas"]["RecoveryCodesOut"];
@@ -11,6 +15,13 @@ export type CustomerProfileOut = components["schemas"]["CustomerProfileOut"];
 export type DeviceOut = components["schemas"]["DeviceOut"];
 export type EntriesPage = components["schemas"]["EntriesPage"];
 export type EntryOut = components["schemas"]["EntryOut"];
+/** TASK-017 query filters, from the generated contract (amounts in paise, dates YYYY-MM-DD IST). */
+export type EntryFilters = Omit<
+  NonNullable<
+    operations["list_my_account_entries_api_v1_accounts__account_id__transactions_get"]["parameters"]["query"]
+  >,
+  "limit" | "cursor" | "direction"
+>;
 export type OpenAccountType = components["schemas"]["OpenAccountType"];
 export type NotificationOut = components["schemas"]["NotificationOut"];
 export type NotificationsPage = components["schemas"]["NotificationsPage"];
@@ -22,8 +33,16 @@ export type AlertDetail = components["schemas"]["AlertDetail"];
 export type FraudStats = components["schemas"]["FraudStats"];
 export type SecurityMonitoring = components["schemas"]["SecurityMonitoring"];
 export type DemoLabStatus = components["schemas"]["DemoLabStatus"];
-export type PayeeVerificationOut = components["schemas"]["PayeeVerificationOut"];
 export type SpendingBreakdownResponse = components["schemas"]["SpendingBreakdownResponse"];
+export type CustomerInsightsListResponse = components["schemas"]["CustomerInsightsListResponse"];
+export type CustomerInsightItem = components["schemas"]["CustomerInsightItem"];
+export type ChurnRiskLevel = components["schemas"]["ChurnRiskLevel"];
+export type CustomerInsightDetail = components["schemas"]["CustomerInsightDetail"];
+export type InteractionChannel = components["schemas"]["InteractionChannel"];
+export type InteractionOutcome = components["schemas"]["InteractionOutcome"];
+export type InteractionCreate = components["schemas"]["InteractionCreate"];
+export type InteractionOut = components["schemas"]["InteractionOut"];
+export type InteractionListResponse = components["schemas"]["InteractionListResponse"];
 export type CategorySpendingItem = components["schemas"]["CategorySpendingItem"];
 export type SpendingTrendsResponse = components["schemas"]["SpendingTrendsResponse"];
 export type MonthlySpendingSummary = components["schemas"]["MonthlySpendingSummary"];
@@ -110,14 +129,34 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}, retry = 
 }
 
 async function readBody<T>(path: string, response: Response): Promise<T> {
-  // Transfer bodies for 202 (pending) and 403 (declined) carry state the UI must show. They are
-  // plain JSON; a problem+json 403 (e.g. a non-customer token) is an error, not a transfer.
+  // Transfer and bill-payment bodies for 202 (pending) and 403 (declined) carry state the UI must
+  // show. They are plain JSON; a problem+json 403 (e.g. a non-customer token) is an error.
   const isTransferState =
-    path.startsWith("/api/v1/transfers") &&
+    (path.startsWith("/api/v1/transfers") || path === "/api/v1/bills/pay") &&
     (response.status === 202 || response.status === 403) &&
     !isProblem(response);
   if (!response.ok && !isTransferState) throw await toError(response);
   return (response.status === 204 ? undefined : await response.json()) as T;
+}
+
+/** Authenticated GET of a file (statements): the bearer token never goes into a URL, so the
+ * download is fetched as a blob and handed to the browser. Same refresh retry as apiFetch. */
+export async function apiDownload(
+  path: string,
+  retry = true,
+): Promise<{ blob: Blob; filename: string | null }> {
+  const headers = new Headers();
+  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+  const response = await fetch(path, { headers, credentials: "include" });
+  if (response.status === 401 && retry && accessToken !== null) {
+    if (await refreshSession()) return apiDownload(path, false);
+    accessToken = null;
+    onSessionLost?.();
+  }
+  if (!response.ok) throw await toError(response);
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? null;
+  return { blob: await response.blob(), filename };
 }
 
 /** A call made as ANOTHER principal with an explicit bearer token (the staff fraud demo lab,
@@ -198,9 +237,18 @@ export const api = {
       body: JSON.stringify({ account_type: accountType }),
     }),
   /** Keyset pagination: pass the previous page's next_cursor to walk further back in time. */
-  accountEntries: (accountId: string, cursor: string | null, limit = 10) => {
+  /** TASK-017: ``filters`` must be sent again with each ``cursor`` of the same list. */
+  accountEntries: (
+    accountId: string,
+    cursor: string | null,
+    limit = 10,
+    filters: EntryFilters = {},
+  ) => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (cursor) params.set("cursor", cursor);
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== null && value !== "") params.set(key, String(value));
+    }
     return apiFetch<EntriesPage>(
       `/api/v1/accounts/${encodeURIComponent(accountId)}/transactions?${params.toString()}`,
     );
@@ -219,7 +267,50 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
     }),
+  /** UC-03 / TASK-016: dates are YYYY-MM-DD (bank days, IST). */
+  statement: (accountId: string, start: string, end: string, format: "pdf" | "csv") =>
+    apiDownload(
+      `/api/v1/accounts/${encodeURIComponent(accountId)}/statements?${new URLSearchParams({
+        start_date: start,
+        end_date: end,
+        format,
+      }).toString()}`,
+    ),
   payees: () => apiFetch<PayeeOut[]>("/api/v1/payees"),
+  addPayee: (body: {
+    name: string;
+    account_number: string;
+    bank_code: string;
+    nickname: string | null;
+  }) => apiFetch<PayeeOut>("/api/v1/payees", { method: "POST", body: JSON.stringify(body) }),
+  verifyPayee: (payeeId: string) =>
+    apiFetch<PayeeVerificationOut>(`/api/v1/payees/${encodeURIComponent(payeeId)}/verify`, {
+      method: "POST",
+    }),
+  updatePayee: (payeeId: string, body: PayeeUpdate) =>
+    apiFetch<PayeeOut>(`/api/v1/payees/${encodeURIComponent(payeeId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  removePayee: (payeeId: string) =>
+    apiFetch<undefined>(`/api/v1/payees/${encodeURIComponent(payeeId)}`, { method: "DELETE" }),
+  billers: () => apiFetch<BillerOut[]>("/api/v1/bills/billers"),
+  billPayments: () => apiFetch<BillPaymentOut[]>("/api/v1/bills/payments?limit=20"),
+  /** Same one-key-per-intent rule as ``transfer``. 202 (held) and 403 (declined) are outcomes. */
+  payBill: (
+    body: {
+      from_account_id: string;
+      biller_id: string;
+      consumer_reference: string;
+      amount_minor: number;
+    },
+    idempotencyKey: string,
+  ) =>
+    apiFetch<BillPaymentOut>("/api/v1/bills/pay", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(body),
+    }),
   /** One Idempotency-Key per user intent; reuse the SAME key when retrying the same submit. */
   transfer: (
     body: {
@@ -298,6 +389,37 @@ export const api = {
       `/api/v1/analytics/health-score?${params.toString()}`,
     );
   },
+  customerInsights: (filters: {
+    segment?: string;
+    min_churn_risk?: number;
+    min_loan_propensity?: number;
+    limit: number;
+    offset: number;
+  }) => {
+    const params = new URLSearchParams({
+      limit: String(filters.limit),
+      offset: String(filters.offset),
+    });
+    if (filters.segment) params.set("segment", filters.segment);
+    if (filters.min_churn_risk !== undefined)
+      params.set("min_churn_risk", String(filters.min_churn_risk));
+    if (filters.min_loan_propensity !== undefined)
+      params.set("min_loan_propensity", String(filters.min_loan_propensity));
+    return apiFetch<CustomerInsightsListResponse>(
+      `/api/v1/insights/customers?${params.toString()}`,
+    );
+  },
+  customerInsightDetail: (customerId: string) =>
+    apiFetch<CustomerInsightDetail>(`/api/v1/insights/customers/${encodeURIComponent(customerId)}`),
+  customerInteractions: (customerId: string, limit = 20) =>
+    apiFetch<InteractionListResponse>(
+      `/api/v1/insights/customers/${encodeURIComponent(customerId)}/interactions?limit=${String(limit)}`,
+    ),
+  logInteraction: (customerId: string, body: InteractionCreate) =>
+    apiFetch<InteractionOut>(
+      `/api/v1/insights/customers/${encodeURIComponent(customerId)}/interactions`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
   assistantHistory: (limit = 50) =>
     apiFetch<AssistantHistory>(`/api/v1/assistant/messages?limit=${String(limit)}`),
 };

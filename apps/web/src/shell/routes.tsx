@@ -12,12 +12,17 @@ import { errorMessage } from "../lib/errors";
 import { Accounts } from "../pages/Accounts";
 import { NotFound } from "../pages/NotFound";
 import { MfaEnrolment } from "../pages/MfaEnrolment";
+import { PayBills } from "../pages/PayBills";
+import { Payees } from "../pages/Payees";
 import { Profile } from "../pages/Profile";
+import { Statements } from "../pages/Statements";
 import { AuditLog } from "../pages/staff/AuditLog";
 import { FraudAlert } from "../pages/staff/FraudAlert";
 import { FraudDemoLab } from "../pages/staff/FraudDemoLab";
 import { FraudQueue } from "../pages/staff/FraudQueue";
 import { canReviewFraud } from "../pages/staff/fraudFormat";
+import { RMInsights } from "../pages/staff/RMInsights";
+import { canAccessRMInsights } from "../pages/staff/rmInsightsFormat";
 import { useDemoLabStatus } from "../pages/staff/fraudLab";
 import { SecurityMonitoring } from "../pages/staff/SecurityMonitoring";
 import { StaffHome } from "../pages/staff/StaffHome";
@@ -36,6 +41,9 @@ const HOME_PATH: Record<Area, string> = { customer: "/accounts", staff: "/staff"
 function customerNav(me: UserOut): NavItem[] {
   const items: NavItem[] = [
     { to: "/accounts", label: "Accounts" },
+    { to: "/payees", label: "Payees" },
+    { to: "/bills", label: "Pay bills" },
+    { to: "/statements", label: "Statements" },
     { to: "/insights", label: "Spending & health" },
     { to: "/profile", label: "Profile & security" },
   ];
@@ -50,6 +58,7 @@ function staffNav(me: UserOut, demoLabEnabled: boolean): NavItem[] {
     items.push({ to: "/staff/monitoring", label: "Security monitoring" });
     items.push({ to: "/staff/fraud", label: "Fraud alerts" });
   }
+  if (canAccessRMInsights(me)) items.push({ to: "/staff/insights", label: "Customer insights" });
   // TASK-081: only where the server says the lab may run (never in production).
   if (canReviewFraud(me) && demoLabEnabled) {
     items.push({ to: "/staff/fraud-lab", label: "Fraud demo lab" });
@@ -195,6 +204,9 @@ export const routes: RouteObject[] = [
         children: [
           { index: true, element: <Navigate to="/accounts" replace /> },
           { path: "accounts", element: <Accounts /> },
+          { path: "payees", element: <Payees /> },
+          { path: "bills", element: <PayBills /> },
+          { path: "statements", element: <Statements /> },
           {
             path: "insights",
             element: (
@@ -216,6 +228,7 @@ export const routes: RouteObject[] = [
           { path: "fraud/:alertId", element: <FraudAlert /> },
           { path: "fraud-lab", element: <FraudDemoLab /> },
           { path: "monitoring", element: <SecurityMonitoring /> },
+          { path: "insights", element: <RMInsights /> },
           { path: "security", element: <StaffSecurity /> },
         ],
       },

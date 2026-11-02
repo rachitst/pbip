@@ -1,11 +1,13 @@
 """Account opening and read use cases."""
 
 import secrets
+from datetime import date, timedelta
 from uuid import UUID
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from pbip_api.core.calendar import day_start
 from pbip_api.core.errors import ConflictError, UnprocessableError
 from pbip_api.core.pagination import PageDirection, decode_cursor, encode_cursor
 from pbip_api.modules.accounts.models import (
@@ -19,6 +21,7 @@ from pbip_api.modules.accounts.schemas import EntriesPage, EntryOut, OpenAccount
 from pbip_api.modules.compliance.service import AuditService
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.ledger import service as ledger_service
+from pbip_api.modules.ledger.models import EntryDirection
 
 _ACCOUNT_NUMBER_PREFIX = "40"
 _MAX_ATTEMPTS = 8
@@ -187,11 +190,17 @@ def list_entries_page(
     limit: int,
     cursor: str | None,
     direction: PageDirection,
+    filters: ledger_service.EntryFilters | None = None,
 ) -> EntriesPage:
-    """One keyset page of an (already authorized) account's ledger entries."""
+    """One keyset page of an (already authorized) account's ledger entries, optionally filtered."""
     after_seq = decode_cursor(cursor).seq if cursor is not None else None
     rows = ledger_service.list_account_entries(
-        session, account.id, limit + 1, after_seq, newer=direction == PageDirection.NEWER
+        session,
+        account.id,
+        limit + 1,
+        after_seq,
+        newer=direction == PageDirection.NEWER,
+        filters=filters,
     )
     page, has_more = rows[:limit], len(rows) > limit
     items = [
@@ -211,3 +220,27 @@ def list_entries_page(
     last = page[-1][0] if page else None
     next_cursor = encode_cursor(last.seq, last.created_at) if has_more and last else None
     return EntriesPage(items=items, next_cursor=next_cursor, has_more=has_more)
+
+
+def entry_filters(
+    start_date: date | None,
+    end_date: date | None,
+    min_amount: int | None,
+    max_amount: int | None,
+    direction: EntryDirection | None,
+    search: str | None,
+) -> ledger_service.EntryFilters:
+    """TASK-017 search criteria: dates are bank days in India (inclusive); amounts in paise."""
+    if start_date and end_date and start_date > end_date:
+        raise UnprocessableError("the start date must be on or before the end date")
+    if min_amount is not None and max_amount is not None and min_amount > max_amount:
+        raise UnprocessableError("the minimum amount must not exceed the maximum amount")
+    cleaned = search.strip() if search else None
+    return ledger_service.EntryFilters(
+        start=day_start(start_date) if start_date else None,
+        end=day_start(end_date + timedelta(days=1)) if end_date else None,
+        min_amount=min_amount,
+        max_amount=max_amount,
+        direction=direction,
+        text=cleaned or None,
+    )

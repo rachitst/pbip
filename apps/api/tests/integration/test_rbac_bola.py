@@ -54,6 +54,9 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("get", "/api/v1/recommendations"),
         ("post", "/api/v1/events/batch"),
         ("get", "/api/v1/insights/customers"),
+        ("get", f"/api/v1/insights/customers/{uuid.uuid4()}"),
+        ("get", f"/api/v1/insights/customers/{uuid.uuid4()}/interactions"),
+        ("post", f"/api/v1/insights/customers/{uuid.uuid4()}/interactions"),
         ("get", f"/api/v1/admin/users/{uuid.uuid4()}/lockout"),
         ("post", f"/api/v1/admin/users/{uuid.uuid4()}/unlock"),
     ]:
@@ -69,6 +72,9 @@ def test_customer_cannot_use_staff_endpoints(
     assert client.get("/api/v1/fraud/demo-lab", headers=alice.headers).status_code == 403
     assert client.get("/api/v1/compliance/audit-logs", headers=alice.headers).status_code == 403
     assert client.get("/api/v1/insights/customers", headers=alice.headers).status_code == 403
+    own = f"/api/v1/insights/customers/{alice.customer_id}"
+    assert client.get(own, headers=alice.headers).status_code == 403
+    assert client.get(f"{own}/interactions", headers=alice.headers).status_code == 403
     assert (
         client.post(
             "/api/v1/admin/users",
@@ -322,8 +328,24 @@ def test_bola_customer_b_cannot_touch_customer_a_objects(
         "analytics health-score non-existent account": client.get(
             f"/api/v1/analytics/health-score?account_id={uuid.uuid4()}", headers=h
         ),
+        "statement for victim account": client.get(
+            f"/api/v1/accounts/{ids['account']}/statements",
+            headers=h,
+            params={"start_date": "2026-01-01", "end_date": "2026-01-31"},
+        ),
+        "statement for non-existent account": client.get(
+            f"/api/v1/accounts/{uuid.uuid4()}/statements",
+            headers=h,
+            params={"start_date": "2026-01-01", "end_date": "2026-01-31"},
+        ),
         "get payee": client.get(f"/api/v1/payees/{ids['payee']}", headers=h),
         "verify payee": client.post(f"/api/v1/payees/{ids['payee']}/verify", headers=h),
+        "edit payee": client.patch(
+            f"/api/v1/payees/{ids['payee']}", headers=h, json={"nickname": "mine now"}
+        ),
+        "edit non-existent payee": client.patch(
+            f"/api/v1/payees/{uuid.uuid4()}", headers=h, json={"nickname": "x"}
+        ),
         "delete payee": client.delete(f"/api/v1/payees/{ids['payee']}", headers=h),
         "get transfer": client.get(f"/api/v1/transfers/{ids['transfer']}", headers=h),
         "step-up transfer": client.post(
