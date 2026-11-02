@@ -547,7 +547,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #38 | **Sprint:** 2 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Core Banking & Ledger
 - **Owner:** Sujal (`SUJALGPM`)
-- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (7.6 days of slack)
+- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Mon 02 Nov (#296, c6c652f) | **Status:** Done | **Risk:** Low (7.6 days of slack)
 - **Depends on:** TASK-005 (#16, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Parallel: can start immediately
 - **Goal:** Celery Beat task executing recurring and scheduled standing orders idempotently per occurrence.
@@ -577,7 +577,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #39 | **Sprint:** 2 | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Core Banking & Ledger
 - **Owner:** Sujal (`SUJALGPM`)
-- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (3.9 days of slack)
+- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** Mon 02 Nov (#302, 2dd1ab7) | **Status:** Done | **Risk:** Low (3.9 days of slack)
 - **Depends on:** TASK-008 (#19, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Parallel: can start immediately
 - **Goal:** Export service generating tamper-evident PDF and CSV account statements for date ranges.
@@ -607,7 +607,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #40 | **Sprint:** 2 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Core Banking & Ledger
 - **Owner:** Sujal (`SUJALGPM`)
-- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (8.1 days of slack)
+- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Mon 02 Nov (#303, bbe0888) | **Status:** Done | **Risk:** Low (8.1 days of slack)
 - **Depends on:** TASK-008 (#19, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Parallel: can start immediately
 - **Goal:** High-performance filtered transaction queries by date range, payee name, and amount bounds.
@@ -697,7 +697,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #43 | **Sprint:** 2 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Kalpak (`Patil-Kalpak`)
-- **Start:** Tue 27 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (7.4 days of slack)
+- **Start:** Tue 27 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** Mon 02 Nov (#301, 18441c6) | **Status:** Done | **Risk:** Low (7.4 days of slack)
 - **Depends on:** TASK-014 (#37, Sujal), TASK-019 (#42, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-014, TASK-019
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout. Payee management can use the existing payees API; the bill-payment part waits for TASK-014's API (no mocked endpoints).
@@ -899,7 +899,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #50 | **Sprint:** 2 | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Tue 27 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (6.5 days of slack)
+- **Start:** Tue 27 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** - (set when merged; PR #312) | **Status:** In Review | **Risk:** Low (6.5 days of slack)
 - **Depends on:** TASK-014 (#37, Sujal), TASK-015 (#38, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-014, TASK-015
 - **Goal:** Comprehensive Low-Level Design document covering data models, triggers, and state machines.
@@ -1222,7 +1222,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #61 | **Sprint:** 3 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Pranay (`pranaysanap`)
-- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged; PR #268) | **Status:** In Review | **Risk:** Low (3.0 days of slack)
+- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** Mon 02 Nov (#268, 0ae1607) | **Status:** Done | **Risk:** Low (3.0 days of slack)
 - **Depends on:** TASK-011 (#22, Krishna), TASK-029 (#52, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-029
 - **Goal:** Automated model promotion script tagging champion models in MLflow registry.
@@ -2036,7 +2036,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #89 | **Sprint:** 5 | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Sat 31 Oct | **Target deadline:** Sun 01 Nov | **Actual completion:** - (set when merged) | **Status:** In Review | **Risk:** Low (2.4 days of slack)
+- **Start:** Sat 31 Oct | **Target deadline:** Sun 01 Nov | **Actual completion:** Mon 02 Nov (#277, 1c6ed9e) | **Status:** Done | **Risk:** Low (2.4 days of slack)
 - **Depends on:** TASK-056 (#79, Krishna), TASK-019 (#42, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-056, TASK-019
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; lives in the staff route tree for the relationship manager role.
@@ -2256,7 +2256,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #97 | **Sprint:** 5 | **Priority:** should | **Size:** S (0.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Kalpak (`Patil-Kalpak`)
-- **Start:** Mon 02 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Medium (1.4 days of slack before downstream work is delayed)
+- **Start:** Mon 02 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** Mon 02 Nov (#302, 2dd1ab7) | **Status:** Done | **Risk:** Medium (1.4 days of slack before downstream work is delayed)
 - **Depends on:** TASK-016 (#39, Sujal), TASK-019 (#42, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-016, TASK-019
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; statements are a tab of the routed account detail page.
@@ -2455,7 +2455,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #104 | **Sprint:** 6 | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Sun 01 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (set when merged) | **Status:** In Review | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
+- **Start:** Sun 01 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** Mon 02 Nov (#273, 8e5c4f1) | **Status:** Done | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
 - **Depends on:** TASK-036 (#59, Kalpak), TASK-080 (#103, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-036, TASK-080
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; lives in the staff route tree.
@@ -2830,7 +2830,7 @@ decision in ADR-0015.
 
 - **Issue:** #177 | **Sprint:** unscheduled | **Priority:** must | **Size:** S (0.5 person-days estimate) | **Epic:** Core Banking & Ledger
 - **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Start:** - | **Target deadline:** - | **Actual completion:** Mon 02 Nov (#301, 18441c6) | **Status:** Done | **Risk:** Unscheduled
 - **Depends on:** none.
 - **Mode:** Unscheduled
 - **Goal:** Customers can edit a payee (UC-05 'Edit payee'), with name changes forcing re-verification.
@@ -2968,7 +2968,7 @@ decision in ADR-0015.
 
 - **Issue:** #182 | **Sprint:** unscheduled | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov)
-- **Start:** Sun 01 Nov | **Target deadline:** Sun 01 Nov | **Actual completion:** Sun 1 Nov (`GET /api/v1/fraud/monitoring`, `/staff/monitoring`; in review) | **Status:** In review | **Risk:** Low
+- **Start:** Sun 01 Nov | **Target deadline:** Sun 01 Nov | **Actual completion:** Sun 1 Nov (`GET /api/v1/fraud/monitoring`, `/staff/monitoring`; #278) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-019 (#42, Kalpak), TASK-035 (#58, Krishna), TASK-036 (#59, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; lives in the staff route tree.

@@ -929,6 +929,38 @@ def test_a_fraud_block_declines_the_run_and_tells_the_customer(
         assert {"TRANSFER_DECLINED", "SCHEDULED_TRANSFER_PAUSED"} <= types
 
 
+def test_a_fraud_block_on_the_final_run_completes_the_order_without_a_pause_reason(
+    migrated_engine: Engine,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    settings: Settings,
+) -> None:
+    """Regression (found while writing the LLD): a BLOCK on the last occurrence set COMPLETED
+    but kept pause_reason=FRAUD_BLOCK, violating ck_scheduled_transfers_pause_reason_valid, so
+    the commit failed and the run was retried for ever."""
+    alice, bob, payee = pair
+    today = date(2026, 11, 1)
+    with Session(migrated_engine) as session:
+        inst_id = _create_instruction(session, alice, payee, next_run_date=today, end_date=today).id
+
+    with Session(migrated_engine) as session:
+        outcome = execute_scheduled_instruction(
+            session,
+            inst_id,
+            today_utc=today,
+            payments_service=_service(session, FraudDecision.BLOCK, settings),
+        )
+    assert outcome == ScheduledExecutionOutcome.BLOCK
+
+    with Session(migrated_engine) as session:
+        row = session.get(ScheduledTransfer, inst_id)
+        assert row is not None
+        assert row.status == ScheduledTransferStatus.COMPLETED and row.pause_reason is None
+        tx = session.get(Transaction, row.last_transaction_id)
+        assert tx is not None and tx.status == TransactionStatus.DECLINED
+        dst = session.get(Account, bob.account_id)
+        assert dst is not None and dst.ledger_balance == 0
+
+
 def test_the_daily_limit_applies_to_a_scheduled_run_and_it_retries_the_same_day(
     migrated_engine: Engine,
     pair: tuple[Actor, Actor, dict[str, Any]],

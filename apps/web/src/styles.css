@@ -1616,6 +1616,17 @@ a {
   border-color: var(--danger);
 }
 
+/* ---- Phone width: tables with row actions (payees) ---------------------------------------- */
+@media (max-width: 640px) {
+  .hide-narrow {
+    display: none;
+  }
+  .row-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 /* ---- Loans (TASK-051) --------------------------------------------------------------------- */
 .loan-list {
   display: grid;
