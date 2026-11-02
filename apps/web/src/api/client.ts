@@ -71,6 +71,13 @@ export type LoanApplyRequest = components["schemas"]["LoanApplyRequest"];
 export type LoanSummaryOut = components["schemas"]["LoanSummaryOut"];
 export type LoanOut = components["schemas"]["LoanOut"];
 export type LoanInstalmentOut = components["schemas"]["LoanInstalmentOut"];
+export type WealthProductOut = components["schemas"]["WealthProductOut"];
+export type DepositQuoteOut = components["schemas"]["DepositQuoteOut"];
+export type DepositBookRequest = components["schemas"]["DepositBookRequest"];
+export type FixedDepositOut = components["schemas"]["FixedDepositOut"];
+export type PortfolioOut = components["schemas"]["PortfolioOut"];
+export type AllocationSlice = components["schemas"]["AllocationSlice"];
+export type RiskLevel = WealthProductOut["risk_level"];
 
 export class ApiError extends Error {
   constructor(
@@ -416,6 +423,36 @@ export const api = {
     }),
   loans: () => apiFetch<LoanSummaryOut[]>("/api/v1/loans"),
   loan: (loanId: string) => apiFetch<LoanOut>(`/api/v1/loans/${encodeURIComponent(loanId)}`),
+  wealthProducts: (riskLevel?: RiskLevel) =>
+    apiFetch<WealthProductOut[]>(
+      riskLevel
+        ? `/api/v1/wealth/products?risk_level=${encodeURIComponent(riskLevel)}`
+        : "/api/v1/wealth/products",
+    ),
+  /** The server computes the maturity (exact integer paise); the browser never does money maths. */
+  quoteDeposit: (productId: string, amountMinor: number, tenureMonths: number) =>
+    apiFetch<DepositQuoteOut>("/api/v1/wealth/fixed-deposits/quote", {
+      method: "POST",
+      body: JSON.stringify({
+        product_id: productId,
+        amount_minor: amountMinor,
+        tenure_months: tenureMonths,
+      }),
+    }),
+  /** One key per confirmed intent: a retried submit never books (or debits) twice. */
+  bookDeposit: (body: DepositBookRequest, idempotencyKey: string) =>
+    apiFetch<FixedDepositOut>("/api/v1/wealth/fixed-deposits/book", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(body),
+    }),
+  closeDeposit: (depositId: string, idempotencyKey: string) =>
+    apiFetch<FixedDepositOut>(
+      `/api/v1/wealth/fixed-deposits/${encodeURIComponent(depositId)}/close`,
+      { method: "POST", headers: { "Idempotency-Key": idempotencyKey } },
+    ),
+  fixedDeposits: () => apiFetch<FixedDepositOut[]>("/api/v1/wealth/fixed-deposits"),
+  portfolio: () => apiFetch<PortfolioOut>("/api/v1/wealth/portfolio"),
   notifications: (options?: { unread_only?: boolean; limit?: number; offset?: number }) => {
     const params = new URLSearchParams();
     if (options?.unread_only !== undefined) params.set("unread_only", String(options.unread_only));

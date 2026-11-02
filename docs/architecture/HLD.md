@@ -175,7 +175,7 @@ Across modules, code calls the other module's `service` or `policy` functions on
 | `compliance` | Hash-chained audit log read and verify | `/compliance/audit-logs*` | Implemented |
 | `health` | Liveness and readiness (DB + Redis) | `/api/health/live`, `/api/health/ready` | Implemented |
 | `statements` | PDF/CSV statements | none (empty package) | Planned (TASK-016, TASK-074) |
-| `wealth` | Deposits, funds, insurance, comparison | none (empty package) | Planned (TASK-063, TASK-064, TASK-065, TASK-096, TASK-097, TASK-098) |
+| `wealth` | Seeded catalogue (fixed deposits, illustrative funds and gold bond, risk filter); exact quarterly-compounded deposit maths; idempotent fixed-deposit booking and closure through the ledger (`SYS-FIXED-DEPOSITS`), maturity and portfolio computed on read ([ADR-0025](../adr/0025-wealth-catalogue-and-fixed-deposits.md)) | `/wealth/products`, `/wealth/fixed-deposits*`, `/wealth/portfolio` | Implemented (API and web `/wealth`); insurance (TASK-096), risk profile (TASK-097) and comparison (TASK-098) Planned |
 
 Scheduled and recurring transfers live in the `payments` module (`scheduled_service.py`, table `scheduled_transfers`,
 migration `0014`, [ADR-0023](../adr/0023-scheduled-transfers.md)); the Celery job is in section 4.2.

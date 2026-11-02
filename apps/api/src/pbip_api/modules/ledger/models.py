@@ -30,6 +30,9 @@ class TransactionType(StrEnum):
     BILL_PAYMENT = "BILL_PAYMENT"
     LOAN_DISBURSAL = "LOAN_DISBURSAL"  # clearing -> customer (ADR-0024); never counted as income
     LOAN_REPAYMENT = "LOAN_REPAYMENT"  # customer -> clearing, collected by the scheduler (ADR-0024)
+    FD_BOOKING = "FD_BOOKING"  # customer -> SYS-FIXED-DEPOSITS (ADR-0025); not spend
+    FD_CLOSURE = "FD_CLOSURE"  # SYS-FIXED-DEPOSITS -> customer, the principal back; not income
+    FD_INTEREST = "FD_INTEREST"  # clearing -> customer, deposit interest (ADR-0025)
 
 
 class TransactionStatus(StrEnum):

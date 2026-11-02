@@ -49,6 +49,13 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("get", "/api/v1/loans"),
         ("post", "/api/v1/loans/apply"),
         ("get", f"/api/v1/loans/{uuid.uuid4()}"),
+        ("get", "/api/v1/wealth/products"),
+        ("post", "/api/v1/wealth/fixed-deposits/quote"),
+        ("post", "/api/v1/wealth/fixed-deposits/book"),
+        ("get", "/api/v1/wealth/fixed-deposits"),
+        ("get", f"/api/v1/wealth/fixed-deposits/{uuid.uuid4()}"),
+        ("post", f"/api/v1/wealth/fixed-deposits/{uuid.uuid4()}/close"),
+        ("get", "/api/v1/wealth/portfolio"),
         ("get", "/api/v1/fraud/alerts"),
         ("get", "/api/v1/fraud/stats"),
         ("get", "/api/v1/fraud/monitoring"),
@@ -503,6 +510,52 @@ def test_bola_loans_are_only_visible_to_their_borrower(
     assert client.get("/api/v1/loans", headers=h).json() == []
     own = client.get(f"/api/v1/accounts/{alice.account_id}", headers=alice.headers).json()
     assert own["ledger_balance_minor"] == 2_00_000_00  # income + one loan, nothing from Mallory
+
+
+def test_bola_fixed_deposits_are_only_visible_to_their_owner(
+    client: TestClient, make_customer: Callable[..., Actor]
+) -> None:
+    """TASK-064: deposits are read through wealth/policy with the AUTHENTICATED customer id; a
+    deposit cannot be booked from, read or closed into someone else's account."""
+    alice = make_customer(funds=2_00_000_00)
+    mallory = make_customer(funds=2_00_000_00)
+    product = "20000000-0000-4000-a000-000000000002"  # FD-REGULAR (seeded catalogue)
+
+    def book(actor: Actor, account_id: str) -> Any:
+        return client.post(
+            "/api/v1/wealth/fixed-deposits/book",
+            headers={**actor.headers, "Idempotency-Key": uuid.uuid4().hex},
+            json={
+                "product_id": product,
+                "amount_minor": 1_00_000_00,
+                "tenure_months": 12,
+                "account_id": account_id,
+            },
+        )
+
+    victim = book(alice, str(alice.account_id))
+    assert victim.status_code == 201, victim.text
+    deposit_id = victim.json()["id"]
+    h = mallory.headers
+    close = {"Idempotency-Key": uuid.uuid4().hex}
+    attempts = {
+        "get victim deposit": client.get(f"/api/v1/wealth/fixed-deposits/{deposit_id}", headers=h),
+        "get non-existent deposit": client.get(
+            f"/api/v1/wealth/fixed-deposits/{uuid.uuid4()}", headers=h
+        ),
+        "close victim deposit": client.post(
+            f"/api/v1/wealth/fixed-deposits/{deposit_id}/close", headers=h | close
+        ),
+        "book FROM victim account": book(mallory, str(alice.account_id)),
+    }
+    for name, response in attempts.items():
+        assert response.status_code == 404, f"{name}: expected 404 got {response.status_code}"
+    assert client.get("/api/v1/wealth/fixed-deposits", headers=h).json() == []
+    assert client.get("/api/v1/wealth/portfolio", headers=h).json()["open_deposits"] == 0
+    own = client.get(f"/api/v1/accounts/{alice.account_id}", headers=alice.headers).json()
+    assert own["ledger_balance_minor"] == 1_00_000_00  # only her own booking moved her money
+    mine = client.get(f"/api/v1/wealth/fixed-deposits/{deposit_id}", headers=alice.headers)
+    assert mine.status_code == 200 and mine.json()["status"] == "ACTIVE"
 
 
 def test_bola_forecast_neither_reads_nor_alerts_for_another_customers_account(
