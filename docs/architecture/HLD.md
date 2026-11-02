@@ -177,7 +177,8 @@ Across modules, code calls the other module's `service` or `policy` functions on
 | `statements` | PDF/CSV statements | none (empty package) | Planned (TASK-016, TASK-074) |
 | `wealth` | Deposits, funds, insurance, comparison | none (empty package) | Planned (TASK-063, TASK-064, TASK-065, TASK-096, TASK-097, TASK-098) |
 
-Scheduled and recurring transfers have no module yet. They are Planned (TASK-015, TASK-021).
+Scheduled and recurring transfers live in the `payments` module (`scheduled_service.py`, table `scheduled_transfers`,
+migration `0014`, [ADR-0023](../adr/0023-scheduled-transfers.md)); the Celery job is in section 4.2.
 
 ### 4.2 Background jobs (`apps/api/src/pbip_api/worker/celery_app.py`)
 
@@ -225,7 +226,7 @@ Every other screen is Planned under the task named in section 4.1.
 
 | Store | What lives there | Notes |
 |---|---|---|
-| PostgreSQL `public` | 26 tables: identity and sessions, customers and devices, accounts, ledger, holds, idempotency keys, payees, bills, fraud events and alerts, notifications and outbox, hash-chained audit log, security events, analytics aggregates, segments, clickstream (monthly range partitions), assistant messages | Full diagram: [er-diagram.md](er-diagram.md) (generated, CI-checked). Integer minor units for money. CHECK constraints for enums and ranges. Triggers keep `transaction_entries` immutable and balanced and `audit_logs` append-only |
+| PostgreSQL `public` | 30 tables (33 with the 3 `synthetic` tables below; `alembic_version` and clickstream partitions are not counted, as in the LLD): identity and sessions, customers and devices, accounts, ledger, holds, idempotency keys, payees, bills, scheduled transfers, loans and instalments, fraud events and alerts, notifications and outbox, hash-chained audit log, security events, RM interactions, analytics aggregates, segments, clickstream (monthly range partitions), assistant messages | Full diagram: [er-diagram.md](er-diagram.md) (generated, CI-checked). Integer minor units for money. CHECK constraints for enums and ranges. Triggers keep `transaction_entries` immutable and balanced and `audit_logs` append-only |
 | PostgreSQL `synthetic` | Generation runs, synthetic customers, synthetic transactions | Training data only, never read on the request path ([ADR-0009](../adr/0009-synthetic-dataset-schema.md)) |
 | Redis | Celery broker and result backend (results expire after 1 h); fixed-window rate limits `rl:{name}:{subject}`; sorted-set velocity windows for transfers and login failures | Not a system of record. Rate limits fail open if Redis is down. Velocity falls back to PostgreSQL ([ADR-0020](../adr/0020-device-network-signals-and-velocity-counters.md)). Idempotency is in PostgreSQL, not Redis ([ADR-0003](../adr/0003-idempotency-in-postgresql.md)) |
 | Fraud model directory | `lightgbm.txt`, `isolation_forest.joblib`, `hybrid_params.json`, `manifest.json` (SHA-256 of each file) | Built by `make fraud-model` into `models/fraud`; mounted read-only into `api` in the dev compose. Read once per process when `FRAUD_SCORER=hybrid`. A damaged or missing artefact means rules-only |
@@ -528,5 +529,12 @@ This HLD follows the code. Where an earlier document says something different, t
 * Blueprint section 1 says models are "loaded at start from the MLflow registry (alias `champion`) with a local-file
   fallback". On `main`, the API loads only from `FRAUD_MODEL_DIR`, and only when `FRAUD_SCORER=hybrid`. Registry
   loading is TASK-038.
-* Blueprint section 1 lists Redis as a "cache" and Celery for "scheduled xfers". There is no general cache, and there
-  are no scheduled transfers yet (TASK-015).
+* Blueprint section 1 lists Redis as a "cache" and Celery for "scheduled xfers". There is no general cache. Scheduled
+  and recurring transfers are implemented (TASK-015, [ADR-0023](../adr/0023-scheduled-transfers.md)): customers manage
+  standing orders under `/api/v1/transfers/scheduled` (create, list, pause/resume, cancel), stored in
+  `scheduled_transfers` (migration `0014`), and the Celery Beat job `pbip.transfers.execute_scheduled` runs due
+  occurrences every 60 s through the transfer use case. Loan repayment instructions use the same engine
+  ([ADR-0024](../adr/0024-loan-disbursal-and-repayments.md)).
+* Blueprint section 7 lists `POSTED -> REVERSED`. That state is reserved: `ledger.reverse_transaction` is implemented
+  and tested but has no production caller (no route, job or script), and `bill_payments.status = 'REVERSED'` is
+  never set (LLD section 6).
