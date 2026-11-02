@@ -1,5 +1,5 @@
 # ADR 0029: Automatic payout of fixed deposits at maturity
-- Status: Proposed
+- Status: Accepted (product owner, 2026-11-03)
 - Date: 2026-11-03
 - Deciders: Architecture Team (issue #332, follow-up to TASK-064 / ADR-0025)
 
@@ -62,7 +62,24 @@ payout-account change); the deposit earns nothing after maturity (ADR-0025). We 
 account: it would need a new system account and a manual repair flow, and moves the customer's money away from
 a contract that already holds it safely.
 
-### 5. Untouched deposits
+### 5. Amounts, rounding and late runs
+Money is integer paise end to end, and the job does no arithmetic of its own. The figures are the contract
+snapshot that booking stored from `wealth/deposit_math.py` (ADR-0025 section 2):
+* **maturity amount** `= round_half_up(P * (1 + r/4)^q)`. `P` is the principal in paise, `r` is
+  `annual_rate_bps / 10000` and `q = tenure_months / 3` (quarterly compounding). The sum is evaluated with exact
+  `fractions.Fraction` (no float or Decimal) and rounded **once**, half up, to whole paise
+  (`deposit_math.round_half_up`). Interest is never rounded per quarter.
+* **interest** `= maturity amount - P`, an integer, stored as `fixed_deposits.maturity_interest` with
+  `maturity_amount = principal + maturity_interest` enforced by a CHECK. The booking-time quote
+  (`POST /api/v1/wealth/fixed-deposits/quote`) runs the same function on the same bank day, so quote, snapshot and
+  payout agree to the paisa.
+* At payout, `_closure_interest` returns the stored `maturity_interest` for any day on or after maturity. The ledger
+  posts `principal` (`FD_CLOSURE`) and that interest (`FD_INTEREST`). Neither posting rounds anything.
+* **Late runs earn nothing extra.** If the job was down, a deposit that matured days ago is paid on the next run.
+  It gets exactly the maturity amount, because a matured deposit earns nothing after maturity (ADR-0025 section 5;
+  `accrued_interest` caps the date at maturity). `closed_on` is the actual payout day.
+
+### 6. Untouched deposits
 Deposits already closed early or withdrawn manually are `CLOSED` and never selected. Deposits not yet matured are
 not selected. Insufficient funds cannot occur (the debits are system accounts).
 

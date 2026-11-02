@@ -5,6 +5,7 @@ import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from fractions import Fraction
 from typing import Any
 
 import pytest
@@ -381,4 +382,87 @@ def test_payout_racing_a_customer_closure_pays_exactly_once(
     assert set(outcomes) - {"PAID", "closed"} <= {"REPLAY", "SKIPPED", "deposit_closed"}
     assert len(_closures(db)) == 1
     assert _balance(db, alice.account_id) == FUNDS + INTEREST_6M
+    _assert_ledger_consistent(db)
+
+
+def _entries(session: Session, transaction_id: uuid.UUID | None) -> list[TransactionEntry]:
+    stmt = select(TransactionEntry).where(TransactionEntry.transaction_id == transaction_id)
+    return list(session.execute(stmt).scalars())
+
+
+def test_a_deposit_matured_long_before_the_run_is_caught_up_once_without_extra_interest(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    migrated_engine: Engine,
+    settings: Settings,
+    db: Session,
+    clock: FakeClock,
+) -> None:
+    """The job was down for 30 days after maturity. The next run pays exactly the contract
+    amount once: a matured deposit earns nothing after maturity (ADR-0025 s5, ADR-0029 s5)."""
+    alice = make_customer(funds=FUNDS)
+    deposit_id = _book(client, alice)
+    maturity_date = _deposit(db, deposit_id).maturity_date
+    days_to_maturity = (maturity_date - datetime.fromtimestamp(clock.now, tz=UTC).date()).days
+    late = _at(clock, days_to_maturity + 30)
+
+    assert _run(migrated_engine, settings, late) == {"PAID": 1}
+    assert _run(migrated_engine, settings, late) == {}  # caught up once, never again
+    deposit = _deposit(db, deposit_id)
+    assert deposit.paid_interest == deposit.maturity_interest == INTEREST_6M
+    assert deposit.closed_on is not None and deposit.closed_on > maturity_date
+    assert len(_closures(db)) == 1
+    assert _balance(db, alice.account_id) == FUNDS - AMOUNT + deposit.maturity_amount
+    _assert_ledger_consistent(db)
+
+
+def test_the_payout_equals_the_booking_time_quote_to_the_paisa_and_both_postings_balance(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    migrated_engine: Engine,
+    settings: Settings,
+    db: Session,
+    clock: FakeClock,
+) -> None:
+    """ADR-0029 s5: quote, contract snapshot and payout come from one ``deposit_math`` result,
+    rounded once half up to whole paise. An odd amount and 3 quarters make the rounding real."""
+    alice = make_customer(funds=FUNDS)
+    amount = 1_23_456_78
+    terms = {"product_id": FD_SHORT, "amount_minor": amount, "tenure_months": 9}
+    quoted = client.post("/api/v1/wealth/fixed-deposits/quote", headers=alice.headers, json=terms)
+    assert quoted.status_code == 200, quoted.text
+    quote = quoted.json()
+    # Independent check of the rounding rule: P (1 + 0.065/4)^3 = 12,957,362.87 paise -> 12,957,363.
+    exact = Fraction(amount) * (1 + Fraction(650, 40_000)) ** 3
+    assert exact.denominator != 1 and quote["maturity_amount_minor"] == int(exact + Fraction(1, 2))
+    assert quote["maturity_amount_minor"] == amount + quote["maturity_interest_minor"]
+
+    booked = client.post(
+        "/api/v1/wealth/fixed-deposits/book",
+        headers={**alice.headers, "Idempotency-Key": uuid.uuid4().hex},
+        json=terms | {"account_id": str(alice.account_id)},
+    )
+    assert booked.status_code == 201, booked.text
+    deposit_id = uuid.UUID(booked.json()["id"])
+    before = _balance(db, alice.account_id)
+
+    assert _run(migrated_engine, settings, _at(clock, 300)) == {"PAID": 1}
+    deposit = _deposit(db, deposit_id)
+    assert deposit.maturity_amount == quote["maturity_amount_minor"]
+    principal = db.get(Transaction, deposit.closure_transaction_id)
+    interest = db.get(Transaction, deposit.interest_transaction_id)
+    assert principal is not None and interest is not None
+    assert principal.amount == amount
+    assert interest.amount == quote["maturity_interest_minor"] == deposit.paid_interest
+    assert principal.amount + interest.amount == quote["maturity_amount_minor"]
+    assert _balance(db, alice.account_id) - before == quote["maturity_amount_minor"]
+    for posting, debit_account in (
+        (principal, DEPOSITS),
+        (interest, ledger.SYSTEM_CLEARING_ID),
+    ):
+        entries = {(e.account_id, e.direction): e.amount for e in _entries(db, posting.id)}
+        assert entries == {
+            (debit_account, EntryDirection.DEBIT): posting.amount,
+            (alice.account_id, EntryDirection.CREDIT): posting.amount,
+        }
     _assert_ledger_consistent(db)
