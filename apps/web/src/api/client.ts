@@ -5,6 +5,8 @@ export type AccountOut = components["schemas"]["AccountOut"];
 export type PayeeOut = components["schemas"]["PayeeOut"];
 export type TransferOut = components["schemas"]["TransferOut"];
 export type UserOut = components["schemas"]["UserOut"];
+export type MfaEnrollmentOut = components["schemas"]["MfaEnrollmentOut"];
+export type RecoveryCodesOut = components["schemas"]["RecoveryCodesOut"];
 export type CustomerProfileOut = components["schemas"]["CustomerProfileOut"];
 export type DeviceOut = components["schemas"]["DeviceOut"];
 export type EntriesPage = components["schemas"]["EntriesPage"];
@@ -177,6 +179,17 @@ export const api = {
     apiFetch<TokenResponse>("/api/v1/auth/mfa/verify", {
       method: "POST",
       body: JSON.stringify({ mfa_token: mfaToken, code }),
+    }),
+  register: (fullName: string, email: string, password: string) =>
+    apiFetch<UserOut>("/api/v1/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ full_name: fullName, email, password }),
+    }),
+  enrollMfa: () => apiFetch<MfaEnrollmentOut>("/api/v1/auth/mfa/enroll", { method: "POST" }),
+  confirmMfa: (code: string) =>
+    apiFetch<RecoveryCodesOut>("/api/v1/auth/mfa/confirm", {
+      method: "POST",
+      body: JSON.stringify({ code }),
     }),
   restoreSession: refreshSession,
   logout: () =>

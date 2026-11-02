@@ -1423,3 +1423,17 @@ a {
   gap: var(--space-2);
   align-items: end;
 }
+
+/* ---- MFA enrolment (#201) ------------------------------------------------------------------ */
+.secret,
+.recovery-codes code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+.recovery-codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: var(--space-2);
+  padding: 0;
+  list-style: none;
+}
