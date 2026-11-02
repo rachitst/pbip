@@ -1357,7 +1357,7 @@
       "DemoLabStatus": {
         "properties": {
           "enabled": {
-            "description": "False in production: the staff fraud demonstration lab must not run there",
+            "description": "True: the lab may run here. Outside local/test the endpoint answers 404",
             "title": "Enabled",
             "type": "boolean"
           }
@@ -6111,7 +6111,7 @@
     },
     "/api/v1/fraud/demo-lab": {
       "get": {
-        "description": "The lab drives real customer APIs with demo credentials. The web app only knows how it was\nbuilt, not where it is deployed, so the server's APP_ENV decides; production says no.",
+        "description": "The lab drives real customer APIs with demo credentials. The web app only knows how it was\nbuilt, not where it is deployed, so the server's APP_ENV decides. Staging and production\nanswer 404 (not a 200 \"disabled\"), so the lab is indistinguishable from absent there.",
         "operationId": "get_demo_lab_status_api_v1_fraud_demo_lab_get",
         "responses": {
           "200": {
@@ -6123,6 +6123,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not a local/test environment: the lab does not exist here"
           }
         },
         "security": [

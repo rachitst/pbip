@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.db import get_session, utcnow
+from pbip_api.core.errors import NotFoundError
 from pbip_api.core.redis import get_redis
 from pbip_api.core.validation import Text
 from pbip_api.modules.accounts.service import mask_account_number
@@ -186,7 +187,7 @@ class SecurityMonitoring(BaseModel):
 
 class DemoLabStatus(BaseModel):
     enabled: bool = Field(
-        description="False in production: the staff fraud demonstration lab must not run there"
+        description="True: the lab may run here. Outside local/test the endpoint answers 404"
     )
 
 
@@ -246,14 +247,18 @@ def get_monitoring(
     "/demo-lab",
     response_model=DemoLabStatus,
     summary="Whether the fraud demonstration lab (TASK-081) may run in this environment",
+    responses={404: {"description": "Not a local/test environment: the lab does not exist here"}},
 )
 def get_demo_lab_status(
     _analyst: Principal = Depends(analyst_gate),
     settings: Settings = Depends(get_settings),
 ) -> DemoLabStatus:
     """The lab drives real customer APIs with demo credentials. The web app only knows how it was
-    built, not where it is deployed, so the server's APP_ENV decides; production says no."""
-    return DemoLabStatus(enabled=settings.app_env != "production")
+    built, not where it is deployed, so the server's APP_ENV decides. Staging and production
+    answer 404 (not a 200 "disabled"), so the lab is indistinguishable from absent there."""
+    if not settings.fraud_demo_lab_enabled:
+        raise NotFoundError("not found")
+    return DemoLabStatus(enabled=True)
 
 
 @router.get("/alerts", response_model=list[AlertSummary], summary="Alert queue (newest first)")

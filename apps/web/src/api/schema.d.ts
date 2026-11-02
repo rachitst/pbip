@@ -683,7 +683,8 @@ export interface paths {
         /**
          * Whether the fraud demonstration lab (TASK-081) may run in this environment
          * @description The lab drives real customer APIs with demo credentials. The web app only knows how it was
-         *     built, not where it is deployed, so the server's APP_ENV decides; production says no.
+         *     built, not where it is deployed, so the server's APP_ENV decides. Staging and production
+         *     answer 404 (not a 200 "disabled"), so the lab is indistinguishable from absent there.
          */
         get: operations["get_demo_lab_status_api_v1_fraud_demo_lab_get"];
         put?: never;
@@ -1646,7 +1647,7 @@ export interface components {
         DemoLabStatus: {
             /**
              * Enabled
-             * @description False in production: the staff fraud demonstration lab must not run there
+             * @description True: the lab may run here. Outside local/test the endpoint answers 404
              */
             enabled: boolean;
         };
@@ -4202,6 +4203,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DemoLabStatus"];
                 };
+            };
+            /** @description Not a local/test environment: the lab does not exist here */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

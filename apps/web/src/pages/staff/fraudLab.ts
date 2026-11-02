@@ -4,6 +4,7 @@ import type {
   AccountOut,
   AlertDetail,
   CustomerProfileOut,
+  DemoLabStatus,
   PayeeOut,
   PayeeVerificationOut,
   TokenResponse,
@@ -79,7 +80,7 @@ export const SCENARIOS: Scenario[] = [
       "Sign in with the right password and transfer INR 50,000.00 from a new device",
     ],
     signals:
-      "Failed sign-ins in 24 hours, NEW_DEVICE (a device not seen before), plus the payee and amount rules",
+      "RECENT_LOGIN_FAILURES (3 or more failed sign-ins in 24 hours), NEW_DEVICE_OR_NETWORK (a device not seen before), plus the payee and amount rules",
   },
   {
     code: "F4",
@@ -156,11 +157,19 @@ export interface RunInput {
 /** A failure the lab explains itself (as opposed to an API error). */
 export class LabError extends Error {}
 
-/** The server decides whether the lab may run (false in production); see GET /fraud/demo-lab. */
+/** The server decides whether the lab may run: GET /fraud/demo-lab answers 404 outside local/test
+ * (staging, production), which means "switched off", not an error to retry. */
 export function useDemoLabStatus(enabled: boolean) {
   return useQuery({
     queryKey: ["fraud", "demo-lab"],
-    queryFn: () => api.fraudDemoLab(),
+    queryFn: async (): Promise<DemoLabStatus> => {
+      try {
+        return await api.fraudDemoLab();
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) return { enabled: false };
+        throw error;
+      }
+    },
     enabled,
     staleTime: Infinity,
   });
@@ -215,13 +224,14 @@ async function signIn(who: Credentials): Promise<string> {
   return body.access_token;
 }
 
-/** A sign-in with a wrong password. Only the expected 401 counts; a lockout or rate limit stops. */
-async function failedSignIn(email: string, attempt: number): Promise<void> {
+/** A sign-in with a wrong password. Only the expected 401 counts; a lockout or rate limit stops.
+ * The wrong guess is random per attempt, never a constant in the source. */
+async function failedSignIn(email: string): Promise<void> {
   try {
     await apiFetchAs<TokenResponse>(
       null,
       "/api/v1/auth/login",
-      post({ email, password: `wrong-password-attempt-${String(attempt)}` }),
+      post({ email, password: crypto.randomUUID() }),
     );
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) return;
@@ -372,7 +382,7 @@ const accountTakeover: Runner = async ({ customer }, progress) => {
   );
   for (let n = 1; n <= 3; n += 1) {
     await progress.step(`Attacker sign-in ${String(n)} of 3 with a wrong password`, () =>
-      failedSignIn(customer.email, n),
+      failedSignIn(customer.email),
     );
   }
   const attacker = await progress.step("Attacker signs in with the stolen password", () =>

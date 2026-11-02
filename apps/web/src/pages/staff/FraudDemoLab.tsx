@@ -63,8 +63,9 @@ export function FraudDemoLab() {
       )}
       {status.data?.enabled === false && (
         <Alert tone="warning">
-          The fraud demo lab is switched off in this environment. It only runs where the server is
-          not in production (APP_ENV), because it moves money as a customer.
+          The fraud demo lab is switched off in this environment. It only runs where the server is a
+          local or test environment (APP_ENV), never in staging or production, because it moves
+          money as a customer.
         </Alert>
       )}
       {status.data?.enabled === true && <Lab />}

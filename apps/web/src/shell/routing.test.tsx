@@ -40,7 +40,11 @@ describe("routing, roles and the application shell (ADR-0016)", () => {
       if (url.endsWith("/customers/me")) return Promise.resolve(json(200, profile));
       if (url.endsWith("/customers/devices")) return Promise.resolve(json(200, []));
       if (url.endsWith("/fraud/demo-lab")) {
-        return Promise.resolve(json(200, { enabled: labEnabled }));
+        return Promise.resolve(
+          labEnabled
+            ? json(200, { enabled: true })
+            : json(404, { code: "not_found", title: "Not found" }),
+        );
       }
       return Promise.resolve(json(404, { code: "not_found", title: "not found" }));
     });
@@ -175,7 +179,7 @@ describe("routing, roles and the application shell (ADR-0016)", () => {
       );
       unmount();
 
-      labEnabled = false; // APP_ENV=production on the server
+      labEnabled = false; // APP_ENV=staging or production: the server answers 404
       renderApp();
       await screen.findByRole("heading", { name: "Staff workspace" });
       await waitFor(() => {

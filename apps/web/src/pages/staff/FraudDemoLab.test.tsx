@@ -8,6 +8,9 @@ import { MeContext } from "../../shell/MeContext";
 import { json, urlOf } from "../../test-utils";
 import { FraudDemoLab } from "./FraudDemoLab";
 
+/** Generated per run: the lab never ships or hard-codes a demo credential. */
+const demoSecret = crypto.randomUUID();
+
 const analyst: UserOut = {
   id: "u-fa",
   email: "analyst@demo.pbip",
@@ -106,7 +109,12 @@ let handler: Handler = () => undefined;
 let labEnabled = true;
 
 function server(call: Call): Response {
-  if (call.url.endsWith("/api/v1/fraud/demo-lab")) return json(200, { enabled: labEnabled });
+  if (call.url.endsWith("/api/v1/fraud/demo-lab")) {
+    // Staging and production answer 404: the lab does not exist there.
+    return labEnabled
+      ? json(200, { enabled: true })
+      : json(404, { code: "not_found", title: "Not found" });
+  }
   return handler(call) ?? json(404, { code: "not_found", title: "Not found" });
 }
 
@@ -129,7 +137,7 @@ function renderLab(me: UserOut = analyst) {
 
 async function enterPassword() {
   const user = userEvent.setup();
-  await user.type(await screen.findByLabelText("Customer password"), "demo-pass");
+  await user.type(await screen.findByLabelText("Customer password"), demoSecret);
   return user;
 }
 
@@ -141,7 +149,7 @@ function happyServer(overrides: Handler = () => undefined): Handler {
     const { method, url } = call;
     if (url.endsWith("/auth/login")) {
       const { email, password } = call.body as { email: string; password: string };
-      if (password !== "demo-pass") return json(401, { code: "unauthorized", title: "Invalid" });
+      if (password !== demoSecret) return json(401, { code: "unauthorized", title: "Invalid" });
       return json(200, { access_token: `token-${email}`, mfa_required: false });
     }
     const bearer = call.headers.get("Authorization");
@@ -295,7 +303,7 @@ describe("fraud demo lab (TASK-081)", () => {
     await user.click(screen.getByRole("button", { name: "Run F3 Account takeover" }));
     expect(await screen.findByText("Risk 77/100")).toBeInTheDocument();
     const logins = calls.filter((c) => c.url.endsWith("/auth/login"));
-    expect(logins.map((c) => (c.body as { password: string }).password === "demo-pass")).toEqual([
+    expect(logins.map((c) => (c.body as { password: string }).password === demoSecret)).toEqual([
       true,
       false,
       false,
@@ -315,7 +323,7 @@ describe("fraud demo lab (TASK-081)", () => {
     let failures = 0;
     handler = happyServer((call) => {
       if (!call.url.endsWith("/auth/login")) return undefined;
-      if ((call.body as { password: string }).password === "demo-pass") return undefined;
+      if ((call.body as { password: string }).password === demoSecret) return undefined;
       failures += 1;
       return failures === 2
         ? json(423, { code: "account_locked", title: "Account locked" })
@@ -410,7 +418,7 @@ describe("fraud demo lab (TASK-081)", () => {
     expect(calls.some((c) => c.url.endsWith("/api/v1/accounts"))).toBe(false);
   });
 
-  it("is switched off when the server is in production: no forms, no runs", async () => {
+  it("is switched off when the server is in staging or production (404): no forms, no runs", async () => {
     labEnabled = false;
     renderLab();
     expect(await screen.findByText(/switched off in this environment/)).toBeInTheDocument();
