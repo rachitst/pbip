@@ -12,13 +12,17 @@ import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
 import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
+import { DemographicsSection } from "./DemographicsSection";
 import { MfaEnrolment } from "./MfaEnrolment";
+import { RiskProfileSection } from "./RiskProfileSection";
 
 export function Profile() {
   return (
     <div className="page">
       <PageHeader title="Profile & security" />
       <ProfileDetails />
+      <RiskProfileSection />
+      <DemographicsSection />
       <MfaEnrolment />
       <Devices />
       <ChangePassword />

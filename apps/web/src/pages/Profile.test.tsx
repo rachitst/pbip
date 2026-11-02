@@ -22,6 +22,23 @@ const device = {
   device_age_days: 24,
 };
 
+const riskProfile = {
+  band: null,
+  score: null,
+  max_score: 10,
+  answers: null,
+  questionnaire_version: null,
+  assessed_at: null,
+};
+const demographics = {
+  date_of_birth: null,
+  age_band: "unknown",
+  recommendations_consent: false,
+  consent_granted_at: null,
+  consent_policy_version: null,
+  current_policy_version: "ADR-0015-v1",
+};
+
 type ChangeOutcome = "ok" | "wrong-current" | "breached";
 
 describe("profile & security", () => {
@@ -41,6 +58,12 @@ describe("profile & security", () => {
       if (url.endsWith("/accounts")) return Promise.resolve(json(200, [account]));
       if (url.endsWith("/payees")) return Promise.resolve(json(200, []));
       if (url.endsWith("/customers/me")) return Promise.resolve(json(200, profile));
+      if (url.endsWith("/customers/me/risk-profile")) {
+        return Promise.resolve(json(200, riskProfile));
+      }
+      if (url.endsWith("/customers/me/demographics")) {
+        return Promise.resolve(json(200, demographics));
+      }
       if (url.endsWith("/customers/devices") && init?.method === "POST") {
         return Promise.resolve(json(201, { ...device, id: "dev-2", label: "This browser" }));
       }
@@ -96,6 +119,18 @@ describe("profile & security", () => {
     expect(screen.getByText("******4321")).toBeInTheDocument();
     expect(await screen.findByText("Firefox on Linux")).toBeInTheDocument();
     expect(screen.getByText("New (24 days)")).toBeInTheDocument();
+  });
+
+  it("includes the risk profile and the date of birth and consent sections", async () => {
+    await openProfile();
+    expect(await screen.findByRole("heading", { name: "Risk profile" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Date of birth and recommendations consent" }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("You have not answered the questionnaire yet."),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Give consent" })).toBeInTheDocument();
   });
 
   it("registers this browser with a stable X-Device-ID header", async () => {

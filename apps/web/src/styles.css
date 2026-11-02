@@ -1654,3 +1654,10 @@ input[type="range"] {
   width: 100%;
   accent-color: var(--brand);
 }
+
+/* ---- Profile: date of birth and consent (TASK-107) ---------------------------------------- */
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
