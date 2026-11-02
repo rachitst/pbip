@@ -37,6 +37,9 @@ SCHEDULED_WORKER_DURATION_SECONDS = Histogram(
     "scheduled_worker_duration_seconds",
     "Duration of scheduled transfer processing loop in seconds",
 )
+FD_MATURITY_PAYOUTS_TOTAL = Counter(
+    "fd_maturity_payouts_total", "Automatic fixed-deposit maturity payouts by outcome", ["outcome"]
+)
 UNHANDLED_ERRORS_TOTAL = Counter(
     "unhandled_errors_total",
     "Unhandled exceptions answered with a generic 500 (error tracking, TASK-103)",
