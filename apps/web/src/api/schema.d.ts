@@ -97,7 +97,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Ledger entries for one of my accounts (keyset pagination) */
+        /**
+         * Ledger entries for one of my accounts (keyset pagination)
+         * @description Filters keep the same keyset cursor: send the same filters with ``cursor`` for the next
+         *     page of the filtered list (TASK-017).
+         */
         get: operations["list_my_account_entries_api_v1_accounts__account_id__transactions_get"];
         put?: never;
         post?: never;
@@ -766,6 +770,44 @@ export interface paths {
         get: operations["get_prioritized_customer_insights_api_v1_insights_customers_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/insights/customers/{customer_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One customer's churn signals, health score, 30-day volume and eligible products
+         * @description Detail behind the RM flyout (RM or admin with an MFA-verified session).
+         */
+        get: operations["get_customer_insight_detail_api_v1_insights_customers__customer_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/insights/customers/{customer_id}/interactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Calls, meetings, emails and notes logged for a customer, newest first */
+        get: operations["list_customer_interactions_api_v1_insights_customers__customer_id__interactions_get"];
+        put?: never;
+        /** Log a call, meeting, email or note about a customer (audited) */
+        post: operations["log_customer_interaction_api_v1_insights_customers__customer_id__interactions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1622,6 +1664,33 @@ export interface components {
          */
         ChurnRiskLevel: "LOW" | "MEDIUM" | "HIGH";
         /**
+         * CustomerInsightDetail
+         * @description One customer for the RM flyout: churn signals, health, recent volume and eligible products.
+         *
+         *     Same data minimisation as the list: no email, phone, address, birth date or account number.
+         */
+        CustomerInsightDetail: {
+            /**
+             * Customer Since
+             * Format: date-time
+             */
+            customer_since: string;
+            /**
+             * Evaluated At
+             * Format: date-time
+             */
+            evaluated_at: string;
+            /** @description Null when the customer has no account yet */
+            health?: components["schemas"]["HealthSummary"] | null;
+            insight: components["schemas"]["CustomerInsightItem"];
+            /**
+             * Recommendations
+             * @description Every eligible product, best first
+             */
+            recommendations?: components["schemas"]["RecommendedProduct"][];
+            transaction_volume: components["schemas"]["TransactionVolumeOut"];
+        };
+        /**
          * CustomerInsightItem
          * @description What an RM needs to prioritise outreach: no email, address, birth date or account number.
          */
@@ -1660,6 +1729,16 @@ export interface components {
              * @description Elapsed days since the last customer activity or transaction
              */
             inactivity_days: number;
+            /**
+             * Loan Product
+             * @description Best eligible loan or credit product, if any is eligible
+             */
+            loan_product?: string | null;
+            /**
+             * Loan Propensity Score
+             * @description Rule-based relevance of that loan product (not a probability)
+             */
+            loan_propensity_score?: number | null;
             /**
              * Segment
              * @description Behavioral segment (e.g. HIGH_NET_WORTH)
@@ -1981,6 +2060,11 @@ export interface components {
              */
             next_cursor: string | null;
         };
+        /**
+         * EntryDirection
+         * @enum {string}
+         */
+        EntryDirection: "DEBIT" | "CREDIT";
         /** EntryOut */
         EntryOut: {
             /** Amount Minor */
@@ -2236,6 +2320,24 @@ export interface components {
              */
             weight_percentage: number;
         };
+        /**
+         * HealthSummary
+         * @description Financial health score of the customer's primary account (the one recommendations use).
+         */
+        HealthSummary: {
+            /**
+             * Insufficient Data
+             * @description Fewer than three months of history
+             */
+            insufficient_data: boolean;
+            /** Overall Score */
+            overall_score: number;
+            /**
+             * Rating
+             * @enum {string}
+             */
+            rating: "EXCELLENT" | "GOOD" | "FAIR" | "NEEDS_ATTENTION";
+        };
         /** HighRiskCustomer */
         HighRiskCustomer: {
             /**
@@ -2278,6 +2380,58 @@ export interface components {
             /** Principal Minor */
             principal_minor: number;
         };
+        /**
+         * InteractionChannel
+         * @enum {string}
+         */
+        InteractionChannel: "CALL" | "MEETING" | "EMAIL" | "NOTE";
+        /**
+         * InteractionCreate
+         * @description A call, meeting, email or note an RM records against a customer.
+         */
+        InteractionCreate: {
+            channel: components["schemas"]["InteractionChannel"];
+            /** Note */
+            note: string;
+            outcome: components["schemas"]["InteractionOutcome"];
+        };
+        /**
+         * InteractionListResponse
+         * @description The newest interactions first; ``total`` counts all of them for this customer.
+         */
+        InteractionListResponse: {
+            /** Items */
+            items: components["schemas"]["InteractionOut"][];
+            /** Total */
+            total: number;
+        };
+        /** InteractionOut */
+        InteractionOut: {
+            channel: components["schemas"]["InteractionChannel"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Logged By
+             * @description Email of the staff member who recorded it
+             */
+            logged_by: string;
+            /** Note */
+            note: string;
+            outcome: components["schemas"]["InteractionOutcome"];
+        };
+        /**
+         * InteractionOutcome
+         * @enum {string}
+         */
+        InteractionOutcome: "INTERESTED" | "NOT_INTERESTED" | "FOLLOW_UP" | "NO_ANSWER" | "INFORMATION_SENT" | "ACCOUNT_REVIEW";
         /** LiveResponse */
         LiveResponse: {
             /**
@@ -2937,6 +3091,26 @@ export interface components {
              */
             recommendations?: components["schemas"]["ProductRecommendationItem"][];
         };
+        /**
+         * RecommendedProduct
+         * @description An eligible product with the rule-based reasons computed from the customer's own data.
+         */
+        RecommendedProduct: {
+            /**
+             * Product Type
+             * @description SAVINGS, LOAN, INVESTMENT or INSURANCE
+             */
+            product_type: string;
+            /** Reasons */
+            reasons: string[];
+            /**
+             * Score
+             * @description Rule-based relevance (not a probability)
+             */
+            score: number;
+            /** Title */
+            title: string;
+        };
         /** RecoveryCodesOut */
         RecoveryCodesOut: {
             /** Recovery Codes */
@@ -3335,6 +3509,26 @@ export interface components {
          * @enum {string}
          */
         ToolName: "get_account_summary" | "get_recent_transactions" | "get_spend" | "get_balance_forecast" | "get_loan_affordability";
+        /**
+         * TransactionVolumeOut
+         * @description Posted money movements with other parties; own-account moves and reversals excluded.
+         */
+        TransactionVolumeOut: {
+            /**
+             * Inflow Minor
+             * @description Money received, minor units
+             */
+            inflow_minor: number;
+            /**
+             * Outflow Minor
+             * @description Money paid out, minor units
+             */
+            outflow_minor: number;
+            /** Transaction Count */
+            transaction_count: number;
+            /** Window Days */
+            window_days: number;
+        };
         /** TransferOut */
         TransferOut: {
             /** Amount Minor */
@@ -3642,6 +3836,18 @@ export interface operations {
                 cursor?: string | null;
                 /** @description older: newest first, walking back; newer: oldest first, walking forward */
                 direction?: components["schemas"]["PageDirection"];
+                /** @description First bank day (IST) */
+                start_date?: string | null;
+                /** @description To this bank day (IST), inclusive */
+                end_date?: string | null;
+                /** @description Paise, inclusive */
+                min_amount?: number | null;
+                /** @description Paise, inclusive */
+                max_amount?: number | null;
+                /** @description DEBIT (money out) or CREDIT (money in) */
+                type?: components["schemas"]["EntryDirection"] | null;
+                /** @description Case-insensitive text in the payment reference */
+                search?: string | null;
             };
             header?: never;
             path: {
@@ -4797,6 +5003,8 @@ export interface operations {
                 min_churn_risk?: number | null;
                 /** @description Behavioral segment filter */
                 segment?: string | null;
+                /** @description Minimum loan propensity (rule-based relevance of the best loan product) */
+                min_loan_propensity?: number | null;
                 /** @description Page size */
                 limit?: number;
                 /** @description Page offset */
@@ -4816,6 +5024,127 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["CustomerInsightsListResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_customer_insight_detail_api_v1_insights_customers__customer_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerInsightDetail"];
+                };
+            };
+            /** @description No such customer */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_customer_interactions_api_v1_insights_customers__customer_id__interactions_get: {
+        parameters: {
+            query?: {
+                /** @description How many */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                customer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InteractionListResponse"];
+                };
+            };
+            /** @description No such customer */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    log_customer_interaction_api_v1_insights_customers__customer_id__interactions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InteractionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InteractionOut"];
+                };
+            };
+            /** @description No such customer */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

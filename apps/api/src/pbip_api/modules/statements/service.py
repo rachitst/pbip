@@ -8,12 +8,13 @@ when their financial history leaves the bank.
 import csv
 import io
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from enum import StrEnum
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from pbip_api.core.calendar import BANK_TZ
 from pbip_api.core.errors import UnprocessableError
 from pbip_api.core.money import format_minor
 from pbip_api.modules.accounts.models import Account
@@ -27,9 +28,6 @@ from pbip_api.modules.ledger.service import PeriodEntry
 from pbip_api.modules.notifications import service as notifications
 from pbip_api.modules.statements.pdf import A4_HEIGHT, PdfDocument
 
-# Statement days are bank days in India (IST, UTC+05:30, no daylight saving), so a fixed offset is
-# exact and needs no tz database in the container.
-BANK_TZ = timezone(timedelta(hours=5, minutes=30), "IST")
 MAX_PERIOD_DAYS = 366
 MAX_ENTRIES = 10_000
 

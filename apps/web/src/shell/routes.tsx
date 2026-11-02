@@ -22,6 +22,8 @@ import { FraudAlert } from "../pages/staff/FraudAlert";
 import { FraudDemoLab } from "../pages/staff/FraudDemoLab";
 import { FraudQueue } from "../pages/staff/FraudQueue";
 import { canReviewFraud } from "../pages/staff/fraudFormat";
+import { RMInsights } from "../pages/staff/RMInsights";
+import { canAccessRMInsights } from "../pages/staff/rmInsightsFormat";
 import { useDemoLabStatus } from "../pages/staff/fraudLab";
 import { SecurityMonitoring } from "../pages/staff/SecurityMonitoring";
 import { StaffHome } from "../pages/staff/StaffHome";
@@ -58,6 +60,7 @@ function staffNav(me: UserOut, demoLabEnabled: boolean): NavItem[] {
     items.push({ to: "/staff/monitoring", label: "Security monitoring" });
     items.push({ to: "/staff/fraud", label: "Fraud alerts" });
   }
+  if (canAccessRMInsights(me)) items.push({ to: "/staff/insights", label: "Customer insights" });
   // TASK-081: only where the server says the lab may run (never in production).
   if (canReviewFraud(me) && demoLabEnabled) {
     items.push({ to: "/staff/fraud-lab", label: "Fraud demo lab" });
@@ -228,6 +231,7 @@ export const routes: RouteObject[] = [
           { path: "fraud/:alertId", element: <FraudAlert /> },
           { path: "fraud-lab", element: <FraudDemoLab /> },
           { path: "monitoring", element: <SecurityMonitoring /> },
+          { path: "insights", element: <RMInsights /> },
           { path: "security", element: <StaffSecurity /> },
         ],
       },

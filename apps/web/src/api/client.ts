@@ -1,4 +1,4 @@
-import type { components } from "./schema";
+import type { components, operations } from "./schema";
 
 export type TokenResponse = components["schemas"]["TokenResponse"];
 export type AccountOut = components["schemas"]["AccountOut"];
@@ -15,6 +15,13 @@ export type CustomerProfileOut = components["schemas"]["CustomerProfileOut"];
 export type DeviceOut = components["schemas"]["DeviceOut"];
 export type EntriesPage = components["schemas"]["EntriesPage"];
 export type EntryOut = components["schemas"]["EntryOut"];
+/** TASK-017 query filters, from the generated contract (amounts in paise, dates YYYY-MM-DD IST). */
+export type EntryFilters = Omit<
+  NonNullable<
+    operations["list_my_account_entries_api_v1_accounts__account_id__transactions_get"]["parameters"]["query"]
+  >,
+  "limit" | "cursor" | "direction"
+>;
 export type OpenAccountType = components["schemas"]["OpenAccountType"];
 export type NotificationOut = components["schemas"]["NotificationOut"];
 export type NotificationsPage = components["schemas"]["NotificationsPage"];
@@ -27,6 +34,15 @@ export type FraudStats = components["schemas"]["FraudStats"];
 export type SecurityMonitoring = components["schemas"]["SecurityMonitoring"];
 export type DemoLabStatus = components["schemas"]["DemoLabStatus"];
 export type SpendingBreakdownResponse = components["schemas"]["SpendingBreakdownResponse"];
+export type CustomerInsightsListResponse = components["schemas"]["CustomerInsightsListResponse"];
+export type CustomerInsightItem = components["schemas"]["CustomerInsightItem"];
+export type ChurnRiskLevel = components["schemas"]["ChurnRiskLevel"];
+export type CustomerInsightDetail = components["schemas"]["CustomerInsightDetail"];
+export type InteractionChannel = components["schemas"]["InteractionChannel"];
+export type InteractionOutcome = components["schemas"]["InteractionOutcome"];
+export type InteractionCreate = components["schemas"]["InteractionCreate"];
+export type InteractionOut = components["schemas"]["InteractionOut"];
+export type InteractionListResponse = components["schemas"]["InteractionListResponse"];
 export type CategorySpendingItem = components["schemas"]["CategorySpendingItem"];
 export type SpendingTrendsResponse = components["schemas"]["SpendingTrendsResponse"];
 export type MonthlySpendingSummary = components["schemas"]["MonthlySpendingSummary"];
@@ -228,9 +244,18 @@ export const api = {
       body: JSON.stringify({ account_type: accountType }),
     }),
   /** Keyset pagination: pass the previous page's next_cursor to walk further back in time. */
-  accountEntries: (accountId: string, cursor: string | null, limit = 10) => {
+  /** TASK-017: ``filters`` must be sent again with each ``cursor`` of the same list. */
+  accountEntries: (
+    accountId: string,
+    cursor: string | null,
+    limit = 10,
+    filters: EntryFilters = {},
+  ) => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (cursor) params.set("cursor", cursor);
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== null && value !== "") params.set(key, String(value));
+    }
     return apiFetch<EntriesPage>(
       `/api/v1/accounts/${encodeURIComponent(accountId)}/transactions?${params.toString()}`,
     );
@@ -400,6 +425,37 @@ export const api = {
       `/api/v1/analytics/health-score?${params.toString()}`,
     );
   },
+  customerInsights: (filters: {
+    segment?: string;
+    min_churn_risk?: number;
+    min_loan_propensity?: number;
+    limit: number;
+    offset: number;
+  }) => {
+    const params = new URLSearchParams({
+      limit: String(filters.limit),
+      offset: String(filters.offset),
+    });
+    if (filters.segment) params.set("segment", filters.segment);
+    if (filters.min_churn_risk !== undefined)
+      params.set("min_churn_risk", String(filters.min_churn_risk));
+    if (filters.min_loan_propensity !== undefined)
+      params.set("min_loan_propensity", String(filters.min_loan_propensity));
+    return apiFetch<CustomerInsightsListResponse>(
+      `/api/v1/insights/customers?${params.toString()}`,
+    );
+  },
+  customerInsightDetail: (customerId: string) =>
+    apiFetch<CustomerInsightDetail>(`/api/v1/insights/customers/${encodeURIComponent(customerId)}`),
+  customerInteractions: (customerId: string, limit = 20) =>
+    apiFetch<InteractionListResponse>(
+      `/api/v1/insights/customers/${encodeURIComponent(customerId)}/interactions?limit=${String(limit)}`,
+    ),
+  logInteraction: (customerId: string, body: InteractionCreate) =>
+    apiFetch<InteractionOut>(
+      `/api/v1/insights/customers/${encodeURIComponent(customerId)}/interactions`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
   assistantHistory: (limit = 50) =>
     apiFetch<AssistantHistory>(`/api/v1/assistant/messages?limit=${String(limit)}`),
 };

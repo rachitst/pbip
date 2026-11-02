@@ -23,7 +23,7 @@ the partition key is listed per table below.
 
 ## Operational schema (`public`): the bank, its ledger, security and analytics
 
-29 tables.
+30 tables.
 
 ```mermaid
 erDiagram
@@ -266,6 +266,15 @@ erDiagram
         varchar ip
         varchar user_agent
     }
+    rm_interactions {
+        uuid id PK
+        uuid customer_id FK "not null"
+        uuid staff_user_id FK "not null"
+        varchar channel "not null"
+        varchar outcome "not null"
+        text note "not null"
+        timestamptz created_at "not null"
+    }
     roles {
         varchar name PK
         varchar description "not null"
@@ -382,6 +391,8 @@ erDiagram
     users ||--o{ notifications : "user_id"
     customers ||--o{ payees : "customer_id"
     users ||--o{ refresh_tokens : "user_id"
+    customers ||--o{ rm_interactions : "customer_id"
+    users ||--o{ rm_interactions : "staff_user_id"
     customers ||--o{ scheduled_transfers : "customer_id"
     accounts ||--o{ scheduled_transfers : "from_account_id"
     transactions |o--o{ scheduled_transfers : "last_transaction_id"
@@ -427,6 +438,7 @@ erDiagram
 | `outbox_events` | id | - | - | - | - |
 | `payees` | id | customer_id -> customers(id), NO ACTION | ck_payees_status_valid | - | - |
 | `refresh_tokens` | id | user_id -> users(id), CASCADE | - | - | - |
+| `rm_interactions` | id | customer_id -> customers(id), CASCADE<br>staff_user_id -> users(id), RESTRICT | ck_rm_interactions_channel_valid<br>ck_rm_interactions_note_length<br>ck_rm_interactions_outcome_valid | - | - |
 | `roles` | name | - | - | - | - |
 | `scheduled_transfers` | id | customer_id -> customers(id), RESTRICT<br>from_account_id -> accounts(id), RESTRICT<br>last_transaction_id -> transactions(id), SET NULL<br>loan_id -> loans(id), RESTRICT<br>payee_id -> payees(id), RESTRICT<br>to_account_id -> accounts(id), RESTRICT<br>user_id -> users(id), RESTRICT | ck_scheduled_transfers_amount_positive<br>ck_scheduled_transfers_destination_xor<br>ck_scheduled_transfers_end_date_valid<br>ck_scheduled_transfers_failure_count_non_negative<br>ck_scheduled_transfers_frequency_valid<br>ck_scheduled_transfers_pause_reason_valid<br>ck_scheduled_transfers_status_valid | - | - |
 | `security_events` | id | user_id -> users(id), SET NULL | - | - | - |

@@ -715,15 +715,22 @@ behavioural dashboard, so that I contact the right people.*
 
 * ✓ RELATIONSHIP_MANAGER or ADMIN with MFA gets churn signals (inactivity, balance decline) that are exact on known
   ledger data, with filters and pagination.
-* ✗ An RM screen exists.
+* ✓ An RM screen exists: `/staff/insights` lists the leads filtered on the server by segment, churn risk and
+  loan propensity; a customer detail shows the 30-day volume, health score, churn score and eligible products;
+  calls and notes are logged server-side and audited (TASK-066, ADR-0022). RMs see every customer: there is
+  no RM-to-customer assignment.
 * ✗ A behavioural dashboard shows segments, affinity and engagement.
 
 **Status:** Partial.
 
 **Tests** (`integration/test_insights.py`): `test_insights_rbac_authorization`,
-`test_churn_signals_are_exact_on_known_ledger_data`, `test_pagination_and_filters`.
+`test_churn_signals_are_exact_on_known_ledger_data`, `test_pagination_and_filters`;
+`integration/test_rm_insights_ui_api.py` (`test_loan_propensity_is_reported_and_filtered_on_the_server`,
+`test_detail_has_exact_volume_health_and_products_and_no_extra_pii`, `test_new_routes_need_rm_or_admin_with_mfa`,
+`test_logged_interaction_is_listed_shared_and_audited_without_the_note`); `security/test_route_policy_registry.py`
+(`test_every_insights_route_is_behind_the_mfa_rm_gate`); web `RMInsights.test.tsx`, `routing.test.tsx`.
 
-**Tasks:** TASK-056 (In Progress); TASK-066, TASK-101 (Todo).
+**Tasks:** TASK-056 (In Progress); TASK-066 (In Review); TASK-101 (Todo).
 
 ## UC-12 Product recommendation engine
 
