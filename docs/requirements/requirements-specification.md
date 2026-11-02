@@ -54,11 +54,11 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | ID | Requirement | Source | Status | Tasks | Gap |
 |---|---|---|---|---|---|
 | FR-07 | After login, the customer shall see every account with its available, ledger and held balance. | UC-02, section 5 "account summaries" | Implemented | TASK-019 | |
-| FR-08 | The dashboard shall show the total balance across the customer's accounts. | Section 5 "total balance overview" | Implemented | TASK-109 (#283) | `GET /api/v1/accounts/summary`, per currency, savings and current accounts only (see US-04) |
+| FR-08 | The dashboard shall show the total balance across the customer's accounts. | Section 5 "total balance overview" | Implemented | TASK-109 (#283, merged #330) | `GET /api/v1/accounts/summary`, per currency, savings and current accounts only (see US-04) |
 | FR-09 | The customer shall see recent transactions for an account, paginated. | UC-02, section 5 | Implemented | TASK-008, TASK-019 | |
 | FR-10 | The customer shall see spending insights: category breakdown, month-over-month trends, daily burn rate. | UC-02, section 5 "spending insights" | Implemented | TASK-040, TASK-049 | |
 | FR-11 | The customer shall see financial health indicators: a 0-100 health score with components and tips, and a balance forecast labelled as a prediction. | Section 5 "financial health indicators" | Partial | TASK-041, TASK-042, TASK-049; TASK-050 | The forecast has an API but no chart |
-| FR-12 | The dashboard shall show personalised product recommendations. | UC-02, section 5 | Partial | TASK-054; TASK-062 | Carousel on `/accounts` (TASK-062, PR #328, in review); the ranking is rules-based (`rules-v1`) |
+| FR-12 | The dashboard shall show personalised product recommendations. | UC-02, section 5 | Partial | TASK-054; TASK-062 | Carousel on `/accounts` (TASK-062, merged #328); the ranking is rules-based (`rules-v1`) |
 | FR-13 | The customer shall be able to open an account and view its details. | Section 5 "view account details" | Implemented | TASK-005 | |
 | FR-14 | The customer shall be able to search and filter transactions by date and amount. | Section 5 "transaction search" | Planned | TASK-017 | |
 | FR-15 | The customer shall be able to view a statement for a chosen account and period and download it as PDF. | UC-03, section 5 | Planned | TASK-016, TASK-074 | `modules/statements` is empty |
@@ -99,8 +99,8 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | ID | Requirement | Source | Status | Tasks | Gap |
 |---|---|---|---|---|---|
 | FR-37 | The customer shall ask natural-language questions about their own balances, transactions, spending and forecast, in a chat drawer with streamed answers. | UC-08, section 5 "natural language queries", "spending analysis explanations" | Implemented | TASK-057 to TASK-061 | |
-| FR-38 | The assistant shall answer "Can I afford a personal loan?" | UC-08 example | Implemented | TASK-057, TASK-046, TASK-110 (#284) | |
-| FR-39 | The assistant shall answer "Show unusual expenses." | UC-08 example | Implemented | TASK-110 (#284) | |
+| FR-38 | The assistant shall answer "Can I afford a personal loan?" | UC-08 example | Implemented | TASK-057, TASK-046, TASK-110 (#284, merged #331) | Without an amount the assistant suggests the largest eligible amount or asks for one and says why (#331) |
+| FR-39 | The assistant shall answer "Show unusual expenses." | UC-08 example | Implemented | TASK-110 (#284, merged #331) | |
 | FR-40 | The assistant shall suggest investment options, support product discovery and answer FAQs. | UC-08 example, section 5 | Planned | TASK-105 | |
 | FR-41 | The assistant shall be read-only, act only on the authenticated customer's data, refuse money movement, other-customer, SQL and instruction-override requests, and audit every tool call. | Section 8 security (applied to UC-08) | Implemented | TASK-059, TASK-067, TASK-076 | |
 
@@ -124,11 +124,11 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | FR-50 | The system shall capture page visits and clickstream events. | UC-11 data captured | Partial | TASK-055; TASK-112 (#286) | The ingestion API stores typed events in monthly partitions; the web app does not send any |
 | FR-51 | The system shall capture session duration and product interests. | UC-11 data captured | Planned | TASK-055, TASK-101 | No session-duration field; no derived product interest |
 | FR-52 | The system shall analyse spend and income patterns and assign each customer a behavioural segment. | UC-11, section 5 "customer segmentation" | Implemented | TASK-040, TASK-044, TASK-052 | |
-| FR-53 | The system shall recommend loan, savings, investment and insurance products with reasons, using the behaviour profile and spending patterns. | UC-12 | Partial | TASK-054; TASK-062 | Rules-based (`rules-v1`) API; carousel on `/accounts` (TASK-062, PR #328, in review) |
+| FR-53 | The system shall recommend loan, savings, investment and insurance products with reasons, using the behaviour profile and spending patterns. | UC-12 | Partial | TASK-054; TASK-062 | Rules-based (`rules-v1`) API; carousel on `/accounts` (TASK-062, merged #328) |
 | FR-54 | Recommendations shall use demographics. | UC-12 input | Implemented | TASK-107 | Limited by ADR-0015 to a consented age band derived from an optional date of birth; `unknown` without both |
 | FR-55 | Recommendations shall take existing products into account. | UC-12 input | Planned | TASK-111 (#285) | Products already held are not an input |
 | FR-56 | A relationship manager shall see customers ranked by churn risk, with signals and the top eligible product. | Section 6 (relationship manager) | Partial | TASK-056; TASK-066 | API only; no UI |
-| FR-57 | Staff shall see a behavioural analytics dashboard: segmentation, spending patterns, product affinity, engagement. | Section 5 | Implemented (in review) | TASK-101 | Engagement needs clickstream events the web app does not send yet |
+| FR-57 | Staff shall see a behavioural analytics dashboard: segmentation, spending patterns, product affinity, engagement. | Section 5 | Implemented | TASK-101 (merged #325) | Engagement needs clickstream events the web app does not send yet |
 
 ### 2.8 Monitoring and compliance (UC-13, section 5)
 
@@ -136,7 +136,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 |---|---|---|---|---|---|
 | FR-58 | Security staff shall see high-risk customers, active alerts, login anomalies, fraud events and open investigations. | UC-13 | Implemented | TASK-099 | `GET /api/v1/fraud/monitoring` and the `/staff/monitoring` page (fraud analysts and admins, with MFA); ids and aggregates only |
 | FR-59 | A compliance officer shall read the audit history and verify its integrity. | Section 5 "audit history" | Implemented | TASK-048 | |
-| FR-60 | Compliance shall see system-generated alerts, exception management and regulatory monitoring. | Section 5 | Implemented (in review) | TASK-100 | SLAs are the bank's own 24 h assumption (ADR-0027) |
+| FR-60 | Compliance shall see system-generated alerts, exception management and regulatory monitoring. | Section 5 | Implemented | TASK-100 (merged #325) | SLAs are the bank's own 24 h assumption (ADR-0027) |
 
 ## 3. Non-functional requirements (section 8)
 
@@ -180,8 +180,8 @@ delivered (TLS, #280).
 |---|---|
 | FR-02, FR-06 | Web screens for MFA enrolment and self-registration (owned by #201) |
 | FR-05 | Administration screen and application-configuration function (TASK-108, #282) |
-| FR-08 | ~~Total-balance overview on the dashboard~~: done in TASK-109 (#283) |
-| FR-39 | "Show unusual expenses" in the assistant (TASK-110, #284) |
+| FR-08 | ~~Total-balance overview on the dashboard~~: done in TASK-109 (#283, merged #330) |
+| FR-39 | ~~"Show unusual expenses" in the assistant~~: done in TASK-110 (#284, merged #331) |
 | FR-55 | Existing products as a recommendation input (TASK-111, #285) |
 | FR-50 | The web app sending page visits and clickstream events (TASK-112, #286) |
 | NFR-02 | ~~TLS termination as code~~: done in #280 (nginx TLS + HSTS, PostgreSQL `verify-full`); certbot issuance on a real host waits for #198 |
