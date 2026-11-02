@@ -8,8 +8,9 @@ uploaded such a log until TASK-085's follow-up).
 
 from __future__ import annotations
 
-import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -17,31 +18,25 @@ import pytest
 pytestmark = pytest.mark.unit
 
 ROOT = Path(__file__).resolve().parents[4]
-# "mutants" is mutmut's generated copy of apps/api (TASK-086): it repeats this file's own examples.
-_SKIP_DIRS = {
-    ".git",
-    ".venv",
-    "node_modules",
-    "dist",
-    "build",
-    "htmlcov",
-    "__pycache__",
-    "mlruns",
-    "mutants",
-}
 _SKIP_SUFFIXES = {".lock", ".json", ".png", ".svg", ".ico", ".mmdb", ".parquet", ".csv", ".ipynb"}
 _THIS_FILE = Path(__file__).resolve()
 _COMMAND_END = re.compile(r"[\])]|(?<![\\,])\n")
 
 
-def _text_files() -> list[Path]:
+def _text_files(root: Path = ROOT) -> list[Path]:
+    """The repository's tracked files only (``git ls-files``). Walking the directory also read
+    untracked copies of the code: git worktrees that tooling creates under ``.claude/worktrees/``,
+    mutmut's ``mutants/`` and virtualenvs, and reported their files as offenders (#329)."""
+    git = shutil.which("git")
+    assert git is not None, "the scan lists the repository's tracked files with git"
+    listed = subprocess.run(  # noqa: S603 - fixed git command on the repository root
+        [git, "ls-files", "-z"], cwd=root, capture_output=True, check=True
+    ).stdout.decode("utf-8")
     files: list[Path] = []
-    for directory, subdirs, names in os.walk(ROOT):
-        subdirs[:] = [d for d in subdirs if d not in _SKIP_DIRS]
-        for name in names:
-            path = Path(directory) / name
-            if path.suffix not in _SKIP_SUFFIXES and path.resolve() != _THIS_FILE:
-                files.append(path)
+    for name in filter(None, listed.split("\0")):
+        path = root / name
+        if path.suffix not in _SKIP_SUFFIXES and path.resolve() != _THIS_FILE and path.is_file():
+            files.append(path)
     return files
 
 
@@ -96,3 +91,18 @@ def test_every_uvicorn_launch_disables_its_access_log() -> None:
         or "--access-log" in command
     ]
     assert offenders == []
+
+
+def test_scan_reads_only_tracked_files_not_worktree_copies(tmp_path: Path) -> None:
+    """#329: a git worktree under ``.claude/worktrees/`` holds untracked copies of every launch file,
+    which the directory walk reported as offenders. Only the repository's own files are scanned."""
+    git = shutil.which("git")
+    assert git is not None
+    subprocess.run([git, "init", "-q"], cwd=tmp_path, check=True)  # noqa: S603 - fixed command
+    (tmp_path / "Dockerfile").write_text('CMD ["uvicorn", "m:app", "--no-access-log"]\n')
+    subprocess.run([git, "add", "Dockerfile"], cwd=tmp_path, check=True)  # noqa: S603 - fixed
+    copy = tmp_path / ".claude" / "worktrees" / "agent-1"
+    copy.mkdir(parents=True)
+    (copy / "Dockerfile").write_text('CMD ["uvicorn", "m:app"]\n')
+
+    assert _text_files(tmp_path) == [tmp_path / "Dockerfile"]
