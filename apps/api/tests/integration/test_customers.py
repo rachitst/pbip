@@ -199,7 +199,9 @@ def test_oversized_device_header_is_rejected(
         json={},
     )
     assert resp.status_code == 422
-    assert "ddd" not in resp.text  # never echo the value back
+    # Never echo the value back. A short probe such as "ddd" also matches the random hex request id
+    # in the problem body (about 1 run in 150), so look for a run longer than any id can hold.
+    assert "d" * 40 not in resp.text
     assert db.execute(select(Device)).first() is None
 
 
