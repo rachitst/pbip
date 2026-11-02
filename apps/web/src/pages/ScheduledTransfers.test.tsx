@@ -143,7 +143,7 @@ describe("ScheduledTransfers page (TASK-021)", () => {
 
   it("validates the form, then creates with an idempotency key", async () => {
     const user = userEvent.setup();
-    const fetchMock = mockApi((url, init) =>
+    const fetchMock = mockApi((_url, init) =>
       init?.method === "POST" ? json(201, order) : json(200, []),
     );
     renderPage();
