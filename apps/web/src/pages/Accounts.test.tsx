@@ -142,6 +142,48 @@ describe("accounts page", () => {
     });
   });
 
+  it("lists an account opened while the first account list is still loading", async () => {
+    // The first GET read the database before the new account existed and answers late; the
+    // list must refetch rather than keep that answer (an E2E run caught the stale list).
+    const checking = {
+      ...account,
+      id: "acc-2",
+      account_number_masked: "••••••••1997",
+      account_type: "CHECKING",
+    };
+    let opened = false;
+    let releaseFirstList: (() => void) | undefined;
+    const base = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation((input, init) => {
+      const url = urlOf(input);
+      if (url.endsWith("/accounts") && init?.method === "POST") {
+        opened = true;
+        return Promise.resolve(json(201, checking)).finally(() => releaseFirstList?.());
+      }
+      if (url.endsWith("/accounts")) {
+        if (releaseFirstList === undefined) {
+          return new Promise<Response>((resolve) => {
+            releaseFirstList = () => {
+              setTimeout(() => {
+                resolve(json(200, [account]));
+              }, 0);
+            };
+          });
+        }
+        return Promise.resolve(json(200, opened ? [account, checking] : [account]));
+      }
+      if (base === undefined) throw new Error("base fetch mock missing");
+      return base(input, init);
+    });
+    const user = userEvent.setup();
+    renderApp();
+    await user.selectOptions(await screen.findByLabelText("Account type"), "CHECKING");
+    await user.click(screen.getByRole("button", { name: "Open account" }));
+    expect(await screen.findByText("Account ••••••••1997 opened.")).toBeInTheDocument();
+    // Exact text: only the new account's card shows the bare masked number.
+    expect(await screen.findByText("••••••••1997")).toBeInTheDocument();
+  });
+
   it("restores the session, shows balances and the amount on hold", async () => {
     renderApp();
     expect(await screen.findByLabelText("available balance")).toHaveTextContent("INR 9,750.00");
