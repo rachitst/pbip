@@ -2,10 +2,12 @@
 
 import uuid
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from pbip_api.core.db import utcnow
 from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.notifications.models import Notification
 from pbip_test_support import PASSWORD, Actor
@@ -25,6 +27,13 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("post", "/api/v1/bills/pay"),
         ("get", "/api/v1/bills/payments"),
         ("get", f"/api/v1/bills/payments/{uuid.uuid4()}"),
+        ("get", "/api/v1/transfers/scheduled"),
+        ("post", "/api/v1/transfers/scheduled"),
+        ("get", f"/api/v1/transfers/scheduled/{uuid.uuid4()}"),
+        ("delete", f"/api/v1/transfers/scheduled/{uuid.uuid4()}"),
+        ("post", f"/api/v1/transfers/scheduled/{uuid.uuid4()}/cancel"),
+        ("post", f"/api/v1/transfers/scheduled/{uuid.uuid4()}/pause"),
+        ("post", f"/api/v1/transfers/scheduled/{uuid.uuid4()}/resume"),
         ("get", "/api/v1/fraud/alerts"),
         ("get", "/api/v1/fraud/stats"),
         ("get", "/api/v1/fraud/monitoring"),
@@ -83,6 +92,13 @@ def test_staff_have_no_customer_profile(
     assert client.get("/api/v1/customers/devices", headers=analyst.headers).status_code == 403
     assert client.get("/api/v1/accounts", headers=analyst.headers).status_code == 403
     assert client.get("/api/v1/bills/payments", headers=analyst.headers).status_code == 403
+    assert client.get("/api/v1/transfers/scheduled", headers=analyst.headers).status_code == 403
+    assert (
+        client.post(
+            f"/api/v1/transfers/scheduled/{uuid.uuid4()}/pause", headers=analyst.headers
+        ).status_code
+        == 403
+    )
     assert (
         client.get(f"/api/v1/bills/payments/{uuid.uuid4()}", headers=analyst.headers).status_code
         == 403
@@ -239,12 +255,25 @@ def _victim_resources(
         },
     )
     assert bill_payment.status_code == 201, bill_payment.text
+    scheduled = client.post(
+        "/api/v1/transfers/scheduled",
+        headers={**alice.headers, "Idempotency-Key": uuid.uuid4().hex},
+        json={
+            "from_account_id": str(alice.account_id),
+            "amount_minor": 700,
+            "payee_id": payee["id"],
+            "frequency": "MONTHLY",
+            "start_date": (utcnow() + timedelta(days=1)).date().isoformat(),
+        },
+    )
+    assert scheduled.status_code == 201, scheduled.text
     return {
         "account": str(alice.account_id),
         "payee": payee["id"],
         "transfer": transfer.json()["id"],
         "device": device.json()["id"],
         "bill_payment": bill_payment.json()["id"],
+        "scheduled": scheduled.json()["id"],
     }
 
 
@@ -342,6 +371,46 @@ def test_bola_customer_b_cannot_touch_customer_a_objects(
                 "amount_minor": 100,
             },
         ),
+        "get victim scheduled transfer": client.get(
+            f"/api/v1/transfers/scheduled/{ids['scheduled']}", headers=h
+        ),
+        "cancel victim scheduled transfer": client.delete(
+            f"/api/v1/transfers/scheduled/{ids['scheduled']}", headers=h
+        ),
+        "cancel victim scheduled transfer (POST)": client.post(
+            f"/api/v1/transfers/scheduled/{ids['scheduled']}/cancel", headers=h
+        ),
+        "pause victim scheduled transfer": client.post(
+            f"/api/v1/transfers/scheduled/{ids['scheduled']}/pause", headers=h
+        ),
+        "resume victim scheduled transfer": client.post(
+            f"/api/v1/transfers/scheduled/{ids['scheduled']}/resume", headers=h
+        ),
+        "non-existent scheduled transfer": client.get(
+            f"/api/v1/transfers/scheduled/{uuid.uuid4()}", headers=h
+        ),
+        "schedule FROM victim account": client.post(
+            "/api/v1/transfers/scheduled",
+            headers=key(),
+            json={
+                "from_account_id": ids["account"],
+                "amount_minor": 100,
+                "to_account_id": str(mallory.account_id),
+                "frequency": "DAILY",
+                "start_date": utcnow().date().isoformat(),
+            },
+        ),
+        "schedule using victim payee": client.post(
+            "/api/v1/transfers/scheduled",
+            headers=key(),
+            json={
+                "from_account_id": str(mallory.account_id),
+                "amount_minor": 100,
+                "payee_id": ids["payee"],
+                "frequency": "DAILY",
+                "start_date": utcnow().date().isoformat(),
+            },
+        ),
         "mark victim notification read": client.post(
             f"/api/v1/notifications/{notification.id}/read", headers=h
         ),
@@ -351,6 +420,8 @@ def test_bola_customer_b_cannot_touch_customer_a_objects(
     # And nothing of Alice's was disturbed.
     own = client.get(f"/api/v1/accounts/{ids['account']}", headers=alice.headers)
     assert own.status_code == 200 and own.json()["ledger_balance_minor"] == 98_500
+    schedule = client.get(f"/api/v1/transfers/scheduled/{ids['scheduled']}", headers=alice.headers)
+    assert schedule.status_code == 200 and schedule.json()["status"] == "ACTIVE"
     inbox = client.get("/api/v1/notifications", headers=alice.headers).json()
     assert inbox["unread_count"] == 1 and inbox["items"][0]["read"] is False
 

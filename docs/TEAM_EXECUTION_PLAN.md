@@ -547,7 +547,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #38 | **Sprint:** 2 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Core Banking & Ledger
 - **Owner:** Sujal (`SUJALGPM`)
-- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (7.6 days of slack)
+- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Mon 02 Nov (#296, c6c652f) | **Status:** Done | **Risk:** Low (7.6 days of slack)
 - **Depends on:** TASK-005 (#16, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Parallel: can start immediately
 - **Goal:** Celery Beat task executing recurring and scheduled standing orders idempotently per occurrence.

@@ -161,7 +161,7 @@ Across modules, code calls the other module's `service` or `policy` functions on
 | `accounts` | Open and list accounts; ledger history with keyset pagination | `/accounts*` | Implemented. Search and filter Planned (TASK-017) |
 | `ledger` | The only writer of balances, holds and entries (no router) | none | Implemented ([ADR-0002](../adr/0002-double-entry-ledger.md)) |
 | `payees` | Add, list, get, delete, confirmation-of-payee verify | `/payees*` | Partial: no edit (TASK-094), no UI (TASK-020) |
-| `payments` | Idempotent transfers, limits, fraud decision, TOTP step-up (3 wrong codes escalate to analyst review), analyst release/reject of transfers and held bill payments | `/transfers*` | Implemented (API and web) |
+| `payments` | Idempotent transfers, limits, fraud decision, TOTP step-up (3 wrong codes escalate to analyst review), analyst release/reject of transfers and held bill payments; scheduled/recurring transfers ([ADR-0023](../adr/0023-scheduled-transfers.md)) | `/transfers*` | Implemented (API and web) |
 | `bills` | Biller catalogue, idempotent bill payments sharing the daily limit; flagged payments held for analyst review | `/bills/*` | Implemented (API). UI Planned (TASK-020) |
 | `fraud` | Baseline rules, hybrid scorer adapter, event persistence, alert queue, telemetry (decisions over time, top reasons, masked risky payees; 60 s Redis cache) | `/fraud/alerts*`, `/fraud/stats` | Implemented (API and analyst web screens) |
 | `notifications` | Inbox, read state, outbox relay target | `/notifications*` | Implemented (API and web bell) |
@@ -185,6 +185,7 @@ Scheduled and recurring transfers have no module yet. They are Planned (TASK-015
 | `relay-outbox` | `pbip.outbox.relay` | every 10 s | Turns unprocessed `outbox_events` into `notifications` (`FOR UPDATE SKIP LOCKED`, batch 100) | Implemented. It does not publish to an external broker; the generic relay is Planned (TASK-026) |
 | `materialize-monthly-spending` | `pbip.analytics.materialize_monthly_spending` | 02:00 UTC daily | Writes `monthly_category_spending` ([ADR-0011](../adr/0011-monthly-spending-aggregates.md)) | Implemented |
 | `ensure-clickstream-partitions` | `pbip.events.ensure_partitions` | 01:30 UTC daily | Creates future monthly partitions (idempotent) | Implemented |
+| `execute-scheduled-transfers` | `pbip.transfers.execute_scheduled` | every 60 s | Runs due standing orders through the transfer use case (key `sched-{id}-{date}`, per-instruction try-lock); records missed occurrences without catch-up ([ADR-0023](../adr/0023-scheduled-transfers.md)) | Implemented |
 | `segment-customers-weekly` | `pbip.analytics.segment_customers` | Sunday 03:00 UTC | K-Means segmentation into `customer_segments` ([ADR-0012](../adr/0012-customer-segmentation-offline-job.md)) | Implemented |
 
 The worker runs with `acks_late`, `reject_on_worker_lost` and prefetch 1, so a task interrupted by a crash is

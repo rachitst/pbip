@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from fastapi import Depends, Request
 from pbip_ml.fraud.contract import FraudScorer
 from redis import Redis
@@ -11,6 +13,9 @@ from pbip_api.core.velocity import VelocityCounters
 from pbip_api.modules.fraud.baseline import BaselineRulesScorer
 from pbip_api.modules.fraud.hybrid import HybridFraudScorer
 
+if TYPE_CHECKING:  # the model stack loads only when the hybrid flag is on (fraud/hybrid.py)
+    from pbip_ml.fraud.hybrid import HybridScorer
+
 
 def get_fraud_scorer(
     request: Request,
@@ -23,9 +28,19 @@ def get_fraud_scorer(
     The models were loaded once when the app was created (``app.state.fraud_engine``); a request
     never reads a model file.
     """
-    counters = VelocityCounters(redis_client)
+    engine = getattr(request.app.state, "fraud_engine", None)
+    return build_fraud_scorer(session, settings, engine, VelocityCounters(redis_client))
+
+
+def build_fraud_scorer(
+    session: Session,
+    settings: Settings,
+    engine: "HybridScorer | None",
+    counters: VelocityCounters | None,
+) -> FraudScorer:
+    """The scorer choice itself, shared by requests and the scheduled-transfer worker (ADR-0023),
+    so an unattended run is scored by exactly the engine an interactive transfer would get."""
     if settings.fraud_scorer == "hybrid":
-        engine = getattr(request.app.state, "fraud_engine", None)
         return HybridFraudScorer(session, engine, settings.fraud_model_budget_ms, counters)
     return BaselineRulesScorer(session, counters)
 
