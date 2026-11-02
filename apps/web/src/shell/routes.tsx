@@ -12,6 +12,8 @@ import { errorMessage } from "../lib/errors";
 import { Accounts } from "../pages/Accounts";
 import { NotFound } from "../pages/NotFound";
 import { MfaEnrolment } from "../pages/MfaEnrolment";
+import { PayBills } from "../pages/PayBills";
+import { Payees } from "../pages/Payees";
 import { Profile } from "../pages/Profile";
 import { ScheduledTransfers } from "../pages/ScheduledTransfers";
 import { Statements } from "../pages/Statements";
@@ -38,6 +40,8 @@ const HOME_PATH: Record<Area, string> = { customer: "/accounts", staff: "/staff"
 function customerNav(me: UserOut): NavItem[] {
   const items: NavItem[] = [
     { to: "/accounts", label: "Accounts" },
+    { to: "/payees", label: "Payees" },
+    { to: "/bills", label: "Pay bills" },
     { to: "/scheduled", label: "Scheduled transfers" },
     { to: "/statements", label: "Statements" },
     { to: "/insights", label: "Spending & health" },
@@ -200,6 +204,8 @@ export const routes: RouteObject[] = [
           { index: true, element: <Navigate to="/accounts" replace /> },
           { path: "accounts", element: <Accounts /> },
           { path: "scheduled", element: <ScheduledTransfers /> },
+          { path: "payees", element: <Payees /> },
+          { path: "bills", element: <PayBills /> },
           { path: "statements", element: <Statements /> },
           {
             path: "insights",

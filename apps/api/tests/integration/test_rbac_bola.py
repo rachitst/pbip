@@ -334,6 +334,12 @@ def test_bola_customer_b_cannot_touch_customer_a_objects(
         ),
         "get payee": client.get(f"/api/v1/payees/{ids['payee']}", headers=h),
         "verify payee": client.post(f"/api/v1/payees/{ids['payee']}/verify", headers=h),
+        "edit payee": client.patch(
+            f"/api/v1/payees/{ids['payee']}", headers=h, json={"nickname": "mine now"}
+        ),
+        "edit non-existent payee": client.patch(
+            f"/api/v1/payees/{uuid.uuid4()}", headers=h, json={"nickname": "x"}
+        ),
         "delete payee": client.delete(f"/api/v1/payees/{ids['payee']}", headers=h),
         "get transfer": client.get(f"/api/v1/transfers/{ids['transfer']}", headers=h),
         "step-up transfer": client.post(
