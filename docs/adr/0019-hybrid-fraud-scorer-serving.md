@@ -81,5 +81,8 @@ hybrid on the request path. Five questions had to be settled first (handoff on #
   served model flags almost any transfer to a payee added this month: a ₹10 transfer to a 48 h-old payee
   scored risk 75 (REVIEW). The hybrid path is implemented and tested, but switching it on needs the data
   fix in #251 and a retrain first.
+  **Update (1 Nov 2026, #251 fixed):** with generator v2.1 and retrained models, legitimate new-payee
+  transfers are held at REVIEW 0.09% (test) / 0.24% (held-out) of the time. Local and demo now run
+  `hybrid` (`.env.example`, docker-compose); the code default stays `rules`.
 - Velocity counters move to Redis in TASK-034, and login-failure/device rules join the registry in TASK-095.
   Both feed this same adapter.

@@ -20,6 +20,11 @@ RUN uv sync --frozen --no-dev --no-editable --package pbip-api
 
 FROM python:3.12-slim AS runtime
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PATH="/app/.venv/bin:$PATH"
+# libgomp1: the OpenMP runtime LightGBM links against (fraud scorer, ADR-0019). Without it the
+# model cannot be imported and the API serves the rules only.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
 RUN groupadd --system app && useradd --system --gid app --home-dir /app --no-create-home app
 WORKDIR /app
 COPY --from=builder --chown=app:app /app/.venv /app/.venv

@@ -204,6 +204,7 @@ def test_reversal_is_a_compensating_transaction_not_an_edit(db: Session) -> None
     db.refresh(a), db.refresh(b), db.refresh(original)
     assert (a.ledger_balance, b.ledger_balance) == (1_000, 0)
     assert original.status == TransactionStatus.REVERSED and reversal.reversal_of_id == original.id
+    assert reversal.reference == "Reversal: customer dispute"  # TASK-086: statements show why
     count = db.execute(
         select(func.count())
         .select_from(TransactionEntry)

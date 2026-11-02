@@ -8,8 +8,10 @@ import pandas as pd
 import pytest
 from pbip_datagen.__main__ import _export_fraud
 from pbip_datagen.generator import GeneratorConfig
+from pbip_ml.fraud import train as train_cli
 from pbip_ml.fraud import training as t
 from pbip_ml.fraud.train import load_export, log_to_mlflow, run
+from pbip_ml.tracking import TrackingTarget, local_target
 
 
 @pytest.fixture(scope="module")
@@ -30,6 +32,35 @@ def test_split_is_chronological_with_no_overlap(dataset: pd.DataFrame) -> None:
     assert split.validation["occurred_at"].max() < split.test["occurred_at"].min()
     assert len(split.train) + len(split.validation) + len(split.test) == len(dataset)
     assert all(part["label"].sum() > 0 for part in (split.train, split.validation, split.test))
+
+
+def test_dataset_holds_outgoing_transfers_only_with_features_from_all_rows() -> None:
+    """TASK-071: the API scores debits only, so training/evaluation rows exclude credits."""
+    at = pd.Timestamp("2025-03-01 10:00", tz="UTC")
+    device = "d1"
+    rows = [  # a debit, a big credit (e.g. an F7 deposit), then a debit
+        ("a", at, "DEBIT", 1_000_00),
+        ("b", at + pd.Timedelta(hours=1), "CREDIT", 99_500_00),
+        ("c", at + pd.Timedelta(hours=2), "DEBIT", 2_000_00),
+    ]
+    transfers = pd.DataFrame(
+        {
+            "id": [r[0] for r in rows],
+            "customer_id": "c1",
+            "occurred_at": [r[1] for r in rows],
+            "direction": [r[2] for r in rows],
+            "amount_minor": [r[3] for r in rows],
+            "payee_added_at": [at - pd.Timedelta(days=90), pd.NaT, at - pd.Timedelta(days=90)],
+            "device_id": device,
+            "new_device": False,
+            "failed_logins_24h": 0,
+        }
+    )
+    labels = pd.DataFrame({"transaction_id": ["b"], "fraudulent": [True]})
+    data = t.build_dataset(transfers, labels)
+    assert list(data.index) == [0, 2]  # the credit is gone; positions in the export are kept
+    assert data["is_debit"].eq(1).all() and data["label"].eq(0).all()
+    assert data.loc[2, "ratio_to_avg_amount"] == 2.0  # history (the earlier debit) still counts
 
 
 def test_metrics_from_a_known_confusion_matrix() -> None:
@@ -84,7 +115,14 @@ def test_training_is_deterministic(dataset: pd.DataFrame) -> None:
     assert np.array_equal(a.predict(x), b.predict(x))
 
 
-def test_cli_run_writes_artifacts_and_logs_to_mlflow(exported: Path, tmp_path: Path) -> None:
+def test_cli_run_writes_artifacts_and_logs_to_mlflow(
+    exported: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _no_shared_server(*_args: object, **_kwargs: object) -> TrackingTarget:
+        # Regression: with a local MLflow server on :5000 the test used to log there, not to tmp_path.
+        raise AssertionError("test must not resolve (or probe) the shared tracking server")
+
+    monkeypatch.setattr(train_cli, "configure_tracking", _no_shared_server)
     out = tmp_path / "models"
     report = run(exported, out, holdout=exported)
     assert {p.name for p in out.iterdir()} == {
@@ -96,5 +134,5 @@ def test_cli_run_writes_artifacts_and_logs_to_mlflow(exported: Path, tmp_path: P
     }
     assert report["lightgbm"]["test"]["pr_auc"] > 0 and "holdout_seed" in report["lightgbm"]
     assert report["hybrid"]["at_review"]["recall"] >= report["rules_only"]["at_review"]["recall"]
-    run_id = log_to_mlflow(report, out, tmp_path / "mlruns")
+    run_id = log_to_mlflow(report, out, tmp_path / "mlruns", local_target(tmp_path / "mlruns"))
     assert run_id and any((tmp_path / "mlruns").rglob("lightgbm.txt"))

@@ -37,3 +37,8 @@ SCHEDULED_WORKER_DURATION_SECONDS = Histogram(
     "scheduled_worker_duration_seconds",
     "Duration of scheduled transfer processing loop in seconds",
 )
+UNHANDLED_ERRORS_TOTAL = Counter(
+    "unhandled_errors_total",
+    "Unhandled exceptions answered with a generic 500 (error tracking, TASK-103)",
+    ["route", "error_type"],
+)

@@ -1,4 +1,4 @@
-"""Unit tests for scheduled transfer recurrence and occurrence projection (ADR-0021)."""
+"""Unit tests for scheduled transfer recurrence and occurrence projection (ADR-0023)."""
 
 from datetime import date
 

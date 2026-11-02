@@ -1,4 +1,4 @@
-"""Scheduled and recurring transfer instructions (TASK-015 / ADR-0021)."""
+"""Scheduled and recurring transfer instructions (TASK-015 / ADR-0023)."""
 
 from datetime import date, datetime
 from enum import StrEnum
@@ -30,7 +30,7 @@ class SchedulePauseReason(StrEnum):
 
 
 class ScheduledTransfer(Base):
-    """Recurring transfer standing order executed by Celery Beat per occurrence (ADR-0021)."""
+    """Recurring transfer standing order executed by Celery Beat per occurrence (ADR-0023)."""
 
     __tablename__ = "scheduled_transfers"
     __table_args__ = (

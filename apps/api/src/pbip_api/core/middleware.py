@@ -14,7 +14,7 @@ _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{8,64}$")
 _logger = structlog.get_logger("pbip_api.access")
 
 
-def _route_template(scope: Scope) -> str:
+def route_template(scope: Scope) -> str:
     route = scope.get("route")
     path = getattr(route, "path", None)
     return path if isinstance(path, str) else "unmatched"
@@ -56,7 +56,7 @@ class RequestContextMiddleware:
             await self.app(scope, receive, send_wrapper)
         finally:
             elapsed = time.perf_counter() - started
-            route = _route_template(scope)
+            route = route_template(scope)
             method = scope["method"]
             HTTP_REQUESTS_TOTAL.labels(method, route, str(status_code)).inc()
             HTTP_REQUEST_DURATION_SECONDS.labels(method, route).observe(elapsed)

@@ -28,7 +28,12 @@ from pbip_ml.fraud import training as t
 from pbip_ml.fraud.contract import FraudDecision
 from pbip_ml.fraud.inference import write_manifest
 from pbip_ml.fraud.rules import default_registry
-from pbip_ml.tracking import DEFAULT_LOCAL_DIR, configure_tracking, ensure_experiment
+from pbip_ml.tracking import (
+    DEFAULT_LOCAL_DIR,
+    TrackingTarget,
+    configure_tracking,
+    ensure_experiment,
+)
 
 EXPERIMENT = "pbip-fraud"
 HYBRID_VERSION = "hybrid-lgbm-iforest-1"
@@ -113,8 +118,17 @@ def run(data: Path, out: Path, holdout: Path | None = None) -> dict[str, Any]:
     return report
 
 
-def log_to_mlflow(report: dict[str, Any], out: Path, local_dir: Path) -> str:
-    target = configure_tracking(local_dir=local_dir)
+def log_to_mlflow(
+    report: dict[str, Any],
+    out: Path,
+    local_dir: Path,
+    target: TrackingTarget | None = None,
+) -> str:
+    """Log the run. ``target`` pins the store so tests never fall through to a live server."""
+    if target is None:
+        target = configure_tracking(local_dir=local_dir)
+    else:
+        mlflow.set_tracking_uri(target.uri)
     experiment_id = ensure_experiment(EXPERIMENT, target)
     with mlflow.start_run(experiment_id=experiment_id) as active:
         mlflow.log_params({k: v for k, v in t.LGBM_PARAMS.items() if k != "verbose"})

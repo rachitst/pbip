@@ -1,4 +1,4 @@
-"""The reusable transfer core (TASK-015 / ADR-0021): ``_execute_transfer`` never commits.
+"""The reusable transfer core (TASK-015 / ADR-0023): ``_execute_transfer`` never commits.
 
 A scheduled run must update its own state and the transfer in ONE commit, so the use case is split
 from the interactive wrapper. These tests drive ``PaymentsService`` directly against PostgreSQL.

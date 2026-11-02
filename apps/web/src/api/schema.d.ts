@@ -673,6 +673,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fraud/demo-lab": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether the fraud demonstration lab (TASK-081) may run in this environment
+         * @description The lab drives real customer APIs with demo credentials. The web app only knows how it was
+         *     built, not where it is deployed, so the server's APP_ENV decides. Staging and production
+         *     answer 404 (not a 200 "disabled"), so the lab is indistinguishable from absent there.
+         */
+        get: operations["get_demo_lab_status_api_v1_fraud_demo_lab_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fraud/monitoring": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Security monitoring: high-risk customers, open alerts, login anomalies, fraud events
+         * @description UC-13 dashboard data (TASK-099), cached in Redis for 60 seconds.
+         */
+        get: operations["get_monitoring_api_v1_fraud_monitoring_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fraud/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fraud telemetry: decisions over time, hold rate, top reasons, risky payees
+         * @description Aggregates only, cached in Redis for 60 seconds per window (TASK-035).
+         */
+        get: operations["get_stats_api_v1_fraud_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/insights/customers": {
         parameters: {
             query?: never;
@@ -1048,6 +1110,25 @@ export interface components {
             /** Roles */
             roles: string[];
         };
+        /**
+         * AlertCustomer
+         * @description What an analyst needs to judge the alert; no contact details or date of birth.
+         */
+        AlertCustomer: {
+            /**
+             * Customer Since
+             * Format: date-time
+             */
+            customer_since: string;
+            /** Full Name */
+            full_name: string;
+            /** Kyc Status */
+            kyc_status: string;
+            /** Risk Profile */
+            risk_profile: string | null;
+            /** Segment */
+            segment: string | null;
+        };
         /** AlertDetail */
         AlertDetail: {
             /** Amount Minor */
@@ -1059,11 +1140,17 @@ export interface components {
             created_at: string;
             /** Currency */
             currency: string;
+            customer: components["schemas"]["AlertCustomer"] | null;
             /**
              * Customer Id
              * Format: uuid
              */
             customer_id: string;
+            /**
+             * Customer Name
+             * @description Full name of the customer who made the payment
+             */
+            customer_name?: string | null;
             /** Decision */
             decision: string;
             /** Features */
@@ -1083,6 +1170,8 @@ export interface components {
             reasons: {
                 [key: string]: unknown;
             }[];
+            /** Reference */
+            reference: string | null;
             /** Resolution Note */
             resolution_note: string | null;
             /** Resolved At */
@@ -1094,12 +1183,19 @@ export interface components {
             /** Status */
             status: string;
             /**
+             * Top Reason
+             * @description First recorded reason: bank rules first, then the model's strongest factor
+             */
+            top_reason?: string | null;
+            /**
              * Transaction Id
              * Format: uuid
              */
             transaction_id: string;
             /** Transaction Status */
             transaction_status: string;
+            /** Transaction Type */
+            transaction_type: string;
         };
         /**
          * AlertStatus
@@ -1117,6 +1213,11 @@ export interface components {
             created_at: string;
             /** Currency */
             currency: string;
+            /**
+             * Customer Name
+             * @description Full name of the customer who made the payment
+             */
+            customer_name?: string | null;
             /** Decision */
             decision: string;
             /**
@@ -1130,6 +1231,11 @@ export interface components {
             severity: string;
             /** Status */
             status: string;
+            /**
+             * Top Reason
+             * @description First recorded reason: bank rules first, then the model's strongest factor
+             */
+            top_reason?: string | null;
             /** Transaction Status */
             transaction_status: string;
         };
@@ -1618,6 +1724,22 @@ export interface components {
              */
             segment: "HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER";
         };
+        /** DayCounts */
+        DayCounts: {
+            /** Allow */
+            ALLOW: number;
+            /** Block */
+            BLOCK: number;
+            /** Review */
+            REVIEW: number;
+            /** Step Up */
+            STEP_UP: number;
+            /**
+             * Day
+             * @description UTC date, YYYY-MM-DD
+             */
+            day: string;
+        };
         /** DecisionRequest */
         DecisionRequest: {
             /**
@@ -1627,6 +1749,14 @@ export interface components {
             action: "RELEASE" | "REJECT";
             /** Note */
             note?: string | null;
+        };
+        /** DemoLabStatus */
+        DemoLabStatus: {
+            /**
+             * Enabled
+             * @description True: the lab may run here. Outside local/test the endpoint answers 404
+             */
+            enabled: boolean;
         };
         /**
          * DeviceOut
@@ -1912,6 +2042,89 @@ export interface components {
              */
             window_months: number;
         };
+        /** FlaggedEvent */
+        FlaggedEvent: {
+            /** Alert Id */
+            alert_id: string | null;
+            /** Alert Status */
+            alert_status: string | null;
+            /** Amount Minor */
+            amount_minor: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Customer Id
+             * Format: uuid
+             */
+            customer_id: string;
+            /** Decision */
+            decision: string;
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /** Reason Codes */
+            reason_codes: string[];
+            /** Risk Score */
+            risk_score: number;
+        };
+        /** FraudEventsPanel */
+        FraudEventsPanel: {
+            /**
+             * Last 24H
+             * @description REVIEW and BLOCK decisions in 24 hours
+             */
+            last_24h: {
+                [key: string]: number;
+            };
+            /**
+             * Latest
+             * @description The ten newest flagged decisions
+             */
+            latest: components["schemas"]["FlaggedEvent"][];
+        };
+        /** FraudStats */
+        FraudStats: {
+            /** Block Rate */
+            block_rate: number;
+            /** By Day */
+            by_day: components["schemas"]["DayCounts"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Hold Rate
+             * @description Share of scored transactions held for REVIEW
+             */
+            hold_rate: number;
+            /** Latency P95 Ms */
+            latency_p95_ms: number | null;
+            /**
+             * Model Fallbacks
+             * @description Decisions served by the rules because the model failed
+             */
+            model_fallbacks: number;
+            /** Risky Payees */
+            risky_payees: components["schemas"]["RiskyPayee"][];
+            /** Scored */
+            scored: number;
+            /** Top Rules */
+            top_rules: components["schemas"]["RuleCount"][];
+            /** Totals */
+            totals: {
+                [key: string]: number;
+            };
+            /** Window Days */
+            window_days: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1953,6 +2166,35 @@ export interface components {
              * @description Weight in percent
              */
             weight_percentage: number;
+        };
+        /** HighRiskCustomer */
+        HighRiskCustomer: {
+            /**
+             * Alert Id
+             * @description Alert to open: newest open one, else newest
+             */
+            alert_id: string | null;
+            /** Blocked */
+            blocked: number;
+            /**
+             * Customer Id
+             * Format: uuid
+             */
+            customer_id: string;
+            /**
+             * Flagged Events
+             * @description REVIEW/BLOCK decisions, or decisions that opened an alert
+             */
+            flagged_events: number;
+            /**
+             * Last Flagged At
+             * Format: date-time
+             */
+            last_flagged_at: string;
+            /** Max Risk */
+            max_risk: number;
+            /** Open Alerts */
+            open_alerts: number;
         };
         /** InstalmentOut */
         InstalmentOut: {
@@ -2001,6 +2243,19 @@ export interface components {
             /** Tenures Months */
             tenures_months: number[];
         };
+        /** Lockout */
+        Lockout: {
+            /**
+             * Locked At
+             * Format: date-time
+             */
+            locked_at: string;
+            /**
+             * User Id
+             * @description None if the user was deleted since
+             */
+            user_id: string | null;
+        };
         /** LockoutStatusOut */
         LockoutStatusOut: {
             /** Failed Login Count */
@@ -2011,6 +2266,50 @@ export interface components {
             last_failure_at: string | null;
             /** Locked Until */
             locked_until: string | null;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /** LoginAnomalies */
+        LoginAnomalies: {
+            /**
+             * Burst Threshold
+             * @description Failed sign-ins in the window that make a burst
+             */
+            burst_threshold: number;
+            /** Bursts */
+            bursts: components["schemas"]["LoginBurst"][];
+            /**
+             * Counts
+             * @description Security events in the window, by type
+             */
+            counts: {
+                [key: string]: number;
+            };
+            /**
+             * Recent Lockouts
+             * @description The ten newest ACCOUNT_LOCKED events
+             */
+            recent_lockouts: components["schemas"]["Lockout"][];
+            /**
+             * Unknown Account Failures
+             * @description Failed sign-ins for unknown emails
+             */
+            unknown_account_failures: number;
+            /** Window Hours */
+            window_hours: number;
+        };
+        /** LoginBurst */
+        LoginBurst: {
+            /** Failures */
+            failures: number;
+            /**
+             * Last Failure At
+             * Format: date-time
+             */
+            last_failure_at: string;
             /**
              * User Id
              * Format: uuid
@@ -2146,6 +2445,23 @@ export interface components {
              */
             unread_count: number;
         };
+        /** OldestOpenAlert */
+        OldestOpenAlert: {
+            /**
+             * Alert Id
+             * Format: uuid
+             */
+            alert_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Risk Score */
+            risk_score: number;
+            /** Severity */
+            severity: string;
+        };
         /** OpenAccountRequest */
         OpenAccountRequest: {
             account_type: components["schemas"]["OpenAccountType"];
@@ -2157,6 +2473,30 @@ export interface components {
          * @enum {string}
          */
         OpenAccountType: "SAVINGS" | "CHECKING" | "CURRENT";
+        /** OpenAlertsPanel */
+        OpenAlertsPanel: {
+            /**
+             * By Severity
+             * @description Open alerts per severity (MEDIUM, HIGH)
+             */
+            by_severity: {
+                [key: string]: number;
+            };
+            /**
+             * Oldest
+             * @description The five longest-waiting open alerts
+             */
+            oldest: components["schemas"]["OldestOpenAlert"][];
+            /**
+             * Oldest Open Age Seconds
+             * @description Age of the oldest open alert
+             */
+            oldest_open_age_seconds: number | null;
+            /** Oldest Open At */
+            oldest_open_at: string | null;
+            /** Total */
+            total: number;
+        };
         /**
          * PageDirection
          * @enum {string}
@@ -2349,6 +2689,34 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** RiskyPayee */
+        RiskyPayee: {
+            /**
+             * Account
+             * @description Masked: last four digits only
+             */
+            account: string;
+            /** Bank Code */
+            bank_code: string;
+            /**
+             * Customers
+             * @description Distinct customers who sent flagged money here
+             */
+            customers: number;
+            /** Flagged Transfers */
+            flagged_transfers: number;
+            /** Max Risk */
+            max_risk: number;
+        };
+        /** RuleCount */
+        RuleCount: {
+            /** Code */
+            code: string;
+            /** Count */
+            count: number;
+            /** Source */
+            source: string | null;
+        };
         /**
          * ScheduleFrequency
          * @enum {string}
@@ -2455,6 +2823,24 @@ export interface components {
          * @enum {string}
          */
         ScheduledTransferStatus: "ACTIVE" | "PAUSED" | "CANCELLED" | "COMPLETED";
+        /**
+         * SecurityMonitoring
+         * @description UC-13 panels. Identifiers and aggregates only: no names, emails, account numbers or IPs.
+         */
+        SecurityMonitoring: {
+            fraud_events: components["schemas"]["FraudEventsPanel"];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** High Risk Customers */
+            high_risk_customers: components["schemas"]["HighRiskCustomer"][];
+            /** High Risk Window Days */
+            high_risk_window_days: number;
+            login_anomalies: components["schemas"]["LoginAnomalies"];
+            open_alerts: components["schemas"]["OpenAlertsPanel"];
+        };
         /**
          * SpendingBreakdownResponse
          * @description Response containing categorized spending breakdown for an account.
@@ -3918,6 +4304,8 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["AlertStatus"] | null;
+                /** @description Only the alert raised for this transaction (at most one) */
+                transaction_id?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -3999,6 +4387,84 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_demo_lab_status_api_v1_fraud_demo_lab_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoLabStatus"];
+                };
+            };
+            /** @description Not a local/test environment: the lab does not exist here */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_monitoring_api_v1_fraud_monitoring_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityMonitoring"];
+                };
+            };
+        };
+    };
+    get_stats_api_v1_fraud_stats_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FraudStats"];
+                };
             };
             /** @description Validation Error */
             422: {

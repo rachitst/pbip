@@ -1,4 +1,4 @@
-"""Scheduled transfer execution and outage recovery engine (ADR-0021)."""
+"""Scheduled transfer execution and outage recovery engine (ADR-0023)."""
 
 import time
 from datetime import date
@@ -98,7 +98,7 @@ def _recover_missed_occurrences(
     instruction: ScheduledTransfer,
     now_date: date,
 ) -> ScheduledExecutionOutcome:
-    """Recover expired occurrences in one atomic transaction (ADR-0021 Approach D)."""
+    """Recover expired occurrences in one atomic transaction (ADR-0023 Approach D)."""
     audit = AuditService(session)
     missed_dates = compute_missed_occurrences(
         instruction.start_date,

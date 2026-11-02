@@ -1,4 +1,4 @@
-"""Object-level authorization for scheduled transfers (ADR-0021).
+"""Object-level authorization for scheduled transfers (ADR-0023).
 
 The ONLY way application code obtains a scheduled transfer on behalf of a customer.
 A missing instruction and someone else's instruction are indistinguishable (404),

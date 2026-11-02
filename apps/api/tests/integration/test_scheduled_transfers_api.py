@@ -1,4 +1,4 @@
-"""PostgreSQL integration tests for scheduled transfers API endpoints (TASK-015 / ADR-0021)."""
+"""PostgreSQL integration tests for scheduled transfers API endpoints (TASK-015 / ADR-0023)."""
 
 import threading
 import uuid

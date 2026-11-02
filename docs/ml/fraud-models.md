@@ -1,6 +1,6 @@
 # Fraud models: LightGBM classifier and Isolation Forest (TASK-029, TASK-030)
 
-**Status:** trained offline and evaluated. The hybrid scorer is wired into transfers and bill payments behind `FRAUD_SCORER=hybrid` (TASK-033, ADR-0019). The default is still `rules`: see "Served-path finding" below.
+**Status:** trained offline and evaluated. The hybrid scorer is wired into transfers and bill payments behind `FRAUD_SCORER=hybrid` (TASK-033, ADR-0019). Local and demo run `hybrid` since the #251 fix (generator v2.1); the code default for other deployments stays `rules`. Current numbers: `docs/ml/model-evaluation-report-v1.md` (v1.1). The tables below are the v2.0 (pre-#251) training run, kept for history.
 **Code:**
 - `ml/src/pbip_ml/fraud/training.py`: dataset, time split, models, metrics.
 - `ml/src/pbip_ml/fraud/train.py`: CLI and MLflow logging.
@@ -119,4 +119,17 @@ Example, a high-risk F5 transfer:
 ### Served-path finding: new payees (#251)
 In the labelled data, no legitimate debit goes to a payee less than 761 h (about 32 days) old, while 83% of fraud debits use a payee under 72 h old. The models learned "new payee = fraud". When served, a ₹10 transfer to a 48 h-old verified payee scored model probability 0.99 and risk 75 (REVIEW), with `MODEL_PAYEE_AGE_SECONDS` as the top reason.
 
-The offline metrics above do not show this, because the test split has the same blind spot. It is a data-generator gap, not a serving bug. Until #251 adds legitimate new-payee transfers and the models are retrained, the hybrid stays off by default.
+The offline metrics above do not show this, because the test split has the same blind spot. It was a data-generator gap, not a serving bug.
+
+**Fixed (generator v2.1).** Legitimate new payees, phone changes and forgotten passwords were added and the models retrained. Legitimate transfers to payees under 3 days old are now held at REVIEW 0.09% of the time (test), down from 100%. Recall at REVIEW is 0.835, down from 0.957, because the old number was inflated by the shortcut. Details are in the evaluation report v1.1, §3.3.
+
+## Model registry and promotion (TASK-038)
+
+The API keeps loading checked files once at startup (ADR-0019). MLflow decides WHICH files.
+
+1. `make fraud-model` trains into `models/fraud` and logs the run (artifacts + `report.json`) to the `pbip-fraud` experiment.
+2. `make promote-model` (`python -m pbip_ml.fraud.promotion promote --latest-run --data data/fraud [--holdout H]`) downloads the run's artifacts, verifies them with the serving loader and **measures** them with the evaluation report's functions (`pbip_ml.fraud.evaluation.served_metrics` and `latency_profile`), never the numbers the run logged about itself. `--data` must be the export the run was trained on (checked against the run's test period, so the gate never scores training rows). The current champion is measured on the same rows. The run is registered as a new version of `pbip-fraud` with the alias `challenger`, and the measured numbers and verdict are stored as version tags.
+3. Gate (all must hold): served-hybrid PR-AUC >= 0.80 on the test period (and on the held-out seed if given; evaluation report v1.1: 0.860 / 0.858; re-measured by the gate on 2 Nov 2026 for the `make fraud-model` export and the report's held-out seed 4242: 0.886 / 0.850), single-request p95 latency <= 50 ms (`FRAUD_MODEL_BUDGET_MS`), PR-AUC not below the champion's, and p95 latency not above 1.5x the champion's (both timed in the same process, one after the other; the ratio leaves headroom for timing noise). The champion's measured PR-AUC and p95 are stored on the new version as the `champion_measured` tag. On a pass the alias `champion` moves to the new version and is read back; on a fail the champion is unchanged and the rejected version keeps `challenger`. Exit code 0 promoted, 1 rejected, 2 could not run.
+4. `make fraud-champion` (`... export-champion --out models/fraud`) copies the champion's artifacts into the served directory, after checking their manifest is the one the gate measured and that `inference.load` accepts them, and writes `champion.json` (version, run, manifest hash). The directory is swapped by rename. Restart the API to serve it.
+
+**MLflow down:** `promote` and `export-champion` refuse to run against an unreachable server (no silent local fallback, which could promote into the wrong registry), and the export leaves `models/fraud` untouched, so the API keeps starting from the last exported champion. The API never needs MLflow.

@@ -130,10 +130,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 | TASK-032 | SHAP Explainability & Reason Code Generator | Rachit | Wed 28 Oct | Wed 28 Oct | 029, 031 | Seq | High | #55 |
 | TASK-033 | HybridFraudScorer Service Integration in Transfer Flow | Rachit | Wed 28 Oct | Thu 29 Oct | 031, 032 | Seq | High | #56 |
 | TASK-038 | MLflow Model Registry Champion/Challenger Promotion Workflow | Pranay | Thu 29 Oct | Fri 30 Oct | 011, 029 | Seq | Low | #61 |
-| TASK-037 | Step-Up MFA Challenge Modal & Customer Transfer Confirmation | Kalpak | Thu 29 Oct | Thu 29 Oct | 033, 019 | Seq | Low | #60 |
-| TASK-035 | Fraud Telemetry & Risk Analytics Endpoints | Krishna | Fri 30 Oct | Fri 30 Oct | 033 | Seq | High | #58 |
+| TASK-037 | Step-Up MFA Challenge Modal & Customer Transfer Confirmation | Rachit | Thu 29 Oct | Thu 29 Oct | 033, 019 | Seq | Low | #60 |
+| TASK-035 | Fraud Telemetry & Risk Analytics Endpoints | Rachit | Fri 30 Oct | Fri 30 Oct | 033 | Seq | High | #58 |
 | TASK-039 | Fraud Engine Model Evaluation & Performance Report | Rachit | Fri 30 Oct | Sat 31 Oct | 029, 030, 031 | Seq | Low | #62 |
-| TASK-036 | Staff Fraud Operations Queue & Alert Detail UI | Kalpak | Fri 30 Oct | Sun 01 Nov | 019, 033, 035 | Seq | High | #59 |
+| TASK-036 | Staff Fraud Operations Queue & Alert Detail UI | Rachit | Fri 30 Oct | Sun 01 Nov | 019, 033, 035 | Seq | High | #59 |
 
 - **Critical path:** 023 (Pranay) -> 024 (Pranay) -> 029 (Pranay) -> 031 (Pranay) -> 032 (Pranay) -> 033 (Pranay) -> 035 (Krishna) -> 036 (Kalpak), target Sun 01 Nov.
 - **In parallel:** Kalpak, Krishna, Pranay, Sujal.
@@ -1129,8 +1129,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-035 - Fraud Telemetry & Risk Analytics Endpoints
 
 - **Issue:** #58 | **Sprint:** 3 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
-- **Owner:** Krishna (`LetRock1`)
-- **Start:** Fri 30 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
+- **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov; was Krishna)
+- **Start:** Fri 30 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** Sun 1 Nov (`fraud/stats.py`, `GET /api/v1/fraud/stats`) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-033 (#56, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-033
 - **Goal:** Staff analytics endpoints providing fraud decision breakdown, hold rates, and rule triggers.
@@ -1143,10 +1143,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Responses cached in Redis with 60-second TTL to avoid database strain
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #58`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] GET /api/v1/fraud/stats returns decision counts (ALLOW, STEP_UP, REVIEW, BLOCK) over time
-  - [ ] Breakdown of most frequently triggered rules and high-risk payees
-  - [ ] Protected by require_roles([FRAUD_ANALYST, ADMIN], mfa=True)
-  - [ ] Responses cached in Redis with 60-second TTL to avoid database strain
+  - [x] GET /api/v1/fraud/stats returns decision counts (ALLOW, STEP_UP, REVIEW, BLOCK) over time (per UTC day, 1-90 day window, plus hold/block rates, model fallbacks, p95 latency)
+  - [x] Breakdown of most frequently triggered rules and high-risk payees (top 10 reason codes with source; destination accounts behind REVIEW/BLOCK, masked, counted across customers)
+  - [x] Protected by require_roles([FRAUD_ANALYST, ADMIN], mfa=True) (`test_stats_are_staff_only_and_need_mfa`, BOLA matrix)
+  - [x] Responses cached in Redis with 60-second TTL to avoid database strain (fail-open if Redis is down: `test_stats_are_cached_for_60_seconds_and_survive_redis_down`)
 - **Definition of done (evidence):** RBAC tests verify analyst authorization and MFA claim, response format verified.
 - **Required checks:**
   - Automated: pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths
@@ -1159,8 +1159,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-036 - Staff Fraud Operations Queue & Alert Detail UI
 
 - **Issue:** #59 | **Sprint:** 3 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Frontend Web Application
-- **Owner:** Kalpak (`Patil-Kalpak`)
-- **Start:** Fri 30 Oct | **Target deadline:** Sun 01 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
+- **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov; was Kalpak)
+- **Start:** Fri 30 Oct | **Target deadline:** Sun 01 Nov | **Actual completion:** Sun 1 Nov (`/staff/fraud`, `/staff/fraud/:alertId`) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-019 (#42, Kalpak), TASK-033 (#56, Pranay), TASK-035 (#58, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-033, TASK-035 (TASK-019 is done)
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; lives in the staff route tree (`/staff`), gated by role and an MFA-verified session (the API enforces access).
@@ -1174,10 +1174,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Strict role-based rendering ensuring customer accounts cannot view staff routes
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #59`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Alert queue listing pending transfers with risk scores and flagged reasons
-  - [ ] Detail view displaying customer profile, transaction context, and visual SHAP contribution bars
-  - [ ] Action buttons: RELEASE (captures hold, posts transfer) and REJECT (cancels transfer, releases hold)
-  - [ ] Strict role-based rendering ensuring customer accounts cannot view staff routes
+  - [x] Alert queue listing pending transfers with risk scores and flagged reasons (filters Open/All/Confirmed/Released; reasons are on the detail view)
+  - [x] Detail view displaying customer profile, transaction context, and visual SHAP contribution bars (reasons in plain language; API adds a staff-only customer summary)
+  - [x] Action buttons: RELEASE (captures hold, posts transfer) and REJECT (cancels transfer, releases hold) (confirm dialog with the effect, optional audit note)
+  - [x] Strict role-based rendering ensuring customer accounts cannot view staff routes (staff area guard; non-analyst staff get a notice and no API call)
 - **Definition of done (evidence):** Vitest tests mock analyst actions, optimistic update and error states handled.
 - **Required checks:**
   - Automated: Vitest + Testing Library covering loading, empty, error and success states; Playwright journey for critical flows; types only from `schema.d.ts`
@@ -1190,8 +1190,8 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 ### TASK-037 - Step-Up MFA Challenge Modal & Customer Transfer Confirmation
 
 - **Issue:** #60 | **Sprint:** 3 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Frontend Web Application
-- **Owner:** Kalpak (`Patil-Kalpak`)
-- **Start:** Thu 29 Oct | **Target deadline:** Thu 29 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (3.2 days of slack)
+- **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov; was Kalpak)
+- **Start:** Thu 29 Oct | **Target deadline:** Thu 29 Oct | **Actual completion:** Sun 1 Nov (`SendMoney` review/confirm + step-up modal; server-side escalation after 3 wrong codes) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-033 (#56, Pranay), TASK-019 (#42, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-033, TASK-019
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; applies the enter -> review -> submit -> outcome pattern to send money once TASK-033 is merged (not before).
@@ -1205,10 +1205,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: On 3 failed attempts, escalates transfer to PENDING_REVIEW and closes modal
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #60`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Detects STEP_UP response from transfer API and displays MFA prompt modal
-  - [ ] Submits TOTP code to POST /api/v1/transfers/{id}/step-up
-  - [ ] On valid code, completes transfer, displays receipt, and updates balances
-  - [ ] On 3 failed attempts, escalates transfer to PENDING_REVIEW and closes modal
+  - [x] Detects STEP_UP response from transfer API and displays MFA prompt modal
+  - [x] Submits TOTP code to POST /api/v1/transfers/{id}/step-up
+  - [x] On valid code, completes transfer, displays receipt, and updates balances
+  - [x] On 3 failed attempts, escalates transfer to PENDING_REVIEW and closes modal (the SERVER counts the wrong codes per transfer and escalates: hold + alert; `test_three_wrong_step_up_codes_hand_the_transfer_to_an_analyst`)
 - **Definition of done (evidence):** React component tests verify happy path, invalid TOTP code, and escalation flow.
 - **Required checks:**
   - Automated: Vitest + Testing Library covering loading, empty, error and success states; Playwright journey for critical flows; types only from `schema.d.ts`
@@ -1222,7 +1222,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #61 | **Sprint:** 3 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Pranay (`pranaysanap`)
-- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (3.0 days of slack)
+- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged; PR #268) | **Status:** In Review | **Risk:** Low (3.0 days of slack)
 - **Depends on:** TASK-011 (#22, Krishna), TASK-029 (#52, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-029
 - **Goal:** Automated model promotion script tagging champion models in MLflow registry.
@@ -1235,10 +1235,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Includes local disk fallback if MLflow server is disconnected
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #61`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Script evaluates candidate model against baseline metrics gate (PR-AUC, latency)
-  - [ ] Promotes winning model by setting alias 'champion' in MLflow Model Registry
-  - [ ] FastAPI service loads model at startup dynamically from 'champion' alias
-  - [ ] Includes local disk fallback if MLflow server is disconnected
+  - [x] Script evaluates candidate model against baseline metrics gate (PR-AUC, latency)
+  - [x] Promotes winning model by setting alias 'champion' in MLflow Model Registry
+  - [x] FastAPI service loads model at startup dynamically from 'champion' alias (as built: `export-champion` writes the champion's checksummed files into `FRAUD_MODEL_DIR`, which the API's unchanged startup loader reads; the API never calls MLflow, ADR-0019)
+  - [x] Includes local disk fallback if MLflow server is disconnected (the last exported champion stays on disk and keeps being served; promote/export refuse to run rather than fall back to another registry)
 - **Definition of done (evidence):** Model promotion script tested with mock MLflow runs, offline fallback tested.
 - **Required checks:**
   - Automated: pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable; CI job or `scripts/dev.py` command exercised in tests; works from a fresh clone
@@ -1662,7 +1662,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #76 | **Sprint:** 4 | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (8.5 days of slack)
+- **Start:** Sun 25 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** Sun 1 Nov (#262, `docs/architecture/HLD.md`) | **Status:** Done | **Risk:** Low
 - **Depends on:** none
 - **Mode:** Parallel: can start immediately
 - **Goal:** Comprehensive High-Level Design document covering system boundaries, C4 models, and integration contracts.
@@ -1674,9 +1674,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Scalability analysis and production migration roadmap
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #76`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] C4 Context and Container diagrams illustrating all components and data stores
-  - [ ] Documented API interface contracts and ML inference integration specifications
-  - [ ] Scalability analysis and production migration roadmap
+  - [x] C4 Context and Container diagrams illustrating all components and data stores
+  - [x] Documented API interface contracts and ML inference integration specifications
+  - [x] Scalability analysis and production migration roadmap
 - **Definition of done (evidence):** Committed to docs/architecture/HLD.md, peer-reviewed and approved.
 - **Required checks:**
   - Automated: document builds/renders, links valid, content matches the code and backlog
@@ -2120,7 +2120,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #92 | **Sprint:** 5 | **Priority:** should | **Size:** S (0.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Fri 30 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (3.9 days of slack)
+- **Start:** Fri 30 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** Sun 1 Nov (#289, 0af8016: dashboards as code incl. p50/p95/p99 per route template and the four fraud decisions, alert rules in infra/prometheus/alerts.yml; every panel rendered data on a running compose stack with the monitoring profile, laptop) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-035 (#58, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-035
 - **Goal:** Provisioned Grafana dashboards tracking API throughput, latency percentiles, and fraud decisions.
@@ -2176,7 +2176,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #94 | **Sprint:** 5 | **Priority:** could | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (8.2 days of slack)
+- **Start:** Mon 26 Oct | **Target deadline:** Mon 26 Oct | **Actual completion:** - (set when merged) | **Status:** In Review (#261) | **Risk:** Low (8.2 days of slack)
 - **Depends on:** TASK-023 (#46, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-023
 - **Goal:** Data generator extension injecting Structuring (F7) and Dormant account sudden activity (F8).
@@ -2188,9 +2188,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Generates corresponding ground-truth scenario tags for evaluation
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #94`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] F7: Multiple deposits just beneath the mandatory reporting threshold
-  - [ ] F8: Accounts dormant for > 180 days suddenly initiating maximum transfers
-  - [ ] Generates corresponding ground-truth scenario tags for evaluation
+  - [x] F7: Multiple deposits just beneath the mandatory reporting threshold
+  - [x] F8: Accounts dormant for > 180 days suddenly initiating maximum transfers
+  - [x] Generates corresponding ground-truth scenario tags for evaluation
 - **Definition of done (evidence):** Unit tests verify scenario signature parameters and label generation.
 - **Required checks:**
   - Automated: pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable
@@ -2203,7 +2203,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #95 | **Sprint:** 5 | **Priority:** could | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Mon 26 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (7.8 days of slack)
+- **Start:** Mon 26 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** - (set when merged) | **Status:** In Review (PR #267) | **Risk:** Low (7.8 days of slack)
 - **Depends on:** TASK-023 (#46, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-023
 - **Goal:** Network graph analysis using NetworkX detecting circular fund loops between mule accounts.
@@ -2215,10 +2215,11 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Outputs risk score boost for accounts participating in detected circular loops
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #95`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Builds directed transaction graph from recent transfer records
-  - [ ] Detects simple cycles of length 3-5 with high funds retention (> 90%)
-  - [ ] Outputs risk score boost for accounts participating in detected circular loops
+  - [x] Builds directed transaction graph from recent transfer records
+  - [x] Detects simple cycles of length 3-5 with high funds retention (> 90%)
+  - [x] Outputs risk score boost for accounts participating in detected circular loops
 - **Definition of done (evidence):** NetworkX script identifies synthetic circular rings with 100% precision.
+- **Evidence:** `ml/src/pbip_ml/fraud/circular.py`, `ml/tests/test_fraud_circular.py`, `scripts/evaluate_circular_rings.py`, write-up `docs/ml/circular-transfer-spike.md` (spike: not wired into the scorer or the payment path).
 - **Required checks:**
   - Automated: pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable
   - Manual: inspect outputs/plots for sanity; re-run with the same seed and compare
@@ -2366,7 +2367,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #101 | **Sprint:** 6 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (4.0 days of slack)
+- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (suite merged in #288, 4c5d2d5; laptop: 0% errors, 0 deadlocks/overdrafts, money conserved; NOT met: p95 within budget and 10,000 requests in one run on the 2-CPU laptop, staging #198; GitHub runner run 41378616211 after #295, 6843893: 13,666 requests, 0% errors, all p95 under 500 ms (transfers 348 ms, 537 ms on an earlier runner), invariants clean) | **Status:** In Progress | **Risk:** High (needs staging hardware)
 - **Depends on:** TASK-012 (#23, Rachit), TASK-033 (#56, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-033
 - **Goal:** Load testing suite verifying p95 latency < 500ms under 500 concurrent virtual users.
@@ -2395,7 +2396,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #102 | **Sprint:** 6 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Fri 30 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (4.0 days of slack)
+- **Start:** Fri 30 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (indexes + pool settings merged in #288, 4c5d2d5; fraud-feature query 4.46 -> 0.54 ms under load, 76.6 -> 0.26 ms at 500k rows; NOT met: DB p95 < 15 ms at 200 connections, not measurable on the laptop) | **Status:** In Progress | **Risk:** High (needs staging hardware)
 - **Depends on:** TASK-078 (#101, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-078
 - **Goal:** PostgreSQL query profiling and connection pool tuning eliminating slow queries.
@@ -2454,7 +2455,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #104 | **Sprint:** 6 | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Sun 01 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
+- **Start:** Sun 01 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (set when merged) | **Status:** In Review | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
 - **Depends on:** TASK-036 (#59, Kalpak), TASK-080 (#103, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-036, TASK-080
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; lives in the staff route tree.
@@ -2468,11 +2469,12 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Clearly isolated with demo-only guardrail disabled in production environments
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #104`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] UI cards for each scenario: Account Takeover, APP Scam, Mule Pass-Through, Velocity Burst
-  - [ ] Clicking 'Execute Attack' fires realistic sequence of API calls
-  - [ ] Live visual feedback shows transfer held, alert raised in staff queue, and reasons generated
-  - [ ] Clearly isolated with demo-only guardrail disabled in production environments
+  - [x] UI cards for each scenario: Account Takeover, APP Scam, Mule Pass-Through, Velocity Burst
+  - [x] Clicking 'Execute Attack' fires realistic sequence of API calls
+  - [x] Live visual feedback shows transfer held, alert raised in staff queue, and reasons generated
+  - [x] Clearly isolated with demo-only guardrail disabled in production environments
 - **Definition of done (evidence):** Component tests test attack scenario dispatch, disabled when APP_ENV=production.
+- **Evidence (#273):** scenarios F1, F2, F3, F5, F6 run real customer API calls and show the server's alert for that transfer (`fraudLab.ts`); F4 explained as not runnable from a browser; `GET /api/v1/fraud/demo-lab` answers 404 unless `APP_ENV` is `local` or `test`, so the lab is off in staging and production; lab transfers are scored by the payment path's `FraudScorer` and move money only through the ledger (`test_lab_transfers_use_the_payment_scorer_and_move_money_only_through_the_ledger`); no credential in the source (demo password typed by the operator, F3 wrong guesses random); `FraudDemoLab.test.tsx` (13), `routing.test.tsx`, `test_fraud_demo_lab.py` (8); real-stack screenshots in `pbip-screenshots/task-081/`.
 - **Required checks:**
   - Automated: Vitest + Testing Library covering loading, empty, error and success states; Playwright journey for critical flows; types only from `schema.d.ts`
   - Manual: click through the screen on the Docker stack (`python scripts/dev.py up`): keyboard-only navigation, narrow window, dark mode
@@ -2514,7 +2516,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #106 | **Sprint:** 6 | **Priority:** could | **Size:** M (1.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Wed 28 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (6.0 days of slack)
+- **Start:** Wed 28 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** Sun 1 Nov (#293, 91bf750: gpg-encrypted pg_dump with manifest, restore drill into a temporary DB; drill on the laptop matched 39 tables/775,226 rows, ledger totals and the 151-row audit chain; tampering rejected) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-001 (#12, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Parallel: can start immediately
 - **Goal:** Automated script performing PostgreSQL pg_dump with encryption and automated restore test.
@@ -2597,7 +2599,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #109 | **Sprint:** 6 | **Priority:** could | **Size:** M (1.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Sujal (`SUJALGPM`)
-- **Start:** Sun 01 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (1.8 days of slack)
+- **Start:** Sun 01 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** Mon 2 Nov (#297, 937ce21, taken over by Rachit: mutmut 3.8.1 on ledger + payments services, 1,041/1,076 mutants killed = 96.7% (68.2% on the first 500 before); 0 critical survivors, all 35 classified; gate `python -m scripts.mutation_gate` fails below 85%; report docs/testing/mutation-report.md; laptop, not CI) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-005 (#16, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Parallel: can start immediately
 - **Goal:** Mutation testing run with mutmut on core ledger and payments modules proving test robustness.
@@ -2707,7 +2709,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #113 | **Sprint:** 7 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Identity & Core Banking
 - **Owner:** Abbas (`Abbaskazi`)
-- **Start:** Sun 01 Nov | **Target deadline:** Sun 01 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (2.0 days of slack)
+- **Start:** Sun 01 Nov | **Target deadline:** Sun 01 Nov | **Actual completion:** Sun 1 Nov (#290, 1690365: Bandit 0 high/medium, pip-audit clean, npm production 0, gitleaks over all refs 16 false positives, audit chain valid; OWASP ZAP baseline 6 WARN -> 0 after the CORP/COEP fix; nightly dast.yml; report docs/security/security-audit-2026-11.md) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-067 (#90, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-067
 - **Goal:** Comprehensive pre-ship security verification pass ensuring flawless compliance.
@@ -2965,8 +2967,8 @@ decision in ADR-0015.
 ### TASK-099 - Security Monitoring Dashboard API and UI
 
 - **Issue:** #182 | **Sprint:** unscheduled | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Frontend Web Application
-- **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov)
+- **Start:** Sun 01 Nov | **Target deadline:** Sun 01 Nov | **Actual completion:** Sun 1 Nov (`GET /api/v1/fraud/monitoring`, `/staff/monitoring`; in review) | **Status:** In review | **Risk:** Low
 - **Depends on:** TASK-019 (#42, Kalpak), TASK-035 (#58, Krishna), TASK-036 (#59, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout; lives in the staff route tree.
@@ -2979,9 +2981,9 @@ decision in ADR-0015.
   5. Implement and make the tests pass for: No customer PII beyond what the analyst role already sees; metrics labelled by route templates only
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #182`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Staff API (require_roles with MFA) returns high-risk customers, open alerts, login anomalies (failed-login bursts, lockouts) and recent fraud events
-  - [ ] Dashboard page renders each panel with counts and drill-down links to the alert queue
-  - [ ] No customer PII beyond what the analyst role already sees; metrics labelled by route templates only
+  - [x] Staff API (require_roles with MFA) returns high-risk customers, open alerts, login anomalies (failed-login bursts, lockouts) and recent fraud events
+  - [x] Dashboard page renders each panel with counts and drill-down links to the alert queue
+  - [x] No customer PII beyond what the analyst role already sees; metrics labelled by route templates only
 - **Definition of done (evidence):** API RBAC and MFA tests, component tests for each panel, Playwright check of the staff route.
 - **Required checks:**
   - Automated: Vitest component tests and, for journeys, Playwright; ESLint strict, no `any`
@@ -3050,7 +3052,7 @@ decision in ADR-0015.
 
 - **Issue:** #185 | **Sprint:** unscheduled | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (merged in #288, 4c5d2d5; laptop browser: page loads 913-1,665 ms, login 2,102 ms, all within budget; API p95 budget not met under 50 VUs on the laptop; GitHub runner run 41378616211 after #295: every API p95 under 500 ms (transfers 348 ms; 537 ms on an earlier runner, so not yet stable), browser budgets passed) | **Status:** In Progress | **Risk:** Medium
 - **Depends on:** TASK-012 (#23, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **Goal:** Measured evidence for the section 8 targets: page load < 2 s, API response < 500 ms, login < 3 s.
@@ -3077,7 +3079,7 @@ decision in ADR-0015.
 
 - **Issue:** #186 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (mechanism merged in #289, 0af8016: blackbox probes, 30-day availability rule, AvailabilityBelow99, error tracking in Loki; NOT met: one week on a deployed test environment, #198) | **Status:** In Progress | **Risk:** High (no staging host)
 - **Depends on:** TASK-082 (#105, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **Goal:** Evidence for '99% availability in test environment' and 'error tracking' (section 8).
@@ -3103,8 +3105,8 @@ decision in ADR-0015.
 ### TASK-104 - Business Requirements Specification and User Stories
 
 - **Issue:** #187 | **Sprint:** unscheduled | **Priority:** should | **Size:** S (0.5 person-days estimate) | **Epic:** Documentation & Governance
-- **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov; was unassigned)
+- **Start:** - | **Target deadline:** - | **Actual completion:** Sun 1 Nov (#263, `docs/requirements/requirements-specification.md`, `user-stories.md`) | **Status:** Done | **Risk:** Low
 - **Depends on:** none.
 - **Mode:** Unscheduled
 - **Goal:** The business documentation deliverables: requirements specification and user stories traced to use cases.
@@ -3116,9 +3118,9 @@ decision in ADR-0015.
   5. Implement and make the tests pass for: Links to docs/requirements/traceability.md for implementation and verification status
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #187`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Requirements specification derived from the use case document with numbered functional and non-functional requirements
-  - [ ] User stories for every use case UC-01 to UC-13 with acceptance criteria linked to backlog tasks
-  - [ ] Links to docs/requirements/traceability.md for implementation and verification status
+  - [x] Requirements specification derived from the use case document with numbered functional and non-functional requirements
+  - [x] User stories for every use case UC-01 to UC-13 with acceptance criteria linked to backlog tasks
+  - [x] Links to docs/requirements/traceability.md for implementation and verification status
 - **Definition of done (evidence):** Committed to docs/requirements/, reviewed by a teammate.
 - **Required checks:**
   - Automated: document builds/renders, links valid, content matches the code and backlog
@@ -3157,8 +3159,8 @@ decision in ADR-0015.
 ### TASK-106 - Entity-Relationship Diagram Generated from the Live Schema
 
 - **Issue:** #189 | **Sprint:** unscheduled | **Priority:** should | **Size:** S (0.5 person-days estimate) | **Epic:** Documentation & Governance
-- **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Owner:** Rachit (`rachitst`) (taken over Sun 1 Nov; was unassigned)
+- **Start:** - | **Target deadline:** - | **Actual completion:** Sun 1 Nov (#259, `scripts/er_diagram.py`, `docs/architecture/er-diagram.md`, CI drift check) | **Status:** Done | **Risk:** Low
 - **Depends on:** none.
 - **Mode:** Unscheduled
 - **Goal:** The ER Diagram deliverable (section 9), kept in sync with the migrations.
@@ -3169,8 +3171,8 @@ decision in ADR-0015.
   4. Implement and make the tests pass for: A check fails CI when the committed diagram no longer matches the schema
   5. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #189`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] ER diagram covering every table, primary and foreign key, generated from the migrated schema
-  - [ ] A check fails CI when the committed diagram no longer matches the schema
+  - [x] ER diagram covering every table, primary and foreign key, generated from the migrated schema
+  - [x] A check fails CI when the committed diagram no longer matches the schema
 - **Definition of done (evidence):** Diagram committed under docs/architecture/ with the generation command documented.
 - **Required checks:**
   - Automated: document builds/renders, links valid, content matches the code and backlog
@@ -3208,6 +3210,86 @@ decision in ADR-0015.
   - Documentation: docstrings say why; update README/blueprint/ADR/threat model where behaviour or architecture changes (AGENTS section 12).
 - **Reviewer checklist:** every acceptance criterion demonstrated by a test or artefact | `CI Gate` green | coverage gate met, no unexplained drop | AGENTS.md section 5 security checklist | migration with working downgrade if schema changed | `make openapi` committed if API changed | no TODO/placeholder code | docs updated
 
+### Requirement-gap tasks added 2026-11-01 (TASK-108 to TASK-112)
+
+Added by tracing use case document v0.2 section 5 and the requirements specification again: each covers a
+requirement with "no task" (FR-05 administration and configuration, FR-08 total balance, FR-39 unusual expenses,
+FR-55 held products, FR-50 web clickstream). Unassigned, no dates, Todo on the board. Registration/MFA screens stay
+with #201 and TLS was delivered in #280, so neither is repeated here.
+
+### TASK-108 - Administration Screens and Application Configuration
+
+- **Issue:** #282 | **Sprint:** unscheduled | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Identity & Core Banking
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-007.
+- **Mode:** Unscheduled
+- **Goal:** FR-05 / section 5 administration: an ADMIN can manage staff users and view or change the application settings that are safe to change at runtime, from the web app.
+- **Expected end result / acceptance criteria:**
+  - [ ] Staff web screens (ADMIN, MFA session) to create staff users with explicit roles and to inspect and clear a lockout, using the existing admin API
+  - [ ] A documented allow-list of runtime-configurable settings (for example the daily transfer limit) with typed, bounded validation; secrets and security settings are never configurable from the UI
+  - [ ] Every configuration change is audited (who, old and new value, reason) in the hash-chained audit log
+  - [ ] Non-admin roles get 403 on every admin route and screen (RBAC tests), and the route-policy registry covers the new routes
+- **Definition of done (evidence):** Component and E2E tests for the screens; API tests for validation, RBAC and audit; threat model updated for the new configuration surface.
+
+### TASK-109 - Total Balance Overview on the Customer Dashboard
+
+- **Issue:** #283 | **Sprint:** unscheduled | **Priority:** should | **Size:** S (0.5 person-days estimate) | **Epic:** Frontend Web Application
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-019.
+- **Mode:** Unscheduled
+- **Goal:** FR-08 / section 5 'total balance overview': the dashboard shows the total balance across the customer's own accounts.
+- **Expected end result / acceptance criteria:**
+  - [ ] Dashboard shows the total available and ledger balance across the authenticated customer's accounts, in integer minor units formatted by lib/money.ts
+  - [ ] The total is computed server-side from the customer's own accounts only (policy function; another customer's accounts never contribute)
+  - [ ] Loading, error and empty (no accounts) states are handled
+- **Definition of done (evidence):** API test (ownership, multiple accounts, zero accounts) and component test; OpenAPI regenerated if the API changes.
+
+### TASK-110 - Assistant Intent: Show Unusual Expenses
+
+- **Issue:** #284 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** AI Assistant & Security
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-057, TASK-059.
+- **Mode:** Unscheduled
+- **Goal:** FR-39 / UC-08 example 'Show unusual expenses': a read-only assistant tool that lists the customer's spending that is unusual for them, with the reason.
+- **Expected end result / acceptance criteria:**
+  - [ ] Approved read-only tool in the assistant registry; customer_id is injected server-side and is not part of the tool schema; arguments are bounded enums (period)
+  - [ ] Unusual means outside the customer's own baseline (for example category spend or single transactions well above their usual amount); the rule and threshold are documented and each item states why it is unusual
+  - [ ] Merchant names and references in the result are treated as untrusted data (delimited, length-capped, control characters stripped)
+  - [ ] Routed intent answers without the LLM; adversarial tests cover cross-customer requests and prompt injection through a merchant name
+- **Definition of done (evidence):** Unit tests for the anomaly rule with known inputs; assistant integration and adversarial tests; tool call audited.
+
+### TASK-111 - Held Products as a Recommendation Input
+
+- **Issue:** #285 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-054.
+- **Mode:** Unscheduled
+- **Goal:** FR-55 / UC-12: recommendations take the products a customer already holds into account.
+- **Expected end result / acceptance criteria:**
+  - [ ] Recommendation input includes the customer's held products (accounts, loans and, once they exist, deposits and investments), read through the owning modules' service functions
+  - [ ] A product the customer already holds is not recommended again unless the rule explains why (for example a top-up), and the reason says so
+  - [ ] The recommendation contract change is recorded in an ADR if pbip_ml contract.py changes
+- **Definition of done (evidence):** Unit tests with known holdings proving exclusion and explained exceptions; contract/ADR updated if changed.
+
+### TASK-112 - Web Clickstream Instrumentation
+
+- **Issue:** #286 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
+- **Owner:** Unassigned
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Depends on:** TASK-055.
+- **Mode:** Unscheduled
+- **Goal:** FR-50 / UC-11: the web app sends page-visit and interaction events to the existing clickstream ingestion API (TASK-055).
+- **Expected end result / acceptance criteria:**
+  - [ ] Page visits (route template, never raw ids or query strings) and a defined list of key interactions are sent in batches to the ingestion API
+  - [ ] No personal data, amounts, account numbers or free text in events; a test asserts the event payload shape
+  - [ ] Sending never blocks or breaks the UI: failures are dropped silently and batches are size- and rate-bounded
+  - [ ] Instrumentation respects the analytics consent decision recorded for the customer, if one exists
+- **Definition of done (evidence):** Component tests for the event hook and batching; an E2E check that a page visit reaches the ingestion API; privacy review noted in the threat model.
+
 ## 7. Cross-owner handoffs
 
 | From | Provider | To | Receiver | Provider target | Receiver start |
@@ -3232,27 +3314,27 @@ decision in ADR-0015.
 | TASK-046 | Rachit | TASK-057 | Rachit | Wed 28 Oct | Wed 28 Oct |
 | TASK-042 | Rachit | TASK-050 | Kalpak | Wed 28 Oct | Thu 29 Oct |
 | TASK-043 | Krishna | TASK-050 | Kalpak | Wed 28 Oct | Thu 29 Oct |
-| TASK-033 | Rachit | TASK-037 | Kalpak | Thu 29 Oct | Thu 29 Oct |
+| TASK-033 | Rachit | TASK-037 | Rachit | Thu 29 Oct | Thu 29 Oct |
 | TASK-033 | Rachit | TASK-078 | Rachit | Thu 29 Oct | Thu 29 Oct |
 | TASK-045 | Rachit | TASK-051 | Kalpak | Wed 28 Oct | Thu 29 Oct |
 | TASK-047 | Sujal | TASK-051 | Kalpak | Thu 29 Oct | Thu 29 Oct |
 | TASK-033 | Rachit | TASK-035 | Krishna | Thu 29 Oct | Fri 30 Oct |
 | TASK-030 | Rachit | TASK-039 | Pranay | Tue 27 Oct | Fri 30 Oct |
-| TASK-033 | Rachit | TASK-036 | Kalpak | Thu 29 Oct | Fri 30 Oct |
-| TASK-035 | Krishna | TASK-036 | Kalpak | Fri 30 Oct | Fri 30 Oct |
-| TASK-035 | Krishna | TASK-069 | Rachit | Fri 30 Oct | Fri 30 Oct |
+| TASK-033 | Rachit | TASK-036 | Rachit | Thu 29 Oct | Fri 30 Oct |
+| TASK-035 | Rachit | TASK-036 | Rachit | Fri 30 Oct | Fri 30 Oct |
+| TASK-035 | Rachit | TASK-069 | Rachit | Fri 30 Oct | Fri 30 Oct |
 | TASK-019 | Kalpak | TASK-066 | Krishna | Mon 26 Oct | Sat 31 Oct |
 | TASK-060 | Rachit | TASK-061 | Rachit | Sat 31 Oct | Sun 01 Nov |
 | TASK-019 | Kalpak | TASK-077 | Rachit | Mon 26 Oct | Sun 01 Nov |
-| TASK-036 | Kalpak | TASK-077 | Rachit | Sun 01 Nov | Sun 01 Nov |
-| TASK-037 | Kalpak | TASK-077 | Rachit | Thu 29 Oct | Sun 01 Nov |
-| TASK-036 | Kalpak | TASK-081 | Abbas | Sun 01 Nov | Sun 01 Nov |
+| TASK-036 | Rachit | TASK-077 | Rachit | Sun 01 Nov | Sun 01 Nov |
+| TASK-037 | Rachit | TASK-077 | Rachit | Thu 29 Oct | Sun 01 Nov |
+| TASK-036 | Rachit | TASK-081 | Abbas | Sun 01 Nov | Sun 01 Nov |
 | TASK-080 | Pranay | TASK-081 | Abbas | Sat 31 Oct | Sun 01 Nov |
 | TASK-064 | Sujal | TASK-065 | Krishna | Sun 01 Nov | Mon 02 Nov |
 | TASK-019 | Kalpak | TASK-065 | Krishna | Mon 26 Oct | Mon 02 Nov |
 | TASK-054 | Krishna | TASK-062 | Kalpak | Fri 30 Oct | Mon 02 Nov |
 | TASK-019 | Kalpak | TASK-092 | Rachit | Mon 26 Oct | Mon 02 Nov |
-| TASK-036 | Kalpak | TASK-092 | Rachit | Sun 01 Nov | Mon 02 Nov |
+| TASK-036 | Rachit | TASK-092 | Rachit | Sun 01 Nov | Mon 02 Nov |
 | TASK-061 | Rachit | TASK-092 | Rachit | Mon 02 Nov | Mon 02 Nov |
 | TASK-029 | Rachit | TASK-088 | Krishna | Tue 27 Oct | Mon 02 Nov |
 | TASK-084 | Pranay | TASK-088 | Krishna | Sun 01 Nov | Mon 02 Nov |

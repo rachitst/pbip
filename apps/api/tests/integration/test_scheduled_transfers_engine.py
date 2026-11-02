@@ -1,4 +1,4 @@
-"""PostgreSQL integration tests for scheduled transfer execution engine (TASK-015 / ADR-0021)."""
+"""PostgreSQL integration tests for scheduled transfer execution engine (TASK-015 / ADR-0023)."""
 
 import uuid
 from collections.abc import Callable

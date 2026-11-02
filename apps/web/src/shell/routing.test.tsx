@@ -16,10 +16,12 @@ describe("routing, roles and the application shell (ADR-0016)", () => {
   const fetchMock = vi.fn<typeof fetch>();
   let me: unknown = customerMe;
   let meStatus = 200;
+  let labEnabled = true;
 
   beforeEach(() => {
     me = customerMe;
     meStatus = 200;
+    labEnabled = true;
     document.title = "";
     fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock);
@@ -37,6 +39,13 @@ describe("routing, roles and the application shell (ADR-0016)", () => {
       if (url.endsWith("/payees")) return Promise.resolve(json(200, []));
       if (url.endsWith("/customers/me")) return Promise.resolve(json(200, profile));
       if (url.endsWith("/customers/devices")) return Promise.resolve(json(200, []));
+      if (url.endsWith("/fraud/demo-lab")) {
+        return Promise.resolve(
+          labEnabled
+            ? json(200, { enabled: true })
+            : json(404, { code: "not_found", title: "Not found" }),
+        );
+      }
       return Promise.resolve(json(404, { code: "not_found", title: "not found" }));
     });
   });
@@ -124,6 +133,32 @@ describe("routing, roles and the application shell (ADR-0016)", () => {
       );
     });
 
+    it("links security monitoring for analysts only; a customer gets not found", async () => {
+      me = analystMe;
+      const user = userEvent.setup();
+      const first = renderApp();
+      const nav = await screen.findByRole("navigation", { name: "Main" });
+      await user.click(within(nav).getByRole("link", { name: "Security monitoring" }));
+      expect(
+        await screen.findByRole("heading", { name: "Security monitoring" }),
+      ).toBeInTheDocument();
+      expect(window.location.pathname).toBe("/staff/monitoring");
+      expect(requested("/fraud/monitoring")).toBe(1);
+      first.unmount();
+
+      me = { ...analystMe, roles: ["COMPLIANCE_OFFICER"] };
+      const second = renderApp();
+      await screen.findByRole("heading", { name: "Security monitoring" });
+      expect(screen.queryByRole("link", { name: "Security monitoring" })).not.toBeInTheDocument();
+      expect(screen.getByText(/needs the Fraud Analyst or Administrator role/)).toBeInTheDocument();
+      second.unmount();
+
+      me = customerMe;
+      renderApp();
+      expect(await screen.findByRole("heading", { name: "Page not found" })).toBeInTheDocument();
+      expect(requested("/fraud/monitoring")).toBe(1);
+    });
+
     it("links both areas for a user who is a customer and staff", async () => {
       me = { ...customerMe, roles: ["CUSTOMER", "COMPLIANCE_OFFICER"] };
       const user = userEvent.setup();
@@ -131,6 +166,36 @@ describe("routing, roles and the application shell (ADR-0016)", () => {
       await user.click(await screen.findByRole("link", { name: "Staff workspace" }));
       expect(await screen.findByRole("heading", { name: "Staff workspace" })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "My banking" })).toHaveAttribute("href", "/accounts");
+    });
+
+    it("links the fraud demo lab only when the server says it may run (TASK-081)", async () => {
+      me = analystMe;
+      labEnabled = true;
+      window.history.replaceState(null, "", "/staff");
+      const { unmount } = renderApp();
+      expect(await screen.findByRole("link", { name: "Fraud demo lab" })).toHaveAttribute(
+        "href",
+        "/staff/fraud-lab",
+      );
+      unmount();
+
+      labEnabled = false; // APP_ENV=staging or production: the server answers 404
+      renderApp();
+      await screen.findByRole("heading", { name: "Staff workspace" });
+      await waitFor(() => {
+        expect(requested("/fraud/demo-lab")).toBe(2);
+      });
+      expect(screen.getByRole("link", { name: "Fraud alerts" })).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Fraud demo lab" })).not.toBeInTheDocument();
+    });
+
+    it("never asks about the lab for staff who cannot use it", async () => {
+      me = { ...customerMe, roles: ["COMPLIANCE_OFFICER"], mfa_verified_session: true };
+      window.history.replaceState(null, "", "/staff");
+      renderApp();
+      await screen.findByRole("heading", { name: "Staff workspace" });
+      expect(requested("/fraud/demo-lab")).toBe(0);
+      expect(screen.queryByRole("link", { name: "Fraud demo lab" })).not.toBeInTheDocument();
     });
   });
 

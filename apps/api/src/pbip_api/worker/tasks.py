@@ -53,7 +53,7 @@ def ensure_clickstream_partitions_task() -> list[str]:
 
 @celery_app.task(name="pbip.transfers.execute_scheduled")
 def execute_scheduled_transfers_task() -> dict[str, int]:
-    """Execute due scheduled transfers and process missed recovery (60s beat; ADR-0021)."""
+    """Execute due scheduled transfers and process missed recovery (60s beat; ADR-0023)."""
     from pbip_api.modules.payments.scheduled_service import process_due_scheduled_transfers
 
     return process_due_scheduled_transfers()

@@ -1,4 +1,4 @@
-"""UTC date recurrence and upcoming occurrence projection (ADR-0021)."""
+"""UTC date recurrence and upcoming occurrence projection (ADR-0023)."""
 
 import calendar
 from dataclasses import dataclass

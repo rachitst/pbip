@@ -95,9 +95,10 @@ describe("accounts page", () => {
     renderApp();
     await user.selectOptions(await screen.findByLabelText("Payee"), "payee-1");
     await user.type(screen.getByLabelText("Amount (INR)"), "125.50");
-    await user.click(screen.getByRole("button", { name: "Send" }));
+    await user.click(screen.getByRole("button", { name: "Review transfer" }));
+    await user.click(await screen.findByRole("button", { name: "Send money" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Transfer completed");
+    expect(await screen.findByRole("status")).toHaveTextContent("Sent INR 125.50");
     const call = fetchMock.mock.calls.find(([url]) => urlOf(url).endsWith("/transfers"));
     const init = call?.[1];
     expect(new Headers(init?.headers).get("Idempotency-Key")).toMatch(/^[0-9a-f-]{36}$/);
@@ -112,7 +113,7 @@ describe("accounts page", () => {
     renderApp();
     await user.selectOptions(await screen.findByLabelText("Payee"), "payee-1");
     await user.type(screen.getByLabelText("Amount (INR)"), "12.345");
-    await user.click(screen.getByRole("button", { name: "Send" }));
+    await user.click(screen.getByRole("button", { name: "Review transfer" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("valid amount");
     expect(fetchMock.mock.calls.some(([url]) => urlOf(url).endsWith("/transfers"))).toBe(false);
   });

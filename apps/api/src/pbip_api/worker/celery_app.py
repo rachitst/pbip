@@ -27,7 +27,7 @@ celery_app.conf.update(
     result_expires=3600,
     beat_schedule={
         "relay-outbox": {"task": "pbip.outbox.relay", "schedule": 10.0},
-        # TASK-015 / ADR-0021: recurring and scheduled transfer execution engine.
+        # TASK-015 / ADR-0023: recurring and scheduled transfer execution engine.
         "execute-scheduled-transfers": {
             "task": "pbip.transfers.execute_scheduled",
             "schedule": 60.0,
