@@ -68,7 +68,7 @@ and is never joined to the operational schema ([ADR-0009](../adr/0009-synthetic-
 | 22 | `loan_instalments` | `loans` | 0016 | The repayment schedule, one row per EMI |
 | 23 | `wealth_products` | `wealth` | 0018 | Wealth catalogue (seeded reference data, ADR-0025) |
 | 24 | `fixed_deposits` | `wealth` | 0018 | A booked fixed deposit with its contract snapshot |
-| 25 | `insurance_products` | `wealth` | 0019 | Insurance catalogue (seeded reference data, ADR-0028) |
+| 25 | `insurance_products` | `wealth` | 0020 | Insurance catalogue (seeded reference data, ADR-0028) |
 | 26 | `notifications` | `notifications` | 0001, 0007 | In-app notification inbox |
 | 27 | `outbox_events` | `notifications` | 0001 | Transactional outbox, relayed into notifications |
 | 28 | `audit_logs` | `compliance` | 0001 | Hash-chained, append-only audit trail |
@@ -371,8 +371,8 @@ authenticated customer id.
 * "Matured" is not stored: it is `ACTIVE` with `maturity_date` on or before today (IST), derived on read like
   loan arrears.
 
-**`insurance_products`** (0019, TASK-096, ADR-0028)
-* Purpose: the insurance catalogue, seeded by migration 0019 (two term-life and two health plans,
+**`insurance_products`** (0020, TASK-096, ADR-0028)
+* Purpose: the insurance catalogue, seeded by migration 0020 (two term-life and two health plans,
   `catalogue_version` `2026-11-v1`); a premium or limit change is a new migration. Fixed ids
   `30000000-0000-4000-a000-00000000000N`. Nothing references it (insurance is listed, not sold), and the
   endpoint reads no customer data: PBIP does no underwriting.
@@ -442,8 +442,8 @@ not an error. Tests: `tests/integration/test_events.py::test_events_partition_ro
 
 **`assistant_messages`** (0009, `api/modules/assistant/models.py`). FK `customer_id -> customers` `CASCADE`.
 CHECKs: `role IN ('user','assistant')`, `char_length(content) <= 2000`, `tool_name IS NULL OR tool_name IN
-('get_account_summary','get_recent_transactions','get_spend','get_balance_forecast','get_loan_affordability')`
-(the approved tool registry, AGENTS.md section 9). Index `(customer_id, created_at)`.
+('get_account_summary','get_recent_transactions','get_spend','get_balance_forecast','get_loan_affordability',
+'get_unusual_expenses')` (the approved tool registry, AGENTS.md section 9; 0018 added the last one). Index `(customer_id, created_at)`.
 
 **`rm_interactions`** (0015, `api/modules/insights/models.py`,
 [ADR-0022](../adr/0022-rm-insights-detail-and-outreach-log.md)). FKs `customer_id -> customers` `CASCADE`,
@@ -499,7 +499,8 @@ fire on `TRUNCATE`; no `public` table has a TRUNCATE guard.
 | 0016 | `20261102_0016_loans.py` | `loans`, `loan_instalments`, `scheduled_transfers.loan_id`, loan transaction types (ADR-0024). Its downgrade fails on purpose if loan rows exist: ledger history is never deleted to make a downgrade pass |
 | 0017 | `20261102_0017_customer_risk_profile_and_consent.py` | `customers` risk-tolerance columns (band, answers, score, questionnaire version, assessed at) and the ADR-0015 recommendations consent (timestamp, policy version); nothing backfilled (TASK-097, TASK-107) |
 | 0018 | `20261102_0018_wealth_catalogue_and_fixed_deposits.py` | `wealth_products` (seeded), `fixed_deposits`, `SYS-FIXED-DEPOSITS`, deposit transaction types (ADR-0025). Its downgrade fails on purpose if deposit transactions exist |
-| 0019 | `20261102_0019_insurance_catalogue.py` | `insurance_products` (seeded, ADR-0028); the downgrade drops it (nothing references it) |
+| 0019 | `20261102_0019_assistant_unusual_expenses_tool.py` | Widens the `assistant_messages.tool_name` CHECK for `get_unusual_expenses` (TASK-110); no new table |
+| 0020 | `20261102_0020_insurance_catalogue.py` | `insurance_products` (seeded, ADR-0028); the downgrade drops it (nothing references it) |
 
 Every migration has a downgrade; CI runs up, down, up and `alembic check`. One head is enforced by
 `tests/unit/test_migration_heads.py`.

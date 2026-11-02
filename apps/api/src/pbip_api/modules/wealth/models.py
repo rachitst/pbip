@@ -194,7 +194,7 @@ class InsuranceType(StrEnum):
 
 
 class InsuranceProduct(Base):
-    """Insurance catalogue (TASK-096, ADR-0028): reference data seeded by migration 0019.
+    """Insurance catalogue (TASK-096, ADR-0028): reference data seeded by migration 0020.
 
     A separate table from ``wealth_products`` because insurance is protection, not investment: it
     has a cover range, entry ages and a premium the customer pays, and no yield, lock-in or risk

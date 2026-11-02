@@ -28,7 +28,7 @@ ALL_BANDS_FROM_18 = [
     {"age_band": "60+", "whole_band_eligible": False},
 ]
 
-# The exact seeded catalogue (migration 0019): changing a premium or a limit is a NEW migration.
+# The exact seeded catalogue (migration 0020): changing a premium or a limit is a NEW migration.
 EXPECTED: dict[str, dict[str, Any]] = {
     "TERM-LIFE-CLASSIC": {
         "id": "30000000-0000-4000-a000-000000000001",
@@ -225,7 +225,7 @@ def test_migration_downgrade_drops_the_catalogue_and_upgrade_reseeds_it(
     config = Config(str(ALEMBIC_INI))
     os.environ["ALEMBIC_DATABASE_URL"] = test_database_url
     try:
-        command.downgrade(config, "0018")
+        command.downgrade(config, "0019")
         assert "insurance_products" not in inspect(migrated_engine).get_table_names()
         assert "wealth_products" in inspect(migrated_engine).get_table_names()
     finally:

@@ -36,7 +36,7 @@ of ADR-0025: a stable `code`, a `catalogue_version`, notes that say the data is 
 minor units, and reads through `modules/wealth/` (the insurance catalogue lives in the wealth module; there is no
 new module and no new service).
 
-### 2. Seeded by migration `0019`, versioned, the same in every environment
+### 2. Seeded by migration `0020`, versioned, the same in every environment
 Like `wealth_products`, `insurance_products` is reference data inserted by its migration (`catalogue_version =
 2026-11-v1`). A premium or limit change is a **new** reviewed, reversible migration, never an edit in place, so
 every environment and every test sees the same rows and there is an audit trail of what was shown when. Nothing

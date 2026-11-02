@@ -16,6 +16,7 @@ export const TOOL_LABELS: Record<StreamToolCall["tool"], string> = {
   get_spend: "Adding up your spending...",
   get_balance_forecast: "Forecasting your balance...",
   get_loan_affordability: "Checking loan affordability...",
+  get_unusual_expenses: "Comparing with your usual spending...",
 };
 
 export const STARTER_PROMPTS = [

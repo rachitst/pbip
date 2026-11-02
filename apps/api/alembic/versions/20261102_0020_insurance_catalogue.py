@@ -1,7 +1,7 @@
 """Insurance catalogue: term-life and health products with indicative premiums (TASK-096).
 
-Revision ID: 0019
-Revises: 0018
+Revision ID: 0020
+Revises: 0019
 Create Date: 2026-11-02 18:00:00.000000+00:00
 
 ADR-0028. ``insurance_products`` is reference data seeded here, identical in every environment: a
@@ -17,8 +17,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0019"
-down_revision: str | None = "0018"
+revision: str = "0020"
+down_revision: str | None = "0019"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
