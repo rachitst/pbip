@@ -1,7 +1,15 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { account, customerMe, entry, json, renderApp, urlOf } from "../test-utils";
+import {
+  account,
+  customerMe,
+  entry,
+  json,
+  noRecommendations,
+  renderApp,
+  urlOf,
+} from "../test-utils";
 
 describe("account transactions (keyset pagination)", () => {
   const fetchMock = vi.fn<typeof fetch>();
@@ -18,6 +26,8 @@ describe("account transactions (keyset pagination)", () => {
       if (url.pathname.endsWith("/auth/me")) return Promise.resolve(json(200, customerMe));
       if (url.pathname === "/api/v1/accounts") return Promise.resolve(json(200, [account]));
       if (url.pathname === "/api/v1/payees") return Promise.resolve(json(200, []));
+      if (url.pathname === "/api/v1/recommendations")
+        return Promise.resolve(json(200, noRecommendations));
       if (url.pathname === "/api/v1/accounts/acc-1/transactions") {
         if (url.searchParams.get("cursor") === "cursor-2") {
           if (olderFails) return Promise.resolve(json(500, { code: "error", title: "boom" }));
