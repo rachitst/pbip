@@ -60,3 +60,6 @@ data/geoip/
 
 # Local dev TLS material (scripts/dev_certs.py)
 infra/certs/
+
+# mutmut work tree (TASK-086, docs/testing/mutation-report.md)
+apps/api/mutants/
