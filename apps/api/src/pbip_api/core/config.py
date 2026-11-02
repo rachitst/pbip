@@ -111,6 +111,11 @@ class Settings(BaseSettings):
     def docs_enabled(self) -> bool:
         return not self.is_deployed
 
+    @property
+    def fraud_demo_lab_enabled(self) -> bool:
+        """The staff fraud demo lab (TASK-081) moves money as demo customers: local/test only."""
+        return self.app_env in ("local", "test")
+
     @model_validator(mode="after")
     def _reject_unsafe_deployed_config(self) -> "Settings":
         if not self.is_deployed:
