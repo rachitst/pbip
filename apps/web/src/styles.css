@@ -1580,3 +1580,31 @@ a {
     align-items: stretch;
   }
 }
+
+/* ---- Loans (TASK-051) --------------------------------------------------------------------- */
+.loan-list {
+  display: grid;
+  gap: var(--space-4);
+}
+.loan-card {
+  padding: var(--space-4) var(--space-5);
+  margin-block: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.loan-card h3 {
+  margin-top: 0;
+}
+.loan-card .meter {
+  margin-block: var(--space-2) var(--space-3);
+}
+.loan-value {
+  margin-top: calc(-1 * var(--space-2));
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--brand);
+}
