@@ -3011,6 +3011,39 @@
         "title": "PayeeOut",
         "type": "object"
       },
+      "PayeeUpdate": {
+        "additionalProperties": false,
+        "description": "Only the name and nickname can change. Account number and bank code are not accepted at\nall (``extra=\"forbid\"`` -> 422): a different account is a different payee.",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 2,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "nickname": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nickname"
+          }
+        },
+        "title": "PayeeUpdate",
+        "type": "object"
+      },
       "PayeeVerificationOut": {
         "properties": {
           "name_match": {
@@ -6677,6 +6710,62 @@
           }
         ],
         "summary": "Get one of my payees",
+        "tags": [
+          "payees"
+        ]
+      },
+      "patch": {
+        "operationId": "update_payee_api_v1_payees__payee_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "payee_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Payee Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PayeeUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayeeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Rename or re-nickname a payee; a new name must be verified again",
         "tags": [
           "payees"
         ]

@@ -1351,3 +1351,14 @@ a {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: var(--text-sm);
 }
+
+/* ---- Payees and bill payments (TASK-020) ---------------------------------------------------- */
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+.receipt {
+  margin-top: var(--space-4);
+}
