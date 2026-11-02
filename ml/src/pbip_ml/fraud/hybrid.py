@@ -33,10 +33,10 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 
+from pbip_ml.fraud.artifacts import MODEL_FEATURES, AnomalyModel
 from pbip_ml.fraud.contract import FraudDecision, FraudReason, ReasonSource
 from pbip_ml.fraud.features import FraudFeatures
 from pbip_ml.fraud.rules import RuleContext, RuleRegistry, default_registry
-from pbip_ml.fraud.training import MODEL_FEATURES, AnomalyModel
 
 STEP_UP_AT, REVIEW_AT, BLOCK_AT = 30, 60, 85
 ANOMALY_REASON_AT = 0.5
