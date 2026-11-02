@@ -1,0 +1,53 @@
+/* Administration screens (TASK-108). Component stylesheet: tokens only, no global selectors. */
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.admin-panel h2 {
+  margin-top: 0;
+}
+.admin-roles label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--text);
+}
+.admin-roles input[type="checkbox"] {
+  display: inline-block;
+  width: auto;
+  min-height: auto;
+  margin: 0;
+}
+.admin-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.admin-inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+.admin-inline-form .field {
+  flex: 1 1 16rem;
+  margin-bottom: 0;
+}
+.admin-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+.admin-setting-description {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: normal;
+  color: var(--muted);
+}
+.admin-settings-table td,
+.admin-settings-table th {
+  vertical-align: top;
+}

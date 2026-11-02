@@ -39,7 +39,7 @@ and is never joined to the operational schema ([ADR-0009](../adr/0009-synthetic-
 
 ## 2. Table inventory
 
-35 tables: 32 in `public`, 3 in `synthetic` (the same count as `er-diagram.md`). Partitions of
+36 tables: 33 in `public`, 3 in `synthetic` (the same count as `er-diagram.md`). Partitions of
 `clickstream_events` and `alembic_version` are not counted.
 
 | # | Table | Owning module (`models.py`) | Created in | Purpose |
@@ -76,9 +76,10 @@ and is never joined to the operational schema ([ADR-0009](../adr/0009-synthetic-
 | 30 | `clickstream_events` | `events` | 0006 | Web behaviour events, range-partitioned by month |
 | 31 | `assistant_messages` | `assistant` | 0009 | AI assistant conversation history |
 | 32 | `rm_interactions` | `insights` | 0015 | Relationship manager outreach log |
-| 33 | `synthetic.generation_runs` | none (`pbip_datagen`) | 0002 | One seeded generator run |
-| 34 | `synthetic.customers` | none (`pbip_datagen`) | 0002 | Synthetic customers of a run |
-| 35 | `synthetic.transactions` | none (`pbip_datagen`) | 0002 | Synthetic transactions of a run (ML training data) |
+| 33 | `runtime_settings` | `runtime_config` | 0020 | ADMIN overrides of allow-listed business limits (ADR-0031) |
+| 34 | `synthetic.generation_runs` | none (`pbip_datagen`) | 0002 | One seeded generator run |
+| 35 | `synthetic.customers` | none (`pbip_datagen`) | 0002 | Synthetic customers of a run |
+| 36 | `synthetic.transactions` | none (`pbip_datagen`) | 0002 | Synthetic transactions of a run (ML training data) |
 
 ---
 
@@ -400,6 +401,19 @@ authenticated customer id.
   writers cannot fork the chain. The row is written in the caller's transaction. Tampering detection:
   `test_audit_chain_verifies_and_detects_tampering`.
 
+### 3.10a Runtime configuration (`api/modules/runtime_config/models.py`, TASK-108, ADR-0031)
+
+**`runtime_settings`** (0020)
+* Columns: `id` UUID PK, `key VARCHAR(64)` unique, `value BIGINT`, `updated_by_user_id` -> `users(id)`
+  `ON DELETE RESTRICT`, `created_at`, `updated_at`. A row exists only while a setting is overridden.
+* CHECKs: `ck_runtime_settings_key_valid` (the allow-list: `daily_transfer_limit_minor`, `max_transfer_minor`,
+  `max_active_scheduled_transfers_per_customer`), `ck_runtime_settings_value_non_negative`. The per-key bounds
+  live in `runtime_config/allowlist.py` and are checked on write and again on read.
+* Index: `ix_runtime_settings_updated_by_user_id`.
+* Readers: `runtime_config.service.effective_settings` at each limit check in `payments/service.py` and
+  `bills/service.py`, in the use case's transaction (no cache). Writers: `PUT /api/v1/admin/settings/{key}` only,
+  under the audit-chain lock, with a `RUNTIME_SETTING_CHANGED` audit row (old value, new value, reason).
+
 ### 3.11 Analytics, events, assistant and insights
 
 **`monthly_category_spending`** (0003, `api/modules/analytics/models.py`). FK `account_id -> accounts` `CASCADE`.
@@ -483,6 +497,7 @@ fire on `TRUNCATE`; no `public` table has a TRUNCATE guard.
 | 0017 | `20261102_0017_customer_risk_profile_and_consent.py` | `customers` risk-tolerance columns (band, answers, score, questionnaire version, assessed at) and the ADR-0015 recommendations consent (timestamp, policy version); nothing backfilled (TASK-097, TASK-107) |
 | 0018 | `20261102_0018_wealth_catalogue_and_fixed_deposits.py` | `wealth_products` (seeded), `fixed_deposits`, `SYS-FIXED-DEPOSITS`, deposit transaction types (ADR-0025). Its downgrade fails on purpose if deposit transactions exist |
 | 0019 | `20261102_0019_assistant_unusual_expenses_tool.py` | Widens the `assistant_messages.tool_name` CHECK for `get_unusual_expenses` (TASK-110); no new table |
+| 0020 | `20261103_0020_runtime_settings.py` | `runtime_settings` (TASK-108, ADR-0031). Its downgrade drops any overrides; the environment values apply again |
 
 Every migration has a downgrade; CI runs up, down, up and `alembic check`. One head is enforced by
 `tests/unit/test_migration_heads.py`.

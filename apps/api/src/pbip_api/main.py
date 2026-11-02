@@ -28,6 +28,7 @@ from pbip_api.modules.notifications.router import router as notifications_router
 from pbip_api.modules.payees.router import router as payees_router
 from pbip_api.modules.payments.router import router as payments_router
 from pbip_api.modules.recommendations.router import router as recommendations_router
+from pbip_api.modules.runtime_config.router import router as runtime_config_router
 from pbip_api.modules.statements.router import router as statements_router
 from pbip_api.modules.wealth.router import router as wealth_router
 
@@ -35,6 +36,7 @@ ROUTERS = (
     health_router,
     auth_router,
     admin_router,
+    runtime_config_router,
     customers_router,
     accounts_router,
     analytics_router,

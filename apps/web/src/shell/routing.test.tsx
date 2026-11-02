@@ -214,6 +214,37 @@ describe("routing, roles and the application shell (ADR-0016)", () => {
       expect(within(nav).queryByRole("link", { name: "Compliance & risk" })).toBeNull();
     });
 
+    it("links administration to admins only; other roles get a restricted page (TASK-108)", async () => {
+      me = { ...analystMe, roles: ["ADMIN"] };
+      const user = userEvent.setup();
+      const first = renderApp();
+      const nav = await screen.findByRole("navigation", { name: "Main" });
+      await user.click(within(nav).getByRole("link", { name: "Administration" }));
+      expect(await screen.findByRole("heading", { name: "Administration" })).toBeInTheDocument();
+      expect(window.location.pathname).toBe("/staff/admin");
+      await waitFor(() => {
+        expect(requested("/admin/settings")).toBe(1);
+      });
+      first.unmount();
+
+      for (const role of ["FRAUD_ANALYST", "COMPLIANCE_OFFICER", "RELATIONSHIP_MANAGER"]) {
+        me = { ...analystMe, roles: [role] };
+        window.history.replaceState(null, "", "/staff/admin");
+        const view = renderApp();
+        await screen.findByRole("heading", { name: "Administration" });
+        expect(screen.queryByRole("link", { name: "Administration" })).not.toBeInTheDocument();
+        expect(screen.getByText(/needs the Administrator role/)).toBeVisible();
+        view.unmount();
+      }
+      expect(requested("/admin/settings")).toBe(1);
+
+      me = customerMe;
+      window.history.replaceState(null, "", "/staff/admin");
+      renderApp();
+      expect(await screen.findByRole("heading", { name: "Page not found" })).toBeInTheDocument();
+      expect(requested("/admin/settings")).toBe(1);
+    });
+
     it("links both areas for a user who is a customer and staff", async () => {
       me = { ...customerMe, roles: ["CUSTOMER", "COMPLIANCE_OFFICER"] };
       const user = userEvent.setup();
