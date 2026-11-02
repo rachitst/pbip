@@ -18,6 +18,7 @@ describe("opening an account", () => {
       if (url.endsWith("/auth/refresh")) return Promise.resolve(json(200, { access_token: "t" }));
       if (url.endsWith("/auth/me")) return Promise.resolve(json(200, customerMe));
       if (url.endsWith("/payees")) return Promise.resolve(json(200, []));
+      if (url.endsWith("/accounts/summary")) return Promise.resolve(json(200, { totals: [] }));
       if (url.endsWith("/recommendations")) return Promise.resolve(json(200, noRecommendations));
       if (url.endsWith("/accounts") && init?.method === "POST") {
         if (limitReached) {

@@ -3236,7 +3236,7 @@ with #201 and TLS was delivered in #280, so neither is repeated here.
 
 - **Issue:** #283 | **Sprint:** unscheduled | **Priority:** should | **Size:** S (0.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Start:** Mon 02 Nov | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** In Review | **Risk:** Unscheduled
 - **Depends on:** TASK-019.
 - **Mode:** Unscheduled
 - **Goal:** FR-08 / section 5 'total balance overview': the dashboard shows the total balance across the customer's own accounts.

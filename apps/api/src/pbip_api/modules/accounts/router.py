@@ -10,6 +10,7 @@ from pbip_api.modules.accounts import policy, service
 from pbip_api.modules.accounts.models import Account
 from pbip_api.modules.accounts.schemas import (
     AccountOut,
+    AccountsSummaryOut,
     EntriesPage,
     OpenAccountRequest,
 )
@@ -68,6 +69,19 @@ def list_my_accounts(
     session: Session = Depends(get_session),
 ) -> list[AccountOut]:
     return [to_account_out(a) for a in service.list_accounts(session, customer.id)]
+
+
+# Declared before "/{account_id}" so "summary" is not parsed as an account id.
+@router.get(
+    "/summary",
+    response_model=AccountsSummaryOut,
+    summary="Total balance across my accounts, per currency",
+)
+def get_my_accounts_summary(
+    customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+) -> AccountsSummaryOut:
+    return service.get_accounts_summary(session, customer.id)
 
 
 @router.get("/{account_id}", response_model=AccountOut, summary="Get one of my accounts")
