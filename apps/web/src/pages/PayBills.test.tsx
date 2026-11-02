@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AccountOut, BillPaymentOut, BillerOut } from "../api/client";
 import { json, urlOf } from "../test-utils";
+import { clickstream } from "../telemetry/tracker";
 import { PayBills } from "./PayBills";
 
 const account: AccountOut = {
@@ -76,6 +77,7 @@ describe("PayBills (TASK-020)", () => {
   it("pays in integer minor units with one idempotency key and shows the receipt", async () => {
     const user = userEvent.setup();
     const fetchMock = mockApi(() => json(201, paid));
+    const track = vi.spyOn(clickstream, "track");
     renderPage();
     await fillAndConfirm(user, "1250.50");
     const dialog = await screen.findByRole("dialog");
@@ -93,6 +95,7 @@ describe("PayBills (TASK-020)", () => {
     });
     const headers = new Headers(call?.[1]?.headers);
     expect(headers.get("Idempotency-Key")).toMatch(/^[0-9a-f-]{36}$/);
+    expect(track.mock.calls).toEqual([["transfer_initiated", { transfer_kind: "BILL_PAYMENT" }]]);
   });
 
   it("reuses the same idempotency key when the same confirmed payment is retried", async () => {

@@ -317,4 +317,38 @@ describe("routing, roles and the application shell (ADR-0016)", () => {
       expect(screen.getAllByRole("main")).toHaveLength(1);
     });
   });
+  describe("clickstream (TASK-112)", () => {
+    const batches = () =>
+      fetchMock.mock.calls
+        .filter(([input]) => urlOf(input).endsWith("/api/v1/events/batch"))
+        .map(
+          ([, init]) =>
+            JSON.parse(init?.body as string) as {
+              events: { event_type: string; page_url?: string }[];
+            },
+        );
+
+    it("sends a customer's page visit as the route template, without the query string", async () => {
+      window.history.replaceState(null, "", "/accounts?account=acc-1&transaction=tx-9");
+      renderApp();
+      expect(await screen.findByRole("heading", { name: "My accounts" })).toBeInTheDocument();
+      window.dispatchEvent(new Event("pagehide"));
+      await waitFor(() => {
+        expect(batches()).toHaveLength(1);
+      });
+      expect(batches()[0]?.events).toEqual([
+        expect.objectContaining({ event_type: "page_view", page_url: "/accounts" }),
+      ]);
+      expect(JSON.stringify(batches())).not.toContain("acc-1");
+    });
+
+    it("never instruments the staff area", async () => {
+      me = analystMe;
+      window.history.replaceState(null, "", "/staff");
+      renderApp();
+      expect(await screen.findByRole("heading", { name: "Staff workspace" })).toBeInTheDocument();
+      window.dispatchEvent(new Event("pagehide"));
+      expect(batches()).toEqual([]);
+    });
+  });
 });

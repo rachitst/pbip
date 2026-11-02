@@ -4836,7 +4836,7 @@ export interface components {
             event_type: components["schemas"]["TelemetryEventType"];
             /**
              * Page Url
-             * @description Route path only, e.g. /accounts (no query string or fragment)
+             * @description Route path or template only, e.g. /accounts or /accounts/:id (no query string or fragment)
              */
             page_url?: string | null;
             /**

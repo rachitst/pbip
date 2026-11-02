@@ -83,6 +83,8 @@ export type LoanApplyRequest = components["schemas"]["LoanApplyRequest"];
 export type LoanSummaryOut = components["schemas"]["LoanSummaryOut"];
 export type LoanOut = components["schemas"]["LoanOut"];
 export type LoanInstalmentOut = components["schemas"]["LoanInstalmentOut"];
+export type EventBatchRequest = components["schemas"]["EventBatchRequest"];
+export type EventBatchResponse = components["schemas"]["EventBatchResponse"];
 export type RecommendationsResponse = components["schemas"]["RecommendationsResponse"];
 export type ProductRecommendationItem = components["schemas"]["ProductRecommendationItem"];
 export type WealthProductOut = components["schemas"]["WealthProductOut"];
@@ -113,6 +115,10 @@ let onSessionLost: (() => void) | null = null;
 
 export function setAccessToken(token: string | null): void {
   accessToken = token;
+}
+/** Whether a user is signed in on this tab (clickstream sends nothing otherwise, TASK-112). */
+export function hasAccessToken(): boolean {
+  return accessToken !== null;
 }
 export function setSessionLostHandler(handler: (() => void) | null): void {
   onSessionLost = handler;
@@ -606,4 +612,12 @@ export const api = {
     }),
   assistantHistory: (limit = 50) =>
     apiFetch<AssistantHistory>(`/api/v1/assistant/messages?limit=${String(limit)}`),
+  /** Clickstream batch (TASK-112). ``keepalive`` lets it finish while the page unloads; no
+   * refresh-and-retry and no session-lost handling on 401: a failed batch is simply dropped. */
+  sendEvents: (body: EventBatchRequest) =>
+    apiFetch<EventBatchResponse>(
+      "/api/v1/events/batch",
+      { method: "POST", body: JSON.stringify(body), keepalive: true },
+      false,
+    ),
 };

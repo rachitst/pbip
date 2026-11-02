@@ -6802,14 +6802,14 @@
             "anyOf": [
               {
                 "maxLength": 256,
-                "pattern": "^/[A-Za-z0-9/_.-]*$",
+                "pattern": "^/[A-Za-z0-9/_.:-]*$",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Route path only, e.g. /accounts (no query string or fragment)",
+            "description": "Route path or template only, e.g. /accounts or /accounts/:id (no query string or fragment)",
             "title": "Page Url"
           },
           "properties": {
