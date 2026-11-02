@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AccountOut, PayeeOut, TransferOut } from "../api/client";
 import { json, urlOf } from "../test-utils";
+import { clickstream } from "../telemetry/tracker";
 import { SendMoney } from "./SendMoney";
 
 const savings: AccountOut = {
@@ -82,12 +83,15 @@ afterEach(() => {
 describe("SendMoney", () => {
   it("sends from the chosen account after review and shows the receipt", async () => {
     const calls = setup(() => json(201, transfer("POSTED")));
+    const track = vi.spyOn(clickstream, "track");
     await fillAndConfirm("300", "acc-2");
     expect(await screen.findByText(/Sent INR 300.00 to Bob Demo/)).toBeInTheDocument();
     const sent = calls.find((c) => c.url.endsWith("/api/v1/transfers"));
     expect(sent?.body).toEqual({ from_account_id: "acc-2", payee_id: "payee-1",
       amount_minor: 30_000, reference: "rent" }); // prettier-ignore
     expect(sent?.headers.get("Idempotency-Key")).toMatch(/^[0-9a-f-]{36}$/);
+    // TASK-112: the kind of transfer only, never the amount, payee or reference
+    expect(track.mock.calls).toEqual([["transfer_initiated", { transfer_kind: "TRANSFER" }]]);
   });
 
   it("refuses more than the chosen account has available, without calling the API", async () => {
