@@ -4,6 +4,8 @@ Verifies eligibility exclusion rules, the rule-based relevance ranking, reasons 
 score stability, and ADR-0015 age band considerations.
 """
 
+import statistics
+import time
 from uuid import uuid4
 
 import pytest
@@ -236,3 +238,44 @@ def test_format_inr_uses_indian_grouping() -> None:
     assert format_inr(20_107_200) == "INR 2,01,072.00"
     assert format_inr(1_000_000_000) == "INR 1,00,00,000.00"
     assert format_inr(-12_345) == "-INR 123.45"
+
+
+# TASK-054: GET /api/v1/recommendations must answer in < 40 ms. The engine may use at most a tenth
+# of that; the rest belongs to the queries that build the context. Measured p95 is about 0.15 ms,
+# so the bound is a wide tolerance for slow or shared CI runners, not a tuned threshold.
+ENGINE_P95_BUDGET_MS = 4.0
+
+
+def test_engine_p95_cpu_time_is_a_small_fraction_of_the_40ms_endpoint_budget() -> None:
+    """CPU time (``process_time``), so other processes on the machine do not inflate it."""
+    contexts = [
+        CustomerRecommendationContext(
+            customer_id=uuid4(),
+            segment=segment,
+            health_score=health,
+            monthly_inflow_minor=inflow,
+            monthly_spend_minor=inflow * 3 // 4,
+            savings_ratio=0.25,
+            discretionary_ratio=0.30,
+            buffer_months=buffer,
+            emi_ratio=0.20,
+            total_balance_minor=inflow * 4,
+        )
+        for segment in ("HIGH_NET_WORTH", "BUDGET_CONSCIOUS", "UNSEGMENTED")
+        for health in (20, 60, 95)
+        for inflow in (10_000_00, 80_000_00, 300_000_00)
+        for buffer in (0.0, 4.0)
+    ]
+    for ctx in contexts:  # warm-up
+        generate_recommendations(ctx)
+
+    timings_ms: list[float] = []
+    for _ in range(10):
+        for ctx in contexts:
+            start = time.process_time()
+            recs = generate_recommendations(ctx)
+            timings_ms.append((time.process_time() - start) * 1000)
+            assert len(recs) <= 3
+
+    p95 = statistics.quantiles(timings_ms, n=20, method="inclusive")[-1]
+    assert p95 < ENGINE_P95_BUDGET_MS, f"engine p95 {p95:.3f} ms over {len(timings_ms)} calls"
