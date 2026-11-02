@@ -24,3 +24,10 @@ def test_beat_runs_one_nightly_spending_job_and_a_weekly_segmentation_job() -> N
     registered = set(celery_app.tasks)
     for entry in schedule.values():
         assert entry["task"] in registered, entry["task"]
+
+
+def test_beat_runs_scheduled_transfers_job() -> None:
+    schedule = celery_app.conf.beat_schedule
+    entry = schedule["execute-scheduled-transfers"]
+    assert entry["task"] == "pbip.transfers.execute_scheduled"
+    assert entry["schedule"] == 60.0
