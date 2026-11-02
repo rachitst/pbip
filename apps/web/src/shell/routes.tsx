@@ -31,6 +31,7 @@ import { StaffHome } from "../pages/staff/StaffHome";
 import { Alert } from "../ui/Alert";
 import { PageHeader } from "../ui/PageHeader";
 import { ErrorState, LoadingState } from "../ui/States";
+import { ClickstreamPageViews } from "../telemetry/PageViews";
 import { AppShell, SignOutButton } from "./AppShell";
 import type { NavItem } from "./AppShell";
 import { MeContext, useCurrentUser } from "./MeContext";
@@ -115,6 +116,8 @@ function AreaLayout({ area, children }: { area: Area; children: ReactNode }) {
   if (area === "customer") {
     return (
       <>
+        {/* TASK-112: the customer area only; staff screens are never instrumented. */}
+        <ClickstreamPageViews routes={routes} />
         <AppShell session={<CustomerSessionBar />} nav={customerNav(me)}>
           {children}
         </AppShell>

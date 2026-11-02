@@ -121,7 +121,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 
 | ID | Requirement | Source | Status | Tasks | Gap |
 |---|---|---|---|---|---|
-| FR-50 | The system shall capture page visits and clickstream events. | UC-11 data captured | Partial | TASK-055; TASK-112 (#286) | The ingestion API stores typed events in monthly partitions; the web app does not send any |
+| FR-50 | The system shall capture page visits and clickstream events. | UC-11 data captured | Implemented | TASK-055; TASK-112 (#286) | The web app sends page visits (route template) and key interactions in bounded batches ([event catalogue](../analytics/clickstream-events.md)); recommendation clicks start when the cards exist (TASK-062) |
 | FR-51 | The system shall capture session duration and product interests. | UC-11 data captured | Planned | TASK-055, TASK-101 | No session-duration field; no derived product interest |
 | FR-52 | The system shall analyse spend and income patterns and assign each customer a behavioural segment. | UC-11, section 5 "customer segmentation" | Implemented | TASK-040, TASK-044, TASK-052 | |
 | FR-53 | The system shall recommend loan, savings, investment and insurance products with reasons, using the behaviour profile and spending patterns. | UC-12 | Partial | TASK-054; TASK-062 | Rules-based (`rules-v1`) API; no UI |
@@ -183,5 +183,5 @@ delivered (TLS, #280).
 | FR-08 | Total-balance overview on the dashboard (TASK-109, #283) |
 | FR-39 | "Show unusual expenses" in the assistant (TASK-110, #284) |
 | FR-55 | Existing products as a recommendation input (TASK-111, #285) |
-| FR-50 | The web app sending page visits and clickstream events (TASK-112, #286) |
+| FR-50 | ~~The web app sending page visits and clickstream events~~: done in TASK-112 (#286), see the [event catalogue](../analytics/clickstream-events.md) |
 | NFR-02 | ~~TLS termination as code~~: done in #280 (nginx TLS + HSTS, PostgreSQL `verify-full`); certbot issuance on a real host waits for #198 |

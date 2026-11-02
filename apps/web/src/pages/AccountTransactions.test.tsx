@@ -1,6 +1,7 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { clickstream } from "../telemetry/tracker";
 import { account, customerMe, entry, json, renderApp, urlOf } from "../test-utils";
 
 describe("account transactions (keyset pagination)", () => {
@@ -38,6 +39,7 @@ describe("account transactions (keyset pagination)", () => {
   });
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("shows newest entries first and loads older pages with the server cursor", async () => {
@@ -101,6 +103,7 @@ describe("account transactions (keyset pagination)", () => {
 
   it("sends the filters in paise and keeps them on the next page's cursor (TASK-017)", async () => {
     const user = userEvent.setup();
+    const track = vi.spyOn(clickstream, "track");
     renderApp();
     await user.click(await screen.findByRole("button", { name: "Transactions" }));
     await screen.findByRole("table");
@@ -119,6 +122,12 @@ describe("account transactions (keyset pagination)", () => {
       expect(u.searchParams.get("type")).toBe("DEBIT");
       expect(u.searchParams.get("min_amount")).toBe("150050");
     }
+    // TASK-112: opening the account and searching are recorded without the terms or amounts
+    const interactions = track.mock.calls.filter(([type]) => type !== "page_view");
+    expect(interactions).toEqual([
+      ["account_viewed", { account_type: "SAVINGS" }],
+      ["search_performed", { search_scope: "TRANSACTIONS", filter_count: 3 }],
+    ]);
   });
 
   it("checks the filters locally and clears them", async () => {

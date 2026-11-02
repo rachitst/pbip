@@ -683,7 +683,8 @@ behavioural profiles reflect real engagement.*
 * ✓ Free text, URLs and unknown fields are rejected.
 * ✓ No IP address or user agent is stored.
 * ✓ Ingestion is rate-limited.
-* ✗ The web app sends events.
+* ✓ The web app sends page visits (the route template, never ids or query strings) and key interactions in
+  bounded batches, only for signed-in customers ([event catalogue](../analytics/clickstream-events.md)).
 * ✗ Session duration is recorded.
 * ✗ Product interests are derived.
 
@@ -691,9 +692,10 @@ behavioural profiles reflect real engagement.*
 
 **Tests** (`integration/test_events.py`): `test_events_batch_happy_path`,
 `test_events_reject_extra_fields_free_text_and_urls`, `test_no_ip_address_or_user_agent_is_stored`,
-`test_events_partition_routing_across_months`.
+`test_events_partition_routing_across_months`, `test_a_batch_built_by_the_web_tracker_is_accepted_and_stored_as_sent`;
+web: `apps/web/src/telemetry/tracker.test.ts`, `PageViews.test.tsx`, `shell/routing.test.tsx` ("clickstream").
 
-**Tasks:** TASK-055 (In Progress); TASK-101 (Todo).
+**Tasks:** TASK-055 (In Progress); TASK-101 (Todo); TASK-112 (In Review).
 
 ### US-31 Build a behavioural profile from spend and income (FR-52)
 
