@@ -3,7 +3,8 @@
     make seed        (or)    uv run python scripts/seed_dev.py
     docker compose exec -T -e PBIP_DEMO_PASSWORD api python - < scripts/seed_dev.py   (CI E2E job)
 
-Refuses to run against staging/production. Safe to re-run: existing users are skipped.
+Refuses to run against staging/production. Safe to re-run: existing users are skipped, and a demo
+customer who already has a relationship manager keeps them (ADR-0032).
 Staff MFA secrets live only in the database, encrypted like any other user's; generate a login
 code with:  uv run python scripts/totp.py analyst@demo.pbip
 Neither the demo password nor any MFA secret is printed or written to a file.
@@ -18,6 +19,7 @@ import os
 import sys
 import time
 from collections.abc import Mapping
+from uuid import UUID
 
 import pyotp
 from pbip_api.core.config import get_settings
@@ -28,9 +30,10 @@ from pbip_api.modules.accounts.service import list_accounts
 from pbip_api.modules.auth.models import RoleName, User
 from pbip_api.modules.auth.service import AuthService, RequestMeta
 from pbip_api.modules.customers.models import Customer
+from pbip_api.modules.insights import service as insights_service
 from pbip_api.modules.ledger import service as ledger
 from sqlalchemy import select
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 DEMO_PASSWORD = "Demo-Password-2026!"  # noqa: S105 - APP_ENV=local fallback only
 PASSWORD_ENV = "PBIP_DEMO_PASSWORD"  # noqa: S105  # pragma: allowlist secret - a variable name
@@ -45,6 +48,11 @@ STAFF = [
     ("admin@demo.pbip", "Platform Admin", RoleName.ADMIN),
     ("rm@demo.pbip", "Relationship Manager", RoleName.RELATIONSHIP_MANAGER),
 ]
+# ADR-0032: rm@demo.pbip looks after Alice; Bob stays unassigned, so the demo shows an RM's
+# portfolio next to the administrator's view of every customer. Assigned by the demo admin.
+RM_EMAIL = "rm@demo.pbip"
+ASSIGNING_ADMIN_EMAIL = "admin@demo.pbip"
+RM_PORTFOLIO = ("alice@demo.pbip",)
 
 
 def demo_password(app_env: str, environ: Mapping[str, str]) -> str | None:
@@ -53,6 +61,25 @@ def demo_password(app_env: str, environ: Mapping[str, str]) -> str | None:
     if chosen:
         return chosen
     return DEMO_PASSWORD if app_env == "local" else None
+
+
+def _user_id(session: Session, email: str) -> UUID:
+    return session.execute(select(User.id).where(User.email == email)).scalar_one()
+
+
+def _assign_demo_portfolio(session: Session) -> None:
+    """Assign ``RM_PORTFOLIO`` to the demo RM through the audited service; a customer who already
+    has an RM (from an earlier run or an admin's change) is left alone."""
+    rm_id = _user_id(session, RM_EMAIL)
+    admin_id = _user_id(session, ASSIGNING_ADMIN_EMAIL)
+    for email in RM_PORTFOLIO:
+        customer_id = session.execute(
+            select(Customer.id).join(User, User.id == Customer.user_id).where(User.email == email)
+        ).scalar_one()
+        if insights_service.assigned_rm(session, customer_id) is not None:
+            continue
+        insights_service.assign_rm(session, customer_id, rm_id, admin_id)
+        sys.stdout.write(f"assigned {email}  to {RM_EMAIL}\n")
 
 
 def main(environ: Mapping[str, str] | None = None) -> int:
@@ -110,6 +137,8 @@ def main(environ: Mapping[str, str] | None = None) -> int:
                 user.id, pyotp.TOTP(enrollment.secret).at(int(now)), meta
             )
             sys.stdout.write(f"staff    {email}  ({role.value}, MFA enrolled)\n")
+
+        _assign_demo_portfolio(session)
 
     sys.stdout.write(
         "\nDemo password (all new users): PBIP_DEMO_PASSWORD if set, else (APP_ENV=local only)\n"

@@ -4,10 +4,12 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
+from pbip_api.modules.insights.policy import scope_for
 from pbip_api.modules.insights.schemas import (
     ChurnRiskLevel,
     CustomerInsightItem,
     CustomerInsightsListResponse,
+    InsightScope,
 )
 from pbip_api.modules.insights.service import (
     calculate_churn_signals,
@@ -90,8 +92,10 @@ def test_customer_insights_list_response() -> None:
         items=[],
         total=0,
         evaluated_at=datetime.now(UTC),
+        scope=InsightScope.ASSIGNED,
     )
     assert resp.total == 0
+    assert resp.scope == InsightScope.ASSIGNED
     assert resp.items == []
 
 
@@ -118,3 +122,13 @@ def test_churn_score_exact_value() -> None:
         0.295,
         ChurnRiskLevel.LOW,
     )
+
+
+def test_scope_is_all_for_admin_and_assigned_for_an_rm() -> None:
+    """ADR-0032: ADMIN wins for a user holding both roles; any other staff role is portfolio-only."""
+    user = uuid4()
+    assert scope_for(user, {"ADMIN"}).sees_all
+    assert scope_for(user, {"ADMIN", "RELATIONSHIP_MANAGER"}).sees_all
+    rm = scope_for(user, frozenset({"RELATIONSHIP_MANAGER"}))
+    assert (rm.user_id, rm.sees_all) == (user, False)
+    assert not scope_for(user, []).sees_all
