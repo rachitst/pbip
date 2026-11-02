@@ -65,7 +65,9 @@ def main(environ: Mapping[str, str] | None = None) -> int:
         return 1
     password = demo_password(settings.app_env, os.environ if environ is None else environ)
     if password is None:
-        sys.stderr.write(f"Set {PASSWORD_ENV}: only APP_ENV=local has a default demo password.\n")
+        sys.stderr.write(
+            "Set PBIP_DEMO_PASSWORD: only APP_ENV=local has a default demo password.\n"
+        )
         return 1
 
     factory = sessionmaker(bind=get_engine(), expire_on_commit=False)
@@ -110,8 +112,8 @@ def main(environ: Mapping[str, str] | None = None) -> int:
             sys.stdout.write(f"staff    {email}  ({role.value}, MFA enrolled)\n")
 
     sys.stdout.write(
-        f"\nDemo password (all new users): {PASSWORD_ENV} if set, else (APP_ENV=local only) the\n"
-        "DEMO_PASSWORD constant in scripts/seed_dev.py.\n"
+        "\nDemo password (all new users): PBIP_DEMO_PASSWORD if set, else (APP_ENV=local only)\n"
+        "the DEMO_PASSWORD constant in scripts/seed_dev.py.\n"
         "Staff MFA code: uv run python scripts/totp.py <staff email>\n"
     )
     return 0

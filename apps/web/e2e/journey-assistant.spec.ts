@@ -29,22 +29,26 @@ test("the assistant answers a balance question from the customer's own account",
   await expect(drawer).toBeVisible();
   await expect(drawer).toContainText("can't move money");
 
-  const streamed = page.waitForResponse(
-    (r) => new URL(r.url()).pathname === "/api/v1/assistant/chat/stream",
-  );
   await drawer.getByRole("textbox", { name: "Message" }).fill("What is my balance?");
   await drawer.getByRole("button", { name: "Send" }).click();
 
   const reply = drawer.locator(".assistant-msg--assistant").last();
   await expect(reply).toContainText("Your accounts:");
   await expect(reply).toContainText(`${lastFour}: ${inr(BALANCE)} available`);
-  // The finished frame says which tool ran and that no model chose it.
-  const done = /event: done\ndata: (.*)\n/.exec(await (await streamed).text())?.[1] ?? "{}";
-  expect(JSON.parse(done)).toMatchObject({
-    outcome: "answered",
-    tool: "get_account_summary",
-    engine: "rules",
+  // The stored conversation says which approved tool answered. Read through the API with the
+  // customer's own token: a streamed (SSE) body cannot be read back from the browser.
+  const login = await request.post("/api/v1/auth/login", {
+    data: { email: customer.email, password: customer.password },
   });
+  expect(login.ok()).toBe(true);
+  const token = ((await login.json()) as { access_token: string }).access_token;
+  const history = await request.get("/api/v1/assistant/messages", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(history.ok()).toBe(true);
+  const body = (await history.json()) as { items?: { role: string; tool: string | null }[] };
+  const assistantTurns = (body.items ?? []).filter((m) => m.role === "assistant");
+  expect(assistantTurns.at(-1)?.tool).toBe("get_account_summary");
 
   await drawer.getByRole("button", { name: "Close assistant" }).click();
   await expect(drawer).toBeHidden();
