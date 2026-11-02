@@ -1,0 +1,71 @@
+{
+  "events": [
+    {
+      "event_id": "00000000-0000-4000-8000-000000000002",
+      "event_type": "page_view",
+      "event_timestamp": "2026-11-02T10:00:00.000Z",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "properties": {},
+      "page_url": "/accounts"
+    },
+    {
+      "event_id": "00000000-0000-4000-8000-000000000003",
+      "event_type": "account_viewed",
+      "event_timestamp": "2026-11-02T10:00:00.000Z",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "properties": {
+        "account_type": "SAVINGS"
+      },
+      "page_url": "/accounts"
+    },
+    {
+      "event_id": "00000000-0000-4000-8000-000000000004",
+      "event_type": "search_performed",
+      "event_timestamp": "2026-11-02T10:00:00.000Z",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "properties": {
+        "search_scope": "TRANSACTIONS",
+        "filter_count": 2
+      },
+      "page_url": "/accounts"
+    },
+    {
+      "event_id": "00000000-0000-4000-8000-000000000005",
+      "event_type": "transfer_initiated",
+      "event_timestamp": "2026-11-02T10:00:00.000Z",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "properties": {
+        "transfer_kind": "TRANSFER"
+      },
+      "page_url": "/accounts"
+    },
+    {
+      "event_id": "00000000-0000-4000-8000-000000000006",
+      "event_type": "page_view",
+      "event_timestamp": "2026-11-02T10:00:00.000Z",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "properties": {},
+      "page_url": "/loans"
+    },
+    {
+      "event_id": "00000000-0000-4000-8000-000000000007",
+      "event_type": "loan_calculator_used",
+      "event_timestamp": "2026-11-02T10:00:00.000Z",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "properties": {
+        "loan_type": "PERSONAL"
+      },
+      "page_url": "/loans"
+    },
+    {
+      "event_id": "00000000-0000-4000-8000-000000000008",
+      "event_type": "product_clicked",
+      "event_timestamp": "2026-11-02T10:00:00.000Z",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "properties": {
+        "product_id": "00000000-0000-4000-a000-000000000005"
+      },
+      "page_url": "/insights"
+    }
+  ]
+}
