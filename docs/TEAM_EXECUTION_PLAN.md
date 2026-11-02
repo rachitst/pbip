@@ -899,7 +899,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #50 | **Sprint:** 2 | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Tue 27 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (6.5 days of slack)
+- **Start:** Tue 27 Oct | **Target deadline:** Wed 28 Oct | **Actual completion:** - (set when merged; PR #312) | **Status:** In Review | **Risk:** Low (6.5 days of slack)
 - **Depends on:** TASK-014 (#37, Sujal), TASK-015 (#38, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-014, TASK-015
 - **Goal:** Comprehensive Low-Level Design document covering data models, triggers, and state machines.

@@ -115,6 +115,7 @@ One `uv` workspace (`apps/api`, `ml`, `data-gen`) with a single `uv.lock`.
 Implemented (20 tables, migration `0001`). Money columns are `BIGINT` minor units.
 The sketch below is the original core design; the complete, CI-checked diagram generated from the
 migrated schema (every table, key and relationship) is [`architecture/er-diagram.md`](architecture/er-diagram.md).
+Per-table constraints, triggers, state machines and lock order: [`architecture/LLD.md`](architecture/LLD.md).
 
 ```mermaid
 erDiagram
