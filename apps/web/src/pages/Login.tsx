@@ -7,7 +7,8 @@ import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
 import { PageHeader } from "../ui/PageHeader";
 
-export function Login() {
+/** ``onRegister`` is given only where self-registration is offered (the signed-out app). */
+export function Login({ onRegister }: { onRegister?: () => void }) {
   const { login, verifyMfa, mfaToken, notice } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -87,6 +88,14 @@ export function Login() {
           {mfaToken ? "Verify" : "Sign in"}
         </Button>
       </form>
+      {onRegister && !mfaToken && (
+        <p>
+          New to PBIP?{" "}
+          <Button variant="link" onClick={onRegister}>
+            Create an account
+          </Button>
+        </p>
+      )}
     </main>
   );
 }
