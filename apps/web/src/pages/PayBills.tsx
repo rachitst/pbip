@@ -6,6 +6,7 @@ import type { AccountOut, BillPaymentOut, BillerOut } from "../api/client";
 import { errorMessage } from "../lib/errors";
 import { accountTypeLabel, formatDateTime } from "../lib/format";
 import { formatMinor, parseToMinor } from "../lib/money";
+import { trackTransferInitiated } from "../telemetry/tracker";
 import type { Tone } from "../lib/status";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
@@ -181,6 +182,7 @@ function PayForm({ accounts, billers }: { accounts: AccountOut[]; billers: Bille
     if (!draft) return;
     setPaying(true);
     setPayError(null);
+    trackTransferInitiated("BILL_PAYMENT");
     try {
       const payment = await api.payBill(
         {

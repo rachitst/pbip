@@ -11,6 +11,7 @@ import type {
   LoanSummaryOut,
 } from "../api/client";
 import { json, urlOf } from "../test-utils";
+import { clickstream } from "../telemetry/tracker";
 import { Loans, formatRate } from "./Loans";
 
 const account: AccountOut = {
@@ -245,10 +246,12 @@ describe("Loans (TASK-051)", () => {
 
   it("debounces the sliders and shows the EMI the server computed in integer paise", async () => {
     const fetchMock = mockApi();
+    const track = vi.spyOn(clickstream, "track");
     renderPage();
     const amount = await screen.findByLabelText("Loan amount");
     const estimate = () => screen.findByRole("region", { name: "EMI estimate" });
     await within(await estimate()).findByText("INR 25,012.00"); // initial: (25,00,000 paise / 100 + 12) rupees
+    expect(track).not.toHaveBeenCalled(); // opening the page is not using the calculator
     fireEvent.change(amount, { target: { value: "3000000" } });
     fireEvent.change(amount, { target: { value: "3500000" } });
     fireEvent.change(screen.getByLabelText("Tenure"), { target: { value: "1" } });
@@ -266,6 +269,8 @@ describe("Loans (TASK-051)", () => {
       principal_minor: 3_500_000,
       tenure_months: 24,
     });
+    // TASK-112: one event per settled change, with the loan type and never the amount
+    expect(track.mock.calls).toEqual([["loan_calculator_used", { loan_type: "PERSONAL" }]]);
   });
 
   it("shows the eligibility pre-check with the maximum amount, the rate and the reasons", async () => {

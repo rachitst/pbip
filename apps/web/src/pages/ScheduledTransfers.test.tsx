@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AccountOut, PayeeOut, ScheduledTransferOut } from "../api/client";
 import { json, urlOf } from "../test-utils";
+import { clickstream } from "../telemetry/tracker";
 import { ScheduledTransfers, formProblem, istDate, statusNote } from "./ScheduledTransfers";
 
 const NOW = Date.parse("2026-11-02T06:00:00Z");
@@ -146,6 +147,7 @@ describe("ScheduledTransfers page (TASK-021)", () => {
     const fetchMock = mockApi((_url, init) =>
       init?.method === "POST" ? json(201, order) : json(200, []),
     );
+    const track = vi.spyOn(clickstream, "track");
     renderPage();
     await user.click(await screen.findByRole("button", { name: "Schedule a transfer" }));
     const dialog = screen.getByRole("dialog");
@@ -169,6 +171,8 @@ describe("ScheduledTransfers page (TASK-021)", () => {
       payee_id: "p-1",
     });
     expect(new Headers(post?.[1]?.headers).get("Idempotency-Key")).toMatch(/^[0-9a-f-]{36}$/);
+    // one event for the submitted order; the refused first attempt sent nothing
+    expect(track.mock.calls).toEqual([["transfer_initiated", { transfer_kind: "SCHEDULED" }]]);
   });
 
   it("pauses an active order and hides resume for a fraud-blocked one", async () => {
