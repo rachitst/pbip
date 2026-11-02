@@ -98,6 +98,7 @@ function renderAt(path: string, ui: ReactElement, me: UserOut = analyst) {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -129,6 +130,9 @@ describe("FraudQueue", () => {
   });
 
   it("lists open alerts and switches filters through the API", async () => {
+    // Relative times depend on "now": pin the clock (Date only; timers stay real for userEvent).
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-01T13:00:00Z"));
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation((input) =>
@@ -140,7 +144,10 @@ describe("FraudQueue", () => {
     const cells = within(row as HTMLElement);
     expect(cells.getByText("72 of 100")).toBeInTheDocument();
     expect(cells.getByText("Amount is 9.0x the customer's 30-day average")).toBeInTheDocument();
-    expect(cells.getByRole("link", { name: /ago$/ })).toHaveAttribute("href", "/staff/fraud/al-1");
+    expect(cells.getByRole("link", { name: "about 3 hours ago" })).toHaveAttribute(
+      "href",
+      "/staff/fraud/al-1",
+    );
     expect(
       screen.getByText("Showing 1 alert, newest first. Risk is out of 100."),
     ).toBeInTheDocument();
