@@ -19,6 +19,7 @@ import { Profile } from "../pages/Profile";
 import { ScheduledTransfers } from "../pages/ScheduledTransfers";
 import { Statements } from "../pages/Statements";
 import { AuditLog } from "../pages/staff/AuditLog";
+import { ComplianceDashboard, canManageCompliance } from "../pages/staff/ComplianceDashboard";
 import { FraudAlert } from "../pages/staff/FraudAlert";
 import { FraudDemoLab } from "../pages/staff/FraudDemoLab";
 import { FraudQueue } from "../pages/staff/FraudQueue";
@@ -37,6 +38,9 @@ import { MeContext, useCurrentUser } from "./MeContext";
 
 // Recharts is large: load the Insights page (and the chart library) only when it is opened.
 const Insights = lazy(() => import("../pages/Insights"));
+const BehaviourAnalytics = lazy(() => import("../pages/staff/BehaviourAnalytics"));
+// The Wealth page draws its allocation chart with Recharts too: also loaded on first visit.
+const Wealth = lazy(() => import("../pages/Wealth"));
 
 const HOME_PATH: Record<Area, string> = { customer: "/accounts", staff: "/staff", none: "/" };
 
@@ -48,6 +52,7 @@ function customerNav(me: UserOut): NavItem[] {
     { to: "/scheduled", label: "Scheduled transfers" },
     { to: "/statements", label: "Statements" },
     { to: "/loans", label: "Loans" },
+    { to: "/wealth", label: "Wealth" },
     { to: "/insights", label: "Spending & health" },
     { to: "/profile", label: "Profile & security" },
   ];
@@ -62,12 +67,16 @@ function staffNav(me: UserOut, demoLabEnabled: boolean): NavItem[] {
     items.push({ to: "/staff/monitoring", label: "Security monitoring" });
     items.push({ to: "/staff/fraud", label: "Fraud alerts" });
   }
-  if (canAccessRMInsights(me)) items.push({ to: "/staff/insights", label: "Customer insights" });
+  if (canAccessRMInsights(me)) {
+    items.push({ to: "/staff/insights", label: "Customer insights" });
+    items.push({ to: "/staff/behaviour", label: "Behavioural analytics" });
+  }
   // TASK-081: only where the server says the lab may run (never in production).
   if (canReviewFraud(me) && demoLabEnabled) {
     items.push({ to: "/staff/fraud-lab", label: "Fraud demo lab" });
   }
-  if (me.roles.includes("COMPLIANCE_OFFICER") || me.roles.includes("ADMIN")) {
+  if (canManageCompliance(me)) {
+    items.push({ to: "/staff/compliance", label: "Compliance & risk" });
     items.push({ to: "/staff/audit-log", label: "Audit log" });
   }
   items.push({ to: "/staff/security", label: "Sign-in security" });
@@ -214,6 +223,14 @@ export const routes: RouteObject[] = [
           { path: "statements", element: <Statements /> },
           { path: "loans", element: <Loans /> },
           {
+            path: "wealth",
+            element: (
+              <Suspense fallback={<LoadingState label="Loading wealth..." />}>
+                <Wealth />
+              </Suspense>
+            ),
+          },
+          {
             path: "insights",
             element: (
               <Suspense fallback={<LoadingState label="Loading spending & financial health..." />}>
@@ -235,6 +252,15 @@ export const routes: RouteObject[] = [
           { path: "fraud-lab", element: <FraudDemoLab /> },
           { path: "monitoring", element: <SecurityMonitoring /> },
           { path: "insights", element: <RMInsights /> },
+          { path: "compliance", element: <ComplianceDashboard /> },
+          {
+            path: "behaviour",
+            element: (
+              <Suspense fallback={<LoadingState label="Loading behavioural analytics..." />}>
+                <BehaviourAnalytics />
+              </Suspense>
+            ),
+          },
           { path: "security", element: <StaffSecurity /> },
         ],
       },

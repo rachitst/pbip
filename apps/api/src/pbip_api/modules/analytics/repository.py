@@ -30,6 +30,14 @@ from pbip_api.modules.ledger.models import (
 
 HEALTH_WINDOW_MONTHS = 12
 INCOME_TYPES = (TransactionType.DEPOSIT, TransactionType.TRANSFER)
+# Never income or spend. A REVERSAL returns money; a fixed deposit's booking and principal payout
+# move the customer's own money to and from their deposit (ADR-0025), like a move between own
+# accounts. Deposit interest (FD_INTEREST) stays visible as a credit.
+NOT_ACTIVITY_TYPES = (
+    TransactionType.REVERSAL,
+    TransactionType.FD_BOOKING,
+    TransactionType.FD_CLOSURE,
+)
 SCHEDULED_CHANNEL = "SCHEDULED"  # transactions.channel of the scheduled-transfer engine (ADR-0023)
 
 
@@ -93,7 +101,7 @@ def get_financial_health_metrics(
             TransactionEntry.account_id == account_id,
             TransactionEntry.created_at >= start,
             Transaction.status == TransactionStatus.POSTED,
-            Transaction.type != TransactionType.REVERSAL,
+            Transaction.type.not_in(NOT_ACTIVITY_TYPES),
         )
         .order_by(TransactionEntry.created_at)
     )
@@ -179,7 +187,7 @@ def compute_monthly_spending_from_entries(
             TransactionEntry.created_at >= start,
             TransactionEntry.created_at < end,
             Transaction.status == TransactionStatus.POSTED,
-            Transaction.type != TransactionType.REVERSAL,
+            Transaction.type.not_in(NOT_ACTIVITY_TYPES),
         )
     )
     totals: dict[str, int] = {}
@@ -380,7 +388,7 @@ def extract_customer_rfm_features(
         .where(
             TransactionEntry.account_id.in_(account_ids),
             Transaction.status == TransactionStatus.POSTED,
-            Transaction.type != TransactionType.REVERSAL,
+            Transaction.type.not_in(NOT_ACTIVITY_TYPES),
         )
         .order_by(TransactionEntry.created_at)
     )
@@ -582,7 +590,7 @@ def transaction_volume(
         ).where(
             debit_owned | credit_owned,
             Transaction.status == TransactionStatus.POSTED,
-            Transaction.type != TransactionType.REVERSAL,
+            Transaction.type.not_in(NOT_ACTIVITY_TYPES),
             Transaction.created_at >= start,
             Transaction.created_at <= end,
         )

@@ -128,12 +128,12 @@ function listCalls(fetchMock: ReturnType<typeof mockApi>): URLSearchParams[] {
     .map((u) => u.searchParams);
 }
 
-function renderPage(me: UserOut = rm) {
+function renderPage(me: UserOut = rm, path = "/staff/insights") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
       <MeContext.Provider value={me}>
-        <MemoryRouter>
+        <MemoryRouter initialEntries={[path]}>
           <RMInsights />
         </MemoryRouter>
       </MeContext.Provider>
@@ -166,6 +166,24 @@ describe("rmInsightsFormat", () => {
 });
 
 describe("RMInsights page (TASK-066)", () => {
+  it("starts filtered by a known segment from the behavioural dashboard link (TASK-101)", async () => {
+    const fetchMock = mockApi({});
+    renderPage(rm, "/staff/insights?segment=BUDGET_CONSCIOUS");
+    await waitFor(() => {
+      expect(listCalls(fetchMock)[0]?.get("segment")).toBe("BUDGET_CONSCIOUS");
+    });
+    expect(screen.getByLabelText("Segment")).toHaveValue("BUDGET_CONSCIOUS");
+  });
+
+  it("ignores an unknown segment in the link", async () => {
+    const fetchMock = mockApi({});
+    renderPage(rm, "/staff/insights?segment=<script>");
+    await waitFor(() => {
+      expect(listCalls(fetchMock)).toHaveLength(1);
+    });
+    expect(listCalls(fetchMock)[0]?.get("segment")).toBeNull();
+  });
+
   it.each([analyst, compliance])("blocks $roles and never calls the API", (me) => {
     const fetchMock = mockApi({});
     renderPage(me);

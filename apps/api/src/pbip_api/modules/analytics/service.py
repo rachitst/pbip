@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from pbip_api.core.db import utcnow
 from pbip_api.core.errors import NotFoundError, UnprocessableError
 from pbip_api.modules.accounts.service import mask_account_number
-from pbip_api.modules.analytics import projection, repository, unusual
+from pbip_api.modules.analytics import behaviour, projection, repository, unusual
 from pbip_api.modules.analytics.health import compute_financial_health_score
 from pbip_api.modules.analytics.models import MonthlyCategorySpending
 from pbip_api.modules.analytics.policy import verify_account_ownership
@@ -29,6 +29,7 @@ from pbip_api.modules.analytics.schemas import (
     BalanceForecastPoint,
     BalanceForecastResponse,
     BalanceHistoryPoint,
+    BehaviourAnalyticsResponse,
     CategoryShiftItem,
     CategorySpendingItem,
     CustomerSegmentResponse,
@@ -578,4 +579,13 @@ def get_unusual_expenses(
         month=month,
         baseline_months=baseline_months,
         findings=unusual.find_unusual(period, baseline),
+    )
+
+
+def get_behaviour_analytics(
+    session: Session, now: datetime, days: int, segment: str | None
+) -> BehaviourAnalyticsResponse:
+    """Staff behavioural dashboard (TASK-101): aggregates over every customer, no drill-down."""
+    return BehaviourAnalyticsResponse.model_validate(
+        behaviour.behaviour_analytics(session, now, days, segment)
     )

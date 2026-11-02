@@ -572,6 +572,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/compliance/exceptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Exceptions (blocked payments, lockouts, audit-chain failures) and SLA indicators
+         * @description TASK-100 dashboard data. The audit chain is fully verified at most once per 5 minutes
+         *     (cached, ADR-0027); ``/audit-logs/verify`` still verifies on demand.
+         */
+        get: operations["list_exceptions_api_v1_compliance_exceptions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/exceptions/{kind}/{ref}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Acknowledge an open exception (audited with actor and reason) */
+        post: operations["acknowledge_exception_api_v1_compliance_exceptions__kind___ref__acknowledge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/exceptions/{kind}/{ref}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve an exception (audited with actor and reason) */
+        post: operations["resolve_exception_api_v1_compliance_exceptions__kind___ref__resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/customers/devices": {
         parameters: {
             query?: never;
@@ -819,6 +874,26 @@ export interface paths {
          * @description Aggregates only, cached in Redis for 60 seconds per window (TASK-035).
          */
         get: operations["get_stats_api_v1_fraud_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/insights/behaviour": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Behavioural analytics: segment mix, spending, product affinity, engagement
+         * @description TASK-101 aggregates (RM or admin, MFA). No customer ids: drill-down is ``/customers``.
+         */
+        get: operations["get_behaviour_analytics_api_v1_insights_behaviour_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1250,6 +1325,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/wealth/fixed-deposits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My fixed deposits */
+        get: operations["list_fixed_deposits_api_v1_wealth_fixed_deposits_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/fixed-deposits/book": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Book a fixed deposit from one of my accounts (idempotent) */
+        post: operations["book_fixed_deposit_api_v1_wealth_fixed_deposits_book_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/fixed-deposits/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exact maturity preview for a fixed deposit (books nothing) */
+        post: operations["quote_fixed_deposit_api_v1_wealth_fixed_deposits_quote_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/fixed-deposits/{deposit_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One of my fixed deposits */
+        get: operations["get_fixed_deposit_api_v1_wealth_fixed_deposits__deposit_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/fixed-deposits/{deposit_id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close one of my fixed deposits: maturity payout, or premature with the penalty rate */
+        post: operations["close_fixed_deposit_api_v1_wealth_fixed_deposits__deposit_id__close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/portfolio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My portfolio: cash, deposits with accrued interest, and allocation */
+        get: operations["get_portfolio_api_v1_wealth_portfolio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Wealth catalogue: fixed deposits, mutual funds and the sovereign gold bond */
+        get: operations["list_products_api_v1_wealth_products_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1291,6 +1485,15 @@ export interface components {
             password: string;
             /** Roles */
             roles: string[];
+        };
+        /** AffinityPanel */
+        AffinityPanel: {
+            /** Products */
+            products: string[];
+            /** Recommendation Clicks */
+            recommendation_clicks: components["schemas"]["ProductClicks"][];
+            /** Segments */
+            segments: components["schemas"]["SegmentAffinity"][];
         };
         /**
          * AgeBand
@@ -1426,6 +1629,21 @@ export interface components {
             /** Transaction Status */
             transaction_status: string;
         };
+        /** AllocationSlice */
+        AllocationSlice: {
+            /**
+             * Asset Class
+             * @enum {string}
+             */
+            asset_class: "CASH" | "DEPOSITS" | "FUNDS";
+            /**
+             * Share Bps
+             * @description Share of the total; the slices sum to 10000 (0 if empty)
+             */
+            share_bps: number;
+            /** Value Minor */
+            value_minor: number;
+        };
         /** AssistantHistory */
         AssistantHistory: {
             /** Items */
@@ -1461,6 +1679,15 @@ export interface components {
             token?: components["schemas"]["StreamToken"] | null;
             tool_call?: components["schemas"]["StreamToolCall"] | null;
             tool_result?: components["schemas"]["StreamToolResult"] | null;
+        };
+        /** AuditChainOut */
+        AuditChainOut: {
+            /** Checked */
+            checked: number;
+            /** First Invalid Seq */
+            first_invalid_seq: number | null;
+            /** Valid */
+            valid: boolean;
         };
         /** AuditLogOut */
         AuditLogOut: {
@@ -1582,6 +1809,41 @@ export interface components {
              * Format: date
              */
             date: string;
+        };
+        /**
+         * BehaviourAnalyticsResponse
+         * @description TASK-101: segment mix, spending, product affinity and engagement; aggregates only.
+         */
+        BehaviourAnalyticsResponse: {
+            affinity: components["schemas"]["AffinityPanel"];
+            /** Currency */
+            currency: string;
+            engagement: components["schemas"]["EngagementPanel"];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Period Days */
+            period_days: number;
+            /**
+             * Period End
+             * Format: date-time
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date-time
+             */
+            period_start: string;
+            /**
+             * Segment
+             * @description Segment filter, or null for all
+             */
+            segment: ("HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER" | "UNSEGMENTED") | null;
+            segments: components["schemas"]["SegmentDistribution"];
+            /** Spending */
+            spending: components["schemas"]["SegmentSpend"][];
         };
         /** BillPaymentOut */
         BillPaymentOut: {
@@ -1772,6 +2034,21 @@ export interface components {
          * @enum {string}
          */
         ChurnRiskLevel: "LOW" | "MEDIUM" | "HIGH";
+        /** ComplianceExceptionsOut */
+        ComplianceExceptionsOut: {
+            audit_chain: components["schemas"]["AuditChainOut"];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            indicators: components["schemas"]["RegulatoryIndicators"];
+            /**
+             * Items
+             * @description Matching exceptions, newest first
+             */
+            items: components["schemas"]["ExceptionOut"][];
+        };
         /**
          * CustomerInsightDetail
          * @description One customer for the RM flyout: churn signals, health, recent volume and eligible products.
@@ -1981,6 +2258,18 @@ export interface components {
              */
             segment: "HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER";
         };
+        /** DailyEngagement */
+        DailyEngagement: {
+            /** Active Customers */
+            active_customers: number;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Events */
+            events: number;
+        };
         /**
          * DateOfBirthIn
          * @description Self-declared date of birth (ADR-0015). The age must be 18 to 120 on the bank's date.
@@ -2053,6 +2342,76 @@ export interface components {
              * @description Whether the age band may be used to tailor product recommendations
              */
             recommendations_consent: boolean;
+        };
+        /** DepositBookRequest */
+        DepositBookRequest: {
+            /**
+             * Account Id
+             * Format: uuid
+             * @description One of MY accounts: funds the deposit, receives the payout
+             */
+            account_id: string;
+            /** Amount Minor */
+            amount_minor: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Tenure Months */
+            tenure_months: number;
+        };
+        /** DepositQuoteOut */
+        DepositQuoteOut: {
+            /** Annual Rate Bps */
+            annual_rate_bps: number;
+            /** Apy Bps */
+            apy_bps: number;
+            /** Lock In Months */
+            lock_in_months: number;
+            /** Maturity Amount Minor */
+            maturity_amount_minor: number;
+            /**
+             * Maturity Date
+             * Format: date
+             */
+            maturity_date: string;
+            /** Maturity Interest Minor */
+            maturity_interest_minor: number;
+            /** Premature Penalty Bps */
+            premature_penalty_bps: number | null;
+            /** Principal Minor */
+            principal_minor: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Product Name */
+            product_name: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /** Tenure Months */
+            tenure_months: number;
+        };
+        /**
+         * DepositTermsRequest
+         * @description No rate, maturity or customer from the client: the rate comes from the catalogue, the
+         *     maturity from ``deposit_math`` and the customer from the session (ADR-0025).
+         */
+        DepositTermsRequest: {
+            /** Amount Minor */
+            amount_minor: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Tenure Months */
+            tenure_months: number;
         };
         /**
          * DeviceOut
@@ -2238,6 +2597,44 @@ export interface components {
             /** Upper 95 Minor */
             upper_95_minor: number;
         };
+        /** EngagementPanel */
+        EngagementPanel: {
+            /**
+             * Active Customers
+             * @description Customers with at least one event in the period
+             */
+            active_customers: number;
+            /** Active Share Pct */
+            active_share_pct: number;
+            /**
+             * Avg Session Seconds
+             * @description Mean of last minus first event time per session (one-event sessions are 0)
+             */
+            avg_session_seconds: number;
+            /** By Event Type */
+            by_event_type: components["schemas"]["EventTypeCount"][];
+            /** By Segment */
+            by_segment: components["schemas"]["SegmentEngagement"][];
+            /**
+             * Customers
+             * @description Customers in scope (all, or the filtered segment)
+             */
+            customers: number;
+            /**
+             * Daily
+             * @description Days (UTC) with at least one event
+             */
+            daily: components["schemas"]["DailyEngagement"][];
+            /** Events */
+            events: number;
+            /** Events Per Session */
+            events_per_session: number;
+            /**
+             * Sessions
+             * @description Distinct (customer, session id) pairs in the period
+             */
+            sessions: number;
+        };
         /** EntriesPage */
         EntriesPage: {
             /** Has More */
@@ -2321,6 +2718,107 @@ export interface components {
              */
             received_at: string;
         };
+        /** EventTypeCount */
+        EventTypeCount: {
+            /** Event Type */
+            event_type: string;
+            /** Events */
+            events: number;
+        };
+        /**
+         * ExceptionActionRequest
+         * @description Why the officer acknowledges or resolves; stored in the audit log with the actor.
+         */
+        ExceptionActionRequest: {
+            /** Reason */
+            reason: string;
+        };
+        /** ExceptionCounts */
+        ExceptionCounts: {
+            /** Acknowledged */
+            ACKNOWLEDGED: number;
+            /** Open */
+            OPEN: number;
+            /** Resolved */
+            RESOLVED: number;
+        };
+        /**
+         * ExceptionKind
+         * @enum {string}
+         */
+        ExceptionKind: "BLOCKED_TRANSFER" | "ACCOUNT_LOCKOUT" | "AUDIT_CHAIN_FAILURE";
+        /** ExceptionOut */
+        ExceptionOut: {
+            acknowledged: components["schemas"]["ExceptionStepOut"] | null;
+            /**
+             * Amount Minor
+             * @description Blocked payments only
+             */
+            amount_minor?: number | null;
+            /** Currency */
+            currency?: string | null;
+            /**
+             * First Invalid Seq
+             * @description Audit chain failures only
+             */
+            first_invalid_seq?: number | null;
+            /**
+             * Id
+             * @description KIND:reference; stable, used in the action URLs
+             */
+            id: string;
+            kind: components["schemas"]["ExceptionKind"];
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * Reason Codes
+             * @description Fraud rule/model codes of a blocked payment
+             */
+            reason_codes?: string[];
+            /**
+             * Ref
+             * @description Fraud event id, security event id, or first failing audit sequence number
+             */
+            ref: string;
+            resolved: components["schemas"]["ExceptionStepOut"] | null;
+            /**
+             * Risk Score
+             * @description Blocked payments only
+             */
+            risk_score?: number | null;
+            status: components["schemas"]["ExceptionStatus"];
+            /** Transaction Type */
+            transaction_type?: string | null;
+        };
+        /**
+         * ExceptionStatus
+         * @enum {string}
+         */
+        ExceptionStatus: "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
+        /** ExceptionStepOut */
+        ExceptionStepOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /**
+             * By User Id
+             * @description Staff user who took the step
+             */
+            by_user_id: string | null;
+            /** Reason */
+            reason: string;
+        };
+        /** ExceptionsByKind */
+        ExceptionsByKind: {
+            ACCOUNT_LOCKOUT: components["schemas"]["ExceptionCounts"];
+            AUDIT_CHAIN_FAILURE: components["schemas"]["ExceptionCounts"];
+            BLOCKED_TRANSFER: components["schemas"]["ExceptionCounts"];
+        };
         /**
          * FinancialHealthComponents
          * @description Component-wise breakdown of the financial health score.
@@ -2384,6 +2882,96 @@ export interface components {
              * @description Length of the trailing window used
              */
             window_months: number;
+        };
+        /** FixedDepositOut */
+        FixedDepositOut: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /**
+             * Accrued Interest Minor
+             * @description Interest earned to today at the contract rate (paid interest once closed)
+             */
+            accrued_interest_minor: number;
+            /** Annual Rate Bps */
+            annual_rate_bps: number;
+            /**
+             * Booked At
+             * Format: date-time
+             */
+            booked_at: string;
+            /**
+             * Booking Transaction Id
+             * Format: uuid
+             */
+            booking_transaction_id: string;
+            /** Can Close Now */
+            can_close_now: boolean;
+            /** Closed On */
+            closed_on: string | null;
+            /** Closure Kind */
+            closure_kind: ("MATURED" | "PREMATURE") | null;
+            /** Closure Transaction Id */
+            closure_transaction_id: string | null;
+            /** Currency */
+            currency: string;
+            /**
+             * Days To Maturity
+             * @description Bank days until maturity; 0 once matured
+             */
+            days_to_maturity: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Interest Transaction Id */
+            interest_transaction_id: string | null;
+            /**
+             * Lock In Until
+             * Format: date
+             */
+            lock_in_until: string;
+            /** Maturity Amount Minor */
+            maturity_amount_minor: number;
+            /**
+             * Maturity Date
+             * Format: date
+             */
+            maturity_date: string;
+            /** Maturity Interest Minor */
+            maturity_interest_minor: number;
+            /** Paid Interest Minor */
+            paid_interest_minor: number | null;
+            /**
+             * Payout If Closed Today Minor
+             * @description What closing today would pay (premature penalty applied); None if it cannot
+             */
+            payout_if_closed_today_minor: number | null;
+            /** Principal Minor */
+            principal_minor: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Product Name */
+            product_name: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * Status
+             * @description MATURED = active and the maturity date reached: ready to withdraw
+             * @enum {string}
+             */
+            status: "ACTIVE" | "MATURED" | "CLOSED";
+            /** Tenure Months */
+            tenure_months: number;
         };
         /** FlaggedEvent */
         FlaggedEvent: {
@@ -3244,6 +3832,86 @@ export interface components {
             name_match: "MATCH" | "NO_MATCH" | "NOT_CHECKED";
             payee: components["schemas"]["PayeeOut"];
         };
+        /** PortfolioOut */
+        PortfolioOut: {
+            /**
+             * Accrued Interest Minor
+             * @description Interest earned to date on open deposits
+             */
+            accrued_interest_minor: number;
+            /** Allocation */
+            allocation: components["schemas"]["AllocationSlice"][];
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+            /**
+             * Cash Minor
+             * @description Ledger balance of my INR accounts
+             */
+            cash_minor: number;
+            /**
+             * Currency
+             * @constant
+             */
+            currency: "INR";
+            /**
+             * Deposits Value Minor
+             * @description Principal + accrued interest
+             */
+            deposits_value_minor: number;
+            /**
+             * Funds Minor
+             * @description Fund holdings: PBIP sells no fund units, so always 0
+             */
+            funds_minor: number;
+            /**
+             * Invested Principal Minor
+             * @description Principal of my open fixed deposits
+             */
+            invested_principal_minor: number;
+            /** Open Deposits */
+            open_deposits: number;
+            /** Projected Maturity Value Minor */
+            projected_maturity_value_minor: number;
+            /** Total Minor */
+            total_minor: number;
+        };
+        /** ProductClicks */
+        ProductClicks: {
+            /**
+             * Clicks
+             * @description product_clicked events in the period
+             */
+            clicks: number;
+            /**
+             * Customers
+             * @description Distinct customers who clicked
+             */
+            customers: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Product Type */
+            product_type: string;
+            /** Title */
+            title: string;
+        };
+        /** ProductHolding */
+        ProductHolding: {
+            /** Holders */
+            holders: number;
+            /** Product */
+            product: string;
+            /**
+             * Share Pct
+             * @description holders / customers in the segment, percent
+             */
+            share_pct: number;
+        };
         /**
          * ProductRecommendationItem
          * @description A single personalized product recommendation with explainable reasons.
@@ -3376,11 +4044,51 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** RegulatoryIndicators */
+        RegulatoryIndicators: {
+            /** Acknowledge Sla Hours */
+            acknowledge_sla_hours: number;
+            by_kind: components["schemas"]["ExceptionsByKind"];
+            /** Oldest Review At */
+            oldest_review_at: string | null;
+            /** Review Sla Hours */
+            review_sla_hours: number;
+            /**
+             * Reviews Past Sla
+             * @description Fraud alerts still OPEN that were raised more than review_sla_hours ago
+             */
+            reviews_past_sla: number;
+            /**
+             * Reviews Pending
+             * @description Fraud alerts still OPEN (held payments), any age
+             */
+            reviews_pending: number;
+            /**
+             * Unacknowledged Past Sla
+             * @description OPEN exceptions that occurred more than acknowledge_sla_hours ago
+             */
+            unacknowledged_past_sla: number;
+            /**
+             * Unresolved Exceptions
+             * @description OPEN + ACKNOWLEDGED exceptions in the window
+             */
+            unresolved_exceptions: number;
+            /**
+             * Window Days
+             * @description Exceptions that occurred in the last N days are counted
+             */
+            window_days: number;
+        };
         /**
          * RiskBand
          * @enum {string}
          */
         RiskBand: "LOW" | "MODERATE" | "HIGH";
+        /**
+         * RiskLevel
+         * @enum {string}
+         */
+        RiskLevel: "LOW" | "MODERATE" | "HIGH";
         /**
          * RiskProfileOut
          * @description The customer's current risk band and the answers that produced it; nulls until assessed.
@@ -3582,6 +4290,101 @@ export interface components {
             high_risk_window_days: number;
             login_anomalies: components["schemas"]["LoginAnomalies"];
             open_alerts: components["schemas"]["OpenAlertsPanel"];
+        };
+        /** SegmentAffinity */
+        SegmentAffinity: {
+            /** Customers */
+            customers: number;
+            /** Holdings */
+            holdings: components["schemas"]["ProductHolding"][];
+            /**
+             * Segment
+             * @enum {string}
+             */
+            segment: "HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER" | "UNSEGMENTED";
+        };
+        /** SegmentDistribution */
+        SegmentDistribution: {
+            /** Items */
+            items: components["schemas"]["SegmentShare"][];
+            /**
+             * Last Segmented At
+             * @description Latest weekly segmentation write
+             */
+            last_segmented_at: string | null;
+            /** Total Customers */
+            total_customers: number;
+        };
+        /** SegmentEngagement */
+        SegmentEngagement: {
+            /** Active Customers */
+            active_customers: number;
+            /** Active Share Pct */
+            active_share_pct: number;
+            /** Customers */
+            customers: number;
+            /**
+             * Segment
+             * @enum {string}
+             */
+            segment: "HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER" | "UNSEGMENTED";
+        };
+        /**
+         * SegmentShare
+         * @description One segment's size and the average RFM features the weekly job stored for it.
+         */
+        SegmentShare: {
+            /** Avg Discretionary Ratio */
+            avg_discretionary_ratio: number | null;
+            /** Avg Monthly Spend Minor */
+            avg_monthly_spend_minor: number | null;
+            /** Avg Monthly Transactions */
+            avg_monthly_transactions: number | null;
+            /**
+             * Avg Recency Days
+             * @description Days since last transaction (job input)
+             */
+            avg_recency_days: number | null;
+            /** Avg Savings Ratio */
+            avg_savings_ratio: number | null;
+            /** Customers */
+            customers: number;
+            /**
+             * Segment
+             * @enum {string}
+             */
+            segment: "HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER" | "UNSEGMENTED";
+            /**
+             * Share Pct
+             * @description Share of all customers, percent, one decimal
+             */
+            share_pct: number;
+        };
+        /** SegmentSpend */
+        SegmentSpend: {
+            /**
+             * Avg Spend Per Spender Minor
+             * @description spend_minor // spenders (floor)
+             */
+            avg_spend_per_spender_minor: number;
+            /** By Type */
+            by_type: components["schemas"]["TypeSpend"][];
+            /** Customers */
+            customers: number;
+            /**
+             * Segment
+             * @enum {string}
+             */
+            segment: "HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER" | "UNSEGMENTED";
+            /** Spend Minor */
+            spend_minor: number;
+            /**
+             * Spenders
+             * @description Customers with at least one spend entry in the period
+             */
+            spenders: number;
+            /** Transactions */
+            transactions: number;
         };
         /**
          * SpendingBreakdownResponse
@@ -3890,6 +4693,15 @@ export interface components {
              */
             to_account_id?: string | null;
         };
+        /** TypeSpend */
+        TypeSpend: {
+            /** Spend Minor */
+            spend_minor: number;
+            /** Transaction Type */
+            transaction_type: string;
+            /** Transactions */
+            transactions: number;
+        };
         /** UnlockResultOut */
         UnlockResultOut: {
             /** Failed Login Count */
@@ -3945,6 +4757,69 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** WealthProductOut */
+        WealthProductOut: {
+            /**
+             * Annual Rate Bps
+             * @description Indicative, simulated annual rate (deposits) or coupon (gold bond); None when market-linked
+             */
+            annual_rate_bps: number | null;
+            /**
+             * Apy Bps
+             * @description Annualised yield: quarterly compounding for deposits, the coupon for the gold bond; None for market-linked funds (PBIP has no market data)
+             */
+            apy_bps: number | null;
+            /**
+             * Bookable
+             * @description Only fixed deposits can be booked online
+             */
+            bookable: boolean;
+            /** Catalogue Version */
+            catalogue_version: string;
+            /** Code */
+            code: string;
+            /** Description */
+            description: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Max Amount Minor */
+            max_amount_minor: number | null;
+            /** Min Amount Minor */
+            min_amount_minor: number | null;
+            /** Min Lock In Months */
+            min_lock_in_months: number;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes: string;
+            /** Premature Closure Allowed */
+            premature_closure_allowed: boolean;
+            /** Premature Penalty Bps */
+            premature_penalty_bps: number | null;
+            /**
+             * Product Type
+             * @enum {string}
+             */
+            product_type: "FIXED_DEPOSIT" | "MUTUAL_FUND" | "SOVEREIGN_GOLD_BOND";
+            /**
+             * Risk Level
+             * @enum {string}
+             */
+            risk_level: "LOW" | "MODERATE" | "HIGH";
+            /**
+             * Tenures Months
+             * @description Empty for open-ended funds
+             */
+            tenures_months: number[];
+            /**
+             * Yield Basis
+             * @enum {string}
+             */
+            yield_basis: "GUARANTEED" | "FIXED_COUPON" | "MARKET_LINKED";
         };
     };
     responses: never;
@@ -4978,6 +5853,145 @@ export interface operations {
             };
         };
     };
+    list_exceptions_api_v1_compliance_exceptions_get: {
+        parameters: {
+            query?: {
+                /** @description Window: exceptions of the last N days */
+                days?: number;
+                /** @description Only this kind */
+                kind?: components["schemas"]["ExceptionKind"] | null;
+                /** @description Only this status */
+                status?: components["schemas"]["ExceptionStatus"] | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceExceptionsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_exception_api_v1_compliance_exceptions__kind___ref__acknowledge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["schemas"]["ExceptionKind"];
+                /** @description Reference from the list */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExceptionActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExceptionOut"];
+                };
+            };
+            /** @description No such exception */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Already acknowledged or resolved */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_exception_api_v1_compliance_exceptions__kind___ref__resolve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["schemas"]["ExceptionKind"];
+                /** @description Reference from the list */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExceptionActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExceptionOut"];
+                };
+            };
+            /** @description No such exception */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Already acknowledged or resolved */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_my_devices_api_v1_customers_devices_get: {
         parameters: {
             query?: never;
@@ -5438,6 +6452,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FraudStats"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_behaviour_analytics_api_v1_insights_behaviour_get: {
+        parameters: {
+            query?: {
+                /** @description Period: the last N days (clickstream: 180) */
+                days?: number;
+                /** @description Only this segment */
+                segment?: ("HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER" | "UNSEGMENTED") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BehaviourAnalyticsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6398,6 +7446,215 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TransferOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_fixed_deposits_api_v1_wealth_fixed_deposits_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedDepositOut"][];
+                };
+            };
+        };
+    };
+    book_fixed_deposit_api_v1_wealth_fixed_deposits_book_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical request; retrying with the same key never duplicates. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepositBookRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedDepositOut"];
+                };
+            };
+            /** @description Insufficient funds, terms not offered or invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    quote_fixed_deposit_api_v1_wealth_fixed_deposits_quote_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepositTermsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DepositQuoteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_fixed_deposit_api_v1_wealth_fixed_deposits__deposit_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deposit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedDepositOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    close_fixed_deposit_api_v1_wealth_fixed_deposits__deposit_id__close_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical request; retrying with the same key never duplicates. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                deposit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedDepositOut"];
+                };
+            };
+            /** @description Already closed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Still inside its lock-in period */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_portfolio_api_v1_wealth_portfolio_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioOut"];
+                };
+            };
+        };
+    };
+    list_products_api_v1_wealth_products_get: {
+        parameters: {
+            query?: {
+                /** @description Only this risk level */
+                risk_level?: components["schemas"]["RiskLevel"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WealthProductOut"][];
                 };
             };
             /** @description Validation Error */
