@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
 import { AuthProvider } from "../auth/AuthContext";
-import { customerMe } from "../test-utils";
+import { customerMe, noRecommendations } from "../test-utils";
 
 function urlOf(input: Parameters<typeof fetch>[0]): string {
   if (typeof input === "string") return input;
@@ -52,6 +52,7 @@ describe("accounts page", () => {
       if (url.endsWith("/auth/me")) return Promise.resolve(json(200, customerMe));
       if (url.endsWith("/accounts")) return Promise.resolve(json(200, [account]));
       if (url.endsWith("/payees")) return Promise.resolve(json(200, [payee]));
+      if (url.endsWith("/recommendations")) return Promise.resolve(json(200, noRecommendations));
       if (url.endsWith("/transfers") && init?.method === "POST") {
         return Promise.resolve(
           json(201, {

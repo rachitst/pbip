@@ -170,14 +170,16 @@ habits.*
 
 * ✓ The API returns at most three products, each with reasons built from my own figures.
 * ✓ The results are scoped to the authenticated customer.
-* ✗ The dashboard shows the suggestions with "why this was recommended".
+* ✓ The dashboard shows the suggestions with "why this was recommended".
 
-**Status:** Partial. The UI is TASK-062.
+**Status:** Partial until TASK-062 (PR #328) merges: the carousel on `/accounts` shows each product with its
+reasons behind a keyboard disclosure.
 
 **Tests:** `integration/test_recommendations.py::test_recommendations_are_scoped_to_the_authenticated_customer`,
-`test_recommendations_use_the_customers_real_figures_and_ignore_date_of_birth_without_consent`.
+`test_recommendations_use_the_customers_real_figures_and_ignore_date_of_birth_without_consent`;
+`apps/web/src/pages/ProductRecommendations.test.tsx`.
 
-**Tasks:** TASK-054 (In Progress); TASK-062 (Todo).
+**Tasks:** TASK-054 (In Progress); TASK-062 (In Review, PR #328).
 
 ## UC-03 Download account statement
 
@@ -456,7 +458,7 @@ and a rewards card.
 **Tests** (`integration/test_loans.py`): `test_eligible_with_explained_figures`,
 `test_rejected_when_dti_would_exceed_half_of_income`, `test_rejected_after_a_recent_lockout`.
 
-**Tasks:** TASK-046 (Done); TASK-054 (In Progress), TASK-062 (Todo).
+**Tasks:** TASK-046 (Done); TASK-054 (In Progress), TASK-062 (In Review, PR #328).
 
 ### US-21 Apply for and track a loan (FR-32)
 
@@ -785,7 +787,7 @@ behaviour, spending, demographics and what I already hold.*
 * `integration/test_recommendations.py` (`test_engine_gets_the_age_band_only_with_consent_and_never_the_date`);
 * `integration/test_demographics.py`; `apps/web/src/pages/DemographicsSection.test.tsx`.
 
-**Tasks:** TASK-054 (In Progress); TASK-107 (In Review); TASK-062 (Todo).
+**Tasks:** TASK-054 (In Progress); TASK-062 (In Review, PR #328); TASK-107 (Done #326).
 
 ## UC-13 Security monitoring dashboard
 

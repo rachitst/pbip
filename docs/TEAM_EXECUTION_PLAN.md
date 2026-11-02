@@ -1923,7 +1923,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #85 | **Sprint:** 5 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Kalpak (`Patil-Kalpak`)
-- **Start:** Mon 02 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (1.5 days of slack)
+- **Start:** Mon 02 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (set when merged) | **Status:** In Review (#328) | **Risk:** Low (1.5 days of slack)
 - **Depends on:** TASK-054 (#77, Krishna), TASK-019 (#42, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-054, TASK-019
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout.
