@@ -116,6 +116,19 @@ class Settings(BaseSettings):
     fraud_mule_min_inbound_minor: int = Field(default=1_000_000, ge=1)  # 10,000.00
     fraud_mule_min_ratio_percent: int = Field(default=80, ge=1, le=100)
     fraud_mule_repeat_episodes: int = Field(default=2, ge=1, le=100)  # earlier episodes, 30 days
+    # STRUCTURING (F7, #274, ADR-0046): at least N movements on the account within the window, each
+    # just under the threshold (at least (100 - band)% of it), counting this transfer. The band is
+    # an integer percentage so the boundary is exact. Not admin-overridable (ADR-0031).
+    fraud_structuring_threshold_minor: int = Field(default=10_000_000, ge=20_000)  # 1,00,000.00
+    fraud_structuring_band_percent: int = Field(default=10, ge=1, le=50)
+    fraud_structuring_window_hours: int = Field(default=72, ge=1, le=720)
+    fraud_structuring_min_count: int = Field(default=3, ge=2, le=50)
+    # DORMANT_REACTIVATION (F8, #275, ADR-0046): a transfer of at least the minimum from an account
+    # whose customer-induced activity had stopped for the dormancy period before it woke up within
+    # the reactivation window. Not admin-overridable (ADR-0031).
+    fraud_dormancy_days: int = Field(default=180, ge=30, le=3650)
+    fraud_dormant_reactivation_days: int = Field(default=7, ge=1, le=90)
+    fraud_dormant_min_amount_minor: int = Field(default=2_500_000, ge=1)  # 25,000.00
 
     # Banking limits (INTEGER MINOR UNITS)
     internal_bank_code: str = "PBIP0001"
