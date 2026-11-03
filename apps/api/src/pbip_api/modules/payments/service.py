@@ -63,6 +63,7 @@ from pbip_api.modules.payments.recurrence import (
     upcoming_occurrences,
 )
 from pbip_api.modules.payments.schemas import ScheduledTransferCreate, to_scheduled_transfer_out
+from pbip_api.modules.runtime_config import service as runtime_config
 
 # Wrong step-up codes for ONE transfer before it goes to an analyst instead (TASK-037).
 STEP_UP_MAX_FAILURES = 3
@@ -142,6 +143,13 @@ class PaymentsService:
         self.counters = counters
         self.audit = AuditService(session)
 
+    def _limits(self) -> Settings:
+        """The limits in force now, including an ADMIN's runtime overrides (ADR-0031).
+
+        Read at each check in this use case's transaction, so a change applies to the next
+        transfer in every process (API and worker)."""
+        return runtime_config.effective_settings(self.session, self.settings)
+
     # ----------------------------------------------------------------- creation
     def create_transfer(
         self,
@@ -203,7 +211,7 @@ class PaymentsService:
         signals are simply unknown and the audit row carries no IP/request id. ``interactive`` is
         False when nobody can answer a step-up challenge: STEP_UP then becomes REVIEW.
         """
-        if command.amount_minor > self.settings.max_transfer_minor:
+        if command.amount_minor > self._limits().max_transfer_minor:
             raise LimitExceededError("amount exceeds the per-transfer limit")
         ip = meta.ip if meta is not None else None
         request_id = meta.request_id if meta is not None else None
@@ -415,7 +423,7 @@ class PaymentsService:
                 Transaction.id != transaction.id,
             )
         ).scalar_one()
-        if used + transaction.amount > self.settings.daily_transfer_limit_minor:
+        if used + transaction.amount > self._limits().daily_transfer_limit_minor:
             raise LimitExceededError("daily transfer limit exceeded")
 
     def _enqueue(self, event_type: str, user_id: UUID, transaction: Transaction) -> None:
@@ -637,7 +645,7 @@ class PaymentsService:
         instruction pays out on each occurrence, so a retried create must not make a second one:
         it is idempotent like ``POST /api/v1/transfers`` (same user lock, same key table)."""
         self._validate_schedule_dates(command)
-        if command.amount_minor > self.settings.max_transfer_minor:
+        if command.amount_minor > self._limits().max_transfer_minor:
             raise LimitExceededError("amount exceeds the per-transfer limit")
 
         self._lock_user(user_id)
@@ -672,7 +680,7 @@ class PaymentsService:
                 ScheduledTransfer.loan_id.is_(None),  # loan repayments are not the customer's
             )
         ).scalar_one()
-        if live >= self.settings.max_active_scheduled_transfers_per_customer:
+        if live >= self._limits().max_active_scheduled_transfers_per_customer:
             raise ConflictError("too many scheduled transfers; cancel one before adding another")
 
     @staticmethod

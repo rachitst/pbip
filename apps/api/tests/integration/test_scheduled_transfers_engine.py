@@ -12,7 +12,8 @@ import pytest
 from pbip_api.core.config import Settings
 from pbip_api.modules.accounts.models import Account, AccountStatus
 from pbip_api.modules.auth.dependencies import get_field_cipher, get_password_service
-from pbip_api.modules.auth.service import AuthService
+from pbip_api.modules.auth.models import RoleName
+from pbip_api.modules.auth.service import AuthService, RequestMeta
 from pbip_api.modules.compliance.models import AuditLog
 from pbip_api.modules.fraud.models import FraudEvent
 from pbip_api.modules.ledger import service as ledger
@@ -35,6 +36,8 @@ from pbip_api.modules.payments.scheduled_service import (
     try_lock_scheduled_instruction,
 )
 from pbip_api.modules.payments.service import PaymentsService
+from pbip_api.modules.runtime_config.allowlist import RuntimeSettingKey
+from pbip_api.modules.runtime_config.service import RuntimeConfigService
 from pbip_ml.fraud.contract import FraudDecision
 from pbip_ml.fraud.testing import FixedDecisionScorer
 from pbip_test_support import Actor, age_payee
@@ -992,6 +995,44 @@ def test_the_daily_limit_applies_to_a_scheduled_run_and_it_retries_the_same_day(
             select(OutboxEvent).where(OutboxEvent.event_type == "SCHEDULED_TRANSFER_FAILED")
         ).scalars()
         assert len(list(failed)) == 1
+
+
+def test_the_worker_enforces_an_admins_runtime_daily_limit_without_a_restart(
+    migrated_engine: Engine,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    settings: Settings,
+    make_staff: Callable[..., Actor],
+) -> None:
+    """TASK-108 / ADR-0031: the worker's service is built from the process settings, yet a limit
+    an ADMIN lowered at runtime applies to its next run (no cache, read in the run's transaction)."""
+    alice, _, payee = pair
+    today = date(2026, 11, 1)
+    admin = make_staff(RoleName.ADMIN)
+    with Session(migrated_engine) as session:
+        RuntimeConfigService(session, settings).change_setting(
+            RuntimeSettingKey.DAILY_TRANSFER_LIMIT_MINOR,
+            AMOUNT * 2,
+            "Lowered for the scheduled-run test",
+            admin.user_id,
+            RequestMeta(),
+        )
+    with Session(migrated_engine) as session:
+        inst_id = _create_instruction(
+            session, alice, payee, amount=AMOUNT * 2 + 1, next_run_date=today
+        ).id
+
+    with Session(migrated_engine) as session:
+        outcome = execute_scheduled_instruction(
+            session,
+            inst_id,
+            today_utc=today,
+            payments_service=_service(session, FraudDecision.ALLOW, settings),
+        )
+    assert outcome == ScheduledExecutionOutcome.RETRYABLE_FAILURE
+    with Session(migrated_engine) as session:
+        row = session.get(ScheduledTransfer, inst_id)
+        assert row is not None and row.last_failure_reason == "daily_limit_exceeded"
+        assert _transactions_from(session, alice.account_id) == []
 
 
 def test_a_payee_that_is_no_longer_verified_is_not_paid_and_the_order_pauses(

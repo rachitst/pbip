@@ -28,6 +28,7 @@ from pbip_api.modules.loans import models as _loans  # noqa: E402, F401
 from pbip_api.modules.notifications import models as _notifications  # noqa: E402, F401
 from pbip_api.modules.payees import models as _payees  # noqa: E402, F401
 from pbip_api.modules.payments import models as _payments  # noqa: E402, F401
+from pbip_api.modules.runtime_config import models as _runtime_config  # noqa: E402, F401
 from pbip_api.modules.wealth import models as _wealth  # noqa: E402, F401
 
 target_metadata = Base.metadata

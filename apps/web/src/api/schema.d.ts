@@ -128,6 +128,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the runtime-configurable settings with default and effective values (ADMIN, MFA) */
+        get: operations["list_runtime_settings_api_v1_admin_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Change an allow-listed runtime setting, with a reason; audited (ADMIN, MFA) */
+        put: operations["change_runtime_setting_api_v1_admin_settings__key__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users": {
         parameters: {
             query?: never;
@@ -4444,6 +4478,56 @@ export interface components {
             source: string | null;
         };
         /**
+         * RuntimeSettingKey
+         * @enum {string}
+         */
+        RuntimeSettingKey: "daily_transfer_limit_minor" | "max_transfer_minor" | "max_active_scheduled_transfers_per_customer";
+        /** RuntimeSettingOut */
+        RuntimeSettingOut: {
+            /**
+             * Default Value
+             * @description The value from the deployment's environment
+             */
+            default_value: number;
+            /** Description */
+            description: string;
+            /**
+             * Effective Value
+             * @description The value enforced now
+             */
+            effective_value: number;
+            key: components["schemas"]["RuntimeSettingKey"];
+            /** Label */
+            label: string;
+            /** Max Value */
+            max_value: number;
+            /** Min Value */
+            min_value: number;
+            /** Overridden */
+            overridden: boolean;
+            /** @description MINOR_UNITS values are integer minor units (paise) */
+            unit: components["schemas"]["SettingUnit"];
+            /** Updated At */
+            updated_at: string | null;
+            /** Updated By User Id */
+            updated_by_user_id: string | null;
+        };
+        /**
+         * RuntimeSettingUpdate
+         * @description A new value (checked against the key's allow-listed bounds) and why, for the audit log.
+         */
+        RuntimeSettingUpdate: {
+            /** Reason */
+            reason: string;
+            /** Value */
+            value: number;
+        };
+        /** RuntimeSettingsOut */
+        RuntimeSettingsOut: {
+            /** Items */
+            items: components["schemas"]["RuntimeSettingOut"][];
+        };
+        /**
          * ScheduleFrequency
          * @enum {string}
          */
@@ -4667,6 +4751,11 @@ export interface components {
             /** Transactions */
             transactions: number;
         };
+        /**
+         * SettingUnit
+         * @enum {string}
+         */
+        SettingUnit: "MINOR_UNITS" | "COUNT";
         /**
          * SpendingBreakdownResponse
          * @description Response containing categorized spending breakdown for an account.
@@ -5338,6 +5427,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EntriesPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_runtime_settings_api_v1_admin_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeSettingsOut"];
+                };
+            };
+        };
+    };
+    change_runtime_setting_api_v1_admin_settings__key__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: components["schemas"]["RuntimeSettingKey"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuntimeSettingUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeSettingOut"];
                 };
             };
             /** @description Validation Error */

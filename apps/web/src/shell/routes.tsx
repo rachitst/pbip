@@ -18,6 +18,7 @@ import { Payees } from "../pages/Payees";
 import { Profile } from "../pages/Profile";
 import { ScheduledTransfers } from "../pages/ScheduledTransfers";
 import { Statements } from "../pages/Statements";
+import { Administration, canAdminister } from "../pages/staff/Administration";
 import { AuditLog } from "../pages/staff/AuditLog";
 import { ComplianceDashboard, canManageCompliance } from "../pages/staff/ComplianceDashboard";
 import { FraudAlert } from "../pages/staff/FraudAlert";
@@ -82,6 +83,7 @@ function staffNav(me: UserOut, demoLabEnabled: boolean): NavItem[] {
     items.push({ to: "/staff/compliance", label: "Compliance & risk" });
     items.push({ to: "/staff/audit-log", label: "Audit log" });
   }
+  if (canAdminister(me)) items.push({ to: "/staff/admin", label: "Administration" });
   items.push({ to: "/staff/security", label: "Sign-in security" });
   if (isCustomer(me)) items.push({ to: "/accounts", label: "My banking" });
   return items;
@@ -259,6 +261,7 @@ export const routes: RouteObject[] = [
         element: <StaffArea />,
         children: [
           { index: true, element: <StaffHome /> },
+          { path: "admin", element: <Administration /> },
           { path: "audit-log", element: <AuditLog /> },
           { path: "fraud", element: <FraudQueue /> },
           { path: "fraud/:alertId", element: <FraudAlert /> },

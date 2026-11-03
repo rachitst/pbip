@@ -47,6 +47,7 @@ from pbip_api.modules.ledger.models import (
 )
 from pbip_api.modules.notifications import service as notifications
 from pbip_api.modules.payments.service import IdempotencyKeyReuseError, LimitExceededError
+from pbip_api.modules.runtime_config import service as runtime_config
 
 _COUNTS_TOWARDS_LIMIT = (
     TransactionStatus.POSTED,
@@ -88,6 +89,10 @@ class BillsService:
         self.scorer = scorer
         self.countries = countries or NoCountryResolver()
         self.audit = AuditService(session)
+
+    def _limits(self) -> Settings:
+        """The limits in force now, including an ADMIN's runtime overrides (ADR-0031)."""
+        return runtime_config.effective_settings(self.session, self.settings)
 
     # ------------------------------------------------------------------ queries
     def list_billers(self, *, active_only: bool = True) -> list[Biller]:
@@ -143,7 +148,7 @@ class BillsService:
         meta: RequestMeta,
         device_id: UUID | None = None,
     ) -> BillPaymentResult:
-        if command.amount_minor > self.settings.max_transfer_minor:
+        if command.amount_minor > self._limits().max_transfer_minor:
             raise LimitExceededError("amount exceeds the per-payment limit")
         self._lock_user(user_id)
         request_hash = self._request_hash(user_id, command)
@@ -328,7 +333,7 @@ class BillsService:
                 Transaction.id != transaction.id,
             )
         ).scalar_one()
-        if used + transaction.amount > self.settings.daily_transfer_limit_minor:
+        if used + transaction.amount > self._limits().daily_transfer_limit_minor:
             raise LimitExceededError("daily payment limit exceeded")
 
     def _lock_user(self, user_id: UUID) -> None:
