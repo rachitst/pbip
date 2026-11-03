@@ -14,6 +14,11 @@ Point-in-time rule: a transfer's features use only events strictly BEFORE it (``
 the transfer's), except ``distinct_devices_7d``, which counts the current device too (the device in
 use is known at decision time). Money is integer paise; ratios are exact floats of integer sums.
 
+``activity`` marks a past movement the CUSTOMER caused (ADR-0049, the same set as ADR-0046's
+DORMANT_REACTIVATION: transfers, deposits, bill payments, deposit bookings). Fees, interest, loan
+postings and reversals are not activity: they do not wake a dormant account. Every generated row is
+activity; the API marks the rest.
+
 Definitions (all windows end at the transfer, exclusive):
 
 ==========================  ===========================================================
@@ -21,8 +26,16 @@ ratio_to_avg_amount         amount / mean prior DEBIT amount in 30 days; 1.0 wit
 payee_age_seconds           seconds since the payee was added; -1 for credits / unknown
 velocity_10m                prior DEBITs in the last 10 minutes
 failure_count_24h           failed logins in the last 24 hours (counted by the platform)
-distinct_devices_7d         distinct devices on the customer's transfers in 7 days, incl. this one
+distinct_devices_7d         distinct devices on the customer's DEBITs in 7 days, incl. this one
+near_threshold_72h          prior activity in 72 hours, either direction, each 90% to 99.99% of
+                            the INR 1,00,000 reporting threshold (F7 structuring, ADR-0049)
+days_since_last_activity    whole days since the customer's last prior activity; -1 with none
+                            (F8 dormant-account reactivation, ADR-0049)
 ==========================  ===========================================================
+
+``distinct_devices_7d`` counts debits only (ADR-0049): a credit is made by the sender, so the API
+records no device of the customer for it, and the generator's credits carry the customer's usual
+device. Counting them offline would be train/serve skew.
 """
 
 from collections.abc import Sequence
@@ -40,11 +53,27 @@ FEATURE_NAMES = (
     "velocity_10m",
     "failure_count_24h",
     "distinct_devices_7d",
+    "near_threshold_72h",
+    "days_since_last_activity",
 )
 AVG_WINDOW = timedelta(days=30)
 VELOCITY_WINDOW = timedelta(minutes=10)
 DEVICE_WINDOW = timedelta(days=7)
+STRUCTURING_WINDOW = timedelta(hours=72)
+# Synthetic, not statutory: the generator's F7 threshold and the API's LARGE_AMOUNT rule.
+REPORTING_THRESHOLD_MINOR = 1_00_000_00  # INR 1,00,000
+NEAR_THRESHOLD_PERCENT = 90  # "just under" = at least 90% of the threshold, integer arithmetic
 UNKNOWN_PAYEE_AGE = -1
+NO_ACTIVITY = -1
+DAY = timedelta(days=1)
+
+
+def near_threshold(amount_minor: int) -> bool:
+    """At least 90% of the reporting threshold and below it. Exact: no float."""
+    return (
+        amount_minor * 100 >= REPORTING_THRESHOLD_MINOR * NEAR_THRESHOLD_PERCENT
+        and amount_minor < REPORTING_THRESHOLD_MINOR
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +82,7 @@ class PastTransfer:
     direction: Literal["DEBIT", "CREDIT"]
     amount_minor: int
     device_id: UUID | None
+    activity: bool = True  # customer-induced (module docstring); False for fees, interest, ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +102,8 @@ class FraudFeatures:
     velocity_10m: int
     failure_count_24h: int
     distinct_devices_7d: int
+    near_threshold_72h: int
+    days_since_last_activity: int
 
     def as_dict(self) -> dict[str, float | int]:
         return {name: getattr(self, name) for name in FEATURE_NAMES}
@@ -92,15 +124,28 @@ def online_features(current: CurrentTransfer, history: Sequence[PastTransfer]) -
     velocity = sum(
         1 for h in prior if h.direction == "DEBIT" and h.occurred_at >= t - VELOCITY_WINDOW
     )
-    devices = {h.device_id for h in prior if h.occurred_at >= t - DEVICE_WINDOW and h.device_id}
+    devices = {
+        h.device_id
+        for h in prior
+        if h.direction == "DEBIT" and h.occurred_at >= t - DEVICE_WINDOW and h.device_id
+    }
     if current.device_id is not None:
         devices.add(current.device_id)
+    active = [h for h in prior if h.activity]
+    near = sum(
+        1
+        for h in active
+        if h.occurred_at >= t - STRUCTURING_WINDOW and near_threshold(h.amount_minor)
+    )
+    last = max((h.occurred_at for h in active), default=None)
     return FraudFeatures(
         ratio_to_avg_amount=float(ratio),
         payee_age_seconds=payee_age,
         velocity_10m=velocity,
         failure_count_24h=current.failed_logins_24h,
         distinct_devices_7d=len(devices),
+        near_threshold_72h=near,
+        days_since_last_activity=NO_ACTIVITY if last is None else (t - last) // DAY,
     )
 
 
@@ -132,16 +177,34 @@ def _customer_block(group: pd.DataFrame) -> pd.DataFrame:
     end = np.searchsorted(times, times, side="left")
     distinct = np.array(
         [
-            len({d for d in devices[s:e] if d is not None and d == d} | ({cur} if cur else set()))
+            len(
+                {d for d, debit in zip(devices[s:e], is_debit[s:e], strict=True)
+                 if debit and d is not None and d == d}
+                | ({cur} if cur else set())
+            )
             for s, e, cur in zip(start, end, devices, strict=True)
         ],
         dtype=np.int64,
+    )  # fmt: skip
+    active = group["activity"].to_numpy(dtype=bool)
+    near_mask = (
+        active
+        & (amounts * 100 >= REPORTING_THRESHOLD_MINOR * NEAR_THRESHOLD_PERCENT)
+        & (amounts < REPORTING_THRESHOLD_MINOR)
     )
+    near, _ = _window_count_sum(times, near_mask, amounts, _ns(STRUCTURING_WINDOW))
+    # Latest activity strictly before each row: running max of activity times over rows < end.
+    activity_times = np.where(active, times, np.iinfo(np.int64).min)
+    latest = np.concatenate([[np.iinfo(np.int64).min], np.maximum.accumulate(activity_times)])[end]
+    has_prior = latest != np.iinfo(np.int64).min
+    days = np.where(has_prior, (times - np.where(has_prior, latest, 0)) // _ns(DAY), NO_ACTIVITY)
     return pd.DataFrame(
         {
             "ratio_to_avg_amount": ratio.astype(float),
             "velocity_10m": velocity.astype(np.int64),
             "distinct_devices_7d": distinct,
+            "near_threshold_72h": near.astype(np.int64),
+            "days_since_last_activity": days.astype(np.int64),
         },
         index=group.index,
     )
@@ -155,9 +218,12 @@ def offline_features(transfers: pd.DataFrame) -> pd.DataFrame:
     """Vectorised features for every row of a transfers table (training path).
 
     Expects columns: customer_id, occurred_at (tz-aware), direction, amount_minor, payee_added_at,
-    device_id, failed_logins_24h. Returns one row per input row, same index, FEATURE_NAMES columns.
+    device_id, failed_logins_24h, and optionally activity (default: every row is activity, as in
+    the generator). Returns one row per input row, same index, FEATURE_NAMES columns.
     """
     df = transfers.copy()
+    if "activity" not in df.columns:
+        df["activity"] = True
     df["occurred_at"] = pd.to_datetime(df["occurred_at"], utc=True)
     df["payee_added_at"] = pd.to_datetime(df["payee_added_at"], utc=True)
     parts = [_customer_block(group) for _, group in df.groupby("customer_id", sort=False)]
@@ -172,6 +238,8 @@ def offline_features(transfers: pd.DataFrame) -> pd.DataFrame:
             "velocity_10m": windowed["velocity_10m"],
             "failure_count_24h": df["failed_logins_24h"].astype(np.int64),
             "distinct_devices_7d": windowed["distinct_devices_7d"],
+            "near_threshold_72h": windowed["near_threshold_72h"],
+            "days_since_last_activity": windowed["days_since_last_activity"],
         },
         index=df.index,
     )

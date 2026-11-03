@@ -161,7 +161,7 @@ def test_cli_run_writes_artifacts_and_logs_to_mlflow(
 def test_hybrid_version_tells_the_recalibrated_model_apart() -> None:
     """TASK-084: both earlier models were served as ``-1``; a retrain must be told apart. #396
     changed how the calibration and the stack are fitted, so it is ``-3``, not the ``-2`` run."""
-    assert train_cli.HYBRID_VERSION == "hybrid-lgbm-iforest-3"
+    assert train_cli.HYBRID_VERSION == "hybrid-lgbm-iforest-4"
 
 
 def test_calibration_scores_come_from_models_that_never_saw_those_rows_or_later_ones(

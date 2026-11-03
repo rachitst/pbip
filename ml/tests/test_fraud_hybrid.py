@@ -96,6 +96,9 @@ def test_a_model_that_raises_also_falls_back(trained: dict[str, object]) -> None
     assert isinstance(split, t.Split) and isinstance(scorer, h.HybridScorer)
 
     class Broken:
+        def feature_name(self) -> list[str]:  # the booster interface the scorer reads
+            return list(t.MODEL_FEATURES)
+
         def predict(self, *_a: object, **_k: object) -> object:
             raise ValueError("corrupt model")
 
@@ -139,6 +142,9 @@ def test_shap_reasons_are_top3_positive_exact_and_fast(trained: dict[str, object
     calls: list[tuple[int, dict[str, object]]] = []
 
     class CountingBooster:
+        def feature_name(self) -> list[str]:  # metadata only, not a prediction
+            return list(booster.feature_name())
+
         def predict(self, data: pd.DataFrame, **kwargs: object) -> object:
             calls.append((len(data), kwargs))
             return booster.predict(data, **kwargs)
@@ -239,3 +245,39 @@ def test_calibration_rests_on_more_positives_and_is_finer(trained: dict[str, obj
     assert out_of_time[1].sum() > split.validation["label"].sum()
     assert len(params.calibration_x) > len(validation_only.calibration_x)
     assert params.calibration_y == sorted(params.calibration_y)
+
+
+LEGACY_FEATURES = [
+    name
+    for name in t.MODEL_FEATURES
+    if name not in ("near_threshold_72h", "days_since_last_activity")
+]
+
+
+def test_a_model_trained_before_the_new_features_still_scores(trained: dict[str, object]) -> None:
+    """ADR-0049: the -3 artifacts (9 features) are served by code whose row has 11 columns.
+
+    LightGBM matches columns by position, so the row is cut to the booster's own feature list. A
+    9-feature model must score with the model, not fall back to the rules, and give exactly what it
+    gives on its own columns.
+    """
+    split, params, anomaly = trained["split"], trained["params"], trained["anomaly"]
+    assert isinstance(split, t.Split) and isinstance(params, h.HybridParams)
+    assert isinstance(anomaly, t.AnomalyModel)
+    legacy = lgb.train(
+        t.LGBM_PARAMS, lgb.Dataset(split.train[LEGACY_FEATURES], split.train["label"]), 20
+    )
+    assert h.model_columns(legacy) == LEGACY_FEATURES
+    scorer = h.HybridScorer(params, legacy, anomaly)
+    frame = pd.concat([split.test[split.test["label"] == 1].head(5), split.test.head(5)])
+    assert set(t.MODEL_FEATURES) <= set(frame.columns)  # the new, wider row
+    for i in range(len(frame)):
+        result = _score(scorer, frame, i)
+        assert result.model_version == params.model_version  # not "+rules-only"
+        expected = float(
+            params.calibrate(np.asarray(legacy.predict(frame.iloc[[i]][LEGACY_FEATURES])))[0]
+        )
+        assert result.features["model_probability"] == round(expected, 4)
+        assert all(r.code.removeprefix("MODEL_").lower() in LEGACY_FEATURES
+                   for r in result.reasons if r.source is ReasonSource.MODEL)  # fmt: skip
+    assert len(h.batch_risk(scorer, frame)) == len(frame)

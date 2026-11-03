@@ -40,7 +40,9 @@ EXPERIMENT = "pbip-fraud"
 # 1: generator v2.1 and v2.2 models (both served as -1; tell them apart by the MLflow run and the
 # registry version in champion.json). 2: generator v2.3 (#276), TASK-084 retrain (never served).
 # 3: calibration on out-of-time folds and the stack's regularisation (#396, ADR-0047).
-HYBRID_VERSION = "hybrid-lgbm-iforest-3"
+# 4: feature contract 2 (ADR-0049): near_threshold_72h, days_since_last_activity and devices
+# counted on debits only, trained on generator v2.4 (legitimate inbound transfers, #274).
+HYBRID_VERSION = "hybrid-lgbm-iforest-4"
 
 
 def load_export(directory: Path) -> pd.DataFrame:

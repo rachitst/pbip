@@ -109,6 +109,12 @@ _TEMPLATES: dict[str, Callable[[float], str]] = {
     "velocity_10m": lambda v: f"{int(v)} other transfers in the previous 10 minutes",
     "failure_count_24h": lambda v: f"{int(v)} failed sign-ins in the previous 24 hours",
     "distinct_devices_7d": lambda v: f"{int(v)} different devices used in 7 days",
+    "near_threshold_72h": lambda v: (
+        f"{int(v)} movements just under INR 1,00,000 in the previous 72 hours"
+    ),
+    "days_since_last_activity": lambda v: (
+        "no earlier activity on record" if v < 0 else f"first activity in {int(v)} days"
+    ),
     "log_amount": lambda v: f"amount of INR {10**v / 100:,.2f}",
     "hour_ist": lambda v: f"made at {int(v):02d}:00 IST",
     "new_device": lambda v: "from a device not seen before" if v >= 1 else "from a known device",
@@ -116,16 +122,28 @@ _TEMPLATES: dict[str, Callable[[float], str]] = {
 }
 
 
+def model_columns(booster: lgb.Booster) -> list[str]:
+    """The columns this booster was trained on, in its order (ADR-0049).
+
+    A model is served with the feature row of the code that serves it, which can have more
+    columns than the model was trained on: the -3 artifacts (9 features) still score correctly
+    after ``near_threshold_72h`` and ``days_since_last_activity`` were added. LightGBM matches
+    columns by position, never by name, so the row is always cut to the booster's own list.
+    """
+    return list(booster.feature_name())
+
+
 def shap_reasons(booster: lgb.Booster, row: pd.DataFrame, top: int = TOP_SHAP) -> list[FraudReason]:
     """Top positive TreeSHAP contributors (log-odds) for ONE row, as MODEL reasons."""
-    contrib = np.asarray(booster.predict(row[list(MODEL_FEATURES)], pred_contrib=True))[0]
+    columns = model_columns(booster)
+    contrib = np.asarray(booster.predict(row[columns], pred_contrib=True))[0]
     values = contrib[:-1]  # last column is the expected value (bias)
     order = np.argsort(-values)
     reasons = []
     for index in order[:top]:
         if values[index] <= 0:
             break
-        name = MODEL_FEATURES[index]
+        name = columns[index]
         reasons.append(
             FraudReason(
                 code=f"MODEL_{name.upper()}",
@@ -165,7 +183,7 @@ class HybridScorer:
         try:
             if self.booster is None or self.anomaly is None:
                 raise RuntimeError("model unavailable")
-            raw = float(np.asarray(self.booster.predict(row[list(MODEL_FEATURES)]))[0])
+            raw = float(np.asarray(self.booster.predict(row[model_columns(self.booster)]))[0])
             p = float(self.params.calibrate(np.array([raw]))[0])
             a = float(self.anomaly.score(row)[0])
         except Exception as exc:  # fail safe: rules only, never ALLOW-all
@@ -223,6 +241,8 @@ def rule_context(row: pd.Series, currency: str = "INR") -> RuleContext:
         velocity_10m=int(row["velocity_10m"]),
         failure_count_24h=int(row["failure_count_24h"]),
         distinct_devices_7d=int(row["distinct_devices_7d"]),
+        near_threshold_72h=int(row["near_threshold_72h"]),
+        days_since_last_activity=int(row["days_since_last_activity"]),
     )
     return RuleContext(int(row["amount_minor"]), currency, features, bool(row["new_device"]))
 
@@ -247,7 +267,7 @@ def fit_params(
     from sklearn.linear_model import LogisticRegression
 
     y = validation["label"].to_numpy()
-    raw = np.asarray(booster.predict(validation[list(MODEL_FEATURES)]))
+    raw = np.asarray(booster.predict(validation[model_columns(booster)]))
     cal_raw, cal_y = (
         (raw, y)
         if out_of_time is None
@@ -290,7 +310,7 @@ def batch_risk(scorer: HybridScorer, frame: pd.DataFrame) -> np.ndarray:
     if scorer.booster is None or scorer.anomaly is None:
         risk = rule_points
     else:
-        raw = np.asarray(scorer.booster.predict(frame[list(MODEL_FEATURES)]))
+        raw = np.asarray(scorer.booster.predict(frame[model_columns(scorer.booster)]))
         p = scorer.params.calibrate(raw)
         a = scorer.anomaly.score(frame)
         z = (
