@@ -6,6 +6,7 @@ older than the new-payee window the large transfer posted instead of being held 
 The HTTP layer is replaced by a recorder; nothing here talks to a running API.
 """
 
+import contextlib
 import importlib.util
 from pathlib import Path
 from types import ModuleType
@@ -77,3 +78,24 @@ def test_fraud_new_payee_sends_to_a_payee_created_on_this_run(
     # Each run sends to the payee it has just created, never to an older one.
     assert api.transfer_payees() == ["new-payee-1", "new-payee-2"]
     assert "old-bob-payee" not in api.transfer_payees()
+
+
+def test_no_scenario_signs_in_as_a_customer_with_an_authenticator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The scripts sign in with a password only; Alice has an authenticator (seed_dev
+    MFA_CUSTOMERS, for the step-up demo), so a scenario that signed in as her would stop."""
+    from scripts import seed_dev
+
+    demo = _load_demo()
+    api = _FakeApi()
+    monkeypatch.setattr(demo, "call", api)
+    for scenario in demo.SCENARIOS.values():
+        # The fake API does not play every scenario to the end; the sign-ins come first.
+        with contextlib.suppress(AssertionError, KeyError, TypeError):
+            scenario()
+    emails = {body["email"] for _, path, body in api.requests if path == "/api/v1/auth/login"}
+    assert emails  # every scenario signs in first
+    assert not emails & set(seed_dev.MFA_CUSTOMERS)
+    seeded = {email for email, _, _ in seed_dev.CUSTOMERS}
+    assert emails <= seeded

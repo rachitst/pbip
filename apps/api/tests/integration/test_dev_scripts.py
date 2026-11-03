@@ -84,7 +84,9 @@ def test_seed_writes_no_secret_file_and_prints_no_secrets(
     assert password not in output.out + output.err
     assert seed_dev.DEMO_PASSWORD not in output.out + output.err
     staff = db.scalars(select(User).where(User.mfa_enabled.is_(True))).all()
-    assert {user.email for user in staff} == {email for email, _, _ in seed_dev.STAFF}
+    assert {user.email for user in staff} == {email for email, _, _ in seed_dev.STAFF} | set(
+        seed_dev.MFA_CUSTOMERS
+    )
     for user in staff:
         assert user.mfa_secret_enc is not None
         secret = _cipher(settings).decrypt(user.mfa_secret_enc)
@@ -292,3 +294,40 @@ def test_e2e_fund_refuses_anything_but_a_bounded_test_deposit(
         )
         == 0
     )
+
+
+def test_seed_gives_alice_an_authenticator_and_keeps_the_lab_customers_without(
+    migrated_engine: Engine,
+    db: Session,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """TASK-089 demo readiness: Alice can answer the step-up on a large transfer (totp.py gives her
+    code); Bob and Carol stay password-only, because the fraud demo lab refuses a customer with an
+    authenticator. An older demo database (seeded before Carol and Alice's authenticator) gets
+    both by re-running the seed, which leaves everything else alone and is a no-op the next time."""
+    environ = {"PBIP_DEMO_PASSWORD": ENV_PASSWORD}
+    monkeypatch.setattr(seed_dev, "MFA_CUSTOMERS", ())
+    monkeypatch.setattr(seed_dev, "CUSTOMERS", seed_dev.CUSTOMERS[:2])  # Alice and Bob only
+    assert _seed_with(settings, migrated_engine, monkeypatch, environ) == 0
+    monkeypatch.undo()
+    capsys.readouterr()
+    users_before = set(db.scalars(select(User.email)).all())
+
+    assert _seed_with(settings, migrated_engine, monkeypatch, environ) == 0  # the older database
+
+    assert set(db.scalars(select(User.email)).all()) == users_before | {"carol@demo.pbip"}
+    enrolled = set(db.scalars(select(User.email).where(User.mfa_enabled.is_(True))).all())
+    assert "alice@demo.pbip" in enrolled
+    assert not enrolled & {"bob@demo.pbip", "carol@demo.pbip"}
+    assert totp.current_code(db, _cipher(settings), "alice@demo.pbip", 1_000_000) is not None
+    first = capsys.readouterr().out
+    assert "alice@demo.pbip  (MFA enrolled)" in first and "customer carol@demo.pbip" in first
+
+    alice_secret = db.scalar(select(User.mfa_secret_enc).where(User.email == "alice@demo.pbip"))
+    assert _seed_with(settings, migrated_engine, monkeypatch, environ) == 0  # again: no-op
+    db.expire_all()
+    again = db.scalar(select(User.mfa_secret_enc).where(User.email == "alice@demo.pbip"))
+    assert again == alice_secret  # not re-enrolled: the presenter's codes keep working
+    assert "MFA enrolled" not in capsys.readouterr().out

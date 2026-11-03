@@ -20,7 +20,14 @@ import {
   plainMessage,
   riskTone,
 } from "./fraudFormat";
-import { LabError, SCENARIOS, isRunnable, runScenario, useDemoLabStatus } from "./fraudLab";
+import {
+  LabError,
+  LabSessions,
+  SCENARIOS,
+  isRunnable,
+  runScenario,
+  useDemoLabStatus,
+} from "./fraudLab";
 import type { LabStep, LabTransfer, Scenario, ScenarioCode, StepState } from "./fraudLab";
 
 const STEP_BADGE: Record<StepState, { label: string; tone: string }> = {
@@ -74,12 +81,14 @@ export function FraudDemoLab() {
 }
 
 function Lab() {
-  const [customerEmail, setCustomerEmail] = useState("alice@demo.pbip");
+  // Seeded without an authenticator for the lab (scripts/seed_dev.py); Alice has one, for step-up.
+  const [customerEmail, setCustomerEmail] = useState("carol@demo.pbip");
   const [customerPassword, setCustomerPassword] = useState("");
   const [senderEmail, setSenderEmail] = useState("bob@demo.pbip");
   const [senderPassword, setSenderPassword] = useState("");
   const [steps, setSteps] = useState<LabStep[]>([]);
   const [active, setActive] = useState<ScenarioCode | null>(null);
+  const [sessions] = useState(() => new LabSessions());
 
   const run = useMutation({
     mutationFn: (code: ScenarioCode) =>
@@ -88,6 +97,7 @@ function Lab() {
         customer: { email: customerEmail.trim(), password: customerPassword },
         sender: { email: senderEmail.trim(), password: senderPassword || customerPassword },
         onProgress: setSteps,
+        sessions,
       }),
   });
   const ready = customerEmail.trim() !== "" && customerPassword !== "";
@@ -111,7 +121,8 @@ function Lab() {
         <h2 id="lab-customers">Demo customers</h2>
         <p className="muted">
           The lab signs in as these seeded customers (no authenticator). Passwords stay in this page
-          and are sent only to the sign-in endpoint.
+          and are sent only to the sign-in endpoint. Each customer signs in once and the session is
+          reused by later runs while this page is open, so the sign-in rate limit is not used up.
         </p>
         <form
           className="lab-form"

@@ -1,4 +1,4 @@
-"""Seed a LOCAL database with demo users, funded accounts and MFA-enrolled staff.
+"""Seed a LOCAL database with demo users, funded accounts and MFA-enrolled staff and Alice.
 
     make seed        (or)    uv run python scripts/seed_dev.py
     docker compose exec -T -e PBIP_DEMO_PASSWORD api python - < scripts/seed_dev.py   (CI E2E job)
@@ -7,6 +7,16 @@ Refuses to run against staging/production. Safe to re-run: existing users are sk
 customer who already has a relationship manager keeps them (ADR-0032).
 Staff MFA secrets live only in the database, encrypted like any other user's; generate a login
 code with:  uv run python scripts/totp.py analyst@demo.pbip
+
+Demo customers and what each is for:
+  alice@demo.pbip  has an authenticator (``MFA_CUSTOMERS``), so the presenter can show the
+                   step-up dialog on a large transfer. Her current code:
+                   uv run python scripts/totp.py alice@demo.pbip
+  bob@demo.pbip    no authenticator: the payee in Alice's demos and the F6 sender in the fraud lab
+  carol@demo.pbip  no authenticator: the fraud demo lab's customer (F1-F5) and mule (F6). The lab
+                   signs in with a password only, so it refuses a customer with an authenticator.
+Re-running on an existing database adds what is missing (Carol, Alice's authenticator) and leaves
+everything else alone, so it is also how an older demo database gets them.
 Neither the demo password nor any MFA secret is printed or written to a file.
 
 The password for every seeded user comes from ``PBIP_DEMO_PASSWORD``. Only APP_ENV=local may fall
@@ -41,7 +51,11 @@ PASSWORD_ENV = "PBIP_DEMO_PASSWORD"  # noqa: S105  # pragma: allowlist secret - 
 CUSTOMERS = [
     ("alice@demo.pbip", "Alice Demo", 25_000_000),  # 2,50,000.00
     ("bob@demo.pbip", "Bob Demo", 5_000_000),
+    ("carol@demo.pbip", "Carol Demo", 25_000_000),  # the fraud demo lab's customer
 ]
+# Customers with an authenticator: step-up on a large transfer to a new payee can be answered,
+# instead of every such transfer going to review. Never Bob or Carol (the lab needs them without).
+MFA_CUSTOMERS = ("alice@demo.pbip",)
 STAFF = [
     ("analyst@demo.pbip", "Fraud Analyst", RoleName.FRAUD_ANALYST),
     ("compliance@demo.pbip", "Compliance Officer", RoleName.COMPLIANCE_OFFICER),
@@ -65,6 +79,36 @@ def demo_password(app_env: str, environ: Mapping[str, str]) -> str | None:
 
 def _user_id(session: Session, email: str) -> UUID:
     return session.execute(select(User.id).where(User.email == email)).scalar_one()
+
+
+def _enrol_mfa(service: AuthService, user_id: UUID, meta: RequestMeta) -> None:
+    """Enrol an authenticator through the normal service, confirmed with the code for "now".
+
+    The clock is pinned for the confirmation only, so the code and the check use one instant
+    (a step boundary in between would refuse it); the service's own clock is put back after.
+    """
+    enrollment = service.begin_mfa_enrollment(user_id)
+    now = time.time()
+    real_clock = service.clock
+
+    def fixed_clock(saved_now: float = now) -> float:
+        return saved_now
+
+    service.clock = fixed_clock
+    try:
+        service.confirm_mfa_enrollment(user_id, pyotp.TOTP(enrollment.secret).at(int(now)), meta)
+    finally:
+        service.clock = real_clock
+
+
+def _enrol_demo_customers(session: Session, service: AuthService, meta: RequestMeta) -> None:
+    """Give each of ``MFA_CUSTOMERS`` an authenticator unless they already have one."""
+    for email in MFA_CUSTOMERS:
+        user = session.execute(select(User).where(User.email == email)).scalar_one_or_none()
+        if user is None or user.mfa_enabled:
+            continue
+        _enrol_mfa(service, user.id, meta)
+        sys.stdout.write(f"customer {email}  (MFA enrolled)\n")
 
 
 def _assign_demo_portfolio(session: Session) -> None:
@@ -126,24 +170,16 @@ def main(environ: Mapping[str, str] | None = None) -> int:
             if exists(email):
                 continue
             user = service.create_user(email, password, name, [role], meta)
-            enrollment = service.begin_mfa_enrollment(user.id)
-            now = time.time()
-
-            def fixed_clock(saved_now: float = now) -> float:
-                return saved_now
-
-            service.clock = fixed_clock
-            service.confirm_mfa_enrollment(
-                user.id, pyotp.TOTP(enrollment.secret).at(int(now)), meta
-            )
+            _enrol_mfa(service, user.id, meta)
             sys.stdout.write(f"staff    {email}  ({role.value}, MFA enrolled)\n")
 
+        _enrol_demo_customers(session, service, meta)
         _assign_demo_portfolio(session)
 
     sys.stdout.write(
         "\nDemo password (all new users): PBIP_DEMO_PASSWORD if set, else (APP_ENV=local only)\n"
         "the DEMO_PASSWORD constant in scripts/seed_dev.py.\n"
-        "Staff MFA code: uv run python scripts/totp.py <staff email>\n"
+        "MFA code (staff and alice@demo.pbip): uv run python scripts/totp.py <email>\n"
     )
     return 0
 
