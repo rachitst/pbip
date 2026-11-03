@@ -19,7 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from pbip_api.core.db import Base, created_at_col, uuid_pk
+from pbip_api.core.db import Base, created_at_col, utcnow, uuid_pk
 
 
 class Notification(Base):
@@ -91,8 +91,12 @@ class OutboxEvent(Base):
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Failed deliveries so far; the relay skips the event until ``next_attempt_at``.
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    # Stamped by the app clock, the clock the relay compares it with (``relay_outbox``'s ``now``
+    # and the retry schedule). The database's ``now()`` can run ahead of the app host (Docker
+    # Desktop's VM clock drifts by hundreds of ms, #371), which made a new event not yet due.
+    # The server default only serves rows written by raw SQL.
     next_attempt_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
     )
     # The exception class of the last failure only: a message could carry payload data.
     last_error: Mapped[str | None] = mapped_column(String(100))
