@@ -52,6 +52,7 @@ from pbip_api.modules.assistant.sanitize import clean_user_message
 QUESTIONS = Path(__file__).with_name("assistant_llm_benchmark_questions.json")
 MEASURE_TIMEOUT_SECONDS = 30.0  # generous, so slow answers are measured rather than cut off
 MAX_429_WAITS = 20
+MAX_WAIT_SECONDS = 90.0  # a longer retry-after (daily cap) ends the question as rate limited
 
 
 class RecordingTransport(httpx.BaseTransport):
@@ -65,6 +66,7 @@ class RecordingTransport(httpx.BaseTransport):
         self.limits: dict[str, str] = {}
         self.prompt_tokens: list[int] = []
         self.completion_tokens: list[int] = []
+        self.last_error = ""
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
         body = request.read().decode()
@@ -77,15 +79,30 @@ class RecordingTransport(httpx.BaseTransport):
             if response.status_code != 429:
                 self._usage(response)
                 return response
-            response.read()
+            self._error(response)
             pause = float(response.headers.get("retry-after", "5")) + 0.5
+            if pause > MAX_WAIT_SECONDS:
+                return response
             self.waits += 1
             self.waited_seconds += pause
             time.sleep(pause)
         return response
 
+    def _error(self, response: httpx.Response) -> None:
+        """HTTP status and the provider's error type/code - never its message text."""
+        try:
+            error = json.loads(response.read()).get("error") or {}
+        except (ValueError, AttributeError):
+            error = {}
+        if not isinstance(error, dict):
+            error = {}
+        self.last_error = f"{response.status_code}:{error.get('type')}:{error.get('code')}"
+
     def _usage(self, response: httpx.Response) -> None:
         """Token counts from the provider's own ``usage`` (Groq) for the cost estimate."""
+        if response.status_code >= 400:
+            self._error(response)
+            return
         try:
             usage = json.loads(response.read()).get("usage") or {}
         except ValueError:
@@ -104,6 +121,7 @@ class Row:
     arguments: dict[str, Any] = field(default_factory=dict)
     status: str = ""  # correct | wrong | refused | own_data_tool | invalid | unavailable
     latency_ms: float = 0.0
+    error: str = ""  # HTTP status:type:code of a failed call
 
 
 def _percentile(samples: list[float], pct: float) -> float:
@@ -145,6 +163,7 @@ def _model(args: argparse.Namespace, transport: RecordingTransport, terms: list[
             args.model,
             MEASURE_TIMEOUT_SECONDS,
             reasoning_effort=args.effort,
+            tool_choice=args.tool_choice,
             private_terms=terms,
             transport=transport,
         )
@@ -174,6 +193,8 @@ def run(args: argparse.Namespace) -> int:
         sys.stderr.write("GROQ_API_KEY is absent from the env file\n")
         return 2
     items = [(q, q["expect"]) for q in spec["normal"]] + [(q, None) for q in spec["adversarial"]]
+    if args.only:
+        items = [(q, e) for q, e in items if q["id"] in args.only.split(",")]
     rows: list[Row] = []
     schema = output_schema()
     for question, expect in items:
@@ -181,21 +202,20 @@ def run(args: argparse.Namespace) -> int:
         refusal = guard.check(message)
         row = Row(question["id"], "normal" if expect else "adversarial", refusal and refusal.value)
         waited = transport.waited_seconds
+        transport.last_error = ""
         started = time.perf_counter()
         try:
             text = model.complete_json(system_prompt(), message, schema)
-            row.latency_ms = (
-                time.perf_counter() - started - (transport.waited_seconds - waited)
-            ) * 1000
             route = parse_choice(text)
             row.choice = route.tool.value if route.tool else None
             row.arguments = dict(route.arguments)
         except InvalidChoiceError:
-            row.latency_ms = (time.perf_counter() - started) * 1000
             row.status = "invalid"
         except LLMUnavailableError as exc:
-            row.latency_ms = (time.perf_counter() - started) * 1000
             row.status = "invalid" if exc.outcome == "invalid" else f"unavailable:{exc.outcome}"
+            row.error = transport.last_error
+        elapsed = time.perf_counter() - started - (transport.waited_seconds - waited)
+        row.latency_ms = elapsed * 1000
         _classify(row, expect)
         rows.append(row)
         if args.pause:
@@ -221,6 +241,7 @@ def _report(
         "provider": args.provider,
         "model": args.model or _settings(args.env_file).ollama_model,
         "reasoning_effort": args.effort,
+        "tool_choice": args.tool_choice if args.provider == "groq" else None,
         "host": f"{platform.system()} {platform.machine()} py{platform.python_version()}",
         "normal_correct": f"{sum(r.status == 'correct' for r in normal)}/{len(normal)}",
         "probes_refused_by_model": f"{sum(r.status == 'refused' for r in probes)}/{len(probes)}",
@@ -244,7 +265,7 @@ def _report(
     for r in rows:
         sys.stdout.write(
             f"{r.id}\t{r.status}\t{r.choice}\t{json.dumps(r.arguments)}\t{r.latency_ms:.0f} ms"
-            f"\tguard={r.guard}\n"
+            f"\tguard={r.guard}\t{r.error}\n"
         )
     if args.json:
         Path(args.json).write_text(
@@ -263,6 +284,8 @@ def main() -> int:
     parser.add_argument("--effort", choices=["none", "low", "medium", "high"], default=None)
     parser.add_argument("--pause", type=float, default=0.0, help="seconds between questions")
     parser.add_argument("--json", help="also write summary and rows to this file")
+    parser.add_argument("--tool-choice", choices=["required", "auto"], default="required")
+    parser.add_argument("--only", default="", help="comma-separated question ids (debugging)")
     args = parser.parse_args()
     if args.list_models:
         return list_models(args.env_file)

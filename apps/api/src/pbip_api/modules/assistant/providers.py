@@ -22,7 +22,7 @@ import threading
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 import httpx
 
@@ -49,6 +49,9 @@ MAX_COOLDOWN_SECONDS = 60.0
 _GROQ_SUFFIX = (
     "\nCall exactly one function. Call `none` for anything the other functions do not cover."
 )
+
+
+ToolChoice = Literal["required", "auto"]
 
 
 class NamedChatModel(Protocol):
@@ -137,6 +140,7 @@ class GroqChatModel:
         timeout_seconds: float,
         *,
         reasoning_effort: str | None = None,
+        tool_choice: ToolChoice = "required",
         private_terms: Iterable[str] = (),
         budget: Callable[[], bool] = lambda: True,
         cooldown: Cooldown | None = None,
@@ -150,6 +154,7 @@ class GroqChatModel:
         self._budget = budget
         self._cooldown = cooldown or Cooldown()
         self._transport = transport
+        self._tool_choice: ToolChoice = tool_choice
 
     def __repr__(self) -> str:  # never the key
         return f"GroqChatModel(model={self._model!r})"
@@ -163,7 +168,7 @@ class GroqChatModel:
                 {"role": "user", "content": redact_for_provider(user, self._private_terms)},
             ],
             "tools": tool_definitions(),
-            "tool_choice": "required",
+            "tool_choice": self._tool_choice,
             "temperature": 0,
             "max_completion_tokens": GROQ_MAX_COMPLETION_TOKENS,
             "stream": False,
@@ -189,10 +194,10 @@ class GroqChatModel:
                 payload = response.json()
         except (httpx.HTTPError, ValueError) as exc:
             raise unavailable_from_http(exc) from exc
-        return _choice_from_tool_call(payload)
+        return _choice_from_tool_call(payload, no_call_means_none=self._tool_choice == "auto")
 
 
-def _choice_from_tool_call(payload: Any) -> str:
+def _choice_from_tool_call(payload: Any, *, no_call_means_none: bool = False) -> str:
     """Exactly one function call with JSON-object arguments; anything else is unusable.
 
     Any: the response is an arbitrary JSON document; every field is type-checked here. The
@@ -201,6 +206,8 @@ def _choice_from_tool_call(payload: Any) -> str:
     try:
         message = payload["choices"][0]["message"]
         calls = message.get("tool_calls") or []
+        if not calls and no_call_means_none:  # "auto": the model declined in prose (never read)
+            return json.dumps({"tool": NO_TOOL, "arguments": {}})
         if len(calls) != 1:
             raise InvalidChoiceError(f"{len(calls)} tool calls")
         function = calls[0]["function"]

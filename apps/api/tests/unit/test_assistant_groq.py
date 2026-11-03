@@ -162,6 +162,31 @@ def test_none_function_means_no_tool() -> None:
     assert route.tool is None
 
 
+_PROSE = httpx.Response(
+    200,
+    json={"choices": [{"message": {"content": "I can't help with transfers.", "tool_calls": []}}]},
+)
+
+
+def test_auto_tool_choice_treats_a_prose_refusal_as_none_and_never_reads_it() -> None:
+    recorder = Recorder(_PROSE)
+    route = llm_route(_groq(recorder, tool_choice="auto"), system_prompt(), "move my money")
+    assert route.tool is None and route.arguments == {}
+    assert recorder.body()["tool_choice"] == "auto"
+
+
+def test_required_tool_choice_treats_prose_as_unusable() -> None:
+    with pytest.raises(LLMUnavailableError) as caught:
+        llm_route(_groq(Recorder(_PROSE)), system_prompt(), "move my money")
+    assert caught.value.outcome == "invalid"
+
+
+def test_auto_tool_choice_still_validates_every_call() -> None:
+    recorder = Recorder(_tool_call("transfer_money", '{"amount": 1}'))
+    with pytest.raises(LLMUnavailableError):
+        llm_route(_groq(recorder, tool_choice="auto"), system_prompt(), "hmm")
+
+
 def test_arguments_are_validated_by_the_tool_model() -> None:
     recorder = Recorder(_tool_call("get_recent_transactions", '{"limit": 5}'))
     route = llm_route(_groq(recorder), system_prompt(), "what went out lately")
