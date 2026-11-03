@@ -1,6 +1,7 @@
 """Rule-based categorization of bank transactions into financial insights categories."""
 
 import re
+from functools import lru_cache
 
 CATEGORY_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
@@ -87,6 +88,13 @@ def is_debt_repayment(reference: str | None) -> bool:
     return reference is not None and DEBT_REPAYMENT.search(reference) is not None
 
 
+# A pure function of two short strings, called once per debit on every analytics and
+# recommendation read: references repeat (the same merchants every month), so the regex scan runs
+# once per distinct pair (#343). Bounded, so it cannot grow with untrusted reference text.
+CATEGORY_CACHE_SIZE = 4096
+
+
+@lru_cache(maxsize=CATEGORY_CACHE_SIZE)
 def categorize_transaction(reference: str | None, tx_type: str | None = None) -> str:
     """Determine spending category for a transaction based on reference, merchant and type."""
     if reference:

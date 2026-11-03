@@ -15,6 +15,7 @@ from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
 import structlog
+from pbip_ml.segmentation.contract import CustomerRFMFeatures
 from sqlalchemy.orm import Session
 
 from pbip_api.core.db import utcnow
@@ -23,7 +24,7 @@ from pbip_api.modules.accounts.models import Account
 from pbip_api.modules.accounts.service import mask_account_number
 from pbip_api.modules.analytics import behaviour, projection, repository, unusual
 from pbip_api.modules.analytics.health import compute_financial_health_score
-from pbip_api.modules.analytics.policy import verify_account_ownership
+from pbip_api.modules.analytics.policy import list_owned_accounts, verify_account_ownership
 from pbip_api.modules.analytics.projection import ModelDay
 from pbip_api.modules.analytics.schemas import (
     BalanceForecastPoint,
@@ -320,8 +321,14 @@ def _cash_flow(
     metrics: repository.HealthMetrics,
     now: datetime,
 ) -> CashFlowProfile:
-    months = max(metrics.months_observed, 1)
     rfm = repository.extract_customer_rfm_features(session, customer_id, now, owned)
+    return _cash_flow_profile(metrics, rfm)
+
+
+def _cash_flow_profile(
+    metrics: repository.HealthMetrics, rfm: CustomerRFMFeatures | None
+) -> CashFlowProfile:
+    months = max(metrics.months_observed, 1)
     return CashFlowProfile(
         monthly_income_minor=metrics.income_minor // months,
         monthly_spend_minor=metrics.spend_minor // months,
@@ -337,16 +344,38 @@ def get_cash_flow_profile(
     return _cash_flow(session, customer_id, owned, metrics, now)
 
 
-def get_health_and_cash_flow(
-    session: Session, customer_id: UUID, account_id: UUID, now: datetime
-) -> tuple[FinancialHealthScoreResponse, CashFlowProfile]:
-    """Both of the above from one ownership check and one pass over the entries (#343): the
-    recommendation context needs both, and computing them separately read everything twice."""
-    account, owned, metrics = _health_inputs(session, customer_id, account_id, now)
-    health = compute_financial_health_score(
-        account.id, account.currency, account.available_balance, metrics
+@dataclass(frozen=True)
+class CustomerFinancialProfile:
+    """The customer's accounts, and the health score and cash flow of the first (oldest) one."""
+
+    accounts: list[Account]  # every account the customer holds, oldest first (accounts policy)
+    health: FinancialHealthScoreResponse
+    cash_flow: CashFlowProfile
+
+
+def get_customer_financial_profile(
+    session: Session, customer_id: UUID, now: datetime
+) -> CustomerFinancialProfile | None:
+    """``get_financial_health_score`` and ``get_cash_flow_profile`` of the customer's first account
+    in two queries (#343): the owned accounts, then one pass over their entries. None when the
+    customer holds no account.
+
+    The accounts come from the accounts policy with the authenticated customer id, so the first one
+    is owned without a second ownership query, and their ids are exactly ``owned_account_ids`` (both
+    read ``account_holders`` for the customer, with no other filter).
+    """
+    accounts = list_owned_accounts(session, customer_id)
+    if not accounts:
+        return None
+    primary = accounts[0]
+    owned = {account.id for account in accounts}
+    metrics, rfm = repository.health_and_rfm_of_customer(
+        session, customer_id, primary.id, owned, now
     )
-    return health, _cash_flow(session, customer_id, owned, metrics, now)
+    health = compute_financial_health_score(
+        primary.id, primary.currency, primary.available_balance, metrics
+    )
+    return CustomerFinancialProfile(accounts, health, _cash_flow_profile(metrics, rfm))
 
 
 def get_customer_segment(session: Session, customer_id: UUID) -> CustomerSegmentResponse:
