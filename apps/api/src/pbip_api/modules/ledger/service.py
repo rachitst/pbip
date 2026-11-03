@@ -364,13 +364,15 @@ def pay_out_fixed_deposit(
     currency: str,
     initiated_by_user_id: UUID,
     reference: str,
+    channel: str = "WEB",
 ) -> DepositPayout:
     """Close a deposit (ADR-0025): the principal back from ``SYS-FIXED-DEPOSITS`` (``FD_CLOSURE``)
     and the interest from the bank's clearing account (``FD_INTEREST``), two balanced postings.
 
     ALL THREE accounts are locked in sorted id order before either header is inserted: locking the
     clearing account only for the second posting would take a row lock after the first header's
-    KEY SHARE locks, the order the lock contract forbids.
+    KEY SHARE locks, the order the lock contract forbids. ``channel`` is ``SCHEDULED`` for the
+    automatic maturity payout (ADR-0029).
     """
     if interest < 0:
         raise LedgerInvariantError("interest cannot be negative")
@@ -384,6 +386,7 @@ def pay_out_fixed_deposit(
         credit_account_id=account_id,
         initiated_by_user_id=initiated_by_user_id,
         reference=f"{reference} principal",
+        channel=channel,
     )
     post_transaction(session, returned, transfer_legs(returned))
     if interest == 0:
@@ -397,6 +400,7 @@ def pay_out_fixed_deposit(
         credit_account_id=account_id,
         initiated_by_user_id=initiated_by_user_id,
         reference=f"{reference} interest",
+        channel=channel,
     )
     post_transaction(session, paid, transfer_legs(paid))
     return DepositPayout(returned, paid)

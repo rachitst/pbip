@@ -371,6 +371,9 @@ authenticated customer id.
   `ix_fixed_deposits_product_id`.
 * "Matured" is not stored: it is `ACTIVE` with `maturity_date` on or before today (IST), derived on read like
   loan arrears.
+* `payout_held_at` (0022, ADR-0029): set when the automatic maturity payout found the source account not active
+  (customer notified once), cleared on payout; CHECK `ck_fixed_deposits_payout_held_only_while_open`. Index
+  `ix_fixed_deposits_status_maturity_date` serves the hourly poll.
 
 **`insurance_products`** (0020, TASK-096, ADR-0028)
 * Purpose: the insurance catalogue, seeded by migration 0020 (two term-life and two health plans,
@@ -515,6 +518,7 @@ fire on `TRUNCATE`; no `public` table has a TRUNCATE guard.
 | 0019 | `20261102_0019_assistant_unusual_expenses_tool.py` | Widens the `assistant_messages.tool_name` CHECK for `get_unusual_expenses` (TASK-110); no new table |
 | 0020 | `20261102_0020_insurance_catalogue.py` | `insurance_products` (seeded, ADR-0028); the downgrade drops it (nothing references it) |
 | 0021 | `20261103_0021_rm_assignments.py` | `rm_assignments` (ADR-0032); downgrade drops the table and its assignment history (the changes stay in the audit chain) |
+| 0022 | `20261103_0022_fd_maturity_payout.py` | `fixed_deposits.payout_held_at`, its CHECK and `ix_fixed_deposits_status_maturity_date` (ADR-0029, issue #332). Number set at merge |
 
 Every migration has a downgrade; CI runs up, down, up and `alembic check`. One head is enforced by
 `tests/unit/test_migration_heads.py`.
@@ -756,6 +760,7 @@ ROLLBACK):
 | Apply for loan | user lock; idempotency row; accounts sorted (`disburse_loan` via `create_transaction`); header; entries; then `loans`, `loan_instalments`, `scheduled_transfers` inserts; audit lock | `loans/service.py` `apply_for_loan` |
 | Book fixed deposit | user lock; idempotency row; accounts sorted (customer, `SYS-FIXED-DEPOSITS`) in `book_fixed_deposit`; header; entries; `fixed_deposits` insert; audit lock | `wealth/service.py` `book_fixed_deposit` |
 | Close fixed deposit | user lock; idempotency row; deposit row `FOR UPDATE`; customer, `SYS-FIXED-DEPOSITS` and `SYS-CLEARING` sorted BEFORE both headers (`pay_out_fixed_deposit`); entries; audit lock | `wealth/service.py` `close_fixed_deposit` |
+| Maturity payout (job) | user lock; idempotency row `fd-maturity/{deposit_id}`; deposit row `FOR UPDATE`; the three accounts sorted BEFORE both headers; entries; audit lock. On a non-active account: rollback, then user lock; deposit row `FOR UPDATE`; audit lock | `wealth/maturity_service.py` `pay_out_matured_deposit` |
 | Confirm step-up | user lock; the transfer row `FOR UPDATE`; accounts sorted in `post_transaction`; audit lock | `confirm_step_up` |
 | Step-up escalation | (new transaction after the failure was committed) user lock; transfer row `FOR UPDATE`; debit account for the hold; audit lock | `_escalate_to_review` |
 | Analyst decision | alert row `FOR UPDATE`; transaction row `FOR UPDATE`; RELEASE: accounts sorted then hold row; REJECT: hold row then its account; `bill_payments` row; audit lock. No user lock, no idempotency key | `PaymentsService.review_alert` |
