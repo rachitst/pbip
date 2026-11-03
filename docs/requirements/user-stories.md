@@ -4,7 +4,7 @@
 |---|---|
 | Task | TASK-104 (#187) |
 | Derived from | *PBIP Use Case Document v0.2*, use cases UC-01 to UC-13 and the section 5 scope |
-| Status checked against | `main` at `2e65b87` (1 Nov 2026); the stories changed in batch docs 5 (US-01, US-06, US-08, US-11 to US-16, US-19 to US-21, US-27, US-32 and US-33) against `bae2580` (3 Nov 2026) |
+| Status checked against | `main` at `2e65b87` (1 Nov 2026); the stories changed in batch docs 5 (US-01, US-06, US-08, US-11 to US-16, US-19 to US-21, US-27, US-32 and US-33) against `bae2580` (3 Nov 2026), and in batch docs 6 (US-06, US-18 and US-20) against `fc4279a` (3 Nov 2026) |
 | Related | [Requirements specification](requirements-specification.md) (FR/NFR ids), [traceability](traceability.md) (per-use-case code, tests and gaps) |
 
 Each story has:
@@ -162,6 +162,8 @@ habits.*
 * ✓ The projection includes the known scheduled payments up to the month end, and the customer is warned once a
   month (bell notification) when the month may end within INR 1,000 of zero or of the overdraft limit
   (TASK-043).
+* ✓ An account too new to forecast shows an empty state, not an error: the API returns
+  `INSUFFICIENT_HISTORY` (#406, ADR-0044).
 
 **Status:** Implemented.
 
@@ -174,7 +176,7 @@ habits.*
 * `integration/test_forecast.py::test_forecast_is_labelled_with_intervals_from_the_account_history`;
 * `integration/test_forecast_projection.py` (obligations, threshold, once-a-month alert) and
   `unit/test_balance_projection.py`;
-* `apps/web/src/pages/BalanceForecastSection.test.tsx`.
+* `apps/web/src/pages/BalanceForecastSection.test.tsx` (including the `INSUFFICIENT_HISTORY` empty state, #406).
 
 **Tasks:** TASK-040, TASK-041, TASK-042, TASK-049 (Done); TASK-043, TASK-050 (Done #318).
 
@@ -467,9 +469,11 @@ guessing.*
 * `integration/test_notifications.py`: `test_list_notifications_pagination_and_unread_filtering`,
   `test_bola_cannot_read_or_mark_other_users_notifications`;
 * `integration/test_notification_links.py`;
+* `integration/test_outbox_relay.py` (retries with backoff, dead letters, exactly-once delivery after a worker crash;
+  TASK-026, #393);
 * `apps/web/src/shell/NotificationBell.test.tsx`.
 
-**Tasks:** TASK-018, TASK-022 (Done).
+**Tasks:** TASK-018, TASK-022, TASK-026 (Done #393).
 
 ## UC-06 Loan recommendation
 
@@ -497,7 +501,8 @@ that I only apply for what I can afford.*
 
 **Acceptance criteria:**
 
-* ✓ Eligibility uses my ledger income and existing repayments, with debt-to-income at most 50%.
+* ✓ Eligibility uses my ledger income and existing repayments, with debt-to-income at most 50%. Income counts only
+  credits that recur in 2 of the last 3 months, so a one-off deposit is not income (#404, ADR-0043).
 * ✓ The reasons show the figures.
 * ✓ A recent lockout refuses the check.
 * ✓ Asked about a loan without an amount, the assistant suggests the largest catalogue loan I am eligible for, at
@@ -509,6 +514,8 @@ that I only apply for what I can afford.*
 **Status:** Partial. Catalogue loan suggestions in the recommendations are TASK-054.
 
 **Tests** (`integration/test_loans.py`): `test_eligible_with_explained_figures`,
+`test_a_one_off_opening_deposit_is_not_income_so_no_loan_is_offered`,
+`test_a_salary_paid_in_two_months_is_income_even_with_month_named_references`,
 `test_rejected_when_dti_would_exceed_half_of_income`, `test_rejected_after_a_recent_lockout`;
 `integration/test_assistant.py::test_a_loan_without_an_amount_suggests_the_largest_eligible_one`;
 `apps/web/src/pages/Loans.test.tsx`: "shows the eligibility pre-check with the maximum amount, the rate and the
