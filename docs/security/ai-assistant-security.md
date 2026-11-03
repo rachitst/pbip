@@ -17,6 +17,8 @@ service.run()
   2. guard.check (+ base64 payloads)  money movement · other customers · SQL · privilege/credentials · instruction override
         └─ refusal ──────────────────────────────────────────────────────────────┐
   3. router: llm.llm_route (Ollama, JSON-schema grammar, temperature 0, fixed URL, 4 s timeout)
+        │   optional, LLM_PROVIDER=groq (ADR-0037): Groq function calling FIRST, redacted question only,
+        │   5 s timeout, then Ollama (§6)
         └─ any failure / invalid output ─► fallback.route (deterministic keyword rules)
   4. tools.invoke in a PostgreSQL READ ONLY transaction, ToolContext(customer_id from token)
         └─ same service/policy functions as the REST API (ownership re-checked)
@@ -137,3 +139,22 @@ Invented arguments are the main LLM-path risk on the smaller model. `_grounded` 
 - The conversation store keeps redacted customer text with no retention limit yet. It is deleted with the customer (`ON DELETE CASCADE`).
 - The unusual-expense rule (TASK-110) is a fixed threshold on the customer's own 3-month baseline (1.5x a category's average month, 3x the category's median payment, both at least INR 1,000 more). It does not know seasonality or one-off planned purchases, needs two months of history, and compares a running month with full months (so it only flags what has already gone past the usual level).
 - The adversarial suite proves the cases it lists. It is not exhaustive.
+
+## 6. Optional hosted router: Groq (ADR-0037)
+
+Off by default (`LLM_PROVIDER=ollama`). With `LLM_PROVIDER=groq`, an unclear question goes to Groq first, then
+Ollama, then the keyword rules (`providers.ModelChain`). Everything above still holds; this section lists what
+changes when data leaves the stack.
+
+| Control | Enforcement | Proof (tests) |
+|---|---|---|
+| Only the redacted routing question leaves | `sanitize.redact_for_provider`: UUIDs, 12-19 digit numbers, Indian mobile numbers, emails, JWTs and the signed-in customer's own name removed; system prompt and function schemas are static; no tool results, retrieved text or history (ADR-0018); Groq's `user` field not sent | `test_outgoing_question_has_no_identifiers_or_pii`, `test_groq_routes_the_unclear_question_and_nothing_identifying_leaves`, the adversarial suite's `groq` variant checks every outgoing body |
+| Same registry, same validation | One function per `REGISTRY` tool (same schemas as the Ollama grammar) + `none`, `tool_choice=required`; exactly one call; `parse_choice` + the tool's Pydantic model | `test_functions_are_exactly_the_approved_registry_plus_none`, `test_injected_tool_calls_are_rejected_and_the_chain_falls_back` |
+| Reasoning never surfaces | `include_reasoning: false` (GPT-OSS) / `reasoning_format: hidden`; only `tool_calls` is read | `test_reasoning_text_is_never_requested` |
+| Fail safe, no retry storm | Timeout 5 s, one attempt, 429 cooldown (≤ 60 s, process-wide), per-customer budget failing closed; every failure → Ollama → rules | `test_every_groq_failure_falls_back_to_ollama`, `test_any_groq_failure_falls_back_to_ollama_and_is_audited`, `test_when_both_models_fail_the_rules_still_answer`, `test_a_429_stops_groq_calls_from_this_process_for_a_while`, `test_the_per_customer_groq_budget_sends_the_rest_to_ollama` |
+| Fixed endpoint, secret key | `GROQ_BASE_URL` constant; `GROQ_API_KEY` is a `SecretStr`, only in the `Authorization` header; deployed environments refuse to boot with groq and no key/model | `test_request_goes_to_the_fixed_url_with_the_key_only_in_the_header`, `test_the_key_never_appears_in_errors_repr_or_logs`, `test_production_rejects_unsafe_configuration` |
+| Audit | `assistant.llm_call` per provider attempt: provider, outcome, latency only | `test_groq_routes_the_unclear_question_and_nothing_identifying_leaves` |
+
+Residual risks: the customer can type a third party's name, which is not recognised and may be sent; Groq may keep
+inputs up to 30 days for abuse monitoring unless Zero Data Retention is enabled on the organisation; retained data is
+in the US (ADR-0037 lists the provider terms as read on 2026-11-03). Measured accuracy and latency are in ADR-0037.

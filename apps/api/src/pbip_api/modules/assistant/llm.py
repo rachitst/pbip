@@ -11,7 +11,7 @@ The base URL is fixed configuration (SSRF: never a model- or user-chosen URL).
 
 import json
 from collections.abc import Mapping
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 import httpx
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -28,8 +28,30 @@ NUM_CTX = 1024
 NUM_PREDICT = 64
 
 
+LLMOutcome = Literal["ok", "timeout", "rate_limited", "error", "invalid", "budget", "cooldown"]
+
+
 class LLMUnavailableError(Exception):
-    """Ollama unreachable, too slow, or answered with something unusable. Caller falls back."""
+    """The model is unreachable, too slow, or answered with something unusable. Caller falls back.
+
+    ``outcome`` is a fixed category for the audit trail and metrics; the message is an exception
+    class name or a fixed phrase, never a payload, a URL with credentials or a key.
+    """
+
+    def __init__(self, reason: str, outcome: LLMOutcome = "error") -> None:
+        super().__init__(reason)
+        self.outcome: LLMOutcome = outcome
+
+
+def unavailable_from_http(exc: Exception) -> LLMUnavailableError:
+    """Map an httpx/JSON failure to a categorised, payload-free LLMUnavailableError."""
+    if isinstance(exc, httpx.TimeoutException):
+        return LLMUnavailableError(type(exc).__name__, "timeout")
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429:
+        return LLMUnavailableError("HTTP 429", "rate_limited")
+    if isinstance(exc, httpx.HTTPStatusError):
+        return LLMUnavailableError(f"HTTP {exc.response.status_code}", "error")
+    return LLMUnavailableError(type(exc).__name__, "error")
 
 
 class ChatModel(Protocol):
@@ -40,6 +62,8 @@ class ChatModel(Protocol):
 
 class OllamaChatModel:
     """Minimal client for Ollama's ``POST /api/chat`` with ``format=<json schema>``."""
+
+    provider = "ollama"
 
     def __init__(
         self,
@@ -74,10 +98,10 @@ class OllamaChatModel:
                 response.raise_for_status()
                 payload = response.json()
         except (httpx.HTTPError, ValueError) as exc:
-            raise LLMUnavailableError(type(exc).__name__) from exc
+            raise unavailable_from_http(exc) from exc
         content = payload.get("message", {}).get("content") if isinstance(payload, dict) else None
         if not isinstance(content, str):
-            raise LLMUnavailableError("no message content")
+            raise LLMUnavailableError("no message content", "invalid")
         return content
 
 
@@ -165,4 +189,4 @@ def llm_route(model: ChatModel, system: str, message: str) -> Route:
     try:
         return parse_choice(text)
     except InvalidChoiceError as exc:
-        raise LLMUnavailableError("invalid tool choice") from exc
+        raise LLMUnavailableError("invalid tool choice", "invalid") from exc

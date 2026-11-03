@@ -293,6 +293,35 @@ every row with `scripts/rotate_field_key.py`, then drop the old key.
 **Rollback.** Before step 6, simply restore `FIELD_ENCRYPTION_KEY=<old>,<new>` order or `<old>` alone only if step 5
 was not run; after step 5, rows are under the new key, so the new key must remain in the list.
 
+### 3.3 `GROQ_API_KEY` (optional hosted assistant router, ADR-0037)
+
+**Effect.** Only used when `LLM_PROVIDER=groq`. The key authorises calls to Groq's API, billed to the organisation
+that owns it; it reads nothing from PBIP. Without a valid key every unclear assistant question falls back to Ollama
+and then the keyword rules (audit `assistant.llm_call` outcome `error`), so a bad or revoked key degrades routing,
+never availability. The deployed compose (`infra/deploy/docker-compose.prod.yml`) does not pass `LLM_PROVIDER` or any
+`GROQ_*` variable: enabling Groq on a deployed host is a reviewed change to that file plus the product owner's sign-off
+(data leaves the stack, ADR-0037), and the API then refuses to boot without `GROQ_API_KEY` and `GROQ_MODEL`.
+
+**Handling.**
+- Create the key in the Groq console (API Keys) under an organisation with **Zero Data Retention** enabled in Data
+  Controls. One key per environment; never reuse the demo key for staging/production.
+- Store it only in the host's `.env` (mode 600) or the secret store, as `GROQ_API_KEY=<value>`. Never paste it into a
+  chat, ticket, commit, command line or log. Read it only programmatically (`Settings().groq_api_key`, a `SecretStr`);
+  to check presence, use a script that prints `present`/`absent`, never the value.
+- The application sends it only in the `Authorization` header to the fixed `https://api.groq.com/openai/v1`. Errors
+  and logs carry an outcome category and the exception class, never the key.
+
+**Rotate** (every 90 days, when someone with access leaves, or at once on suspected exposure):
+1. Create a new key in the Groq console.
+2. Replace only that line in `~/pbip/.env`: `GROQ_API_KEY=<new>`, then apply as in §2.3.
+3. Verify: ask the assistant an unclear question (for example "am I doing ok money-wise?") and check that the newest
+   `assistant.llm_call` audit row shows `provider=groq, outcome=ok`.
+4. Revoke the old key in the Groq console. On suspected exposure, revoke it **first** (step 4 before step 2): the
+   assistant keeps answering through Ollama and the rules in the meantime.
+5. Review the Groq console's usage page for calls you cannot account for since the suspected exposure.
+
+**Rollback.** Set `LLM_PROVIDER=ollama` and apply: no Groq calls are made and the key is unused.
+
 ---
 
 ## 4. Database backup and point-in-time recovery
