@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 import pytest
+import yaml
 
 from scripts.dev import (
     ROOT,
@@ -234,3 +235,14 @@ def test_compose_passes_the_fraud_model_budget_to_the_api_and_worker() -> None:
     for service in ("api", "worker"):
         block = compose.split(f"\n  {service}:\n", 1)[1].split("\n\n", 1)[0]
         assert "environment: *api-env" in block, service
+
+
+def test_long_running_compose_services_restart_after_a_reboot() -> None:
+    """Regression (TASK-089 bug bash): db and redis had no restart policy, so after a reboot
+    api/worker/beat/web came back (unless-stopped) into a stack with no database or broker.
+    Every long-running service the API needs must have the same policy; one-shot jobs
+    (migrate) are the only exception."""
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    services = compose["services"]
+    for name in ("db", "redis", "api", "worker", "beat", "web"):
+        assert services[name].get("restart") == "unless-stopped", name

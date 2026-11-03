@@ -232,6 +232,17 @@ still over 15 s on this 2-core laptop (GitHub issue #135, not part of these task
 **Copy-paste checklist (Windows 10/11, PowerShell; Docker Desktop running).** Paste the output of steps 0-8 into
 GitHub issues #12 (TASK-001), #23 (TASK-012) and #24 (TASK-013).
 
+**Second checkout on the same machine (GitHub issue #371).** `docker-compose.yml` names the project `pbip`, so every
+checkout shares the `pbip_pgdata` volume, which keeps the `POSTGRES_PASSWORD` of the checkout that created it. A fresh
+clone's newly generated `.env` password is then rejected and step 4's `migrate` fails with `password authentication
+failed for user "pbip"`. Give the second clone its own project, and so its own volumes, by adding one line to **its**
+`.env` after step 2: `COMPOSE_PROJECT_NAME=pbip-wincheck`. Compose reads `COMPOSE_PROJECT_NAME` from the `.env` next to
+`docker-compose.yml` and it takes precedence over the file's `name:` (only `-p` ranks higher); check it with
+`docker compose config | Select-String "name: pbip"`, which must list `pbip-wincheck_pgdata` (it only prints the
+resolved configuration and starts nothing). The ports are fixed (5432, 6379, ...), so stop the first checkout's stack before step 4
+(`.\dev.ps1 infra-down` there; this keeps its data). Do not `docker compose down -v` to "make room": that deletes the
+first checkout's database. Leave `name: pbip` in the file as it is: changing it would orphan existing volumes.
+
 ```powershell
 # 0. Environment (record it)
 [System.Environment]::OSVersion.VersionString; python --version; uv --version; node --version; git --version
@@ -324,7 +335,7 @@ Postgres (port 5432) and Redis (port 6379) will start in detached background con
 with `APP_ENV=local`, the `DEMO_PASSWORD` constant in `scripts/seed_dev.py`. Any other `APP_ENV` must set the
 variable (the CI E2E job generates one per run, see `docs/testing/e2e.md`). Existing users are skipped, so the
 password of an already-seeded database does not change.
-- Retail customer: `alice@demo.pbip` / `bob@demo.pbip`
+- Retail customers: `alice@demo.pbip` (authenticator enrolled, for the step-up dialog; code: `uv run python scripts/totp.py alice@demo.pbip`), `bob@demo.pbip` and `carol@demo.pbip` (no authenticator: the fraud demo lab signs in as Carol, F6 sender Bob)
 - Bank staff (analyst): `analyst@demo.pbip`
 - Admin: `admin@demo.pbip`
 - Relationship manager: `rm@demo.pbip` (RM insights page, TASK-066)
@@ -411,6 +422,21 @@ curl -s http://localhost:11434/api/tags            # the model is listed
   The first call after a load took 3-5 minutes on the reference laptop. Pre-warm before a demo:
   `ollama run qwen2.5:1.5b-instruct ""`.
 * Try it: `POST /api/v1/assistant/chat` with `{"message": "what's my balance?"}` in Swagger (`/docs`).
+
+### AI assistant: optional Groq router (demo only, ADR-0037)
+On slow hardware the local model rarely answers within its timeout. For a demo the owner can route
+**unclear** questions through Groq's hosted API instead (clear questions and refusals still never call
+any model). Off by default; it sends the redacted question (no ids, account numbers, emails, phone
+numbers or your name) to a US-hosted provider, so use it only where the owner approved that.
+
+* In `.env`: `LLM_PROVIDER=groq`, `GROQ_API_KEY=<from console.groq.com/keys>` (never commit or paste it
+  anywhere), `GROQ_MODEL` and `GROQ_REASONING_EFFORT` as chosen in ADR-0037. Then restart the API
+  (`docker compose up -d api` or `make dev-api`).
+* Order: Groq, then Ollama, then the keyword rules; a timeout (5 s), 429 or bad answer from Groq just
+  moves to the next step. Each customer gets `RATE_LIMIT_GROQ_PER_MINUTE` (default 5) Groq calls a minute.
+* Check: an unclear question ("am I doing ok money-wise?") answers with `engine: llm`; the audit log has an
+  `assistant.llm_call` row with `provider=groq`.
+* Key handling and rotation: `docs/operations/runbook.md` section 3.3.
 
 ### MLflow only (ML work without the whole stack)
 ```bash

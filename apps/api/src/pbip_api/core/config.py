@@ -88,6 +88,18 @@ class Settings(BaseSettings):
     # How long Ollama keeps the model in memory after a question (Ollama duration syntax).
     ollama_keep_alive: str = Field(default="24h", pattern=r"^-?[0-9]{1,5}[smh]?$")
     assistant_llm_enabled: bool = True
+    # Which model routes unclear assistant questions (ADR-0037). "groq" sends the redacted routing
+    # question to Groq's hosted API first, then falls back to Ollama, then to the rules. The Groq
+    # base URL is a constant in code (SSRF); only the key, model and limits are configuration.
+    llm_provider: Literal["ollama", "groq"] = "ollama"
+    groq_api_key: SecretStr = SecretStr("")
+    # Empty = not chosen. Set from Groq's current model list after the benchmark (ADR-0037).
+    groq_model: str = Field(default="", pattern=r"^[A-Za-z0-9._:/-]{0,100}$")
+    groq_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
+    # None = the model's default (sent as nothing). GPT-OSS accepts low|medium|high only.
+    groq_reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
+    # Groq calls per customer per minute; above it the question goes to Ollama, not to Groq.
+    rate_limit_groq_per_minute: int = Field(default=5, ge=1, le=600)
 
     # Fraud scoring (ADR-0019). "rules" = baseline rules only. "hybrid" adds the trained models
     # from FRAUD_MODEL_DIR (operator-controlled; it holds a pickle) with the rules as a floor.
@@ -109,7 +121,14 @@ class Settings(BaseSettings):
     internal_bank_code: str = "PBIP0001"
     max_transfer_minor: int = 20_000_000  # 2,00,000.00 per transfer
     daily_transfer_limit_minor: int = 50_000_000  # 5,00,000.00 per customer per UTC day
-    idempotency_ttl_hours: int = 24
+    # A key replays its answer for this long, then counts as unused and is purged (ADR-0036).
+    idempotency_ttl_hours: int = Field(default=24, ge=1, le=720)
+    idempotency_purge_batch_size: int = Field(default=1000, ge=1, le=10_000)
+    # An unanswered step-up is declined after this many minutes (ADR-0036): long enough to fetch a
+    # phone and open an authenticator, short enough that a stale fraud decision is not completed
+    # hours later and an abandoned transfer stops counting against the day's limit.
+    step_up_expiry_minutes: int = Field(default=15, ge=1, le=1440)
+    step_up_expiry_batch_size: int = Field(default=200, ge=1, le=1000)
     scheduled_transfers_batch_size: int = Field(default=100, ge=1, le=1000)
     # Matured fixed deposits paid out per hourly run (ADR-0029).
     fd_maturity_payout_batch_size: int = Field(default=100, ge=1, le=1000)
@@ -118,6 +137,12 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:5173,http://localhost:8080"
     cookie_secure: bool = False
+
+    @field_validator("groq_reasoning_effort", mode="before")
+    @classmethod
+    def _empty_effort_is_default(cls, value: object) -> object:
+        """``GROQ_REASONING_EFFORT=`` (as in .env.example and compose) means the model default."""
+        return None if value == "" else value
 
     @property
     def cors_origin_list(self) -> list[str]:
@@ -161,6 +186,10 @@ class Settings(BaseSettings):
             problems.append("COOKIE_SECURE must be true")
         if "*" in self.cors_origin_list:
             problems.append("CORS_ORIGINS must not contain a wildcard")
+        if self.llm_provider == "groq" and not self.groq_api_key.get_secret_value():
+            problems.append("GROQ_API_KEY must be set when LLM_PROVIDER=groq")
+        if self.llm_provider == "groq" and not self.groq_model:
+            problems.append("GROQ_MODEL must be set when LLM_PROVIDER=groq")
         if self.otel_enabled and self.otel_exporter == "memory":
             problems.append("OTEL_EXPORTER=memory keeps every span in memory (tests only)")
         if problems:

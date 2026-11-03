@@ -281,6 +281,7 @@ class BillsService:
     def _begin_idempotent(
         self, user_id: UUID, key: str, request_hash: str
     ) -> tuple[UUID, BillPaymentResult | None]:
+        ledger.discard_expired_idempotency_key(self.session, user_id, key)
         statement = (
             pg_insert(IdempotencyKey)
             .values(

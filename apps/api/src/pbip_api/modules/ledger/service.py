@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.orm import Session
 
 from pbip_api.core.db import utcnow
@@ -27,6 +27,7 @@ from pbip_api.modules.ledger.models import (
     EntryDirection,
     Hold,
     HoldStatus,
+    IdempotencyKey,
     Transaction,
     TransactionEntry,
     TransactionStatus,
@@ -550,3 +551,82 @@ def balance_before(session: Session, account_id: UUID, moment: datetime) -> int:
         .limit(1)
     ).scalar_one_or_none()
     return int(value) if value is not None else 0
+
+
+# ------------------------------------------------------------------------- idempotency keys
+# The keys live with the ledger because they make its postings exactly-once (ADR-0003). A key is
+# answered for ``IDEMPOTENCY_TTL_HOURS`` after its first use and is unknown afterwards (ADR-0036).
+
+
+def discard_expired_idempotency_key(session: Session, user_id: UUID, key: str) -> None:
+    """Forget this user's key if it has expired, so the caller's claim treats it as unused.
+
+    Called by every ``_begin_idempotent`` AFTER the per-user advisory lock, so no other request
+    of this user can be reading or claiming the same key meanwhile."""
+    session.execute(
+        delete(IdempotencyKey).where(
+            IdempotencyKey.user_id == user_id,
+            IdempotencyKey.key == key,
+            IdempotencyKey.expires_at <= utcnow(),
+        )
+    )
+
+
+def purge_expired_idempotency_keys(session: Session, now: datetime, limit: int) -> int:
+    """Delete up to ``limit`` expired keys and return how many; the caller commits.
+
+    ``SKIP LOCKED``: a row a live request is discarding (under its user lock) is left for the
+    next run instead of blocking it. Deleting a key never touches the transaction it answered."""
+    expired = (
+        select(IdempotencyKey.id)
+        .where(IdempotencyKey.expires_at <= now)
+        .order_by(IdempotencyKey.expires_at)
+        .limit(limit)
+        .with_for_update(skip_locked=True)
+        .scalar_subquery()
+    )
+    result = session.execute(
+        delete(IdempotencyKey).where(IdempotencyKey.id.in_(expired)).returning(IdempotencyKey.id)
+    )
+    return len(result.all())
+
+
+# Customer-initiated outgoing payments: the population the fraud scorer sees (transfers, scheduled
+# transfers and bill payments). INITIATED never survives a commit, so every stored row was scored.
+SCORED_PAYMENT_TYPES = (TransactionType.TRANSFER, TransactionType.BILL_PAYMENT)
+
+
+@dataclass(frozen=True, slots=True)
+class PaymentObservation:
+    """One scored outgoing payment, reduced to what drift monitoring needs (no reference text)."""
+
+    amount: int
+    debit_account_id: UUID
+    created_at: datetime
+
+
+def scored_payments_between(
+    session: Session, start: datetime, end: datetime
+) -> list[PaymentObservation]:
+    """Read-only: every scored outgoing payment created in ``[start, end)``, oldest first.
+
+    Feeds the PSI drift job (ADR-0038). Every outcome counts (posted, declined, held, reversed):
+    the scorer saw all of them, so all of them are its input distribution. Plain columns, no ORM
+    entities hydrated; an hourly background read, never on a request.
+    """
+    stmt = (
+        select(Transaction.amount, Transaction.debit_account_id, Transaction.created_at)
+        .where(
+            Transaction.type.in_(SCORED_PAYMENT_TYPES),
+            Transaction.status != TransactionStatus.INITIATED,
+            Transaction.debit_account_id.is_not(None),
+            Transaction.created_at >= start,
+            Transaction.created_at < end,
+        )
+        .order_by(Transaction.created_at.asc(), Transaction.id.asc())
+    )
+    return [
+        PaymentObservation(int(amount), account_id, created_at)
+        for amount, account_id, created_at in session.execute(stmt).all()
+        if account_id is not None  # already filtered in SQL; narrows the type
+    ]

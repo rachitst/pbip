@@ -59,6 +59,25 @@ def consume(redis_client: Redis, name: str, subject: str, limit: int, window_sec
         )
 
 
+def within_budget(
+    redis_client: Redis, name: str, subject: str, limit: int, window_seconds: int
+) -> bool:
+    """Count one call and say whether it is within ``limit``; never raises.
+
+    Unlike :func:`consume` this fails CLOSED: it guards optional calls that cost money or send
+    data out of the stack (the external LLM, ADR-0037), where skipping the call is always safe.
+    """
+    key = rate_limit_key(name, subject)
+    try:
+        count = int(redis_client.incr(key))
+        if count == 1:
+            redis_client.expire(key, window_seconds)
+    except RedisError as exc:
+        _logger.warning("rate_limit_unavailable", name=name, error_type=type(exc).__name__)
+        return False
+    return count <= limit
+
+
 def rate_limit(
     name: str, limit: Callable[[Settings], int], window_seconds: int
 ) -> Callable[..., None]:
