@@ -132,3 +132,13 @@ def test_fraud_dashboard_plots_feature_psi_with_both_thresholds() -> None:
     assert panel["targets"][0]["legendFormat"] == "{{feature}}"
     ids = [p["id"] for p in board["panels"]]
     assert len(ids) == len(set(ids))
+
+
+def test_no_panel_or_alert_drops_the_worker_series() -> None:
+    """Issue #378 / ADR-0039: worker activity (scheduled transfers and the payments and scoring they
+    run) is exported as extra ``source="worker"`` series of the same families; a query that filters
+    on ``source`` would silently hide it again."""
+    exprs = [expr for _, _, expr in _dashboard_exprs()]
+    rules = yaml.safe_load(ALERTS.read_text(encoding="utf-8"))
+    exprs += [rule["expr"] for group in rules["groups"] for rule in group["rules"]]
+    assert not [e for e in exprs if re.search(r"\bsource\s*(=|!=|=~|!~)", e)]

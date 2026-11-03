@@ -70,6 +70,12 @@ class FakeRedis:
             raise RedisConnectionError("redis down")
         return None
 
+    def hgetall(self, _key: str) -> dict[str, str]:
+        """Empty store: ``/metrics`` reads the worker's stored metric totals (ADR-0039)."""
+        if not self.healthy:
+            raise RedisConnectionError("redis down")
+        return {}
+
 
 def build_app(db_ok: bool = True, redis_ok: bool = True, **overrides: Any) -> FastAPI:
     app = create_app(Settings(app_env="local", **overrides))

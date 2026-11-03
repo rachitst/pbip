@@ -66,6 +66,15 @@ runs only when the repository variable `DEPLOY_ENABLED` is `true` and uses the s
 - Metrics: `/metrics` on the API container (not proxied by nginx, which returns 404 for it). Monitoring stack:
   `docker compose --profile monitoring up -d` (`make up-all`); see §1.5 for dashboards, alerts, availability and
   error tracking.
+- Worker metrics (ADR-0039): the Celery worker has no metrics endpoint. After every task it adds its counter and
+  histogram increments to the Redis hash `pbip:metrics:worker:v1`, and the API's `/metrics` exports them with
+  `source="worker"` (scheduled transfers, FD maturity payouts, and the payments and fraud scoring those jobs run).
+  Dashboards that `sum` a family include them automatically. A failed publish never fails the task: the increments
+  are kept and sent after a later task once Redis is back; meanwhile `/metrics` has no `source="worker"` series. Losing Redis data (a
+  `FLUSHALL`, a volume reset) restarts these counters from zero, which Prometheus treats as a normal counter reset,
+  so there is no reason to delete the key to "clear" them. If the API logs `worker_metrics_invalid_series` or
+  `worker_metrics_too_many_series`, someone wrote to the key by hand: inspect it with `HGETALL`, then delete it
+  (counters restart from zero).
 - Audit trail: `GET /api/v1/compliance/audit-logs` and `GET /api/v1/compliance/audit-logs/verify` (compliance officer
   or admin, MFA session) — the verify endpoint recomputes the hash chain.
 
