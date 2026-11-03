@@ -111,6 +111,8 @@ class User(Base):
 
 class UserRole(Base):
     __tablename__ = "user_roles"
+    # The PK leads with user_id; deleting or renaming a role needs this FK index (#315).
+    __table_args__ = (Index("ix_user_roles_role_name", "role_name"),)
 
     user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
@@ -123,6 +125,8 @@ class RefreshToken(Base):
     __table_args__ = (
         Index("ix_refresh_tokens_family_id", "family_id"),
         Index("ix_refresh_tokens_user_id", "user_id"),  # revoke-all-sessions; FK index (TASK-079)
+        # The methods a session was issued with: password, or password then TOTP (auth/service.py).
+        CheckConstraint("amr IN ('pwd', 'pwd,otp')", name="amr_valid"),
     )
 
     id: Mapped[UUID] = uuid_pk()
@@ -159,6 +163,8 @@ class SecurityEvent(Base):
 
     __tablename__ = "security_events"
     __table_args__ = (
+        # Append-only is enforced by the ``security_events_immutable`` trigger (migration 0027).
+        in_check("event_type", SecurityEventType, "event_type_valid"),
         Index("ix_security_events_user_id_created_at", "user_id", "created_at"),
         Index("ix_security_events_event_type_created_at", "event_type", "created_at"),
     )

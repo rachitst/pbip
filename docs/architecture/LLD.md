@@ -27,8 +27,8 @@ purpose, ownership, indexes, trigger behaviour and the rules the code follows on
 | Primary keys | `api/core/db.py` (`uuid_pk`) | `UUID`, `server_default gen_random_uuid()`. Exceptions: `roles` (PK `name`), `user_roles` and `account_holders` (composite PKs), `clickstream_events` (PK `(id, event_timestamp)`, required by partitioning) |
 | Money | AGENTS.md section 4, `api/core/money.py` | `BIGINT` integer minor units (paise). No `float` or `numeric` money column exists. `Float` appears only on non-money columns (`fraud_events.latency_ms`, `customer_segments` ratios) |
 | Timestamps | `api/core/db.py` (`created_at_col`, `utcnow`) | `timestamptz`, `server_default now()` |
-| Enumerations | `api/core/db.py` (`str_enum`, `in_check`) | Stored as `VARCHAR` (`native_enum=False`), constrained by a CHECK `col IN (...)` generated from the Python `StrEnum`. Three enum-valued columns have no CHECK (section 3.15) |
-| Constraint names | `api/core/db.py` (`NAMING_CONVENTION`) | `pk_<table>`, `fk_<table>_<col>_<referred>`, `uq_<table>_<cols>`, `ix_<table>_<cols>`, `ck_<table>_<name>`. Migrations `0002` to `0004` pass already prefixed CHECK names, so the database holds double-prefixed names (section 3.15). The real names are the ones in `er-diagram.md` |
+| Enumerations | `api/core/db.py` (`str_enum`, `in_check`) | Stored as `VARCHAR` (`native_enum=False`), constrained by a CHECK `col IN (...)` generated from the Python `StrEnum`. Every enum-valued column has one (the last three were added in `0027`, section 3.15) |
+| Constraint names | `api/core/db.py` (`NAMING_CONVENTION`) | `pk_<table>`, `fk_<table>_<col>_<referred>`, `uq_<table>_<cols>`, `ix_<table>_<cols>`, `ck_<table>_<name>`. Migrations `0002` to `0004` passed already prefixed CHECK names, which `0027` renamed to the convention (section 3.15). The real names are the ones in `er-diagram.md` |
 | `ON DELETE` | migrations | When a migration does not set it, PostgreSQL uses `NO ACTION` (the row cannot be deleted while referenced). This document writes that as `NO ACTION` |
 | Model registry | `api/modules/__init__.py`, `apps/api/alembic/env.py` | Every `models.py` is imported in both, so Celery and scripts resolve cross-module FKs (regression-tested, see AGENTS.md section 2) |
 
@@ -108,7 +108,7 @@ triggers.
 * FKs: none. Triggers: none.
 
 **`user_roles`** (0001). PK `(user_id, role_name)`. FKs: `user_id -> users` `CASCADE`; `role_name -> roles`
-`NO ACTION`. No CHECKs, no extra indexes.
+`NO ACTION`. No CHECKs. Index `ix_user_roles_role_name` (0027, FK index).
 
 **`refresh_tokens`** (0001, 0012)
 * Key columns: `family_id` (all rotations of one login), `token_hash` (SHA-256, never the token), `amr`,
@@ -116,17 +116,21 @@ triggers.
 * FK: `user_id -> users` `CASCADE`.
 * Unique: `uq_refresh_tokens_token_hash`. Indexes: `ix_refresh_tokens_family_id`, `ix_refresh_tokens_user_id`
   (0012, revoke-all on password change).
+* CHECK: `ck_refresh_tokens_amr_valid` `amr IN ('pwd','pwd,otp')` (0027).
 * Reuse detection and rotation live in `api/modules/auth/service.py`
   ([ADR-0004](../adr/0004-refresh-rotation-cookie.md)).
 
 **`mfa_recovery_codes`** (0001). `code_hash`, `used_at`. FK `user_id -> users` `CASCADE`. Index
 `ix_mfa_recovery_codes_user_id`.
 
-**`security_events`** (0001, 0012 unchanged)
+**`security_events`** (0001, CHECK and trigger added in 0027)
 * Key columns: `event_type VARCHAR(48)`, `ip`, `user_agent`, `request_id`, `details JSONB`.
-* FK: `user_id -> users` `SET NULL` (telemetry survives the user).
+* FK: `user_id -> users` `SET NULL`. With the append-only trigger the `SET NULL` cannot run, so deleting a user
+  who has security events fails; users are disabled, never deleted.
 * Indexes: `ix_security_events_user_id_created_at`, `ix_security_events_event_type_created_at`.
-* No CHECK on `event_type` and no immutability trigger (section 3.15). The step-up failure counter reads this
+* CHECK: `ck_security_events_event_type_valid` (the 16 `SecurityEventType` values).
+* Trigger: `security_events_immutable` `BEFORE UPDATE OR DELETE ... pbip_forbid_mutation()` (append-only, as
+  for `transaction_entries` and `audit_logs`; TRUNCATE in test clean-up is not a row operation). The step-up failure counter reads this
   table: `PaymentsService._step_up_failures` counts `STEP_UP_FAILURE` rows whose `details.subject` is the
   transaction id.
 
@@ -198,7 +202,7 @@ authenticated customer id.
   * `ck_transactions_status_valid` `status IN ('INITIATED','PENDING_STEP_UP','PENDING_REVIEW','POSTED','DECLINED','REVERSED')`
   * `ck_transactions_amount_positive` `amount > 0`
 * Indexes: `ix_transactions_initiated_by_user_id_created_at` (daily limit, customer history),
-  `ix_transactions_debit_account_id_created_at`, `ix_transactions_status`, `ix_transactions_payee_id` (0012).
+  `ix_transactions_debit_account_id_created_at`, `ix_transactions_status`, `ix_transactions_payee_id` (0012), `ix_transactions_reversal_of_id` (0027).
 * Lifecycle: [section 4.1](#41-transfer-lifecycle-transactionsstatus).
 
 **`transaction_entries`** (0001, index added in 0005)
@@ -237,7 +241,8 @@ authenticated customer id.
 * Purpose: exactly-once execution of money-moving POSTs ([ADR-0003](../adr/0003-idempotency-in-postgresql.md)).
 * Key columns: `key VARCHAR(255)`, `request_hash` (SHA-256 of a canonical JSON of the request, user included),
   `response_status`, `response_body JSONB`, `transaction_id`, `expires_at`.
-* FKs `user_id -> users`, `transaction_id -> transactions`, both `NO ACTION`.
+* FKs `user_id -> users`, `transaction_id -> transactions`, both `NO ACTION`. Index
+  `ix_idempotency_keys_transaction_id` (0027).
 * Unique: `uq_idempotency_keys_user_key (user_id, key)`. This constraint is what makes retries and concurrent
   duplicates safe.
 * Shared by four use cases, each with its own request hash, so a key reused across endpoints is a 422, never a
@@ -258,7 +263,7 @@ authenticated customer id.
   `pbip_ml.fraud.contract.FraudDecision`), `reasons JSONB`, `features JSONB` (the feature snapshot),
   `model_version`, `latency_ms`.
 * FKs `transaction_id -> transactions`, `customer_id -> customers`, both `NO ACTION`.
-* No CHECK on `decision` (section 3.15).
+* CHECK: `ck_fraud_events_decision_valid` `decision IN ('ALLOW','STEP_UP','REVIEW','BLOCK')` (0027).
 * Indexes: `ix_fraud_events_transaction_id`, `ix_fraud_events_decision_created_at`,
   `ix_fraud_events_customer_id_created_at` (0012, read on every scored payment).
 
@@ -271,7 +276,8 @@ authenticated customer id.
   `transaction_id -> transactions`, `assigned_to_user_id -> users`.
 * CHECK: `ck_fraud_alerts_status_valid` `status IN ('OPEN','CONFIRMED_FRAUD','FALSE_POSITIVE')`;
   `ck_fraud_alerts_severity_valid` `severity IN ('MEDIUM','HIGH')`.
-* Indexes: `ix_fraud_alerts_status_created_at` (queue), `ix_fraud_alerts_transaction_id` (0013).
+* Indexes: `ix_fraud_alerts_status_created_at` (queue), `ix_fraud_alerts_transaction_id` (0013),
+  `ix_fraud_alerts_assigned_to_user_id` (0027).
 * Lifecycle: [section 4.3](#43-fraud-alert-review-flow-fraud_alertsstatus).
 
 ### 3.6 Bill payments (`api/modules/bills/models.py`, TASK-014)
@@ -288,7 +294,8 @@ authenticated customer id.
   `transaction_id -> transactions` (unique: one bill payment per ledger transaction).
 * CHECK: `ck_bill_payments_status_valid` `status IN ('POSTED','PENDING_REVIEW','DECLINED','REVERSED')` (0010
   added `PENDING_REVIEW`); `ck_bill_payments_amount_positive`.
-* Indexes: `ix_bill_payments_biller_id`, `ix_bill_payments_customer_id_created_at`.
+* Indexes: `ix_bill_payments_biller_id`, `ix_bill_payments_customer_id_created_at`, `ix_bill_payments_account_id`
+  (0027).
 * The ledger side is a `transactions` row of type `BILL_PAYMENT` that debits the customer and credits
   `SYS-CLEARING` (`BillsService.pay_bill`). Lifecycle: [section 4.4](#44-bill-payment-status).
 
@@ -548,31 +555,32 @@ fire on `TRUNCATE`; no `public` table has a TRUNCATE guard.
 | 0022 | `20261103_0022_fd_maturity_payout.py` | `fixed_deposits.payout_held_at`, its CHECK and `ix_fixed_deposits_status_maturity_date` (ADR-0029, issue #332). Number set at merge |
 | 0023 | `20261103_0023_runtime_settings.py` | `runtime_settings` (TASK-108, ADR-0031). Its downgrade drops any overrides; the environment values apply again |
 | 0024 | `20261102_0024_assistant_discovery_tools.py` | Widens the `assistant_messages.tool_name` CHECK for `get_faq_answer`, `list_products` and `get_investment_suggestions` (TASK-105); its downgrade clears only those names; no new table |
+| 0027 | `20261103_0027_schema_hygiene.py` | CHECKs on `security_events.event_type`, `fraud_events.decision`, `refresh_tokens.amr` (the upgrade stops if existing rows violate one); `security_events_immutable` trigger; five FK indexes; renames the double-prefixed CHECKs of 0002 to 0004 (issue #315) |
 
 Every migration has a downgrade; CI runs up, down, up and `alembic check`. One head is enforced by
 `tests/unit/test_migration_heads.py`.
 
 ### 3.15 Schema observations
 
-Facts found while writing this reference. None is changed by this PR.
+Facts found while writing this reference. Items 1, 2, 4 and 5 were fixed by migration `0027` (issue #315).
 
-1. **Enum columns without a CHECK.** `security_events.event_type` (the model now has 16 values, including
+1. **Enum columns without a CHECK (fixed in 0027).** `security_events.event_type` (the model now has 16 values, including
    `ACCOUNT_UNLOCKED` and `PASSWORD_CHANGED`, which were added without a migration because no CHECK exists),
    `fraud_events.decision` and `refresh_tokens.amr` are free `VARCHAR` in the database.
-2. **`security_events` is not append-only in the database.** The model docstring says "append-only", but only
-   `transaction_entries` and `audit_logs` have the immutability trigger.
+2. **`security_events` was not append-only in the database (fixed in 0027).** The model docstring said
+   "append-only", but only `transaction_entries` and `audit_logs` had the immutability trigger.
 3. **Balance columns are guarded by code, not by a trigger.** Only `ck_accounts_available_non_negative` and
    `ck_accounts_held_non_negative` constrain `accounts`; that only `ledger/service.py` writes them is a rule
    enforced by review (AGENTS.md section 4).
-4. **Foreign keys without a supporting index** (no index whose leading column is the FK column in 0001 to 0016,
+4. **Foreign keys without a supporting index (fixed: 0025 and 0027; a test now fails on any new one)** (no index whose leading column is the FK column in 0001 to 0016,
    although AGENTS.md section 6 asks for one): `transactions.credit_account_id`, `transactions.reversal_of_id`,
    `idempotency_keys.transaction_id`, `fraud_alerts.assigned_to_user_id`, `bill_payments.account_id`,
    `user_roles.role_name`.
-5. **Double-prefixed constraint names.** Migrations `0002`, `0003` and `0004` name their CHECKs `ck_<table>_<name>`
+5. **Double-prefixed constraint names (renamed in 0027).** Migrations `0002`, `0003` and `0004` name their CHECKs `ck_<table>_<name>`
    and the naming convention prefixes them again, so the catalogue holds, for example,
    `ck_customers_ck_customers_persona_valid`, and names longer than 63 characters are truncated with a hash
-   suffix (e.g. `ck_customer_segments_ck_customer_segments_confidence_sc_d5bb`). Behaviour is unaffected; use the
-   names in `er-diagram.md` when writing a migration that drops one.
+   suffix (e.g. `ck_customer_segments_ck_customer_segments_confidence_sc_d5bb`). Behaviour was unaffected; `0027`
+   renamed them to `ck_<table>_<name>`. Use the names in `er-diagram.md` when writing a migration that drops one.
 6. **`idempotency_keys.expires_at` is enforced (issue #314, ADR-0036).** A key past it counts as unused: every `_begin_idempotent` discards the caller's expired row under the user lock before claiming, and the daily job `pbip.ledger.purge_expired_idempotency_keys` deletes expired rows (index `ix_idempotency_keys_expires_at`, migration `0026`).
 
 ---

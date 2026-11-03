@@ -71,6 +71,7 @@ class Transaction(Base):
         Index("ix_transactions_credit_account_id_created_at", "credit_account_id", "created_at"),
         Index("ix_transactions_status", "status"),
         Index("ix_transactions_payee_id", "payee_id"),  # payee deletion check; FK index (TASK-079)
+        Index("ix_transactions_reversal_of_id", "reversal_of_id"),  # FK index (#315)
     )
 
     id: Mapped[UUID] = uuid_pk()
@@ -144,6 +145,7 @@ class IdempotencyKey(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "key", name="uq_idempotency_keys_user_key"),
         Index("ix_idempotency_keys_expires_at", "expires_at"),  # the daily purge (ADR-0036)
+        Index("ix_idempotency_keys_transaction_id", "transaction_id"),  # FK index (#315)
     )
 
     id: Mapped[UUID] = uuid_pk()
