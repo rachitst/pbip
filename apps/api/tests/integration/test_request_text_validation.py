@@ -76,6 +76,6 @@ def test_fraud_decision_note_with_nul_is_rejected(
         client,
         f"/api/v1/fraud/alerts/{uuid4()}/decision",
         {"action": "RELEASE", "note": "ok\x00"},
-        analyst.headers,
+        {**analyst.headers, "Idempotency-Key": f"nul-note-{uuid4().hex}"},
     )
     assert resp.status_code == 422, resp.text  # validation runs before the 404 lookup

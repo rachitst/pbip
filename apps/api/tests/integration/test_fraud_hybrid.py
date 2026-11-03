@@ -168,7 +168,7 @@ def test_hybrid_step_up_requires_the_customers_totp(
     assert pending.status_code == 202 and pending.json()["status"] == "PENDING_STEP_UP"
     done = client.post(
         f"/api/v1/transfers/{pending.json()['id']}/step-up",
-        headers=alice.headers,
+        headers={**alice.headers, "Idempotency-Key": f"step-up-{pending.json()['id']}"},
         json={"code": totp_code(secret, clock)},
     )
     assert done.status_code == 200 and done.json()["status"] == "POSTED"
@@ -238,7 +238,7 @@ def test_any_model_problem_falls_back_to_the_rules_never_allow_all(
         gate.set()  # release the slow call's worker thread
     assert response.json()["status"] == "PENDING_REVIEW"  # still caught, by the rules
     event = event_for(db, response.json()["id"])
-    assert event.model_version == "baseline-rules-0.4+rules-only"
+    assert event.model_version == "baseline-rules-0.5+rules-only"
     assert "MODEL_UNAVAILABLE" in {r["code"] for r in event.reasons}
     expected = {"missing": "NOT_LOADED", "raises": "RuntimeError", "too_slow": "TIMEOUT"}
     assert event.features["model_error"] == expected[problem]

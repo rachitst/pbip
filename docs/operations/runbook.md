@@ -537,7 +537,8 @@ above the daily norm; the alert queue (`GET /api/v1/fraud/alerts`) growing faste
 2. Classify: (a) a few customers with many alerts → compromised accounts or mules; (b) many customers, one rule → a
    rule misfiring or a legitimate event (payday, a bill-pay batch); (c) one destination account/payee receiving from
    many → mule collection account.
-3. Decide alerts individually with `POST /api/v1/fraud/alerts/{id}/decision` (`RELEASE` or `REJECT`). Held
+3. Decide alerts individually with `POST /api/v1/fraud/alerts/{id}/decision` (`RELEASE` or `REJECT`, with an
+   `Idempotency-Key` header; a retry with the same key replays the 204, a new key on a resolved alert is a 409). Held
    transfers stay held while in review; a `REJECT` declines and releases the hold.
 
 **Contain (platform owner).**

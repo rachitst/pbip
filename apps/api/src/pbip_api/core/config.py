@@ -107,12 +107,26 @@ class Settings(BaseSettings):
     fraud_scorer: Literal["rules", "hybrid"] = "rules"
     fraud_model_dir: str | None = Field(default=None, max_length=500)
     fraud_model_budget_ms: int = Field(default=50, ge=5, le=90)
+    # MULE_PASS_THROUGH (#144, ADR-0035): inbound transfers from other customers within the window
+    # totalling at least the minimum, and an outbound of at least the ratio of them. The ratio is
+    # an integer percentage so the boundary is exact (0 < R <= 1). Not admin-overridable (ADR-0031).
+    fraud_mule_window_minutes: int = Field(default=60, ge=1, le=1440)
+    fraud_mule_min_inbound_minor: int = Field(default=1_000_000, ge=1)  # 10,000.00
+    fraud_mule_min_ratio_percent: int = Field(default=80, ge=1, le=100)
+    fraud_mule_repeat_episodes: int = Field(default=2, ge=1, le=100)  # earlier episodes, 30 days
 
     # Banking limits (INTEGER MINOR UNITS)
     internal_bank_code: str = "PBIP0001"
     max_transfer_minor: int = 20_000_000  # 2,00,000.00 per transfer
     daily_transfer_limit_minor: int = 50_000_000  # 5,00,000.00 per customer per UTC day
-    idempotency_ttl_hours: int = 24
+    # A key replays its answer for this long, then counts as unused and is purged (ADR-0036).
+    idempotency_ttl_hours: int = Field(default=24, ge=1, le=720)
+    idempotency_purge_batch_size: int = Field(default=1000, ge=1, le=10_000)
+    # An unanswered step-up is declined after this many minutes (ADR-0036): long enough to fetch a
+    # phone and open an authenticator, short enough that a stale fraud decision is not completed
+    # hours later and an abandoned transfer stops counting against the day's limit.
+    step_up_expiry_minutes: int = Field(default=15, ge=1, le=1440)
+    step_up_expiry_batch_size: int = Field(default=200, ge=1, le=1000)
     scheduled_transfers_batch_size: int = Field(default=100, ge=1, le=1000)
     # Matured fixed deposits paid out per hourly run (ADR-0029).
     fd_maturity_payout_batch_size: int = Field(default=100, ge=1, le=1000)
@@ -144,6 +158,17 @@ class Settings(BaseSettings):
     def fraud_demo_lab_enabled(self) -> bool:
         """The staff fraud demo lab (TASK-081) moves money as demo customers: local/test only."""
         return self.app_env in ("local", "test")
+
+    @field_validator("geoip_country_db_path", "geoip_city_db_path", mode="before")
+    @classmethod
+    def _blank_geoip_path_means_unset(cls, value: object) -> object:
+        """``GEOIP_CITY_DB_PATH=`` (as in .env.example) must mean "no database", the same as unset.
+
+        Environment variables arrive as strings, so an empty assignment would otherwise be ``''``
+        rather than ``None`` (found on Windows, where ``dev.py`` exports the .env values)."""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @model_validator(mode="after")
     def _reject_unsafe_deployed_config(self) -> "Settings":

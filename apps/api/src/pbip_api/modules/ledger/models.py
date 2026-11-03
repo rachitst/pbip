@@ -67,6 +67,8 @@ class Transaction(Base):
             "ix_transactions_initiated_by_user_id_created_at", "initiated_by_user_id", "created_at"
         ),
         Index("ix_transactions_debit_account_id_created_at", "debit_account_id", "created_at"),
+        # MULE_PASS_THROUGH sums recent credits to the debited account (#144, migration 0025).
+        Index("ix_transactions_credit_account_id_created_at", "credit_account_id", "created_at"),
         Index("ix_transactions_status", "status"),
         Index("ix_transactions_payee_id", "payee_id"),  # payee deletion check; FK index (TASK-079)
     )
@@ -139,7 +141,10 @@ class IdempotencyKey(Base):
     """One row per (user, Idempotency-Key). The UNIQUE constraint is what makes retries safe."""
 
     __tablename__ = "idempotency_keys"
-    __table_args__ = (UniqueConstraint("user_id", "key", name="uq_idempotency_keys_user_key"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "key", name="uq_idempotency_keys_user_key"),
+        Index("ix_idempotency_keys_expires_at", "expires_at"),  # the daily purge (ADR-0036)
+    )
 
     id: Mapped[UUID] = uuid_pk()
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False)

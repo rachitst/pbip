@@ -58,8 +58,10 @@ def build_fraud_scorer(
         settings, locations or location_resolver_for(settings.geoip_city_db_path)
     )
     if settings.fraud_scorer == "hybrid":
-        return HybridFraudScorer(session, engine, settings.fraud_model_budget_ms, counters, travel)
-    return BaselineRulesScorer(session, counters, travel)
+        return HybridFraudScorer(
+            session, engine, settings.fraud_model_budget_ms, counters, travel, settings=settings
+        )
+    return BaselineRulesScorer(session, counters, travel, settings=settings)
 
 
 def get_country_resolver(settings: Settings = Depends(get_settings)) -> CountryResolver:

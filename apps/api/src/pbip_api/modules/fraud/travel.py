@@ -14,7 +14,7 @@ Side-effect free: it only reads.
 
 import math
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from pbip_ml.fraud.contract import FraudReason, ReasonSource, TransactionContext
 from sqlalchemy import select
@@ -200,8 +200,8 @@ def _reason(prior: PriorLocation, current: GeoPoint, at: datetime, travel: Trave
         else "no time between them"
     )
     message = (
-        f"{prior.label} from {where} at {prior.at:%H:%M} UTC, this payment from "
-        f"{current.country or 'an unknown country'} at {at:%H:%M} UTC: "
+        f"{prior.label} from {where} at {prior.at.astimezone(UTC):%H:%M} UTC, this payment from "
+        f"{current.country or 'an unknown country'} at {at.astimezone(UTC):%H:%M} UTC: "
         f"{travel.distance_km:,.0f} km in {minutes:,.0f} min ({speed}; approximate, ADR-0034)"
     )
     return FraudReason(
