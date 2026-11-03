@@ -526,8 +526,10 @@ compare them, so that I can invest sensibly.*
   level; funds state no yield because PBIP has no market data (TASK-063, ADR-0025).
 * ✓ I can book a fixed deposit from my account with an exact maturity preview, see it with a maturity countdown in
   my portfolio, and withdraw it at maturity or close it early at the penalty rate (TASK-064, TASK-065).
-* ✗ Insurance products are listed.
-* ✗ Two to four products can be compared side by side.
+* ✓ Insurance products are listed: two term-life and two health plans with cover range, an indicative premium at a
+  reference profile and entry-age hints, without underwriting (TASK-096, ADR-0028).
+* ✓ Two to four products can be compared side by side, with "Not applicable" where a field does not apply
+  (`/wealth/compare`, TASK-098).
 
 **Status:** Partial.
 
@@ -536,10 +538,10 @@ compare them, so that I can invest sensibly.*
 `test_catalogue_filters_by_risk_level`, `test_booking_posts_one_balanced_entry_and_stores_the_deposit`,
 `test_premature_closure_pays_the_penalty_rate_and_balances`,
 `test_maturity_is_computed_on_read_and_pays_exactly_the_projected_amount`; `test_wealth_deposit_math.py`;
-`Wealth.test.tsx`.
+`Wealth.test.tsx`; `integration/test_insurance.py`, `unit/test_wealth_insurance.py`, `WealthCompare.test.tsx`.
 
 **Tasks:** TASK-054 (In Progress); TASK-063, TASK-064, TASK-065 (Done #327); TASK-097 (Done #326: the band is recorded,
-not yet used here); TASK-096, TASK-098 (Todo).
+not yet used here); TASK-096, TASK-098 (Done #337).
 
 ## UC-08 AI assistant interaction
 
@@ -720,7 +722,9 @@ behavioural profiles reflect real engagement.*
 * ✓ Free text, URLs and unknown fields are rejected.
 * ✓ No IP address or user agent is stored.
 * ✓ Ingestion is rate-limited.
-* ✗ The web app sends events.
+* ✓ The web app sends events: page visits as route templates only and five allow-listed interactions, in bounded
+  batches whose failures are dropped; nothing is sent when signed out, in the staff area or under Global Privacy
+  Control (TASK-112, `docs/analytics/clickstream-events.md`).
 * ✗ Session duration is recorded.
 * ✗ Product interests are derived.
 
@@ -728,9 +732,10 @@ behavioural profiles reflect real engagement.*
 
 **Tests** (`integration/test_events.py`): `test_events_batch_happy_path`,
 `test_events_reject_extra_fields_free_text_and_urls`, `test_no_ip_address_or_user_agent_is_stored`,
-`test_events_partition_routing_across_months`.
+`test_events_partition_routing_across_months`, `test_a_batch_built_by_the_web_tracker_is_accepted_and_stored_as_sent`;
+web `telemetry/tracker.test.ts`, `telemetry/PageViews.test.tsx`.
 
-**Tasks:** TASK-055 (In Progress); TASK-101 (Done #325: reads the events; the web app still sends none).
+**Tasks:** TASK-055 (In Progress); TASK-101 (Done #325: reads the events); TASK-112 (Done #333).
 
 ### US-31 Build a behavioural profile from spend and income (FR-52)
 
@@ -794,19 +799,23 @@ behaviour, spending, demographics and what I already hold.*
 * ✓ A high debt ratio excludes credit products.
 * ✓ A consented age band is used (ADR-0015): `unknown` without a date of birth and a recorded consent, and
   withdrawal applies to the next request. The engine never receives the date.
-* ✗ Products I already hold are taken into account.
-* ✗ The ranking uses a trained propensity model. It is hand-weighted today.
+* ✓ Products I already hold are taken into account: a held savings account, fixed deposit or (with an active
+  personal loan) the credit line is not offered again, except a fixed-deposit top-up whose reason says so
+  (TASK-111, ADR-0030).
+* ✗ The ranking uses a trained propensity model. It is hand-weighted today; the model is deferred until real
+  exposure and conversion data exist (`docs/ml/recommendation-propensity-decision.md`).
 
-**Status:** Partial. Existing holdings have no task. The propensity model is TASK-054.
+**Status:** Partial. The propensity model is TASK-054.
 
 **Tests:**
 
 * `ml/tests/test_recommendations.py`: `test_eligibility_exclusion_for_high_debt_ratio`,
   `test_adr_0015_age_band_never_changes_ranking_only_adds_an_eligibility_reason`;
 * `integration/test_recommendations.py` (`test_engine_gets_the_age_band_only_with_consent_and_never_the_date`);
-* `integration/test_demographics.py`; `apps/web/src/pages/DemographicsSection.test.tsx`.
+* `integration/test_demographics.py`; `apps/web/src/pages/DemographicsSection.test.tsx`;
+* `ml/tests/test_recommendations_held_products.py`, `integration/test_recommendations_held_products.py`.
 
-**Tasks:** TASK-054 (In Progress); TASK-062 (In Progress: #328 merged; the fixed-deposit action opens `/wealth`, not the booking dialog); TASK-107 (Done #326).
+**Tasks:** TASK-054 (In Progress); TASK-062 (In Progress: #328 merged; the fixed-deposit action opens `/wealth`, not the booking dialog); TASK-107 (Done #326); TASK-111 (Done #342).
 
 ## UC-13 Security monitoring dashboard
 
