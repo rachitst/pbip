@@ -82,6 +82,18 @@ class Settings(BaseSettings):
     # How long Ollama keeps the model in memory after a question (Ollama duration syntax).
     ollama_keep_alive: str = Field(default="24h", pattern=r"^-?[0-9]{1,5}[smh]?$")
     assistant_llm_enabled: bool = True
+    # Which model routes unclear assistant questions (ADR-0034). "groq" sends the redacted routing
+    # question to Groq's hosted API first, then falls back to Ollama, then to the rules. The Groq
+    # base URL is a constant in code (SSRF); only the key, model and limits are configuration.
+    llm_provider: Literal["ollama", "groq"] = "ollama"
+    groq_api_key: SecretStr = SecretStr("")
+    # Empty = not chosen. Set from Groq's current model list after the benchmark (ADR-0034).
+    groq_model: str = Field(default="", pattern=r"^[A-Za-z0-9._:/-]{0,100}$")
+    groq_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
+    # None = the model's default (sent as nothing). GPT-OSS accepts low|medium|high only.
+    groq_reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
+    # Groq calls per customer per minute; above it the question goes to Ollama, not to Groq.
+    rate_limit_groq_per_minute: int = Field(default=5, ge=1, le=600)
 
     # Fraud scoring (ADR-0019). "rules" = baseline rules only. "hybrid" adds the trained models
     # from FRAUD_MODEL_DIR (operator-controlled; it holds a pickle) with the rules as a floor.
@@ -135,6 +147,10 @@ class Settings(BaseSettings):
             problems.append("COOKIE_SECURE must be true")
         if "*" in self.cors_origin_list:
             problems.append("CORS_ORIGINS must not contain a wildcard")
+        if self.llm_provider == "groq" and not self.groq_api_key.get_secret_value():
+            problems.append("GROQ_API_KEY must be set when LLM_PROVIDER=groq")
+        if self.llm_provider == "groq" and not self.groq_model:
+            problems.append("GROQ_MODEL must be set when LLM_PROVIDER=groq")
         if self.otel_enabled and self.otel_exporter == "memory":
             problems.append("OTEL_EXPORTER=memory keeps every span in memory (tests only)")
         if problems:

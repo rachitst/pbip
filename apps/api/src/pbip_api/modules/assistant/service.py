@@ -14,7 +14,9 @@ Pipeline, in order:
 5. The server writes the reply from the tool's structured result; :func:`sanitize.redact_output`
    masks account numbers, tokens and emails.
 6. In one writable transaction: the redacted exchange is stored (``assistant_messages``) and one
-   audit row is written (tool or refusal reason, outcome, engine - never the message or result).
+   audit row is written (tool or refusal reason, outcome, engine - never the message or result),
+   plus one ``assistant.llm_call`` row per model provider tried (provider, outcome, latency;
+   ADR-0034).
 
 :meth:`AssistantService.run` yields the steps as events, so the JSON endpoint and the SSE stream
 (TASK-060) share one implementation.
@@ -39,6 +41,7 @@ from pbip_api.modules.assistant.fallback import Route
 from pbip_api.modules.assistant.faq import FaqFacts
 from pbip_api.modules.assistant.llm import ChatModel, LLMUnavailableError, llm_route
 from pbip_api.modules.assistant.prompts import system_prompt
+from pbip_api.modules.assistant.providers import LLMAttempt, ModelChain
 from pbip_api.modules.assistant.sanitize import clean_user_message, redact_output
 from pbip_api.modules.assistant.schemas import (
     AssistantHistory,
@@ -104,6 +107,7 @@ class AssistantService:
         self.session = session
         self.model = model
         self.facts = facts
+        self._llm_attempts: list[LLMAttempt] = []
 
     def chat(self, customer_id: UUID, user_id: UUID, message: str, now: datetime) -> ChatResponse:
         for event in self.run(customer_id, user_id, message, now):
@@ -150,6 +154,16 @@ class AssistantService:
                     engine=decision.engine,
                     link=reply.link,
                 )
+        for attempt in self._llm_attempts:
+            self._audit(
+                user_id,
+                "assistant.llm_call",
+                {
+                    "provider": attempt.provider,
+                    "outcome": attempt.outcome,
+                    "latency_ms": attempt.latency_ms,
+                },
+            )
         repository.add_exchange(
             self.session, customer_id, redact_output(cleaned), response.reply, response.tool
         )
@@ -187,7 +201,10 @@ class AssistantService:
                     _grounded(llm_route(self.model, system_prompt(), message), message), "llm"
                 )
             except LLMUnavailableError as exc:
-                _logger.warning("assistant_llm_fallback", reason=str(exc))
+                _logger.warning("assistant_llm_fallback", reason=str(exc), outcome=exc.outcome)
+            finally:
+                if isinstance(self.model, ModelChain):
+                    self._llm_attempts = list(self.model.attempts)
         return _Decision(fallback.route(message), "rules")
 
     def _run_read_only(
