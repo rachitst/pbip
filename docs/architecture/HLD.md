@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Task | TASK-053 (#76) |
+| Task | TASK-053 (GitHub issue #76) |
 | Scope | System boundaries, C4 context and container views, components, data stores, API and ML inference contracts, security, scalability, observability, production roadmap |
 | Verified against | `main` at `2e65b87` (1 Nov 2026): code, compose files, workflows and tests, not earlier documents |
 | Related | [Blueprint](../PROJECT_BLUEPRINT.md) (engineering rules), [LLD](LLD.md) (tables, state machines, lock order), [ER diagram](er-diagram.md) (generated from the schema), [threat model](../security/threat-model.md), [AI assistant security](../security/ai-assistant-security.md), [runbook](../operations/runbook.md), [traceability](../requirements/traceability.md) |
@@ -168,14 +168,14 @@ Across modules, code calls the other module's `service` or `policy` functions on
 | `notifications` | Inbox, read state, outbox relay target | `/notifications*` | Implemented (API and web bell) |
 | `analytics` | Spending, trends, health score, balance forecast, segment; nightly and weekly jobs | `/analytics/*` | Implemented. Forecast UI Planned (TASK-050) |
 | `insights` | Relationship-manager churn signals; staff route of the aggregate behavioural dashboard (queries in `analytics/behaviour.py`, ADR-0027) | `/insights/customers`, `/insights/behaviour` | Partial |
-| `recommendations` | Rule-based product recommendations with reasons (`rules-v1`) | `/recommendations` | Partial: customer carousel on `/accounts` (TASK-062, #328); age band from `customers.service.recommendation_age_band`, `unknown` without date of birth and consent (TASK-107) |
+| `recommendations` | Rule-based product recommendations with reasons (`rules-v1`: a hand-weighted relevance formula, not a trained model; the score is not a probability) | `/recommendations` | Partial: customer carousel on `/accounts` (TASK-062, GitHub PR #328); age band from `customers.service.recommendation_age_band`, `unknown` without date of birth and consent (TASK-107); held products from the accounts, loans and wealth services (TASK-111, ADR-0030); no propensity model is trained (TASK-054, `docs/ml/recommendation-propensity-decision.md`) |
 | `loans` | Catalogue (3 products), EMI schedule, explainable eligibility; idempotent application with ledger disbursal, stored schedule and a repayment instruction on the scheduled transfers engine ([ADR-0024](../adr/0024-loan-disbursal-and-repayments.md)) | `/loans*` | Implemented (API and web) |
-| `assistant` | Read-only tool registry, rules-first router, Ollama adapter, guard, sanitiser, output filter, SSE | `/assistant/*` | Implemented (6 tools, including unusual expenses: TASK-110, #331). FAQ, product and investment tools Planned (TASK-105) |
-| `events` | Clickstream batch ingestion into monthly partitions | `/events/batch` | Partial: the web app does not send events yet (TASK-055 In Progress) |
+| `assistant` | Read-only tool registry, rules-first router, Ollama adapter, guard, sanitiser, output filter, SSE | `/assistant/*` | Implemented (6 tools, including unusual expenses: TASK-110, GitHub PR #331). FAQ, product and investment tools Planned (TASK-105) |
+| `events` | Clickstream batch ingestion into monthly partitions | `/events/batch` | Implemented: the web app sends page visits and key interactions (TASK-112, GitHub PR #333); TASK-055 is still In Progress |
 | `compliance` | Hash-chained audit log read and verify; exceptions (blocked payments, lockouts, chain failures) with audited acknowledge/resolve and SLA indicators (ADR-0027) | `/compliance/audit-logs*`, `/compliance/exceptions*` | Implemented |
 | `health` | Liveness and readiness (DB + Redis) | `/api/health/live`, `/api/health/ready` | Implemented |
 | `statements` | PDF/CSV statements | none (empty package) | Planned (TASK-016, TASK-074) |
-| `wealth` | Seeded catalogue (fixed deposits, illustrative funds and gold bond, risk filter); exact quarterly-compounded deposit maths; idempotent fixed-deposit booking and closure through the ledger (`SYS-FIXED-DEPOSITS`), maturity and portfolio computed on read ([ADR-0025](../adr/0025-wealth-catalogue-and-fixed-deposits.md)) | `/wealth/products`, `/wealth/fixed-deposits*`, `/wealth/portfolio` | Implemented (API and web `/wealth`, #327); insurance (TASK-096) and comparison (TASK-098) Planned; the risk band (TASK-097, #326) is recorded but does not filter the catalogue |
+| `wealth` | Seeded catalogue (fixed deposits, illustrative funds and gold bond, risk filter); exact quarterly-compounded deposit maths; idempotent fixed-deposit booking and closure through the ledger (`SYS-FIXED-DEPOSITS`), maturity and portfolio computed on read ([ADR-0025](../adr/0025-wealth-catalogue-and-fixed-deposits.md)) | `/wealth/products`, `/wealth/insurance`, `/wealth/fixed-deposits*`, `/wealth/portfolio` | Implemented (API and web `/wealth`, GitHub PR #327); seeded insurance catalogue ([ADR-0028](../adr/0028-insurance-catalogue.md)) and the comparison page `/wealth/compare` (TASK-096, TASK-098, GitHub PR #337); the risk band (TASK-097, GitHub PR #326) is recorded but does not filter the catalogue |
 
 Scheduled and recurring transfers live in the `payments` module (`scheduled_service.py`, table `scheduled_transfers`,
 migration `0014`, [ADR-0023](../adr/0023-scheduled-transfers.md)); the Celery job is in section 4.2.
@@ -201,18 +201,19 @@ source of API types.
 **Customer screens on `main`:**
 
 * login with the MFA code step;
-* accounts with balances, the total balance per currency (TASK-109, #330), open account, expandable ledger history,
-  and the product recommendations carousel (TASK-062, #328);
+* accounts with balances, the total balance per currency (TASK-109, GitHub PR #330), open account, expandable ledger history,
+  and the product recommendations carousel (TASK-062, GitHub PR #328);
 * send money: source-account choice, verified payees, a review/confirm dialog, a TOTP step-up modal and the real outcome (posted, under review, declined without reasons);
 * insights (spending, trends, health score);
 * profile, devices and password change, the risk-profile questionnaire and the date of birth and recommendations
-  consent (TASK-097, TASK-107, #326);
-* wealth: portfolio, allocation, fixed deposits with booking and closure, catalogue (TASK-063 to TASK-065, #327);
+  consent (TASK-097, TASK-107, GitHub PR #326);
+* wealth: portfolio, allocation, fixed deposits with booking and closure, catalogue (TASK-063 to TASK-065, GitHub PR #327), and
+  the product comparison page `/wealth/compare` (TASK-098, GitHub PR #337);
 * the notification bell;
 * the assistant drawer, streamed over SSE.
 
 **Staff screens:** a staff home page, the fraud alert queue and alert detail (plain-language reasons, SHAP bars, customer profile, release/reject), the compliance audit log, compliance exceptions with regulatory indicators (`/staff/compliance`) and the
-behavioural analytics dashboard (`/staff/behaviour`) (TASK-100, TASK-101, #325).
+behavioural analytics dashboard (`/staff/behaviour`) (TASK-100, TASK-101, GitHub PR #325).
 
 Every other screen is Planned under the task named in section 4.1.
 
@@ -223,14 +224,15 @@ Every other screen is Planned under the task named in section 4.1.
 | `ml/src/pbip_ml/fraud` | Contract, features (offline/online parity-tested), rule registry, LightGBM, Isolation Forest, hybrid combiner, TreeSHAP reasons, `inference.load` | Training: offline scripts, tracked in MLflow. Inference: in-process in `api` |
 | `ml/src/pbip_ml/forecasting` | Balance forecast with 80/95% intervals | In-process, on request |
 | `ml/src/pbip_ml/segmentation` | RFM + lifestyle K-Means | Celery weekly job only |
-| `ml/src/pbip_ml/recommendations` | Eligibility rules + hand-weighted ranking (explicitly not a trained model) | In-process, on request |
+| `ml/src/pbip_ml/recommendations` | Eligibility rules + hand-weighted ranking (explicitly not a trained model); held products suppress or explain a product (ADR-0030) | In-process, on request |
+| `ml/src/pbip_ml/monitoring` | PSI drift computation for amount and velocity (TASK-068); the API imports only the result type for the `pbip_feature_psi` gauge | Library only: no job feeds the gauge yet (GitHub issue #324) |
 | `data-gen/src/pbip_datagen` | Seeded synthetic customers and transactions, fraud injectors F1-F6 with labels | Offline; loaded with COPY into schema `synthetic` ([ADR-0009](../adr/0009-synthetic-dataset-schema.md)) |
 
 ## 5. Data stores
 
 | Store | What lives there | Notes |
 |---|---|---|
-| PostgreSQL `public` | 32 tables (35 with the 3 `synthetic` tables below; `alembic_version` and clickstream partitions are not counted, as in the LLD): identity and sessions, customers and devices, accounts, ledger, holds, idempotency keys, payees, bills, scheduled transfers, loans and instalments, fraud events and alerts, notifications and outbox, hash-chained audit log, security events, RM interactions, wealth catalogue and fixed deposits, analytics aggregates, segments, clickstream (monthly range partitions), assistant messages | Full diagram: [er-diagram.md](er-diagram.md) (generated, CI-checked). Integer minor units for money. CHECK constraints for enums and ranges. Triggers keep `transaction_entries` immutable and balanced and `audit_logs` append-only |
+| PostgreSQL `public` | 33 tables (36 with the 3 `synthetic` tables below; `alembic_version` and clickstream partitions are not counted, as in the LLD): identity and sessions, customers and devices, accounts, ledger, holds, idempotency keys, payees, bills, scheduled transfers, loans and instalments, fraud events and alerts, notifications and outbox, hash-chained audit log, security events, RM interactions, wealth catalogue, insurance catalogue and fixed deposits, analytics aggregates, segments, clickstream (monthly range partitions), assistant messages | Full diagram: [er-diagram.md](er-diagram.md) (generated, CI-checked). Integer minor units for money. CHECK constraints for enums and ranges. Triggers keep `transaction_entries` immutable and balanced and `audit_logs` append-only |
 | PostgreSQL `synthetic` | Generation runs, synthetic customers, synthetic transactions | Training data only, never read on the request path ([ADR-0009](../adr/0009-synthetic-dataset-schema.md)) |
 | Redis | Celery broker and result backend (results expire after 1 h); fixed-window rate limits `rl:{name}:{subject}`; sorted-set velocity windows for transfers and login failures | Not a system of record. Rate limits fail open if Redis is down. Velocity falls back to PostgreSQL ([ADR-0020](../adr/0020-device-network-signals-and-velocity-counters.md)). Idempotency is in PostgreSQL, not Redis ([ADR-0003](../adr/0003-idempotency-in-postgresql.md)) |
 | Fraud model directory | `lightgbm.txt`, `isolation_forest.joblib`, `hybrid_params.json`, `manifest.json` (SHA-256 of each file) | Built by `make fraud-model` into `models/fraud`; mounted read-only into `api` in the dev compose. Read once per process when `FRAUD_SCORER=hybrid`. A damaged or missing artefact means rules-only |
@@ -315,7 +317,7 @@ decision settles the payment, and BLOCK declines it.
 | Serving mode | Model version | Status |
 |---|---|---|
 | `FRAUD_SCORER=rules` (code default) | `baseline-rules-0.3` (`modules/fraud/baseline.py`) | Implemented. Rules: LARGE_AMOUNT, NEW_PAYEE, NEW_PAYEE_LARGE_AMOUNT, VELOCITY_BURST, AMOUNT_SPIKE, NEW_COUNTRY, RECENT_LOGIN_FAILURES, NEW_DEVICE_OR_NETWORK |
-| `FRAUD_SCORER=hybrid` + `FRAUD_MODEL_DIR` | `hybrid-lgbm-iforest-1` | Implemented behind the flag ([ADR-0019](../adr/0019-hybrid-fraud-scorer-serving.md)). It combines calibrated LightGBM, Isolation Forest and the rule registry, and adds the top-3 TreeSHAP reasons. The final score is `max(baseline, hybrid)`. Since #251 the local and demo configuration (`.env.example`, dev compose) runs `hybrid`, with models built by `make fraud-model` and mounted read-only; the code default and the staging compose stay `rules` |
+| `FRAUD_SCORER=hybrid` + `FRAUD_MODEL_DIR` | `hybrid-lgbm-iforest-1` | Implemented behind the flag ([ADR-0019](../adr/0019-hybrid-fraud-scorer-serving.md)). It combines calibrated LightGBM, Isolation Forest and the rule registry, and adds the top-3 TreeSHAP reasons. The final score is `max(baseline, hybrid)`. Since GitHub issue #251 the local and demo configuration (`.env.example`, dev compose) runs `hybrid`, with models built by `make fraud-model` and mounted read-only; the code default and the staging compose stay `rules` |
 | Fail-safe | `...+rules-only` with reason `MODEL_UNAVAILABLE` | Implemented. It applies when the model is missing, raises an error or exceeds `FRAUD_MODEL_BUDGET_MS` (default 50 ms). It never falls back to allow-all |
 
 Model metrics, latency and limits are recorded in the [evaluation report](../ml/model-evaluation-report-v1.md) and
@@ -324,7 +326,8 @@ Model metrics, latency and limits are recorded in the [evaluation report](../ml/
 **Planned fraud work:**
 
 * champion/challenger promotion through the MLflow registry (TASK-038);
-* drift and PSI monitoring (TASK-068);
+* scheduled drift monitoring (TASK-068): the PSI computation and the `pbip_feature_psi` gauge exist (GitHub PR #336), and the
+  job that feeds the gauge, with its Grafana panel and alerts, is GitHub issue #324;
 * F7-F8 and F11 scenarios (TASK-071, TASK-072);
 * final retraining (TASK-084).
 
@@ -334,7 +337,7 @@ Model metrics, latency and limits are recorded in the [evaluation report](../ml/
 |---|---|---|---|
 | `forecasting/contract.py` | `ForecastKind`, `ForecastPoint`, `Forecast` | `GET /analytics/forecast`, assistant `get_balance_forecast` | Implemented ("Predicted, not exact" label) |
 | `segmentation/contract.py` | `CustomerSegmentName` (5 personas), `CustomerRFMFeatures`, `SegmentAssignment`, `ClusteringValidationReport` | Weekly job, `GET /analytics/segment`, recommendations, insights | Implemented |
-| `recommendations/contract.py` | `ProductType`, `BankingProduct`, `CustomerRecommendationContext`, `Recommendation` | `GET /recommendations`, insights | Implemented (rules-v1). The input does not include products already held (no task) |
+| `recommendations/contract.py` | `ProductType`, `BankingProduct`, `CustomerRecommendationContext`, `Recommendation` | `GET /recommendations`, insights | Implemented (rules-v1). The input includes held products as kinds and amounts, no ids (`HeldProduct`, [ADR-0030](../adr/0030-held-products-recommendation-input.md)) |
 | `features/contract.py` | `FeatureSource`, `FeatureDefinition`, `TransactionEvent`, `CustomerFeatures` | Fraud features ([ADR-0010](../adr/0010-customer-feature-contract-draft.md)) | Implemented |
 
 ### 7.3 Assistant (LLM) contract
@@ -441,11 +444,11 @@ adversarial transcripts). Here is the summary, with the enforcing code:
 
 | Concern | Current state | Consequence | Owner |
 |---|---|---|---|
-| Multi-replica deployment | No `replicas` setting in either compose file; never run with more than one API container | Horizontal scaling is designed but unproven | TASK-079 (#102) |
-| Load evidence | `infra/k6/baseline.js` covers health endpoints only (50 VUs, p95 < 50 ms). Analytics endpoints were measured locally (p95 12-19 ms, sequential) | No evidence under concurrent business load | TASK-078 (#101), TASK-102 (#185) |
+| Multi-replica deployment | No `replicas` setting in either compose file; never run with more than one API container | Horizontal scaling is designed but unproven | TASK-079 (GitHub issue #102) |
+| Load evidence | `infra/k6/baseline.js` covers health endpoints only (50 VUs, p95 < 50 ms). Analytics endpoints were measured locally (p95 12-19 ms, sequential) | No evidence under concurrent business load | TASK-078 (GitHub issue #101), TASK-102 (GitHub issue #185) |
 | DB connections | Pool size 10 per API process | `replicas × 10` (+ workers) must stay under PostgreSQL `max_connections`. A pooler (PgBouncer) would be needed beyond a few replicas | TASK-079 |
 | Write hot spot | Per-user advisory lock serialises one customer's money movements | Intended (correctness first); throughput across customers is unaffected | none |
-| Single PostgreSQL primary | No replica or failover; backup and PITR procedures are in the runbook | Vertical scaling plus read replicas for analytics would be the next step | TASK-083 (#106) |
+| Single PostgreSQL primary | No replica or failover; backup and PITR procedures are in the runbook | Vertical scaling plus read replicas for analytics would be the next step | TASK-083 (GitHub issue #106) |
 | ML in-process | Each replica loads its own model copy; inference p95 22.7 ms at 1 thread and 147.8 ms at 4 threads on the reference laptop (evaluation report v1.1) | Memory grows per replica; the 50 ms budget falls back to rules under CPU contention | Evaluation report |
 | LLM | Ollama on CPU: 12-50 s for unclear questions; clear questions take < 0.1 s via the rules path | The LLM path does not meet the API latency target on CPU-only hardware | Documented (ADR-0018); no task |
 | Beat | Must be a single instance | Run exactly one `beat` | none |
@@ -480,7 +483,7 @@ adversarial transcripts). Here is the summary, with the enforcing code:
   5. an automatic rollback if any step fails.
 
   **Status: Partial.** The deploy job runs only when `DEPLOY_ENABLED=true`, and no staging host exists yet, so it has
-  never run against a host (#198).
+  never run against a host (GitHub issue #198).
 
 ## 13. Production roadmap
 
@@ -489,7 +492,7 @@ Items without a task are recommendations that nobody has been assigned yet.
 
 | # | Change | Why | Task |
 |---|---|---|---|
-| 1 | Provision staging; enable the gated deploy; smoke test and roll back for real | Turns the deployment pipeline from Unverified into verified | #198, TASK-091 |
+| 1 | Provision staging; enable the gated deploy; smoke test and roll back for real | Turns the deployment pipeline from Unverified into verified | GitHub issue #198, TASK-091 |
 | 2 | TLS at an edge proxy or load balancer with HSTS; `COOKIE_SECURE=true` (already enforced at boot) | Transport security outside the repo | Runbook 1.4; no task |
 | 3 | Run the monitoring stack in staging, add Alertmanager and receivers, error tracking and availability probes | Observability NFR; alerts currently go nowhere | TASK-069, TASK-103 |
 | 4 | Load and concurrency tests on business endpoints; pool tuning; multi-replica run | Performance and scalability NFR evidence | TASK-078, TASK-079, TASK-102 |

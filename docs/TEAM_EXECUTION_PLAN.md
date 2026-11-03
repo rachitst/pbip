@@ -1711,7 +1711,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #77 | **Sprint:** 5 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (partially delivered in #204 on Sat 31 Oct: eligibility first, top 3 with reasons from real figures, p95 35 ms measured on a laptop; the score is a documented rule-based ranking, a trained model needs product take-up data first, see #77) | **Status:** In Progress | **Risk:** Medium (criterion 2 needs data that does not exist yet)
+- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (partially delivered in #204 on Sat 31 Oct: eligibility first, top 3 with reasons from real figures, p95 35 ms measured on a laptop; the score is a documented rule-based ranking, a trained model needs product take-up data first, see #77; #345, 45fa764, merged Tue 03 Nov: decision to keep `rules-v1` and train no propensity model, `docs/ml/recommendation-propensity-decision.md`) | **Status:** In Progress (criterion 2 Not Met on purpose: the synthetic data has no product adoption, so any LR/GBM labels would be invented and circular; criterion 4 is met by the engine (CPU p95 0.13-0.17 ms) but not demonstrated for the endpoint (p95 143-173 ms on a loaded 2-CPU laptop), follow-up #343. A propensity model is deferred until an impression log, TASK-112 clicks and conversions from TASK-064 and TASK-047 exist) | **Risk:** Medium (criterion 2 needs data that does not exist yet)
 - **Depends on:** TASK-041 (#64, Krishna), TASK-044 (#67, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-041, TASK-044
 - **Goal:** Recommendation engine scoring customer eligibility and propensity for banking products.
@@ -1727,7 +1727,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   - [x] Evaluates eligibility rules first (e.g. savings buffer for investments, income for premium cards)
   - [ ] Scores customer propensity using logistic regression / gradient boosting ranking
   - [x] Returns top-3 recommended products with clear, human-readable justification reasons
-  - [x] GET /api/v1/recommendations endpoint responds in < 40ms
+  - [ ] GET /api/v1/recommendations endpoint responds in < 40ms (engine met; endpoint not demonstrated, #343)
 - **Definition of done (evidence):** Unit tests verify eligibility exclusion filters and ranking score stability.
 - **Required checks:**
   - Automated: pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable; pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths
@@ -2115,7 +2115,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #91 | **Sprint:** 5 | **Priority:** could | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Pranay (`pranaysanap`)
-- **Start:** Sun 01 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (1.8 days of slack)
+- **Start:** Sun 01 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (#336, 5503032, merged Tue 03 Nov; criteria not all met) | **Status:** In Progress (criteria 1 and 2 are met by `pbip_ml/monitoring/psi.py`: PSI for amount and per-entity daily velocity over 30-day windows, stable/warning/critical at 0.1 and 0.25, `ml/tests/test_monitoring_psi.py`; criterion 3 is not: the `pbip_feature_psi` gauge exists in `core/metrics.py` but nothing sets it outside tests, and there is no Grafana panel or alert rule. The scheduled evaluation that feeds it is #324) | **Risk:** Low (1.8 days of slack)
 - **Depends on:** TASK-024 (#47, Rachit), TASK-029 (#52, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-024, TASK-029
 - **Goal:** Background monitoring script calculating feature drift and PSI metrics against baseline distributions.
@@ -2554,6 +2554,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   - [ ] scripts/restore.py tests automated restore into temporary database verifying table row counts
   - [ ] Validates backup integrity and hash-chain continuity after restore
 - **Definition of done (evidence):** Script passes dry-run test, documented in operations runbook.
+- **Follow-up (2026-11-03):** #323 (`test_passphrase_file_must_be_private` assumed POSIX `chmod` and failed on Windows)
+  was fixed in #334 (72c1ad2): the owner-only passphrase-file check applies on POSIX only, and on Windows, where mode
+  bits do not express NTFS ACLs, `scripts/backup.py` warns instead; runbook and `test_backup_restore.py` cover both.
 - **Required checks:**
   - Automated: CI job or `scripts/dev.py` command exercised in tests; works from a fresh clone
   - Manual: run the command on Linux; on Windows too when `dev.ps1`/`dev.cmd` paths change
@@ -2675,7 +2678,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #111 | **Sprint:** 6 | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Mon 02 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (#321, 01aad5a, merged Mon 02 Nov; criteria not all met) | **Status:** In Progress (criterion 4: the pack maps to AGENTS.md and ADRs only, not to any named AI-governance guideline for financial institutions; DoD path `docs/ml/model-cards.md` is a directory `docs/ml/model-cards/`) | **Risk:** Medium (1.1 days of slack before downstream work is delayed)
+- **Start:** Mon 02 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** Tue 03 Nov (#321, 01aad5a: the three model cards, criteria 1-3; #344, 29e075c: criterion 4, `docs/ml/model-cards/governance-alignment.md` maps each model to RBI FREE-AI, EU AI Act Art. 9-15 and SR 11-7 / PRA SS1/23 with 9 stated gaps, and the DoD file `docs/ml/model-cards.md`) | **Status:** Done | **Risk:** Medium (1.1 days of slack before downstream work is delayed)
 - **Depends on:** TASK-029 (#52, Rachit), TASK-042 (#65, Rachit), TASK-084 (#107, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-029, TASK-042, TASK-084
 - **Goal:** Standardized model cards documenting training data, ethical considerations, and limitations.
@@ -2909,8 +2912,8 @@ decision in ADR-0015.
 ### TASK-096 - Insurance Products Catalogue API
 
 - **Issue:** #179 | **Sprint:** unscheduled | **Priority:** should | **Size:** S (0.5 person-days estimate) | **Epic:** Core Banking & Ledger
-- **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Owner:** Rachit (`rachitst`)
+- **Start:** Mon 02 Nov | **Target deadline:** - | **Actual completion:** Tue 03 Nov (#337, a2a4e5d; ADR-0028 Accepted) | **Status:** Done | **Risk:** Unscheduled
 - **Depends on:** TASK-063 (#86, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **Goal:** Read-only catalogue of insurance products so the wealth scope and recommendation outputs include insurance.
@@ -2963,8 +2966,8 @@ decision in ADR-0015.
 ### TASK-098 - Wealth and Insurance Product Comparison UI
 
 - **Issue:** #181 | **Sprint:** unscheduled | **Priority:** could | **Size:** M (1.5 person-days estimate) | **Epic:** Frontend Web Application
-- **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Owner:** Rachit (`rachitst`)
+- **Start:** Mon 02 Nov | **Target deadline:** - | **Actual completion:** Tue 03 Nov (#337, a2a4e5d, with TASK-096) | **Status:** Done | **Risk:** Unscheduled
 - **Depends on:** TASK-019 (#42, Kalpak), TASK-063 (#86, Sujal), TASK-096 (#179, unassigned). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout.
@@ -3286,8 +3289,8 @@ with #201 and TLS was delivered in #280, so neither is repeated here.
 ### TASK-111 - Held Products as a Recommendation Input
 
 - **Issue:** #285 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
-- **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Owner:** Rachit (`rachitst`)
+- **Start:** - | **Target deadline:** - | **Actual completion:** Tue 03 Nov (#342, 3b9301c; ADR-0030 Accepted) | **Status:** Done | **Risk:** Unscheduled
 - **Depends on:** TASK-054.
 - **Mode:** Unscheduled
 - **Goal:** FR-55 / UC-12: recommendations take the products a customer already holds into account.
@@ -3300,8 +3303,8 @@ with #201 and TLS was delivered in #280, so neither is repeated here.
 ### TASK-112 - Web Clickstream Instrumentation
 
 - **Issue:** #286 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
-- **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Owner:** Rachit (`rachitst`)
+- **Start:** - | **Target deadline:** - | **Actual completion:** Tue 03 Nov (#333, e3fcc2f; the DoD's E2E check is a two-sided contract test, not a Playwright run: `tracker.test.ts` builds exactly `__fixtures__/client-batch.json` and `test_a_batch_built_by_the_web_tracker_is_accepted_and_stored_as_sent` posts it to the API) | **Status:** Done | **Risk:** Unscheduled
 - **Depends on:** TASK-055.
 - **Mode:** Unscheduled
 - **Goal:** FR-50 / UC-11: the web app sends page-visit and interaction events to the existing clickstream ingestion API (TASK-055).

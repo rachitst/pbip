@@ -91,8 +91,8 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | FR-32 | The customer shall apply for a loan and track it. | Section 5 "loan applications, loan tracking" | Planned | TASK-047, TASK-051 | |
 | FR-33 | The system shall record the customer's risk tolerance. | UC-07 input | Implemented | TASK-097 | Five-question questionnaire, deterministic LOW/MODERATE/HIGH band, answers and assessment time stored and audited (`/api/v1/customers/me/risk-profile`) |
 | FR-34 | The system shall suggest investment products using risk tolerance, savings behaviour, income and available funds. | UC-07 | Partial | TASK-054; TASK-097, TASK-105 | Fixed deposit and index-fund SIP suggestions use income, savings ratio, buffer and balance; the risk band is recorded (FR-33) but not yet an input |
-| FR-35 | The customer shall browse fixed deposits, mutual funds, stocks and bonds, and insurance products. | Section 5 wealth | Partial | TASK-063, TASK-064, TASK-065, TASK-096 | Seeded catalogues: deposits, illustrative funds and a gold bond (`GET /api/v1/wealth/products`, ADR-0025), term-life and health insurance with indicative premiums and entry-age hints (`GET /api/v1/wealth/insurance`, ADR-0028); no stocks |
-| FR-36 | The customer shall compare wealth and insurance products. | Section 5 "product comparison" | Implemented | TASK-098 | `/wealth/compare`: two to four products side by side, "Not applicable" where a field does not apply |
+| FR-35 | The customer shall browse fixed deposits, mutual funds, stocks and bonds, and insurance products. | Section 5 wealth | Partial | TASK-063, TASK-064, TASK-065, TASK-096 (merged #337) | Seeded catalogues: deposits, illustrative funds and a gold bond (`GET /api/v1/wealth/products`, ADR-0025), term-life and health insurance with indicative premiums and entry-age hints (`GET /api/v1/wealth/insurance`, ADR-0028); no stocks |
+| FR-36 | The customer shall compare wealth and insurance products. | Section 5 "product comparison" | Implemented | TASK-098 (merged #337) | `/wealth/compare`: two to four products side by side, "Not applicable" where a field does not apply |
 
 ### 2.5 AI assistant (UC-08, section 5)
 
@@ -121,14 +121,14 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 
 | ID | Requirement | Source | Status | Tasks | Gap |
 |---|---|---|---|---|---|
-| FR-50 | The system shall capture page visits and clickstream events. | UC-11 data captured | Partial | TASK-055; TASK-112 (#286) | The ingestion API stores typed events in monthly partitions; the web app does not send any |
+| FR-50 | The system shall capture page visits and clickstream events. | UC-11 data captured | Implemented | TASK-055; TASK-112 (#286, merged #333) | The ingestion API stores typed events in monthly partitions; the web app sends page visits as route templates and five allow-listed interactions (`docs/analytics/clickstream-events.md`) |
 | FR-51 | The system shall capture session duration and product interests. | UC-11 data captured | Planned | TASK-055, TASK-101 | No session-duration field; no derived product interest |
 | FR-52 | The system shall analyse spend and income patterns and assign each customer a behavioural segment. | UC-11, section 5 "customer segmentation" | Implemented | TASK-040, TASK-044, TASK-052 | |
-| FR-53 | The system shall recommend loan, savings, investment and insurance products with reasons, using the behaviour profile and spending patterns. | UC-12 | Partial | TASK-054; TASK-062 | Rules-based (`rules-v1`) API; carousel on `/accounts` (TASK-062, merged #328) |
+| FR-53 | The system shall recommend loan, savings, investment and insurance products with reasons, using the behaviour profile and spending patterns. | UC-12 | Partial | TASK-054; TASK-062 | Rules-based (`rules-v1`) API; carousel on `/accounts` (TASK-062, merged #328); the propensity model is deferred until real exposure and conversion data exist (`docs/ml/recommendation-propensity-decision.md`, #345) |
 | FR-54 | Recommendations shall use demographics. | UC-12 input | Implemented | TASK-107 | Limited by ADR-0015 to a consented age band derived from an optional date of birth; `unknown` without both |
-| FR-55 | Recommendations shall take existing products into account. | UC-12 input | Planned | TASK-111 (#285) | Products already held are not an input |
+| FR-55 | Recommendations shall take existing products into account. | UC-12 input | Implemented | TASK-111 (#285, merged #342) | Accounts, active loans and open fixed deposits are an input. A held savings account, fixed deposit or (with an active personal loan) the personal credit line is not offered again, except a fixed-deposit top-up when the balance covers at least 6 months of spending, whose reason says so (ADR-0030) |
 | FR-56 | A relationship manager shall see customers ranked by churn risk, with signals and the top eligible product. | Section 6 (relationship manager) | Partial | TASK-056; TASK-066 | API only; no UI |
-| FR-57 | Staff shall see a behavioural analytics dashboard: segmentation, spending patterns, product affinity, engagement. | Section 5 | Implemented | TASK-101 (merged #325) | Engagement needs clickstream events the web app does not send yet |
+| FR-57 | Staff shall see a behavioural analytics dashboard: segmentation, spending patterns, product affinity, engagement. | Section 5 | Implemented | TASK-101 (merged #325) | Engagement is filled by the web app's clickstream events (TASK-112, merged #333); the seeded demo data has none |
 
 ### 2.8 Monitoring and compliance (UC-13, section 5)
 
@@ -182,6 +182,6 @@ delivered (TLS, #280).
 | FR-05 | Administration screen and application-configuration function (TASK-108, #282) |
 | FR-08 | ~~Total-balance overview on the dashboard~~: done in TASK-109 (#283, merged #330) |
 | FR-39 | ~~"Show unusual expenses" in the assistant~~: done in TASK-110 (#284, merged #331) |
-| FR-55 | Existing products as a recommendation input (TASK-111, #285) |
-| FR-50 | The web app sending page visits and clickstream events (TASK-112, #286) |
+| FR-55 | ~~Existing products as a recommendation input~~: done in TASK-111 (#285, merged #342) |
+| FR-50 | ~~The web app sending page visits and clickstream events~~: done in TASK-112 (#286, merged #333) |
 | NFR-02 | ~~TLS termination as code~~: done in #280 (nginx TLS + HSTS, PostgreSQL `verify-full`); certbot issuance on a real host waits for #198 |
