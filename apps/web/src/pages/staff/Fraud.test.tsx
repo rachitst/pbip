@@ -218,9 +218,11 @@ describe("FraudAlert", () => {
     ["Reject", "REJECT"],
   ])("%s asks for confirmation and posts the decision with the note", async (label, action) => {
     let decided: unknown = null;
+    let key: string | null = null;
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
       if (urlOf(input).endsWith("/decision")) {
         decided = typeof init?.body === "string" ? JSON.parse(init.body) : null;
+        key = new Headers(init?.headers).get("Idempotency-Key");
         return Promise.resolve(noContent());
       }
       return Promise.resolve(json(200, detail));
@@ -233,6 +235,7 @@ describe("FraudAlert", () => {
     await waitFor(() => {
       expect(decided).toEqual({ action, note: "called the customer" });
     });
+    expect(key).toMatch(/^[0-9a-f-]{36}$/); // a RELEASE moves money: idempotent (issue #314)
     expect(await screen.findByText("Decision recorded.")).toBeInTheDocument();
   });
 
@@ -249,6 +252,38 @@ describe("FraudAlert", () => {
     const dialog = await screen.findByRole("dialog");
     await userEvent.click(within(dialog).getByRole("button", { name: "Release" }));
     expect(await within(dialog).findByText(/already resolved/)).toBeInTheDocument();
+  });
+
+  it("retries a failed decision with the same key and uses a new key for a new choice", async () => {
+    const keys: (string | null)[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      if (urlOf(input).endsWith("/decision")) {
+        keys.push(new Headers(init?.headers).get("Idempotency-Key"));
+        return Promise.resolve(
+          json(503, { title: "service unavailable", code: "unavailable", status: 503 }),
+        );
+      }
+      return Promise.resolve(json(200, detail));
+    });
+    renderAt("/staff/fraud/al-1", <FraudAlert />);
+    await userEvent.click(await screen.findByRole("button", { name: "Release" }));
+    let dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Release" }));
+    await within(dialog).findByText(/could not|unavailable|not saved/i);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Release" }));
+    await waitFor(() => {
+      expect(keys).toHaveLength(2);
+    });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await userEvent.click(screen.getByRole("button", { name: "Reject" }));
+    dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Reject" }));
+    await waitFor(() => {
+      expect(keys).toHaveLength(3);
+    });
+    expect(keys[0]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
   });
 
   it("shows the resolution instead of actions for a resolved alert", async () => {

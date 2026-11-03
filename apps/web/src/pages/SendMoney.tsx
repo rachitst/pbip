@@ -66,6 +66,8 @@ function StepUpDialog({ transfer, onDone, onCancel }: StepUpProps) {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // One key for this prompt: a lost response retried with it replays instead of a 409.
+  const [intentKey] = useState(() => crypto.randomUUID());
 
   async function submit(event: SyntheticEvent) {
     event.preventDefault();
@@ -76,7 +78,7 @@ function StepUpDialog({ transfer, onDone, onCancel }: StepUpProps) {
     setBusy(true);
     setError(null);
     try {
-      onDone(await api.stepUp(transfer.id, code));
+      onDone(await api.stepUp(transfer.id, code, intentKey));
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 422) {
         setError("That code did not work. Check your authenticator app and try again.");

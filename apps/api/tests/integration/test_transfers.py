@@ -374,7 +374,7 @@ def test_review_holds_funds_and_analyst_release_posts_the_transfer(
 
     released = client.post(
         f"/api/v1/fraud/alerts/{alert['id']}/decision",
-        headers=analyst.headers,
+        headers={**analyst.headers, **new_key()},
         json={"action": "RELEASE", "note": "customer confirmed by phone"},
     )
     assert released.status_code == 204
@@ -388,7 +388,7 @@ def test_review_holds_funds_and_analyst_release_posts_the_transfer(
     )
     again = client.post(
         f"/api/v1/fraud/alerts/{alert['id']}/decision",
-        headers=analyst.headers,
+        headers={**analyst.headers, **new_key()},
         json={"action": "REJECT"},
     )
     assert again.status_code == 409
@@ -408,7 +408,7 @@ def test_analyst_reject_releases_the_hold_and_declines(
     assert (
         client.post(
             f"/api/v1/fraud/alerts/{alert['id']}/decision",
-            headers=analyst.headers,
+            headers={**analyst.headers, **new_key()},
             json={"action": "REJECT"},
         ).status_code
         == 204
@@ -444,12 +444,14 @@ def test_step_up_with_mfa_completes_after_a_valid_code(
     tid = pending.json()["id"]
 
     wrong = client.post(
-        f"/api/v1/transfers/{tid}/step-up", headers=alice.headers, json={"code": "000000"}
+        f"/api/v1/transfers/{tid}/step-up",
+        headers={**alice.headers, **new_key()},
+        json={"code": "000000"},
     )
     assert wrong.status_code == 422
     done = client.post(
         f"/api/v1/transfers/{tid}/step-up",
-        headers=alice.headers,
+        headers={**alice.headers, **new_key()},
         json={"code": totp_code(secret, clock)},
     )
     assert done.status_code == 200 and done.json()["status"] == "POSTED"
@@ -461,7 +463,7 @@ def test_step_up_with_mfa_completes_after_a_valid_code(
         assert confirmed.resource_id == tid and confirmed.actor_user_id == alice.user_id
     replay = client.post(
         f"/api/v1/transfers/{tid}/step-up",
-        headers=alice.headers,
+        headers={**alice.headers, **new_key()},
         json={"code": totp_code(secret, clock)},
     )
     assert replay.status_code == 409
@@ -642,7 +644,7 @@ def test_three_wrong_step_up_codes_hand_the_transfer_to_an_analyst(
     tid = send(client, alice, payee, 50_000).json()["id"]
     url = f"/api/v1/transfers/{tid}/step-up"
     for _ in range(2):
-        wrong = client.post(url, headers=alice.headers, json={"code": "000000"})
+        wrong = client.post(url, headers={**alice.headers, **new_key()}, json={"code": "000000"})
         assert wrong.status_code == 422
     locked: list[object] = []
     real_lock = PaymentsService._lock_user
@@ -652,7 +654,7 @@ def test_three_wrong_step_up_codes_hand_the_transfer_to_an_analyst(
         real_lock(self, user_id)
 
     monkeypatch.setattr(PaymentsService, "_lock_user", spy)
-    third = client.post(url, headers=alice.headers, json={"code": "000000"})
+    third = client.post(url, headers={**alice.headers, **new_key()}, json={"code": "000000"})
     assert third.status_code == 200 and third.json()["status"] == "PENDING_REVIEW"
     # TASK-086: the escalation takes THIS user's advisory lock (AGENTS lock order), never a shared key.
     assert locked and set(locked) == {alice.user_id}
@@ -665,7 +667,7 @@ def test_three_wrong_step_up_codes_hand_the_transfer_to_an_analyst(
     analyst = make_staff(RoleName.FRAUD_ANALYST)
     alerts = client.get("/api/v1/fraud/alerts", headers=analyst.headers).json()
     assert [a["transaction_status"] for a in alerts] == ["PENDING_REVIEW"]
-    again = client.post(url, headers=alice.headers, json={"code": "000000"})
+    again = client.post(url, headers={**alice.headers, **new_key()}, json={"code": "000000"})
     assert again.status_code == 409  # no longer waiting for a code
 
 
@@ -683,8 +685,15 @@ def test_a_correct_code_after_two_wrong_ones_still_completes(
     tid = send(client, alice, payee, 50_000).json()["id"]
     url = f"/api/v1/transfers/{tid}/step-up"
     for _ in range(2):
-        assert client.post(url, headers=alice.headers, json={"code": "000000"}).status_code == 422
-    done = client.post(url, headers=alice.headers, json={"code": totp_code(secret, clock)})
+        assert (
+            client.post(
+                url, headers={**alice.headers, **new_key()}, json={"code": "000000"}
+            ).status_code
+            == 422
+        )
+    done = client.post(
+        url, headers={**alice.headers, **new_key()}, json={"code": totp_code(secret, clock)}
+    )
     assert done.status_code == 200 and done.json()["status"] == "POSTED"
     assert balance(client, bob)["ledger"] == 50_000
 
@@ -701,7 +710,9 @@ def _decide(
     if note is not None:
         body["note"] = note
     return client.post(
-        f"/api/v1/fraud/alerts/{alert_id}/decision", headers=analyst.headers, json=body
+        f"/api/v1/fraud/alerts/{alert_id}/decision",
+        headers={**analyst.headers, **new_key()},
+        json=body,
     )
 
 
@@ -891,12 +902,14 @@ def test_step_up_is_scoped_to_the_owner_and_to_that_transfer(
     first = send(client, alice, payee, 20_000).json()["id"]
     second = send(client, alice, payee, 30_000).json()["id"]
     stolen = client.post(
-        f"/api/v1/transfers/{first}/step-up", headers=bob.headers, json={"code": "000000"}
+        f"/api/v1/transfers/{first}/step-up",
+        headers={**bob.headers, **new_key()},
+        json={"code": "000000"},
     )
     assert stolen.status_code == 404 and stolen.json()["title"] == "transfer not found"
     done = client.post(
         f"/api/v1/transfers/{second}/step-up",
-        headers=alice.headers,
+        headers={**alice.headers, **new_key()},
         json={"code": totp_code(secret, clock)},
     )
     assert done.status_code == 200 and done.json()["id"] == second
@@ -911,7 +924,7 @@ def test_step_up_is_scoped_to_the_owner_and_to_that_transfer(
     assert balance(client, bob)["ledger"] == 30_000
     not_waiting = client.post(
         f"/api/v1/transfers/{second}/step-up",
-        headers=alice.headers,
+        headers={**alice.headers, **new_key()},
         json={"code": totp_code(secret, clock)},
     )
     assert not_waiting.status_code == 409
@@ -933,7 +946,7 @@ def test_confirmed_step_up_is_audited_notified_and_counted(
     posted_before = TRANSFERS_TOTAL.labels("POSTED")._value.get()
     ok = client.post(
         f"/api/v1/transfers/{tid}/step-up",
-        headers=alice.headers,
+        headers={**alice.headers, **new_key()},
         json={"code": totp_code(secret, clock)},
     )
     assert ok.status_code == 200
@@ -970,7 +983,9 @@ def test_escalation_is_audited_notified_and_counted(
     review_before = TRANSFERS_TOTAL.labels("PENDING_REVIEW")._value.get()
     for _ in range(3):
         last = client.post(
-            f"/api/v1/transfers/{tid}/step-up", headers=alice.headers, json={"code": "000000"}
+            f"/api/v1/transfers/{tid}/step-up",
+            headers={**alice.headers, **new_key()},
+            json={"code": "000000"},
         )
     assert last.status_code == 200 and last.json()["id"] == tid
     assert last.json()["status"] == "PENDING_REVIEW"
@@ -1008,10 +1023,12 @@ def test_daily_limit_is_rechecked_when_a_held_transfer_finally_moves(
     settings.daily_transfer_limit_minor = 150_000
     url = f"/api/v1/transfers/{tid}/step-up"
     if path == "confirm":
-        last = client.post(url, headers=alice.headers, json={"code": totp_code(secret, clock)})
+        last = client.post(
+            url, headers={**alice.headers, **new_key()}, json={"code": totp_code(secret, clock)}
+        )
     else:
         for _ in range(3):
-            last = client.post(url, headers=alice.headers, json={"code": "000000"})
+            last = client.post(url, headers={**alice.headers, **new_key()}, json={"code": "000000"})
     assert last.status_code == 422 and last.json()["code"] == "limit_exceeded"
 
 
@@ -1035,11 +1052,13 @@ def test_a_held_transfer_within_the_limit_is_not_counted_twice_when_it_moves(
     tid = send(client, alice, payee, 100_000).json()["id"]
     url = f"/api/v1/transfers/{tid}/step-up"
     if path == "confirm":
-        last = client.post(url, headers=alice.headers, json={"code": totp_code(secret, clock)})
+        last = client.post(
+            url, headers={**alice.headers, **new_key()}, json={"code": totp_code(secret, clock)}
+        )
         assert last.status_code == 200 and last.json()["status"] == "POSTED"
     else:
         for _ in range(3):
-            last = client.post(url, headers=alice.headers, json={"code": "000000"})
+            last = client.post(url, headers={**alice.headers, **new_key()}, json={"code": "000000"})
         assert last.status_code == 200 and last.json()["status"] == "PENDING_REVIEW"
 
 
@@ -1100,7 +1119,9 @@ def test_wrong_step_up_codes_count_per_transfer(
     for tid in (first, second):
         for _ in range(2):
             wrong = client.post(
-                f"/api/v1/transfers/{tid}/step-up", headers=alice.headers, json={"code": "000000"}
+                f"/api/v1/transfers/{tid}/step-up",
+                headers={**alice.headers, **new_key()},
+                json={"code": "000000"},
             )
             assert wrong.status_code == 422
     with sessionmaker(bind=migrated_engine)() as session:
@@ -1169,8 +1190,289 @@ def test_a_second_escalation_after_one_already_won_returns_the_state_and_holds_o
                 FixedDecisionScorer(FraudDecision.ALLOW),
                 auth_service_factory(session),
             )
-            results.append(service._escalate_to_review(alice.user_id, tid, meta))
+            results.append(
+                service._escalate_to_review(
+                    alice.user_id, tid, meta, idempotency_key=f"race-{len(results)}"
+                )
+            )
             session.commit()
     assert [r.body["status"] for r in results] == ["PENDING_REVIEW", "PENDING_REVIEW"]
     assert results[1].body["id"] == str(tid)
     assert balance(client, alice)["held"] == 70_000  # one hold, not two
+
+
+# ------------------------------------------- issue #314: step-up and analyst decision keys
+def _step_up(client: TestClient, actor: Actor, tid: str, code: str, key: dict[str, str]) -> Any:
+    return client.post(
+        f"/api/v1/transfers/{tid}/step-up", headers={**actor.headers, **key}, json={"code": code}
+    )
+
+
+@pytest.fixture
+def stepped_up(
+    app: FastAPI,
+    client: TestClient,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    auth_service_factory: Callable[[Session], AuthService],
+    migrated_engine: Engine,
+    clock: FakeClock,
+) -> tuple[Actor, Actor, dict[str, Any], str, str]:
+    """Alice (MFA on) with one 50,000 transfer waiting for her code; returns its id and secret."""
+    alice, bob, payee = pair
+    secret = enable_mfa(auth_service_factory, migrated_engine, alice, clock)
+    force_decision(app, FraudDecision.STEP_UP)
+    tid = send(client, alice, payee, 50_000).json()["id"]
+    return alice, bob, payee, tid, secret
+
+
+def test_step_up_requires_an_idempotency_key(
+    client: TestClient, stepped_up: tuple[Actor, Actor, dict[str, Any], str, str], clock: FakeClock
+) -> None:
+    alice, bob, _payee, tid, secret = stepped_up
+    missing = client.post(
+        f"/api/v1/transfers/{tid}/step-up",
+        headers=alice.headers,
+        json={"code": totp_code(secret, clock)},
+    )
+    assert missing.status_code == 422
+    assert client.get(f"/api/v1/transfers/{tid}", headers=alice.headers).json()["status"] == (
+        "PENDING_STEP_UP"
+    )
+    assert balance(client, bob)["ledger"] == 0
+
+
+def test_step_up_retry_with_the_same_key_replays_without_moving_money_twice(
+    client: TestClient,
+    stepped_up: tuple[Actor, Actor, dict[str, Any], str, str],
+    clock: FakeClock,
+    migrated_engine: Engine,
+) -> None:
+    alice, bob, _payee, tid, secret = stepped_up
+    key = new_key()
+    code = totp_code(secret, clock)
+    first = _step_up(client, alice, tid, code, key)
+    assert first.status_code == 200 and first.json()["status"] == "POSTED"
+    assert "idempotent-replayed" not in first.headers
+    # The same code again: a used TOTP step would be refused, so the replay must not re-check it.
+    again = _step_up(client, alice, tid, code, key)
+    assert again.status_code == 200 and again.json() == first.json()
+    assert again.headers["idempotent-replayed"] == "true"
+    assert balance(client, bob)["ledger"] == 50_000
+    assert balance(client, alice)["ledger"] == 10_000_000 - 50_000
+    with sessionmaker(bind=migrated_engine)() as session:
+        row = session.execute(
+            select(IdempotencyKey).where(IdempotencyKey.key == key["Idempotency-Key"])
+        ).scalar_one()
+        assert row.transaction_id == uuid.UUID(tid) and row.response_status == 200
+        confirmations = session.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.action == "TRANSFER_STEP_UP_CONFIRMED")
+        )
+        assert confirmations == 1
+    # Another key on a completed step-up is still a plain 409.
+    assert _step_up(client, alice, tid, code, new_key()).status_code == 409
+
+
+def test_step_up_key_reused_for_a_different_request_is_rejected(
+    client: TestClient,
+    stepped_up: tuple[Actor, Actor, dict[str, Any], str, str],
+    clock: FakeClock,
+) -> None:
+    alice, bob, payee, tid, secret = stepped_up
+    second = send(client, alice, payee, 20_000).json()["id"]
+    key = new_key()
+    assert _step_up(client, alice, tid, totp_code(secret, clock), key).status_code == 200
+    clock.advance(30)
+    clash = _step_up(client, alice, second, totp_code(secret, clock), key)
+    assert clash.status_code == 422 and clash.json()["code"] == "idempotency_key_reuse"
+    assert client.get(f"/api/v1/transfers/{second}", headers=alice.headers).json()["status"] == (
+        "PENDING_STEP_UP"
+    )
+    # A transfer creation's key is not a step-up's key either: never a replay of another endpoint.
+    creation_key = new_key()
+    send(client, alice, payee, 1_000, creation_key)
+    crossed = _step_up(client, alice, second, totp_code(secret, clock), creation_key)
+    assert crossed.status_code == 422 and crossed.json()["code"] == "idempotency_key_reuse"
+    assert balance(client, bob)["ledger"] == 50_000
+
+
+def test_a_wrong_code_does_not_use_up_the_key(
+    client: TestClient,
+    stepped_up: tuple[Actor, Actor, dict[str, Any], str, str],
+    clock: FakeClock,
+    migrated_engine: Engine,
+) -> None:
+    """The failure is committed as evidence, but the key is not claimed, so the customer can type
+    the right code into the same prompt (same key) and complete the transfer."""
+    alice, bob, _payee, tid, secret = stepped_up
+    key = new_key()
+    assert _step_up(client, alice, tid, "000000", key).status_code == 422
+    with migrated_engine.connect() as connection:
+        assert (
+            connection.execute(
+                text("SELECT count(*) FROM idempotency_keys WHERE key = :k"),
+                {"k": key["Idempotency-Key"]},
+            ).scalar_one()
+            == 0
+        )
+    done = _step_up(client, alice, tid, totp_code(secret, clock), key)
+    assert done.status_code == 200 and done.json()["status"] == "POSTED"
+    assert balance(client, bob)["ledger"] == 50_000
+
+
+def test_a_retried_escalation_replays_and_holds_once(
+    client: TestClient, stepped_up: tuple[Actor, Actor, dict[str, Any], str, str]
+) -> None:
+    alice, _bob, _payee, tid, _secret = stepped_up
+    for _ in range(2):
+        assert _step_up(client, alice, tid, "000000", new_key()).status_code == 422
+    key = new_key()
+    third = _step_up(client, alice, tid, "000000", key)
+    assert third.status_code == 200 and third.json()["status"] == "PENDING_REVIEW"
+    retry = _step_up(client, alice, tid, "000000", key)
+    assert retry.status_code == 200 and retry.json() == third.json()
+    assert retry.headers["idempotent-replayed"] == "true"
+    assert balance(client, alice)["held"] == 50_000
+
+
+@pytest.mark.parametrize("same_key", [True, False])
+def test_concurrent_step_ups_post_the_transfer_exactly_once(
+    app: FastAPI,
+    client: TestClient,
+    stepped_up: tuple[Actor, Actor, dict[str, Any], str, str],
+    clock: FakeClock,
+    migrated_engine: Engine,
+    same_key: bool,
+) -> None:
+    """Real threads on PostgreSQL: the user lock serialises them; with one key the losers replay,
+    with their own keys the losers see the transfer no longer waiting (409)."""
+    alice, bob, _payee, tid, secret = stepped_up
+    code = totp_code(secret, clock)
+    shared = new_key()
+
+    def fire(_: int) -> Any:
+        return _step_up(TestClient(app), alice, tid, code, shared if same_key else new_key())
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        responses = list(pool.map(fire, range(6)))
+    winners = [
+        r for r in responses if r.status_code == 200 and "idempotent-replayed" not in r.headers
+    ]
+    assert len(winners) == 1 and winners[0].json()["status"] == "POSTED"
+    if same_key:
+        assert {r.status_code for r in responses} == {200}
+        assert {r.json()["status"] for r in responses} == {"POSTED"}
+    else:
+        assert sorted(r.status_code for r in responses) == [200] + [409] * 5
+    assert balance(client, bob)["ledger"] == 50_000
+    assert balance(client, alice)["ledger"] == 10_000_000 - 50_000
+
+
+@pytest.fixture
+def held_alert(
+    app: FastAPI,
+    client: TestClient,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    make_staff: Callable[..., Actor],
+) -> tuple[Actor, Actor, Actor, str, str]:
+    """A 300,000 transfer held for review and the analyst who will decide it."""
+    alice, bob, payee = pair
+    force_decision(app, FraudDecision.REVIEW)
+    tid = send(client, alice, payee, 300_000).json()["id"]
+    analyst = make_staff(RoleName.FRAUD_ANALYST)
+    alert_id = client.get("/api/v1/fraud/alerts", headers=analyst.headers).json()[0]["id"]
+    return alice, bob, analyst, alert_id, tid
+
+
+def _decide_with(
+    client: TestClient, analyst: Actor, alert_id: str, action: str, key: dict[str, str]
+) -> Any:
+    return client.post(
+        f"/api/v1/fraud/alerts/{alert_id}/decision",
+        headers={**analyst.headers, **key},
+        json={"action": action, "note": "checked"},
+    )
+
+
+def test_analyst_decision_requires_an_idempotency_key(
+    client: TestClient, held_alert: tuple[Actor, Actor, Actor, str, str]
+) -> None:
+    alice, bob, analyst, alert_id, tid = held_alert
+    missing = client.post(
+        f"/api/v1/fraud/alerts/{alert_id}/decision",
+        headers=analyst.headers,
+        json={"action": "RELEASE"},
+    )
+    assert missing.status_code == 422
+    assert balance(client, alice)["held"] == 300_000 and balance(client, bob)["ledger"] == 0
+    assert client.get(f"/api/v1/transfers/{tid}", headers=alice.headers).json()["status"] == (
+        "PENDING_REVIEW"
+    )
+
+
+def test_analyst_release_retried_with_the_same_key_posts_once(
+    client: TestClient,
+    held_alert: tuple[Actor, Actor, Actor, str, str],
+    migrated_engine: Engine,
+) -> None:
+    alice, bob, analyst, alert_id, tid = held_alert
+    key = new_key()
+    first = _decide_with(client, analyst, alert_id, "RELEASE", key)
+    assert first.status_code == 204 and "idempotent-replayed" not in first.headers
+    again = _decide_with(client, analyst, alert_id, "RELEASE", key)
+    assert again.status_code == 204 and again.headers["idempotent-replayed"] == "true"
+    assert balance(client, bob)["ledger"] == 300_000
+    assert balance(client, alice) == {"ledger": 9_700_000, "held": 0, "available": 9_700_000}
+    with sessionmaker(bind=migrated_engine)() as session:
+        resolved = session.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.action == "FRAUD_ALERT_RESOLVED")
+        )
+        assert resolved == 1
+        row = session.execute(
+            select(IdempotencyKey).where(IdempotencyKey.key == key["Idempotency-Key"])
+        ).scalar_one()
+        assert row.user_id == analyst.user_id and row.transaction_id == uuid.UUID(tid)
+    clash = _decide_with(client, analyst, alert_id, "REJECT", key)
+    assert clash.status_code == 422 and clash.json()["code"] == "idempotency_key_reuse"
+    assert _decide_with(client, analyst, alert_id, "REJECT", new_key()).status_code == 409
+
+
+def test_a_failed_decision_does_not_use_up_the_key(
+    client: TestClient, held_alert: tuple[Actor, Actor, Actor, str, str]
+) -> None:
+    _alice, bob, analyst, alert_id, _tid = held_alert
+    key = new_key()
+    assert _decide_with(client, analyst, str(uuid.uuid4()), "RELEASE", key).status_code == 404
+    clash = _decide_with(client, analyst, alert_id, "RELEASE", key)
+    assert clash.status_code == 204  # the 404 stored nothing under the key
+    assert balance(client, bob)["ledger"] == 300_000
+
+
+@pytest.mark.parametrize("same_key", [True, False])
+def test_concurrent_decisions_move_the_money_exactly_once(
+    app: FastAPI,
+    client: TestClient,
+    held_alert: tuple[Actor, Actor, Actor, str, str],
+    same_key: bool,
+) -> None:
+    alice, bob, analyst, alert_id, _tid = held_alert
+    shared = new_key()
+
+    def fire(_: int) -> Any:
+        return _decide_with(
+            TestClient(app), analyst, alert_id, "RELEASE", shared if same_key else new_key()
+        )
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        responses = list(pool.map(fire, range(6)))
+    real = [r for r in responses if r.status_code == 204 and "idempotent-replayed" not in r.headers]
+    assert len(real) == 1
+    if same_key:
+        assert {r.status_code for r in responses} == {204}
+    else:
+        assert sorted(r.status_code for r in responses) == [204] + [409] * 5
+    assert balance(client, bob)["ledger"] == 300_000
+    assert balance(client, alice) == {"ledger": 9_700_000, "held": 0, "available": 9_700_000}
