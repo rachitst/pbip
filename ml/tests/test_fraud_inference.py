@@ -1,15 +1,19 @@
 """TASK-033: the serving module - artifacts load safely, and the served row equals the training row."""
 
 import json
+import pickle
 from pathlib import Path
 from uuid import UUID
 
+import joblib
+import pandas as pd
 import pytest
 from pbip_datagen.__main__ import _export_fraud
 from pbip_datagen.fraud import Transfer, generate_labelled
 from pbip_datagen.generator import GeneratorConfig
 from pbip_ml.fraud import inference as inf
 from pbip_ml.fraud import training as t
+from pbip_ml.fraud.artifacts import AnomalyModel, load_anomaly_model
 from pbip_ml.fraud.features import PastTransfer
 from pbip_ml.fraud.train import load_export, run
 
@@ -103,3 +107,63 @@ def test_loaded_scorer_scores_exactly_like_the_in_memory_one(artifacts: Path) ->
     assert not first.model_version.endswith("+rules-only")
     anomaly = first.features["anomaly_score"]
     assert isinstance(anomaly, float) and 0.0 <= anomaly <= 1.0
+
+
+def _copy(source: Path, target: Path) -> Path:
+    target.mkdir()
+    for f in source.iterdir():
+        (target / f.name).write_bytes(f.read_bytes())
+    return target
+
+
+def test_an_artifact_pickled_under_the_pre_adr_0033_class_path_still_loads(
+    artifacts: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#350: artifacts written before ADR-0033 name ``pbip_ml.fraud.training.AnomalyModel``. The
+    allow-listed unpickler maps that path to the inference-safe class, and the scores are equal."""
+    current = inf.load(artifacts)
+    legacy = _copy(artifacts, tmp_path / "legacy")
+    monkeypatch.setattr(AnomalyModel, "__module__", "pbip_ml.fraud.training")
+    joblib.dump(current.anomaly, legacy / "isolation_forest.joblib")
+    monkeypatch.undo()
+    inf.write_manifest(legacy)
+    payload = (legacy / "isolation_forest.joblib").read_bytes()
+    assert b"pbip_ml.fraud.training" in payload and b"pbip_ml.fraud.artifacts" not in payload
+
+    loaded = inf.load(legacy)
+
+    assert type(loaded.anomaly) is AnomalyModel and current.anomaly is not None
+    frame = pd.DataFrame(
+        [
+            {"ratio_to_avg_amount": r, "velocity_10m": v, "distinct_devices_7d": 1, "log_amount": a}
+            for r, v, a in ((1.0, 0, 3.0), (25.0, 6, 6.5), (0.2, 1, 2.0))
+        ]
+    )
+    assert list(loaded.anomaly.score(frame)) == list(current.anomaly.score(frame))
+
+
+class _OpensAFile:
+    """A pickle that would create ``path`` when loaded: the classic code-execution payload."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+
+    def __reduce__(self) -> tuple[object, tuple[str, str]]:
+        return open, (str(self.path), "w")
+
+
+def test_a_pickle_that_names_a_class_outside_the_allow_list_is_refused_before_it_runs(
+    artifacts: Path, tmp_path: Path
+) -> None:
+    """T34 hardening (ADR-0033): even with a matching manifest, a pickle that calls anything but
+    the Isolation Forest classes is refused, and the call never happens."""
+    marker = tmp_path / "ran"
+    tampered = _copy(artifacts, tmp_path / "tampered")
+    joblib.dump(_OpensAFile(marker), tampered / "isolation_forest.joblib")
+    inf.write_manifest(tampered)
+
+    with pytest.raises(pickle.UnpicklingError, match=r"\.open is not allowed"):
+        load_anomaly_model(tampered / "isolation_forest.joblib")
+    with pytest.raises(inf.ModelLoadError):
+        inf.load(tampered)
+    assert not marker.exists()

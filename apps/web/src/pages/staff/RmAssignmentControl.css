@@ -1,0 +1,16 @@
+/* ADR-0032: the relationship-manager assignment block in the RM insights flyout. */
+.rm-assignment__current {
+  margin: 0 0 var(--space-2);
+}
+.rm-assignment__form {
+  display: grid;
+  gap: var(--space-2);
+}
+.rm-assignment__form .field {
+  margin: 0;
+}
+.rm-assignment__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

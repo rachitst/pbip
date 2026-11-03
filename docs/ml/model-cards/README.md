@@ -11,7 +11,7 @@ evaluation report exists, the card says so instead of giving a number.
 | [Hybrid fraud combiner](hybrid-fraud-combiner.md) | `ml/src/pbip_ml/fraud/hybrid.py` | `hybrid-lgbm-iforest-1` (`+rules-only` on fallback) | yes: transfers and bill payments | `docs/ml/model-evaluation-report-v1.md` §3.1, §8 |
 | [Balance forecast](balance-forecast.md) | `ml/src/pbip_ml/forecasting/model.py` | `forecast-arima-1` | yes: `GET /api/v1/analytics/forecast` | `docs/ml/balance-forecast.md` |
 | [K-Means customer segmentation](kmeans-segmentation.md) | `ml/src/pbip_ml/segmentation/pipeline.py` | none defined in code | stored by an offline job, read by `GET /api/v1/analytics/segment` | no evaluation report on main |
-| [Rule-based product recommendation score](recommendation-score.md) | `ml/src/pbip_ml/recommendations/engine.py` | `rules-v1` | yes | no evaluation report on main |
+| [Rule-based product recommendation score](recommendation-score.md) | `ml/src/pbip_ml/recommendations/engine.py` | `rules-v1` | yes | no ranking evaluation (no outcome labels); latency and the no-model decision: [`docs/ml/recommendation-propensity-decision.md`](../recommendation-propensity-decision.md) |
 
 Not covered by a card:
 
@@ -20,6 +20,9 @@ Not covered by a card:
 - The circular-transfer analysis (`docs/ml/circular-transfer-spike.md`, TASK-072) is a spike, not a served model.
 
 ## Governance in one page
+
+The full mapping to RBI FREE-AI, the EU AI Act and SR 11-7 / PRA SS1/23, with evidence and gaps, is in
+[governance-alignment.md](governance-alignment.md).
 
 - **No black boxes (AGENTS.md section 8).** Fraud decisions return `risk_score`, `decision`, `reasons[]`
   (RULE / MODEL / ANOMALY) and `model_version`. The feature snapshot is stored in `fraud_events`.

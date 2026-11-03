@@ -3,9 +3,9 @@ py/clear-text-logging on scripts/seed_dev.py): MFA secrets stay encrypted in the
 scripts/totp.py derives codes from there. The E2E suite (TASK-077) seeds with a generated
 password, takes unused staff codes from totp.py and funds its own customers with e2e_fund.py."""
 
-import secrets
 from collections.abc import Callable
 from pathlib import Path
+from uuid import UUID
 
 import pyotp
 import pytest
@@ -17,9 +17,10 @@ from pbip_api.modules.accounts.service import list_accounts
 from pbip_api.modules.auth.models import RoleName, User
 from pbip_api.modules.auth.service import AuthService, RequestMeta
 from pbip_api.modules.customers.models import Customer
+from pbip_api.modules.insights import service as insights_service
 from pbip_api.modules.ledger.models import Transaction, TransactionType
-from pbip_test_support import PASSWORD, FakeClock, totp_code
-from sqlalchemy import func, select, update
+from pbip_test_support import PASSWORD, FakeClock, generated_password, totp_code
+from sqlalchemy import func, select, text, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -74,7 +75,7 @@ def test_seed_writes_no_secret_file_and_prints_no_secrets(
     monkeypatch.setattr(seed_dev, "get_settings", lambda: settings)
     monkeypatch.setattr(seed_dev, "get_engine", lambda: migrated_engine)
     monkeypatch.chdir(tmp_path)  # the old script wrote .dev-secrets.txt into the working directory
-    password = _generated_password()
+    password = generated_password()
 
     assert seed_dev.main({seed_dev.PASSWORD_ENV: password}) == 0
 
@@ -95,11 +96,7 @@ def test_seed_writes_no_secret_file_and_prints_no_secrets(
         ).at(1_000_000)
 
 
-def _generated_password() -> str:
-    return f"{secrets.token_urlsafe(18)}Aa1!"
-
-
-ENV_PASSWORD = _generated_password()
+ENV_PASSWORD = generated_password()
 
 
 def _seed_with(
@@ -113,7 +110,7 @@ def _seed_with(
 def test_seeded_users_get_the_password_from_the_environment(
     migrated_engine: Engine, db: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    password = _generated_password()
+    password = generated_password()
 
     assert _seed_with(settings, migrated_engine, monkeypatch, {"PBIP_DEMO_PASSWORD": password}) == 0
 
@@ -122,6 +119,46 @@ def test_seeded_users_get_the_password_from_the_environment(
     passwords = PasswordService.from_settings(settings)
     assert all(passwords.verify(h, password) for h in hashes)
     assert not any(passwords.verify(h, seed_dev.DEMO_PASSWORD) for h in hashes)
+
+
+def test_seed_assigns_the_demo_portfolio_once_and_keeps_an_admins_change(
+    migrated_engine: Engine, db: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0032: rm@demo.pbip gets Alice (audited), Bob stays unassigned; a re-run writes nothing
+    and does not undo a reassignment an administrator made in between."""
+    environ = {"PBIP_DEMO_PASSWORD": ENV_PASSWORD}
+    assert _seed_with(settings, migrated_engine, monkeypatch, environ) == 0
+
+    def customer(email: str) -> Customer:
+        return db.execute(
+            select(Customer).join(User, User.id == Customer.user_id).where(User.email == email)
+        ).scalar_one()
+
+    def user_id(email: str) -> UUID:
+        return db.execute(select(User.id).where(User.email == email)).scalar_one()
+
+    alice, bob = customer("alice@demo.pbip"), customer("bob@demo.pbip")
+    alice_rm = insights_service.assigned_rm(db, alice.id)
+    assert alice_rm is not None and alice_rm.rm_email == seed_dev.RM_EMAIL
+    assert insights_service.assigned_rm(db, bob.id) is None
+    audited = db.execute(
+        text("SELECT actor_user_id, resource_id FROM audit_logs WHERE action = 'RM_ASSIGNED'")
+    ).all()
+    assert [(a.actor_user_id, a.resource_id) for a in audited] == [
+        (user_id(seed_dev.ASSIGNING_ADMIN_EMAIL), str(alice.id))
+    ]
+
+    other_rm = AuthService(
+        db, settings, PasswordService.from_settings(settings), _cipher(settings)
+    ).create_user(
+        "rm2@bank.example", PASSWORD, "Other RM", [RoleName.RELATIONSHIP_MANAGER], RequestMeta()
+    )
+    insights_service.assign_rm(db, alice.id, other_rm.id, user_id(seed_dev.ASSIGNING_ADMIN_EMAIL))
+    assert _seed_with(settings, migrated_engine, monkeypatch, environ) == 0
+    db.expire_all()
+    kept = insights_service.assigned_rm(db, alice.id)
+    assert kept is not None and kept.rm_user_id == other_rm.id
+    assert db.execute(text("SELECT count(*) FROM rm_assignments")).scalar_one() == 2
 
 
 def test_seed_refuses_without_a_password_outside_local(

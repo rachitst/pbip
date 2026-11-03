@@ -6,8 +6,10 @@ The one exception is the loan-propensity filter: a customer's loan score exists 
 recommendation rules have run, so with that filter every candidate is scored (ADR-0022).
 The ordering is by churn risk (retention priority), then balance.
 
-Scope: RM and admin see every customer. The bank has no RM-to-customer assignment yet, and the
-requirements (UC-12, actors table) do not define one; ADR-0022 records this.
+Scope (ADR-0032): an administrator sees every customer; a Relationship Manager sees only the
+customers assigned to them, and any other customer is a 404 like an unknown one (``policy.py``).
+Only an administrator assigns, through ``assign_rm``/``unassign_rm``, which keep the history and
+write the audit chain in the same transaction.
 """
 
 from dataclasses import dataclass
@@ -18,21 +20,27 @@ from pbip_ml.recommendations import PRODUCT_CATALOGUE
 from sqlalchemy.orm import Session
 
 from pbip_api.core.db import utcnow
-from pbip_api.core.errors import NotFoundError
+from pbip_api.core.errors import NotFoundError, UnprocessableError
 from pbip_api.modules.accounts import service as accounts_service
 from pbip_api.modules.analytics import service as analytics_service
 from pbip_api.modules.compliance.service import AuditService
-from pbip_api.modules.insights import repository
+from pbip_api.modules.insights import policy, repository
+from pbip_api.modules.insights.policy import RmScope
 from pbip_api.modules.insights.schemas import (
+    AssignedRm,
     ChurnRiskLevel,
     CustomerInsightDetail,
     CustomerInsightItem,
     CustomerInsightsListResponse,
     HealthSummary,
+    InsightScope,
     InteractionCreate,
     InteractionListResponse,
     InteractionOut,
     RecommendedProduct,
+    RelationshipManagerListResponse,
+    RelationshipManagerOut,
+    RmAssignmentOut,
     TransactionVolumeOut,
 )
 from pbip_api.modules.recommendations import service as recommendations_service
@@ -131,6 +139,7 @@ def _matches(row: _Scored, segment: str | None, min_churn_risk: float | None) ->
 
 def get_customer_insights(
     session: Session,
+    scope: RmScope,
     min_churn_risk: float | None = None,
     segment: str | None = None,
     limit: int = 20,
@@ -138,8 +147,11 @@ def get_customer_insights(
     now: datetime | None = None,
     min_loan_propensity: float | None = None,
 ) -> CustomerInsightsListResponse:
-    """One page of customers ordered by churn risk, with signals and their eligible products."""
+    """One page of the customers in ``scope``, ordered by churn risk, with signals and eligible
+    products. The scope is applied before filtering and paging, so ``total`` is within it."""
     eval_time = now or utcnow()
+    visible = policy.visible_customer_ids(session, scope)
+    listed = InsightScope.ALL if visible is None else InsightScope.ASSIGNED
     scored = [
         row
         for row in (
@@ -147,6 +159,7 @@ def get_customer_insights(
             for activity in analytics_service.get_customer_activity(
                 session, eval_time, BALANCE_WINDOW
             )
+            if visible is None or activity.customer_id in visible
         )
         if _matches(row, segment, min_churn_risk)
     ]
@@ -158,7 +171,9 @@ def get_customer_insights(
             _item(row, _ranked_products(session, row.activity.customer_id, eval_time))
             for row in page
         ]
-        return CustomerInsightsListResponse(items=items, total=len(scored), evaluated_at=eval_time)
+        return CustomerInsightsListResponse(
+            items=items, total=len(scored), evaluated_at=eval_time, scope=listed
+        )
 
     candidates = [
         _item(row, _ranked_products(session, row.activity.customer_id, eval_time)) for row in scored
@@ -170,14 +185,18 @@ def get_customer_insights(
         and item.loan_propensity_score >= min_loan_propensity
     ]
     return CustomerInsightsListResponse(
-        items=matching[offset : offset + limit], total=len(matching), evaluated_at=eval_time
+        items=matching[offset : offset + limit],
+        total=len(matching),
+        evaluated_at=eval_time,
+        scope=listed,
     )
 
 
 def get_customer_insight_detail(
-    session: Session, customer_id: UUID, now: datetime | None = None
+    session: Session, scope: RmScope, customer_id: UUID, now: datetime | None = None
 ) -> CustomerInsightDetail:
-    """The flyout for one customer; 404 when the customer does not exist."""
+    """The flyout for one customer; 404 when the customer does not exist or is out of scope."""
+    policy.require_visible_customer(session, scope, customer_id)
     eval_time = now or utcnow()
     activity = next(
         iter(
@@ -219,6 +238,7 @@ def get_customer_insight_detail(
             for p in products
         ],
         evaluated_at=eval_time,
+        assigned_rm=assigned_rm(session, customer_id),
     )
 
 
@@ -226,11 +246,11 @@ MAX_INTERACTIONS_PAGE = 50
 
 
 def list_interactions(
-    session: Session, customer_id: UUID, limit: int = 20
+    session: Session, scope: RmScope, customer_id: UUID, limit: int = 20
 ) -> InteractionListResponse:
-    """The newest outreach records for a customer; 404 when the customer does not exist."""
-    if repository.get_customer(session, customer_id) is None:
-        raise NotFoundError("customer not found")
+    """The newest outreach records for a customer; 404 when unknown or out of scope. The log stays
+    with the customer, so a newly assigned RM reads what the previous one recorded."""
+    policy.require_visible_customer(session, scope, customer_id)
     rows = repository.list_interactions(session, customer_id, min(limit, MAX_INTERACTIONS_PAGE))
     return InteractionListResponse(
         items=[
@@ -250,16 +270,17 @@ def list_interactions(
 
 def log_interaction(
     session: Session,
+    scope: RmScope,
     customer_id: UUID,
-    staff_user_id: UUID,
     body: InteractionCreate,
     *,
     ip: str | None = None,
     request_id: str | None = None,
 ) -> InteractionOut:
-    """Record an outreach and audit it in the same transaction (the note itself is not audited)."""
-    if repository.get_customer(session, customer_id) is None:
-        raise NotFoundError("customer not found")
+    """Record an outreach and audit it in the same transaction (the note itself is not audited).
+    404 when the customer is unknown or out of the caller's scope."""
+    policy.require_visible_customer(session, scope, customer_id)
+    staff_user_id = scope.user_id
     row = repository.add_interaction(
         session, customer_id, staff_user_id, body.channel, body.outcome, body.note
     )
@@ -286,3 +307,118 @@ def log_interaction(
     )
     session.commit()
     return out
+
+
+def assigned_rm(session: Session, customer_id: UUID) -> AssignedRm | None:
+    """The customer's current RM, or None (also used by the demo seed to stay idempotent)."""
+    found = repository.active_assignment(session, customer_id)
+    if found is None:
+        return None
+    row, email = found
+    return AssignedRm(rm_user_id=row.rm_user_id, rm_email=email, assigned_at=row.assigned_at)
+
+
+def list_relationship_managers(session: Session) -> RelationshipManagerListResponse:
+    """Active RMs (id and email) for the administrator's assignment picker."""
+    return RelationshipManagerListResponse(
+        items=[
+            RelationshipManagerOut(user_id=user_id, email=email)
+            for user_id, email in repository.active_relationship_managers(session)
+        ]
+    )
+
+
+def assign_rm(
+    session: Session,
+    customer_id: UUID,
+    rm_user_id: UUID,
+    admin_user_id: UUID,
+    *,
+    now: datetime | None = None,
+    ip: str | None = None,
+    request_id: str | None = None,
+) -> RmAssignmentOut:
+    """Make ``rm_user_id`` the customer's one active RM (ADR-0032); idempotent for the same RM.
+
+    The per-customer assignment lock is taken before the active row is read, so concurrent
+    administrators are serialised and exactly one assignment stays active. A reassignment closes
+    the previous row (history is kept) and both facts go into one ``RM_ASSIGNED`` audit row.
+    """
+    at = now or utcnow()
+    if repository.get_customer(session, customer_id) is None:
+        raise NotFoundError("customer not found")
+    rm_email = repository.active_relationship_manager(session, rm_user_id)
+    if rm_email is None:
+        raise UnprocessableError("rm_user_id is not an active relationship manager")
+    repository.lock_customer_assignment(session, customer_id)
+    current = repository.active_assignment(session, customer_id)
+    if current is not None and current[0].rm_user_id == rm_user_id:
+        unchanged = RmAssignmentOut(
+            customer_id=customer_id,
+            assigned_rm=AssignedRm(
+                rm_user_id=rm_user_id, rm_email=rm_email, assigned_at=current[0].assigned_at
+            ),
+        )
+        session.rollback()  # nothing changed: release the lock, write nothing
+        return unchanged
+    previous = None
+    if current is not None:
+        previous = current[0].rm_user_id
+        repository.close_assignment(session, current[0], admin_user_id, at)
+    row = repository.add_assignment(session, customer_id, rm_user_id, admin_user_id, at)
+    AuditService(session).record(
+        actor_user_id=admin_user_id,
+        action="RM_ASSIGNED",
+        resource_type="customer",
+        resource_id=str(customer_id),
+        ip=ip,
+        request_id=request_id,
+        details={
+            "rm_user_id": str(rm_user_id),
+            "previous_rm_user_id": None if previous is None else str(previous),
+        },
+    )
+    out = RmAssignmentOut(
+        customer_id=customer_id,
+        assigned_rm=AssignedRm(
+            rm_user_id=rm_user_id, rm_email=rm_email, assigned_at=row.assigned_at
+        ),
+    )
+    session.commit()
+    return out
+
+
+def unassign_rm(
+    session: Session,
+    customer_id: UUID,
+    admin_user_id: UUID,
+    *,
+    now: datetime | None = None,
+    ip: str | None = None,
+    request_id: str | None = None,
+) -> None:
+    """End the customer's active assignment (kept as history) and audit ``RM_UNASSIGNED``.
+
+    Idempotent: with no active assignment nothing is written, so a retry is safe. 404 for an
+    unknown customer.
+    """
+    at = now or utcnow()
+    if repository.get_customer(session, customer_id) is None:
+        raise NotFoundError("customer not found")
+    repository.lock_customer_assignment(session, customer_id)
+    current = repository.active_assignment(session, customer_id)
+    if current is None:
+        session.rollback()
+        return
+    row = current[0]
+    repository.close_assignment(session, row, admin_user_id, at)
+    AuditService(session).record(
+        actor_user_id=admin_user_id,
+        action="RM_UNASSIGNED",
+        resource_type="customer",
+        resource_id=str(customer_id),
+        ip=ip,
+        request_id=request_id,
+        details={"rm_user_id": str(row.rm_user_id)},
+    )
+    session.commit()
