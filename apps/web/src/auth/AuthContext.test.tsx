@@ -60,3 +60,34 @@ describe("signing out", () => {
     expect(screen.queryByText("Alice")).not.toBeInTheDocument();
   });
 });
+
+describe("restoring a session on load", () => {
+  const fetchMock = vi.fn<typeof fetch>();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("treats a 204 refresh (no session cookie) as signed out, with one request and no error", async () => {
+    // #382: the API answers 204 instead of 401 when there is no refresh cookie, so the browser
+    // has no failed request to log on every visit to the sign-in page.
+    fetchMock.mockImplementation((input) =>
+      Promise.resolve(
+        urlOf(input).endsWith("/auth/refresh")
+          ? noContent()
+          : json(404, { code: "not_found", title: "not found" }),
+      ),
+    );
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    renderApp();
+
+    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    expect(fetchMock.mock.calls.map(([input]) => urlOf(input))).toEqual(["/api/v1/auth/refresh"]);
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+});
