@@ -5927,6 +5927,135 @@
         "title": "RuleCount",
         "type": "object"
       },
+      "RuntimeSettingKey": {
+        "enum": [
+          "daily_transfer_limit_minor",
+          "max_transfer_minor",
+          "max_active_scheduled_transfers_per_customer"
+        ],
+        "title": "RuntimeSettingKey",
+        "type": "string"
+      },
+      "RuntimeSettingOut": {
+        "properties": {
+          "default_value": {
+            "description": "The value from the deployment's environment",
+            "title": "Default Value",
+            "type": "integer"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "effective_value": {
+            "description": "The value enforced now",
+            "title": "Effective Value",
+            "type": "integer"
+          },
+          "key": {
+            "$ref": "#/components/schemas/RuntimeSettingKey"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "max_value": {
+            "title": "Max Value",
+            "type": "integer"
+          },
+          "min_value": {
+            "title": "Min Value",
+            "type": "integer"
+          },
+          "overridden": {
+            "title": "Overridden",
+            "type": "boolean"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/SettingUnit",
+            "description": "MINOR_UNITS values are integer minor units (paise)"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "updated_by_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By User Id"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "description",
+          "unit",
+          "min_value",
+          "max_value",
+          "default_value",
+          "effective_value",
+          "overridden",
+          "updated_at",
+          "updated_by_user_id"
+        ],
+        "title": "RuntimeSettingOut",
+        "type": "object"
+      },
+      "RuntimeSettingUpdate": {
+        "additionalProperties": false,
+        "description": "A new value (checked against the key's allow-listed bounds) and why, for the audit log.",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 10,
+            "title": "Reason",
+            "type": "string"
+          },
+          "value": {
+            "maximum": 1000000000000.0,
+            "minimum": 0.0,
+            "title": "Value",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "value",
+          "reason"
+        ],
+        "title": "RuntimeSettingUpdate",
+        "type": "object"
+      },
+      "RuntimeSettingsOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RuntimeSettingOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "RuntimeSettingsOut",
+        "type": "object"
+      },
       "ScheduleFrequency": {
         "enum": [
           "DAILY",
@@ -6511,6 +6640,14 @@
         ],
         "title": "SegmentSpend",
         "type": "object"
+      },
+      "SettingUnit": {
+        "enum": [
+          "MINOR_UNITS",
+          "COUNT"
+        ],
+        "title": "SettingUnit",
+        "type": "string"
       },
       "SpendingBreakdownResponse": {
         "description": "Response containing categorized spending breakdown for an account.",
@@ -8002,6 +8139,88 @@
         "summary": "Ledger entries for one of my accounts (keyset pagination)",
         "tags": [
           "accounts"
+        ]
+      }
+    },
+    "/api/v1/admin/settings": {
+      "get": {
+        "operationId": "list_runtime_settings_api_v1_admin_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimeSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List the runtime-configurable settings with default and effective values (ADMIN, MFA)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/{key}": {
+      "put": {
+        "operationId": "change_runtime_setting_api_v1_admin_settings__key__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RuntimeSettingKey"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimeSettingUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimeSettingOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Change an allow-listed runtime setting, with a reason; audited (ADMIN, MFA)",
+        "tags": [
+          "admin"
         ]
       }
     },

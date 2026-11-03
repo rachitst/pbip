@@ -5,12 +5,19 @@ dependency. A new endpoint added without authentication FAILS THIS TEST. This is
 safety net behind object-level authorization (docs/PROJECT_BLUEPRINT.md section 6).
 """
 
+import uuid
+
 import pytest
 from fastapi.routing import APIRoute
+from pbip_api.core.errors import ForbiddenError
 from pbip_api.main import ROUTERS
+from pbip_api.modules.auth.admin_router import admin_gate
+from pbip_api.modules.auth.dependencies import Principal
+from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.compliance.router import compliance_gate
 from pbip_api.modules.fraud.router import analyst_gate
 from pbip_api.modules.insights.router import assignment_gate, rm_gate
+from pbip_api.modules.runtime_config.router import settings_admin_gate
 from pbip_test_support import build_app
 
 pytestmark = pytest.mark.security
@@ -157,3 +164,47 @@ def test_every_compliance_route_is_behind_the_mfa_compliance_gate() -> None:
         if compliance_gate not in {d.call for d in route.dependant.dependencies}
     ]
     assert not offenders, f"Compliance routes without the MFA compliance gate: {offenders}"
+
+
+def test_every_admin_route_is_behind_an_mfa_admin_only_gate() -> None:
+    """Staff user management and runtime configuration (TASK-007, TASK-108, ADR-0031) are ADMIN-only
+    with MFA. Both gates are ``require_roles(ADMIN, mfa=True)``; a new ``/api/v1/admin/`` route
+    with a weaker gate (or only authentication) fails here."""
+    routes = [r for r in _all_api_routes() if r.path.startswith("/api/v1/admin/")]
+    assert {
+        "/api/v1/admin/users",
+        "/api/v1/admin/users/{user_id}/lockout",
+        "/api/v1/admin/users/{user_id}/unlock",
+        "/api/v1/admin/settings",
+        "/api/v1/admin/settings/{key}",
+    } <= {r.path for r in routes}
+    gates = {admin_gate, settings_admin_gate}
+    offenders = [
+        f"{sorted(route.methods)} {route.path}"
+        for route in routes
+        if not gates & {d.call for d in route.dependant.dependencies}
+    ]
+    assert not offenders, f"Admin routes without the MFA admin gate: {offenders}"
+
+
+@pytest.mark.parametrize("gate", ["admin_gate", "settings_admin_gate"])
+def test_the_admin_gates_admit_only_mfa_verified_admins(gate: str) -> None:
+    """The gate objects above must really be ADMIN + MFA: a principal without ADMIN, or an ADMIN
+    whose session skipped the authenticator step, is refused."""
+    check = {"admin_gate": admin_gate, "settings_admin_gate": settings_admin_gate}[gate]
+
+    def principal(roles: tuple[RoleName, ...], mfa: bool) -> Principal:
+        amr = frozenset({"pwd", "otp"} if mfa else {"pwd"})
+        return Principal(uuid.uuid4(), frozenset(r.value for r in roles), amr, "token-id")
+
+    assert check(principal((RoleName.ADMIN,), True)).mfa_verified
+    for roles, mfa in [
+        ((RoleName.ADMIN,), False),
+        (
+            (RoleName.COMPLIANCE_OFFICER, RoleName.FRAUD_ANALYST, RoleName.RELATIONSHIP_MANAGER),
+            True,
+        ),
+        ((RoleName.CUSTOMER,), True),
+    ]:
+        with pytest.raises(ForbiddenError):
+            check(principal(roles, mfa))

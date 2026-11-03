@@ -78,9 +78,10 @@ and is never joined to the operational schema ([ADR-0009](../adr/0009-synthetic-
 | 32 | `assistant_messages` | `assistant` | 0009 | AI assistant conversation history |
 | 33 | `rm_interactions` | `insights` | 0015 | Relationship manager outreach log |
 | 34 | `rm_assignments` | `insights` | 0021 | Which RM looks after a customer, with history (ADR-0032) |
-| 35 | `synthetic.generation_runs` | none (`pbip_datagen`) | 0002 | One seeded generator run |
-| 36 | `synthetic.customers` | none (`pbip_datagen`) | 0002 | Synthetic customers of a run |
-| 37 | `synthetic.transactions` | none (`pbip_datagen`) | 0002 | Synthetic transactions of a run (ML training data) |
+| 35 | `runtime_settings` | `runtime_config` | 0023 | ADMIN overrides of allow-listed business limits (ADR-0031) |
+| 36 | `synthetic.generation_runs` | none (`pbip_datagen`) | 0002 | One seeded generator run |
+| 37 | `synthetic.customers` | none (`pbip_datagen`) | 0002 | Synthetic customers of a run |
+| 38 | `synthetic.transactions` | none (`pbip_datagen`) | 0002 | Synthetic transactions of a run (ML training data) |
 
 ---
 
@@ -421,6 +422,19 @@ authenticated customer id.
   writers cannot fork the chain. The row is written in the caller's transaction. Tampering detection:
   `test_audit_chain_verifies_and_detects_tampering`.
 
+### 3.10a Runtime configuration (`api/modules/runtime_config/models.py`, TASK-108, ADR-0031)
+
+**`runtime_settings`** (0023)
+* Columns: `id` UUID PK, `key VARCHAR(64)` unique, `value BIGINT`, `updated_by_user_id` -> `users(id)`
+  `ON DELETE RESTRICT`, `created_at`, `updated_at`. A row exists only while a setting is overridden.
+* CHECKs: `ck_runtime_settings_key_valid` (the allow-list: `daily_transfer_limit_minor`, `max_transfer_minor`,
+  `max_active_scheduled_transfers_per_customer`), `ck_runtime_settings_value_non_negative`. The per-key bounds
+  live in `runtime_config/allowlist.py` and are checked on write and again on read.
+* Index: `ix_runtime_settings_updated_by_user_id`.
+* Readers: `runtime_config.service.effective_settings` at each limit check in `payments/service.py` and
+  `bills/service.py`, in the use case's transaction (no cache). Writers: `PUT /api/v1/admin/settings/{key}` only,
+  under the audit-chain lock, with a `RUNTIME_SETTING_CHANGED` audit row (old value, new value, reason).
+
 ### 3.11 Analytics, events, assistant and insights
 
 **`monthly_category_spending`** (0003, `api/modules/analytics/models.py`). FK `account_id -> accounts` `CASCADE`.
@@ -519,6 +533,7 @@ fire on `TRUNCATE`; no `public` table has a TRUNCATE guard.
 | 0020 | `20261102_0020_insurance_catalogue.py` | `insurance_products` (seeded, ADR-0028); the downgrade drops it (nothing references it) |
 | 0021 | `20261103_0021_rm_assignments.py` | `rm_assignments` (ADR-0032); downgrade drops the table and its assignment history (the changes stay in the audit chain) |
 | 0022 | `20261103_0022_fd_maturity_payout.py` | `fixed_deposits.payout_held_at`, its CHECK and `ix_fixed_deposits_status_maturity_date` (ADR-0029, issue #332). Number set at merge |
+| 0023 | `20261103_0023_runtime_settings.py` | `runtime_settings` (TASK-108, ADR-0031). Its downgrade drops any overrides; the environment values apply again |
 
 Every migration has a downgrade; CI runs up, down, up and `alembic check`. One head is enforced by
 `tests/unit/test_migration_heads.py`.
