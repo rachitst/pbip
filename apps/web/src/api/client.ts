@@ -82,6 +82,13 @@ export type EligibilityOut = components["schemas"]["EligibilityOut"];
 export type LoanApplyRequest = components["schemas"]["LoanApplyRequest"];
 export type LoanSummaryOut = components["schemas"]["LoanSummaryOut"];
 export type LoanOut = components["schemas"]["LoanOut"];
+export type AdminCreateUserRequest = components["schemas"]["AdminCreateUserRequest"];
+export type LockoutStatusOut = components["schemas"]["LockoutStatusOut"];
+export type UnlockResultOut = components["schemas"]["UnlockResultOut"];
+export type RuntimeSettingOut = components["schemas"]["RuntimeSettingOut"];
+export type RuntimeSettingsOut = components["schemas"]["RuntimeSettingsOut"];
+export type RuntimeSettingKey = components["schemas"]["RuntimeSettingKey"];
+export type RuntimeSettingUpdate = components["schemas"]["RuntimeSettingUpdate"];
 export type LoanInstalmentOut = components["schemas"]["LoanInstalmentOut"];
 export type EventBatchRequest = components["schemas"]["EventBatchRequest"];
 export type EventBatchResponse = components["schemas"]["EventBatchResponse"];
@@ -620,4 +627,19 @@ export const api = {
       { method: "POST", body: JSON.stringify(body), keepalive: true },
       false,
     ),
+  // TASK-108 administration (ADMIN with an MFA-verified session; enforced by the API).
+  adminCreateUser: (body: AdminCreateUserRequest) =>
+    apiFetch<UserOut>("/api/v1/admin/users", { method: "POST", body: JSON.stringify(body) }),
+  adminLockout: (userId: string) =>
+    apiFetch<LockoutStatusOut>(`/api/v1/admin/users/${encodeURIComponent(userId)}/lockout`),
+  adminUnlock: (userId: string) =>
+    apiFetch<UnlockResultOut>(`/api/v1/admin/users/${encodeURIComponent(userId)}/unlock`, {
+      method: "POST",
+    }),
+  runtimeSettings: () => apiFetch<RuntimeSettingsOut>("/api/v1/admin/settings"),
+  changeRuntimeSetting: (key: RuntimeSettingKey, body: RuntimeSettingUpdate) =>
+    apiFetch<RuntimeSettingOut>(`/api/v1/admin/settings/${encodeURIComponent(key)}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
 };

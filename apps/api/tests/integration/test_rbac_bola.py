@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from pbip_api.core.config import Settings
 from pbip_api.core.db import utcnow
 from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.notifications.models import Notification
@@ -90,6 +91,9 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("delete", f"/api/v1/insights/customers/{uuid.uuid4()}/assignment"),
         ("get", f"/api/v1/admin/users/{uuid.uuid4()}/lockout"),
         ("post", f"/api/v1/admin/users/{uuid.uuid4()}/unlock"),
+        ("post", "/api/v1/admin/users"),
+        ("get", "/api/v1/admin/settings"),
+        ("put", "/api/v1/admin/settings/daily_transfer_limit_minor"),
     ]:
         assert getattr(client, method)(path).status_code == 401, path
 
@@ -126,6 +130,49 @@ def test_customer_cannot_use_staff_endpoints(
         ).status_code
         == 403
     )
+
+
+def test_only_admins_with_mfa_may_use_admin_routes(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_staff: Callable[..., Actor],
+    settings: Settings,
+) -> None:
+    """TASK-108: every /api/v1/admin route (staff users, lockouts, runtime settings) is 403 for
+    customers, every other staff role and an ADMIN whose session skipped the authenticator step."""
+    settings.rate_limit_login_per_minute = 50  # several actors log in from the same client IP
+    victim = make_customer()
+    new_user = {
+        "email": "rbac.created@bank.example",
+        "password": PASSWORD,
+        "full_name": "Rbac Created",
+        "roles": ["FRAUD_ANALYST"],
+    }
+    change = {"value": 150_000, "reason": "RBAC probe, must be refused"}
+    calls: list[tuple[str, str, dict[str, Any] | None]] = [
+        ("post", "/api/v1/admin/users", new_user),
+        ("get", f"/api/v1/admin/users/{victim.user_id}/lockout", None),
+        ("post", f"/api/v1/admin/users/{victim.user_id}/unlock", None),
+        ("get", "/api/v1/admin/settings", None),
+        ("put", "/api/v1/admin/settings/daily_transfer_limit_minor", change),
+    ]
+    refused = [victim] + [
+        make_staff(role)
+        for role in (
+            RoleName.FRAUD_ANALYST,
+            RoleName.COMPLIANCE_OFFICER,
+            RoleName.RELATIONSHIP_MANAGER,
+        )
+    ]
+    refused.append(make_staff(RoleName.ADMIN, mfa=False))
+    for actor in refused:
+        for method, path, body in calls:
+            kwargs: dict[str, Any] = {"headers": actor.headers}
+            if body is not None:
+                kwargs["json"] = body
+            assert getattr(client, method)(path, **kwargs).status_code == 403, (actor.email, path)
+    admin = make_staff(RoleName.ADMIN)
+    assert client.get("/api/v1/admin/settings", headers=admin.headers).status_code == 200
 
 
 def test_staff_have_no_customer_profile(
