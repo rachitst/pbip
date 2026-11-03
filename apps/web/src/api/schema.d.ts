@@ -961,8 +961,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Customers ordered by churn risk, with churn signals and the top eligible product
-         * @description One page of customers ordered by churn risk (RM or admin with an MFA-verified session).
+         * Customers in the caller's scope (an RM: assigned only) ordered by churn risk
+         * @description One page of customers ordered by churn risk (RM: their assigned customers; admin: all).
          */
         get: operations["get_prioritized_customer_insights_api_v1_insights_customers_get"];
         put?: never;
@@ -982,12 +982,30 @@ export interface paths {
         };
         /**
          * One customer's churn signals, health score, 30-day volume and eligible products
-         * @description Detail behind the RM flyout (RM or admin with an MFA-verified session).
+         * @description Detail behind the RM flyout (RM: assigned customers only; admin: any).
          */
         get: operations["get_customer_insight_detail_api_v1_insights_customers__customer_id__get"];
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/insights/customers/{customer_id}/assignment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Assign or reassign a customer to a relationship manager (ADMIN with MFA, audited) */
+        put: operations["assign_relationship_manager_api_v1_insights_customers__customer_id__assignment_put"];
+        post?: never;
+        /** End a customer's relationship-manager assignment (ADMIN with MFA, audited) */
+        delete: operations["unassign_relationship_manager_api_v1_insights_customers__customer_id__assignment_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1005,6 +1023,23 @@ export interface paths {
         put?: never;
         /** Log a call, meeting, email or note about a customer (audited) */
         post: operations["log_customer_interaction_api_v1_insights_customers__customer_id__interactions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/insights/relationship-managers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Active relationship managers, for assigning customers (ADMIN with MFA) */
+        get: operations["list_relationship_managers_api_v1_insights_relationship_managers_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1734,6 +1769,24 @@ export interface components {
             /** Value Minor */
             value_minor: number;
         };
+        /**
+         * AssignedRm
+         * @description The relationship manager responsible for a customer (ADR-0032).
+         */
+        AssignedRm: {
+            /**
+             * Assigned At
+             * Format: date-time
+             */
+            assigned_at: string;
+            /** Rm Email */
+            rm_email: string;
+            /**
+             * Rm User Id
+             * Format: uuid
+             */
+            rm_user_id: string;
+        };
         /** AssistantHistory */
         AssistantHistory: {
             /** Items */
@@ -2173,6 +2226,8 @@ export interface components {
          *     Same data minimisation as the list: no email, phone, address, birth date or account number.
          */
         CustomerInsightDetail: {
+            /** @description The relationship manager now responsible; null if unassigned */
+            assigned_rm?: components["schemas"]["AssignedRm"] | null;
             /**
              * Customer Since
              * Format: date-time
@@ -2279,6 +2334,8 @@ export interface components {
              * @description Prioritized list of customer insight profiles
              */
             items?: components["schemas"]["CustomerInsightItem"][];
+            /** @description ASSIGNED: the caller's own customers only; ALL: every customer (admin) */
+            scope: components["schemas"]["InsightScope"];
             /**
              * Total
              * @description Total matching customers count
@@ -3317,6 +3374,12 @@ export interface components {
              */
             reference_term_years: number;
         };
+        /**
+         * InsightScope
+         * @description ASSIGNED: only the caller's portfolio (an RM). ALL: every customer (an administrator).
+         * @enum {string}
+         */
+        InsightScope: "ASSIGNED" | "ALL";
         /** InstalmentOut */
         InstalmentOut: {
             /** Balance After Minor */
@@ -4294,6 +4357,24 @@ export interface components {
             window_days: number;
         };
         /**
+         * RelationshipManagerListResponse
+         * @description Active staff with the RELATIONSHIP_MANAGER role, for the admin's assignment picker.
+         */
+        RelationshipManagerListResponse: {
+            /** Items */
+            items: components["schemas"]["RelationshipManagerOut"][];
+        };
+        /** RelationshipManagerOut */
+        RelationshipManagerOut: {
+            /** Email */
+            email: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
          * RiskBand
          * @enum {string}
          */
@@ -4366,6 +4447,26 @@ export interface components {
             flagged_transfers: number;
             /** Max Risk */
             max_risk: number;
+        };
+        /** RmAssignmentOut */
+        RmAssignmentOut: {
+            assigned_rm: components["schemas"]["AssignedRm"];
+            /**
+             * Customer Id
+             * Format: uuid
+             */
+            customer_id: string;
+        };
+        /**
+         * RmAssignmentRequest
+         * @description Assign (or reassign) a customer to an active relationship manager (ADMIN only).
+         */
+        RmAssignmentRequest: {
+            /**
+             * Rm User Id
+             * Format: uuid
+             */
+            rm_user_id: string;
         };
         /** RuleCount */
         RuleCount: {
@@ -6903,6 +7004,82 @@ export interface operations {
                     "application/json": components["schemas"]["CustomerInsightDetail"];
                 };
             };
+            /** @description No such customer, or not assigned to the calling RM */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_relationship_manager_api_v1_insights_customers__customer_id__assignment_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RmAssignmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RmAssignmentOut"];
+                };
+            };
+            /** @description No such customer */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description rm_user_id is not an active relationship manager */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    unassign_relationship_manager_api_v1_insights_customers__customer_id__assignment_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description No such customer */
             404: {
                 headers: {
@@ -6944,7 +7121,7 @@ export interface operations {
                     "application/json": components["schemas"]["InteractionListResponse"];
                 };
             };
-            /** @description No such customer */
+            /** @description No such customer, or not assigned to the calling RM */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6986,7 +7163,7 @@ export interface operations {
                     "application/json": components["schemas"]["InteractionOut"];
                 };
             };
-            /** @description No such customer */
+            /** @description No such customer, or not assigned to the calling RM */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7000,6 +7177,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_relationship_managers_api_v1_insights_relationship_managers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelationshipManagerListResponse"];
                 };
             };
         };

@@ -514,6 +514,32 @@
         "title": "AllocationSlice",
         "type": "object"
       },
+      "AssignedRm": {
+        "description": "The relationship manager responsible for a customer (ADR-0032).",
+        "properties": {
+          "assigned_at": {
+            "format": "date-time",
+            "title": "Assigned At",
+            "type": "string"
+          },
+          "rm_email": {
+            "title": "Rm Email",
+            "type": "string"
+          },
+          "rm_user_id": {
+            "format": "uuid",
+            "title": "Rm User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rm_user_id",
+          "rm_email",
+          "assigned_at"
+        ],
+        "title": "AssignedRm",
+        "type": "object"
+      },
       "AssistantHistory": {
         "properties": {
           "items": {
@@ -1410,6 +1436,17 @@
       "CustomerInsightDetail": {
         "description": "One customer for the RM flyout: churn signals, health, recent volume and eligible products.\n\nSame data minimisation as the list: no email, phone, address, birth date or account number.",
         "properties": {
+          "assigned_rm": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssignedRm"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The relationship manager now responsible; null if unassigned"
+          },
           "customer_since": {
             "format": "date-time",
             "title": "Customer Since",
@@ -1592,6 +1629,10 @@
             "title": "Items",
             "type": "array"
           },
+          "scope": {
+            "$ref": "#/components/schemas/InsightScope",
+            "description": "ASSIGNED: the caller's own customers only; ALL: every customer (admin)"
+          },
           "total": {
             "description": "Total matching customers count",
             "minimum": 0.0,
@@ -1601,7 +1642,8 @@
         },
         "required": [
           "total",
-          "evaluated_at"
+          "evaluated_at",
+          "scope"
         ],
         "title": "CustomerInsightsListResponse",
         "type": "object"
@@ -3672,6 +3714,15 @@
         "title": "IndicativePremiumOut",
         "type": "object"
       },
+      "InsightScope": {
+        "description": "ASSIGNED: only the caller's portfolio (an RM). ALL: every customer (an administrator).",
+        "enum": [
+          "ASSIGNED",
+          "ALL"
+        ],
+        "title": "InsightScope",
+        "type": "string"
+      },
       "InstalmentOut": {
         "properties": {
           "balance_after_minor": {
@@ -5608,6 +5659,42 @@
         "title": "RegulatoryIndicators",
         "type": "object"
       },
+      "RelationshipManagerListResponse": {
+        "description": "Active staff with the RELATIONSHIP_MANAGER role, for the admin's assignment picker.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RelationshipManagerOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "RelationshipManagerListResponse",
+        "type": "object"
+      },
+      "RelationshipManagerOut": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "email"
+        ],
+        "title": "RelationshipManagerOut",
+        "type": "object"
+      },
       "RiskBand": {
         "enum": [
           "LOW",
@@ -5774,6 +5861,40 @@
           "max_risk"
         ],
         "title": "RiskyPayee",
+        "type": "object"
+      },
+      "RmAssignmentOut": {
+        "properties": {
+          "assigned_rm": {
+            "$ref": "#/components/schemas/AssignedRm"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_id",
+          "assigned_rm"
+        ],
+        "title": "RmAssignmentOut",
+        "type": "object"
+      },
+      "RmAssignmentRequest": {
+        "additionalProperties": false,
+        "description": "Assign (or reassign) a customer to an active relationship manager (ADMIN only).",
+        "properties": {
+          "rm_user_id": {
+            "format": "uuid",
+            "title": "Rm User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rm_user_id"
+        ],
+        "title": "RmAssignmentRequest",
         "type": "object"
       },
       "RuleCount": {
@@ -10483,7 +10604,7 @@
     },
     "/api/v1/insights/customers": {
       "get": {
-        "description": "One page of customers ordered by churn risk (RM or admin with an MFA-verified session).",
+        "description": "One page of customers ordered by churn risk (RM: their assigned customers; admin: all).",
         "operationId": "get_prioritized_customer_insights_api_v1_insights_customers_get",
         "parameters": [
           {
@@ -10601,7 +10722,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Customers ordered by churn risk, with churn signals and the top eligible product",
+        "summary": "Customers in the caller's scope (an RM: assigned only) ordered by churn risk",
         "tags": [
           "insights"
         ]
@@ -10609,7 +10730,7 @@
     },
     "/api/v1/insights/customers/{customer_id}": {
       "get": {
-        "description": "Detail behind the RM flyout (RM or admin with an MFA-verified session).",
+        "description": "Detail behind the RM flyout (RM: assigned customers only; admin: any).",
         "operationId": "get_customer_insight_detail_api_v1_insights_customers__customer_id__get",
         "parameters": [
           {
@@ -10635,7 +10756,7 @@
             "description": "Successful Response"
           },
           "404": {
-            "description": "No such customer"
+            "description": "No such customer, or not assigned to the calling RM"
           },
           "422": {
             "content": {
@@ -10654,6 +10775,102 @@
           }
         ],
         "summary": "One customer's churn signals, health score, 30-day volume and eligible products",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
+    "/api/v1/insights/customers/{customer_id}/assignment": {
+      "delete": {
+        "operationId": "unassign_relationship_manager_api_v1_insights_customers__customer_id__assignment_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Customer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such customer"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "End a customer's relationship-manager assignment (ADMIN with MFA, audited)",
+        "tags": [
+          "insights"
+        ]
+      },
+      "put": {
+        "operationId": "assign_relationship_manager_api_v1_insights_customers__customer_id__assignment_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Customer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RmAssignmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RmAssignmentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such customer"
+          },
+          "422": {
+            "description": "rm_user_id is not an active relationship manager"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Assign or reassign a customer to a relationship manager (ADMIN with MFA, audited)",
         "tags": [
           "insights"
         ]
@@ -10700,7 +10917,7 @@
             "description": "Successful Response"
           },
           "404": {
-            "description": "No such customer"
+            "description": "No such customer, or not assigned to the calling RM"
           },
           "422": {
             "content": {
@@ -10759,7 +10976,7 @@
             "description": "Successful Response"
           },
           "404": {
-            "description": "No such customer"
+            "description": "No such customer, or not assigned to the calling RM"
           },
           "422": {
             "content": {
@@ -10778,6 +10995,32 @@
           }
         ],
         "summary": "Log a call, meeting, email or note about a customer (audited)",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
+    "/api/v1/insights/relationship-managers": {
+      "get": {
+        "operationId": "list_relationship_managers_api_v1_insights_relationship_managers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelationshipManagerListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Active relationship managers, for assigning customers (ADMIN with MFA)",
         "tags": [
           "insights"
         ]

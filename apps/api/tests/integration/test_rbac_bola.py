@@ -86,6 +86,9 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("get", f"/api/v1/insights/customers/{uuid.uuid4()}"),
         ("get", f"/api/v1/insights/customers/{uuid.uuid4()}/interactions"),
         ("post", f"/api/v1/insights/customers/{uuid.uuid4()}/interactions"),
+        ("get", "/api/v1/insights/relationship-managers"),
+        ("put", f"/api/v1/insights/customers/{uuid.uuid4()}/assignment"),
+        ("delete", f"/api/v1/insights/customers/{uuid.uuid4()}/assignment"),
         ("get", f"/api/v1/admin/users/{uuid.uuid4()}/lockout"),
         ("post", f"/api/v1/admin/users/{uuid.uuid4()}/unlock"),
         ("post", "/api/v1/admin/users"),
@@ -109,6 +112,11 @@ def test_customer_cannot_use_staff_endpoints(
     own = f"/api/v1/insights/customers/{alice.customer_id}"
     assert client.get(own, headers=alice.headers).status_code == 403
     assert client.get(f"{own}/interactions", headers=alice.headers).status_code == 403
+    assign = {"rm_user_id": str(alice.user_id)}
+    assert client.put(f"{own}/assignment", headers=alice.headers, json=assign).status_code == 403
+    assert client.delete(f"{own}/assignment", headers=alice.headers).status_code == 403
+    rms = "/api/v1/insights/relationship-managers"
+    assert client.get(rms, headers=alice.headers).status_code == 403
     assert (
         client.post(
             "/api/v1/admin/users",
@@ -750,3 +758,41 @@ def test_listings_only_contain_the_callers_own_objects(
         ]
         == "1970-05-05"
     )
+
+
+def test_bola_rm_only_reaches_assigned_customers(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_staff: Callable[..., Actor],
+    assign_rm: Callable[..., None],
+) -> None:
+    """ADR-0032: an RM reads and writes insights only for customers assigned to them. Another RM's
+    customer, an unassigned one and a non-existent id are all 404, never 403; an RM cannot assign
+    themselves a customer."""
+    victim = make_customer(funds=10_000_00)
+    unassigned = make_customer(funds=10_000_00)
+    owner_rm = make_staff(RoleName.RELATIONSHIP_MANAGER)
+    mallory = make_staff(RoleName.RELATIONSHIP_MANAGER)
+    assign_rm(owner_rm, victim)
+    note = {"channel": "NOTE", "outcome": "FOLLOW_UP", "note": "x"}
+    h = mallory.headers
+    for target in (victim.customer_id, unassigned.customer_id, uuid.uuid4()):
+        base = f"/api/v1/insights/customers/{target}"
+        attempts = {
+            "detail": client.get(base, headers=h),
+            "list log": client.get(f"{base}/interactions", headers=h),
+            "write log": client.post(f"{base}/interactions", headers=h, json=note),
+        }
+        for name, response in attempts.items():
+            assert response.status_code == 404, f"{name} {target}: got {response.status_code}"
+    listed = client.get("/api/v1/insights/customers", headers=h).json()
+    assert (listed["items"], listed["total"]) == ([], 0)
+    steal = client.put(
+        f"/api/v1/insights/customers/{victim.customer_id}/assignment",
+        headers=h,
+        json={"rm_user_id": str(mallory.user_id)},
+    )
+    assert steal.status_code == 403
+    base = f"/api/v1/insights/customers/{victim.customer_id}"
+    assert client.get(base, headers=owner_rm.headers).status_code == 200
+    assert client.get(f"{base}/interactions", headers=owner_rm.headers).json()["total"] == 0

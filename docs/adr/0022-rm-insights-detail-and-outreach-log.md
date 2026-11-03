@@ -1,5 +1,5 @@
 # ADR 0022: RM insights detail, loan-propensity filter and the outreach log
-- Status: Accepted (approved by the product owner, 2026-11-02; the table shipped in #277, migration 0015)
+- Status: Accepted (approved by the product owner, 2026-11-02; the table shipped in #277, migration 0015). Decision 5 (scope) amended by [ADR-0032](0032-rm-customer-assignment.md)
 - Date: 2026-11-01
 - Deciders: Architecture Team
 

@@ -1,7 +1,7 @@
 """Runtime overrides of allow-listed business limits (TASK-108, ADR-0031).
 
-Revision ID: 0021
-Revises: 0020
+Revision ID: 0023
+Revises: 0022
 Create Date: 2026-11-03
 
 ``runtime_settings`` holds the CURRENT override of a setting an ADMIN may change at runtime; no row
@@ -18,8 +18,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0021"
-down_revision: str | None = "0020"
+revision: str = "0023"
+down_revision: str | None = "0022"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
