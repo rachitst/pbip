@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 import joblib
+import lightgbm as lgb
 import mlflow
 import numpy as np
 import pandas as pd
@@ -36,7 +37,9 @@ from pbip_ml.tracking import (
 )
 
 EXPERIMENT = "pbip-fraud"
-HYBRID_VERSION = "hybrid-lgbm-iforest-1"
+# 1: generator v2.1 and v2.2 models (both served as -1; tell them apart by the MLflow run and the
+# registry version in champion.json). 2: generator v2.3 (#276), TASK-084 retrain.
+HYBRID_VERSION = "hybrid-lgbm-iforest-2"
 
 
 def load_export(directory: Path) -> pd.DataFrame:
@@ -52,10 +55,24 @@ def load_export(directory: Path) -> pd.DataFrame:
     return t.build_dataset(transfers, labels)
 
 
-def run(data: Path, out: Path, holdout: Path | None = None) -> dict[str, Any]:
+def shap_summary(booster: lgb.Booster, x: pd.DataFrame) -> dict[str, float]:
+    """Mean |TreeSHAP| per feature (log-odds, exact ``pred_contrib``): global importance."""
+    contrib = np.asarray(
+        booster.predict(x, num_iteration=booster.best_iteration, pred_contrib=True)
+    )
+    mean_abs = np.abs(contrib[:, :-1]).mean(axis=0)  # the last column is the expected value
+    ranked = sorted(zip(x.columns, mean_abs, strict=True), key=lambda kv: -kv[1])
+    return {str(name): round(float(value), 4) for name, value in ranked}
+
+
+def run(
+    data: Path, out: Path, holdout: Path | None = None, lgbm_params: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """``lgbm_params`` overrides single entries of ``LGBM_PARAMS`` (a tuning candidate)."""
+    params_used = {**t.LGBM_PARAMS, **(lgbm_params or {})}
     dataset = load_export(data)
     split = t.time_split(dataset)
-    booster, threshold = t.train_lightgbm(split)
+    booster, threshold = t.train_lightgbm(split, params=params_used)
     anomaly = t.train_isolation_forest(split)
 
     x_test, y_test = t._xy(split.test)
@@ -69,8 +86,10 @@ def run(data: Path, out: Path, holdout: Path | None = None) -> dict[str, Any]:
                                ("test", split.test))
         },
         "lightgbm": {
+            "params": {k: v for k, v in params_used.items() if k != "verbose"},
             "best_iteration": booster.best_iteration,
             "test": t.evaluate(y_test, lgbm_scores, threshold).as_dict(),
+            "shap_mean_abs_test": shap_summary(booster, x_test),
             "latency": t.single_prediction_ms(
                 lambda row: np.asarray(booster.predict(row, num_iteration=booster.best_iteration)),
                 x_test.iloc[[0]],
@@ -131,12 +150,15 @@ def log_to_mlflow(
         mlflow.set_tracking_uri(target.uri)
     experiment_id = ensure_experiment(EXPERIMENT, target)
     with mlflow.start_run(experiment_id=experiment_id) as active:
-        mlflow.log_params({k: v for k, v in t.LGBM_PARAMS.items() if k != "verbose"})
+        mlflow.log_params(report["lightgbm"]["params"])
+        mlflow.log_param("model_version", HYBRID_VERSION)
         mlflow.log_param("features", ",".join(t.MODEL_FEATURES))
         for model, section in (("lgbm", "test"), ("if", "test_at_0_5")):
             source = report["lightgbm" if model == "lgbm" else "isolation_forest"][section]
             for key in ("precision", "recall", "f1", "pr_auc", "fpr", "fnr"):
                 mlflow.log_metric(f"{model}_{key}", float(source[key]))
+        for feature, value in report["lightgbm"]["shap_mean_abs_test"].items():
+            mlflow.log_metric(f"shap_mean_abs_{feature}", float(value))
         for name in (
             "report.json",
             "lightgbm.txt",
@@ -154,8 +176,14 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--holdout", type=Path, default=None)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--mlflow-local-dir", type=Path, default=DEFAULT_LOCAL_DIR)
+    parser.add_argument(
+        "--lgbm-params", type=Path, default=None, help="JSON overrides of LGBM_PARAMS (tuning)"
+    )
     args = parser.parse_args(argv)
-    report = run(args.data, args.out, args.holdout)
+    overrides = (
+        json.loads(args.lgbm_params.read_text(encoding="utf-8")) if args.lgbm_params else None
+    )
+    report = run(args.data, args.out, args.holdout, overrides)
     run_id = log_to_mlflow(report, args.out, args.mlflow_local_dir)
     sys.stdout.write(json.dumps({"mlflow_run_id": run_id, **report}, indent=2) + "\n")
 

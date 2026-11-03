@@ -27,7 +27,7 @@ from pbip_ml.fraud import inference as inf
 from pbip_ml.fraud import promotion as p
 from pbip_ml.fraud import training as t
 from pbip_ml.fraud.evaluation import served_metrics
-from pbip_ml.fraud.train import load_export, log_to_mlflow, run
+from pbip_ml.fraud.train import HYBRID_VERSION, load_export, log_to_mlflow, run
 from pbip_ml.tracking import (
     TRACKING_URI_ENV,
     TrackingTarget,
@@ -276,7 +276,7 @@ def test_exported_champion_passes_the_serving_loader_and_replaces_old_files(
     expected_files = {*inf.ARTIFACTS, inf.MANIFEST, "report.json", "champion.json"}
     assert set(exported.files) == expected_files  # stale.txt went with the old directory
     scorer = inf.load(served)  # the API's startup loader, checksums included
-    assert scorer.params.model_version == "hybrid-lgbm-iforest-1"
+    assert scorer.params.model_version == HYBRID_VERSION
     for name in (*inf.ARTIFACTS, inf.MANIFEST):
         assert (served / name).read_bytes() == (registry.good_dir / name).read_bytes()
     provenance = json.loads((served / "champion.json").read_text(encoding="utf-8"))
@@ -299,7 +299,7 @@ def test_export_with_mlflow_unreachable_keeps_serving_the_files_on_disk(
     with pytest.raises(p.PromotionError, match="unreachable"):
         p.export_champion("http://127.0.0.1:1", served)
     assert {f.name: f.read_bytes() for f in served.iterdir()} == before
-    assert inf.load(served).params.model_version == "hybrid-lgbm-iforest-1"
+    assert inf.load(served).params.model_version == HYBRID_VERSION
 
 
 def test_export_refuses_artifacts_that_differ_from_what_the_gate_measured(
@@ -343,7 +343,7 @@ def test_cli_promotes_exports_and_reports_rejections_by_exit_code(
     out = tmp_path / "served"
     assert p.main(["export-champion", *common, "--out", str(out)]) == 0
     assert json.loads(capsys.readouterr().out)["version"] == "1"
-    assert inf.load(out).params.model_version == "hybrid-lgbm-iforest-1"
+    assert inf.load(out).params.model_version == HYBRID_VERSION
 
 
 def test_latest_run_is_the_newest_finished_training_run(registry: Registry) -> None:
