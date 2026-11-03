@@ -85,13 +85,16 @@ export const SCENARIOS: Scenario[] = [
   {
     code: "F4",
     title: "Impossible travel",
-    summary: "A transfer comes from a country the customer has never transacted from.",
+    summary:
+      "A transfer comes from a place too far from the customer's last sign-in or payment for the time between them, or from a new country.",
     sequence: [],
-    signals: "NEW_COUNTRY (needs the GeoIP database, ADR-0014)",
+    signals:
+      "IMPOSSIBLE_TRAVEL (needs the GeoIP city database, ADR-0034), NEW_COUNTRY (needs the GeoIP country database, ADR-0014)",
     notRunnable:
-      "The country comes from the network address the server sees. A browser cannot change that " +
-      "honestly (the lab does not forge X-Forwarded-For), and without GEOIP_COUNTRY_DB_PATH the " +
-      "server records no country at all. The rule is covered by the API integration tests.",
+      "The location comes from the network address the server sees. A browser cannot change that " +
+      "honestly (the lab does not forge X-Forwarded-For), and without GEOIP_CITY_DB_PATH and " +
+      "GEOIP_COUNTRY_DB_PATH the server records no location at all. The rules are covered by the " +
+      "API integration tests.",
   },
   {
     code: "F5",

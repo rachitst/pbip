@@ -23,7 +23,12 @@ from sqlalchemy.orm import Session
 from pbip_api.core.config import Settings
 from pbip_api.core.db import utcnow
 from pbip_api.core.errors import ConflictError, NotFoundError, UnprocessableError
-from pbip_api.core.geoip import CountryResolver, NoCountryResolver
+from pbip_api.core.geoip import (
+    CountryResolver,
+    LocationResolver,
+    NoCountryResolver,
+    NoLocationResolver,
+)
 from pbip_api.core.metrics import (
     FRAUD_DECISIONS_TOTAL,
     FRAUD_INFERENCE_SECONDS,
@@ -134,12 +139,14 @@ class PaymentsService:
         auth: AuthService,
         countries: CountryResolver | None = None,
         counters: VelocityCounters | None = None,
+        locations: LocationResolver | None = None,
     ) -> None:
         self.session = session
         self.settings = settings
         self.scorer = scorer
         self.auth = auth
         self.countries = countries or NoCountryResolver()
+        self.locations = locations or NoLocationResolver()
         self.counters = counters
         self.audit = AuditService(session)
 
@@ -242,6 +249,7 @@ class PaymentsService:
 
         # The scorer contract only knows WEB/MOBILE/API (changing it needs an ADR), so the
         # context keeps its default channel; the real channel is on the transaction and audit row.
+        point = self.locations.locate(ip)  # city-level, for IMPOSSIBLE_TRAVEL (ADR-0034)
         result = self.scorer.score(
             TransactionContext(
                 transaction_id=transaction.id,
@@ -252,8 +260,11 @@ class PaymentsService:
                 occurred_at=utcnow(),
                 payee_id=payee.id if payee else None,
                 device_id=device_id,
-                ip_country=self.countries.country(ip),
+                # the city file carries the country too (ADR-0034), when no country file is set
+                ip_country=self.countries.country(ip) or (point.country if point else None),
                 ip_network=ip_network(ip),
+                geo_lat=point.latitude if point else None,
+                geo_lon=point.longitude if point else None,
             )
         )
         FRAUD_INFERENCE_SECONDS.observe(result.latency_ms / 1000)
@@ -976,6 +987,61 @@ class PaymentsService:
                 "next_run_date": instruction.next_run_date.isoformat(),
                 "status": instruction.status.value,
                 "loan_id": str(instruction.loan_id),
+            },
+        )
+        self.session.commit()
+        return instruction
+
+    def clear_scheduled_fraud_block(
+        self,
+        *,
+        analyst_id: UUID,
+        scheduled_transfer_id: UUID,
+        reason: str,
+        meta: RequestMeta,
+    ) -> ScheduledTransfer:
+        """A fraud analyst lifts the FRAUD_BLOCK lock after review (ADR-0023 R1/R5, issue #304).
+
+        The order stays PAUSED with ``pause_reason = CUSTOMER``: it never restarts unattended, the
+        customer resumes it (with the usual re-validation and no-backlog roll-forward). Staff act
+        across customers by role, like alert decisions, so there is no ownership policy here.
+        Repeating the call is a 409, as deciding an already resolved alert is.
+        """
+        owner = self.session.execute(
+            select(ScheduledTransfer.user_id).where(ScheduledTransfer.id == scheduled_transfer_id)
+        ).scalar_one_or_none()
+        if owner is None:
+            raise NotFoundError("scheduled transfer not found")
+        self._lock_user(owner)  # the same first lock the customer's pause/resume/cancel take
+        instruction = self.session.execute(
+            select(ScheduledTransfer)
+            .where(ScheduledTransfer.id == scheduled_transfer_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).scalar_one()
+        if instruction.pause_reason != SchedulePauseReason.FRAUD_BLOCK:
+            raise ConflictError("scheduled transfer is not paused by a fraud block")
+
+        instruction.pause_reason = SchedulePauseReason.CUSTOMER
+        self.audit.record(
+            analyst_id,
+            "SCHEDULED_TRANSFER_FRAUD_BLOCK_CLEARED",
+            "scheduled_transfer",
+            str(instruction.id),
+            ip=meta.ip,
+            request_id=meta.request_id,
+            details={"reason": reason, "customer_user_id": str(instruction.user_id)},
+        )
+        # The customer learns only that they may resume: no score, reasons or analyst note.
+        notifications.enqueue(
+            self.session,
+            notifications.SCHEDULED_TRANSFER_UNLOCKED,
+            {
+                "user_id": str(instruction.user_id),
+                "account_id": str(instruction.from_account_id),
+                "scheduled_transfer_id": str(instruction.id),
+                "amount_minor": instruction.amount,
+                "currency": instruction.currency,
             },
         )
         self.session.commit()

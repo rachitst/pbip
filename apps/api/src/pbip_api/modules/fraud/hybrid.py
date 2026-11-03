@@ -35,6 +35,7 @@ from pbip_api.modules.auth.models import SecurityEvent, SecurityEventType
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.fraud.baseline import BaselineRulesScorer, decide
 from pbip_api.modules.fraud.models import FraudEvent
+from pbip_api.modules.fraud.travel import TravelPolicy
 from pbip_api.modules.ledger.models import Transaction
 from pbip_api.modules.payees.models import Payee
 
@@ -88,12 +89,13 @@ class HybridFraudScorer:
         engine: "HybridScorer | None",
         budget_ms: int,
         counters: VelocityCounters | None = None,
+        travel: TravelPolicy | None = None,
         settings: Settings | None = None,
     ) -> None:
         self.session = session
         self.engine = engine
         self.budget_seconds = budget_ms / 1000
-        self.baseline = BaselineRulesScorer(session, counters, settings=settings)
+        self.baseline = BaselineRulesScorer(session, counters, travel, settings=settings)
 
     def score(self, context: TransactionContext) -> FraudScoreResult:
         started = time.perf_counter()

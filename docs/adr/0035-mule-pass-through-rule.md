@@ -44,7 +44,7 @@ one trades caught mules against legitimate customers held for a second factor or
    written, so concurrent transfers see the same inbound total and the ledger lock order (AGENTS.md section 4) is
    unchanged. Measured: with 1,000 inbound transfers on the account, the whole baseline scorer had p95 42.8 ms and
    median 18.8 ms over 30 calls on the shared laptop at load average 7.4 (`test_scoring_stays_fast_with_1000_inbound_transfers`).
-5. **Version.** `MODEL_VERSION` is `baseline-rules-0.4`.
+5. **Version.** `MODEL_VERSION` is `baseline-rules-0.5` (0.4 is IMPOSSIBLE_TRAVEL, ADR-0034, merged first).
 
 ### Measurement on the synthetic data (honest limits)
 An offline replica of the rule was run over the `make fraud-model` export (seed 42, 3,000 customers, 6 months; whole

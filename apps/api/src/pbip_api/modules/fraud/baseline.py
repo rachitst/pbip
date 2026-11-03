@@ -30,11 +30,12 @@ from pbip_api.modules.auth.models import SecurityEvent, SecurityEventType
 from pbip_api.modules.customers.models import Customer, Device
 from pbip_api.modules.fraud.models import FraudEvent
 from pbip_api.modules.fraud.signals import device_uuid_from_hash
+from pbip_api.modules.fraud.travel import TravelPolicy, impossible_travel
 from pbip_api.modules.ledger.models import Transaction, TransactionStatus, TransactionType
 from pbip_api.modules.payees.models import Payee
 
-MODEL_VERSION = "baseline-rules-0.4"  # 0.2: NEW_COUNTRY (ADR-0014); 0.3: TASK-095 signals
-# 0.4: MULE_PASS_THROUGH (#144, ADR-0035)
+MODEL_VERSION = "baseline-rules-0.5"  # 0.2: NEW_COUNTRY (ADR-0014); 0.3: TASK-095 signals;
+# 0.4: IMPOSSIBLE_TRAVEL (ADR-0034); 0.5: MULE_PASS_THROUGH (#144, ADR-0035)
 
 NEW_PAYEE_WINDOW = timedelta(hours=24)
 NEW_PAYEE_LARGE_MINOR = 2_500_000  # 25,000.00
@@ -78,11 +79,13 @@ class BaselineRulesScorer:
         self,
         session: Session,
         counters: VelocityCounters | None = None,
+        travel: TravelPolicy | None = None,
         settings: Settings | None = None,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self.session = session
         self.counters = counters  # Redis windows (TASK-034); None or unreachable -> PostgreSQL
+        self.travel = travel or TravelPolicy.disabled()  # no city database: rule never scores
         self.settings = settings or get_settings()
         self.clock = clock  # injected by tests; scoring reads no other time source
 
@@ -174,14 +177,15 @@ class BaselineRulesScorer:
 
         failures = self._login_failures(context, now)
         new_device, new_network = self._new_device_or_network(context, now)
-        for reason in _session_signals(failures, new_device, new_network, context.ip_network):
+        travel_reason, travel_features = impossible_travel(self.session, context, self.travel)
+        mule = self._mule_pass_through(context, now)
+        late_rules = (travel_reason, mule.reason)
+        for reason in [
+            *_session_signals(failures, new_device, new_network, context.ip_network),
+            *(rule for rule in late_rules if rule is not None),
+        ]:
             score += int(reason.contribution or 0)
             reasons.append(reason)
-
-        mule = self._mule_pass_through(context, now)
-        if mule.reason is not None:
-            score += int(mule.reason.contribution or 0)
-            reasons.append(mule.reason)
 
         score = min(score, 100)
         return FraudScoreResult(
@@ -203,6 +207,9 @@ class BaselineRulesScorer:
                 "login_failures_24h": failures,
                 "new_device": new_device,
                 "new_network": new_network,
+                "geo_lat": context.geo_lat,
+                "geo_lon": context.geo_lon,
+                **travel_features,
                 **mule.features,
             },
         )

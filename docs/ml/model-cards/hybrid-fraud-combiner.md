@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Code | `ml/src/pbip_ml/fraud/hybrid.py` (combiner), `ml/src/pbip_ml/fraud/train.py` (fit, writes `hybrid_params.json`), `apps/api/src/pbip_api/modules/fraud/hybrid.py` (serving) |
-| `model_version` | `hybrid-lgbm-iforest-1` (`HYBRID_VERSION`, `train.py`). When the models fail or exceed the budget, the API serves the baseline rules marked `<baseline version>+rules-only` (e.g. `baseline-rules-0.3+rules-only`) with a `MODEL_UNAVAILABLE` reason |
+| `model_version` | `hybrid-lgbm-iforest-1` (`HYBRID_VERSION`, `train.py`). When the models fail or exceed the budget, the API serves the baseline rules marked `<baseline version>+rules-only` (e.g. `baseline-rules-0.5+rules-only`) with a `MODEL_UNAVAILABLE` reason |
 | Owner | `rachitst` (`.github/CODEOWNERS`, rule `*`) |
 | Tasks | TASK-031, TASK-032, TASK-033, TASK-038, TASK-039, TASK-080; ADR-0019 |
 
@@ -95,8 +95,9 @@ Contract limit 100 ms. Report §5 has the v1.1 latency profile.
 
 No demographic input: the features are the components' behavioural signals and the baseline rule points.
 No gender, age, religion, caste, ethnicity, marital status, health or income field (ADR-0015 decision 3).
-`NEW_COUNTRY` (ADR-0014) uses a coarse GeoIP country from the request, a security signal, not a
-demographic attribute of the customer. No disparate-impact audit is on main (no protected attributes in
+`NEW_COUNTRY` (ADR-0014) and `IMPOSSIBLE_TRAVEL` (ADR-0034) use a coarse GeoIP country or city-level point
+from the request, security signals, not demographic attributes of the customer; the models themselves never see
+location. No disparate-impact audit is on main (no protected attributes in
 the synthetic data).
 
 ## Explainability and audit
