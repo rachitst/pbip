@@ -22,6 +22,7 @@ import { PageHeader } from "../../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../../ui/States";
 import { StatusBadge } from "../../ui/StatusBadge";
 import { FilterSelect, Metric, PERIOD_OPTIONS } from "./dashboardParts";
+import "./dashboards.css";
 
 /** The compliance endpoints admit COMPLIANCE_OFFICER and ADMIN (with an MFA-verified session). */
 export function canManageCompliance(me: UserOut): boolean {
@@ -347,7 +348,7 @@ export function ComplianceDashboard() {
   }
   const data = query.data;
   return (
-    <div className="page">
+    <div className="page dashboard-page">
       <PageHeader
         title="Compliance & risk"
         description="Blocked payments, sign-in lockouts and audit chain failures to acknowledge and resolve, with service-level indicators."

@@ -14,6 +14,7 @@ import { EmptyState, ErrorState, LoadingState } from "../../ui/States";
 import { TOOLTIP_STYLE, formatShare } from "../insightsChart";
 import { FilterSelect, Metric } from "./dashboardParts";
 import { SEGMENT_LABEL, canAccessRMInsights, segmentLabel } from "./rmInsightsFormat";
+import "./dashboards.css";
 
 /** Typed by the OpenAPI union, so a segment the API adds fails the type check. */
 const SEGMENTS: readonly BehaviourSegment[] = [
@@ -518,7 +519,7 @@ export default function BehaviourAnalytics() {
   const data = query.data;
   const period = `last ${countOf(Number(days), "day")}`;
   return (
-    <div className="page">
+    <div className="page dashboard-page">
       <PageHeader
         title="Behavioural analytics"
         description="How customer segments spend, which products they hold and click, and how they use the app. Aggregates only."

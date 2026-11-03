@@ -51,3 +51,17 @@
 .admin-settings-table th {
   vertical-align: top;
 }
+/* The panels use .card for their frame, but .card is also the narrow, centred sign-in box
+   (max-width 640px). Here a panel fills its column so the settings table has room. */
+.admin-page .admin-panel {
+  max-width: none;
+  margin: 0 0 var(--space-4);
+}
+.admin-settings-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.admin-settings-table th[scope="row"],
+.admin-settings-table td:first-child {
+  min-width: 14rem;
+}
