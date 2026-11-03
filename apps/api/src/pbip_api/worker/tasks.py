@@ -83,3 +83,17 @@ def purge_expired_idempotency_keys_task() -> int:
     from pbip_api.modules.ledger.key_purge import purge_expired_keys
 
     return purge_expired_keys()
+
+
+@celery_app.task(name="pbip.fraud.evaluate_feature_drift")
+def evaluate_feature_drift_task() -> dict[str, float]:
+    """PSI of the fraud scorer's inputs over the last two 30-day windows (hourly beat; ADR-0038).
+
+    Read-only on PostgreSQL; the result goes to Redis for the API's ``/metrics``. Idempotent."""
+    from pbip_api.core.db import utcnow
+    from pbip_api.core.redis import get_redis
+    from pbip_api.modules.fraud.drift import evaluate_feature_drift
+
+    with session_scope() as session:
+        results = evaluate_feature_drift(session, get_redis(), utcnow())
+    return {r.feature: r.psi for r in results}

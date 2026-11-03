@@ -18,6 +18,7 @@ from pbip_api.core.redis import get_redis
 from pbip_api.main import create_app
 from pbip_api.modules.wealth import deposit_math
 from pbip_api.modules.wealth.schemas import WealthProductOut
+from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy import Engine, text
 
 PASSWORD = "Correct-Horse-9!"
@@ -62,6 +63,12 @@ class FakeRedis:
         if not self.healthy:
             raise RuntimeError("redis down")
         return True
+
+    def get(self, _key: str) -> None:
+        """Empty store: ``/metrics`` reads the stored PSI result (ADR-0038) and finds none."""
+        if not self.healthy:
+            raise RedisConnectionError("redis down")
+        return None
 
 
 def build_app(db_ok: bool = True, redis_ok: bool = True, **overrides: Any) -> FastAPI:

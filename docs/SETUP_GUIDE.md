@@ -335,7 +335,7 @@ Postgres (port 5432) and Redis (port 6379) will start in detached background con
 with `APP_ENV=local`, the `DEMO_PASSWORD` constant in `scripts/seed_dev.py`. Any other `APP_ENV` must set the
 variable (the CI E2E job generates one per run, see `docs/testing/e2e.md`). Existing users are skipped, so the
 password of an already-seeded database does not change.
-- Retail customer: `alice@demo.pbip` / `bob@demo.pbip`
+- Retail customers: `alice@demo.pbip` (authenticator enrolled, for the step-up dialog; code: `uv run python scripts/totp.py alice@demo.pbip`), `bob@demo.pbip` and `carol@demo.pbip` (no authenticator: the fraud demo lab signs in as Carol, F6 sender Bob)
 - Bank staff (analyst): `analyst@demo.pbip`
 - Admin: `admin@demo.pbip`
 - Relationship manager: `rm@demo.pbip` (RM insights page, TASK-066)
@@ -655,6 +655,35 @@ tries `::1` first, but compose publishes Postgres and Redis on `127.0.0.1` only,
 (measured: 15 s per connect with a 15 s timeout, indefinitely without one).
 **Fix:** `.env` is never overwritten, so edit it yourself: replace `localhost` with `127.0.0.1` in those three
 URLs (current `.env.example` already uses it), then restart `dev-api` / `dev-worker`.
+
+### Q: Transfers are scored "rules-only" with `model_error=TIMEOUT` on a slow demo machine
+**Cause:** with `FRAUD_SCORER=hybrid` the model step waits at most `FRAUD_MODEL_BUDGET_MS` (default 50 ms).
+Past it the API serves the rules' decision, marked `+rules-only` with a `MODEL_UNAVAILABLE` reason (fail-safe,
+never ALLOW-all). On a slow or busy laptop the model step alone can take longer than 50 ms, so some transfers
+show no model reasons.
+**Fix:** measure the machine first (no database needed; it reads `models/fraud`, never writes it):
+```bash
+uv run python scripts/benchmark_fraud_latency.py --model-dir models/fraud --calls 500 \
+    --budget-ms 50 --budget-ms 100
+```
+It prints p50/p95/p99 of the model step, the fallback rate at each budget and the load average. If the rate at
+50 ms is too high for the demo, set `FRAUD_MODEL_BUDGET_MS` in `.env` (allowed 5-100; the API refuses to start
+outside that range, because the scoring contract is p95 < 100 ms). The compose stack passes it to `api`, `worker`
+and `beat`: run `docker compose up -d api worker beat` to apply it (natively, restart `dev-api` and `dev-worker`).
+Close other heavy programs first: the rate depends mostly on the load at the time.
+
+Measured on 3 Nov 2026, 2-CPU team laptop, `models/fraud` (`hybrid-lgbm-iforest-1`), 500 calls per budget, one
+transfer at a time:
+
+| Load average (1 min) | Model step p50 / p95 / p99 | Fallback at 50 ms | Fallback at 100 ms |
+|---|---|---|---|
+| 1.2-1.4 (idle) | 14.5 / 19.4 / 38.5 ms | 0.2 % (1 of 500) | 0 % |
+| 3.6-4.1 (other jobs running) | 16.7 / 47.7 / 78.5 ms | 1.0 % (5 of 500) | 1.0 % (5 of 500) |
+
+Back to back (no pause between calls) at load 5.5-5.7 the 50 ms budget fell back on 8.2 % of calls and 100 ms on
+0.8 %. On the live stack at load 5-6 (database look-ups and other containers competing too) a 50 ms budget timed
+out on all 3 demo transfers tried and 90 ms on 1 of 4. For a demo on this laptop use `FRAUD_MODEL_BUDGET_MS=100`
+and keep the load low.
 
 ### Q: A port is already in use (`bind: address already in use`)
 PBIP uses 5432 (PostgreSQL), 6379 (Redis), 8000 (API), 5173 (Vite), 8080/8443 (web/nginx), 3000 (Grafana),
