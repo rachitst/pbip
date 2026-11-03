@@ -208,7 +208,7 @@ class HybridFraudScorer:
         )
 
     def _last_activity_before(
-        self, context: TransactionContext, accounts: Select[tuple[UUID]], before: datetime
+        self, context: TransactionContext, accounts: Select[UUID], before: datetime
     ) -> list[PastTransfer]:
         """The customer's latest activity older than the 30-day history, for
         ``days_since_last_activity`` (F8 dormancy). Only asked when the 30 days hold none, so an
