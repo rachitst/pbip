@@ -60,10 +60,19 @@ class MmdbCountryResolver:
 
 @lru_cache(maxsize=4)
 def resolver_for(path: str | None) -> CountryResolver:
-    """One reader per configured path (the database is memory-mapped and safe to share)."""
+    """One reader per configured path (the database is memory-mapped and safe to share).
+
+    A missing or unreadable file must not stop payments (ADR-0014): NEW_COUNTRY only ever adds
+    risk, so it is switched off (every country is unknown) and the error is logged once per
+    process. Restart after fixing the file (runbook 2.4).
+    """
     if not path:
         return NoCountryResolver()
-    return MmdbCountryResolver.open(path)
+    try:
+        return MmdbCountryResolver.open(path)
+    except (OSError, maxminddb.InvalidDatabaseError) as exc:
+        _logger.error("geoip_country_db_unavailable", reason=type(exc).__name__)
+        return NoCountryResolver()
 
 
 def _lookup(reader: _Reader, ip: str | None) -> dict[str, object] | None:
