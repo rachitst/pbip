@@ -978,8 +978,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Customers in the caller's scope (an RM: assigned only) ordered by churn risk
-         * @description One page of customers ordered by churn risk (RM: their assigned customers; admin: all).
+         * Customers in the caller's scope (an RM: assigned only) by churn risk or propensity
+         * @description One page of customers in the requested order (RM: their assigned customers; admin: all).
          */
         get: operations["get_prioritized_customer_insights_api_v1_insights_customers_get"];
         put?: never;
@@ -2320,6 +2320,11 @@ export interface components {
              */
             segment: string;
             /**
+             * Top Product Reason
+             * @description The first rule-based reason for the top product, from the customer's data
+             */
+            top_product_reason?: string | null;
+            /**
              * Top Product Score
              * @description Rule-based relevance (not a probability)
              */
@@ -2351,6 +2356,13 @@ export interface components {
              * @description Prioritized list of customer insight profiles
              */
             items?: components["schemas"]["CustomerInsightItem"][];
+            /** @description How ``items`` are ordered */
+            order: components["schemas"]["InsightOrder"];
+            /**
+             * Product Score Version
+             * @description Version of the rule-based product scoring (not a trained model)
+             */
+            product_score_version: string;
             /** @description ASSIGNED: the caller's own customers only; ALL: every customer (admin) */
             scope: components["schemas"]["InsightScope"];
             /**
@@ -3391,6 +3403,13 @@ export interface components {
              */
             reference_term_years: number;
         };
+        /**
+         * InsightOrder
+         * @description CHURN_RISK: retention first (churn score, then balance). PROPENSITY: the rule-based product
+         *     score of the customer's best eligible product first (``rules-v1``, not a trained model).
+         * @enum {string}
+         */
+        InsightOrder: "CHURN_RISK" | "PROPENSITY";
         /**
          * InsightScope
          * @description ASSIGNED: only the caller's portfolio (an RM). ALL: every customer (an administrator).
@@ -7048,6 +7067,8 @@ export interface operations {
                 segment?: string | null;
                 /** @description Minimum loan propensity (rule-based relevance of the best loan product) */
                 min_loan_propensity?: number | null;
+                /** @description CHURN_RISK (default): highest churn risk first. PROPENSITY: highest rule-based product score first (rules-v1, not a trained model); scores every customer in scope */
+                order_by?: components["schemas"]["InsightOrder"];
                 /** @description Page size */
                 limit?: number;
                 /** @description Page offset */

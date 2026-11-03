@@ -4,7 +4,9 @@ Cost is bounded: one set-based query gives every customer's balances and last ac
 signals are computed from those rows, and only the requested page gets product recommendations.
 The one exception is the loan-propensity filter: a customer's loan score exists only after the
 recommendation rules have run, so with that filter every candidate is scored (ADR-0022).
-The ordering is by churn risk (retention priority), then balance.
+Two orders (TASK-056 criterion 1, ADR-0038): by churn risk (retention priority, then balance), or
+by product propensity, the rule-based score of each customer's best eligible product (``rules-v1``,
+not a trained model). Like the loan filter, the propensity order scores every candidate in scope.
 
 Scope (ADR-0032): an administrator sees every customer; a Relationship Manager sees only the
 customers assigned to them, and any other customer is a 404 like an unknown one (``policy.py``).
@@ -17,6 +19,7 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 from pbip_ml.recommendations import PRODUCT_CATALOGUE
+from pbip_ml.recommendations.engine import MODEL_VERSION
 from sqlalchemy.orm import Session
 
 from pbip_api.core.db import utcnow
@@ -33,6 +36,7 @@ from pbip_api.modules.insights.schemas import (
     CustomerInsightItem,
     CustomerInsightsListResponse,
     HealthSummary,
+    InsightOrder,
     InsightScope,
     InteractionCreate,
     InteractionListResponse,
@@ -124,6 +128,7 @@ def _item(row: _Scored, products: list[ProductRecommendationItem]) -> CustomerIn
         churn_risk_level=row.level,
         top_recommended_product=top.title if top else None,
         top_product_score=top.score if top else None,
+        top_product_reason=top.reasons[0] if top and top.reasons else None,
         loan_product=loan.title if loan else None,
         loan_propensity_score=loan.score if loan else None,
         high_value=row.activity.balance_minor >= HIGH_VALUE_BALANCE_MINOR
@@ -137,6 +142,39 @@ def _matches(row: _Scored, segment: str | None, min_churn_risk: float | None) ->
     return min_churn_risk is None or row.score >= min_churn_risk
 
 
+def _churn_key(row: _Scored) -> tuple[float, int, str]:
+    return (-row.score, -row.activity.balance_minor, str(row.activity.customer_id))
+
+
+def propensity_key(item: CustomerInsightItem) -> tuple[bool, float, float, int, str]:
+    """Best product score first; no eligible product last. Ties: churn risk, balance, then id, so
+    the order (and therefore paging) is the same on every request."""
+    return (
+        item.top_product_score is None,
+        -(item.top_product_score or 0.0),
+        -item.churn_risk_score,
+        -item.total_balance_minor,
+        str(item.customer_id),
+    )
+
+
+def _response(
+    items: list[CustomerInsightItem],
+    total: int,
+    eval_time: datetime,
+    scope: InsightScope,
+    order: InsightOrder,
+) -> CustomerInsightsListResponse:
+    return CustomerInsightsListResponse(
+        items=items,
+        total=total,
+        evaluated_at=eval_time,
+        scope=scope,
+        order=order,
+        product_score_version=MODEL_VERSION,
+    )
+
+
 def get_customer_insights(
     session: Session,
     scope: RmScope,
@@ -146,8 +184,9 @@ def get_customer_insights(
     offset: int = 0,
     now: datetime | None = None,
     min_loan_propensity: float | None = None,
+    order: InsightOrder = InsightOrder.CHURN_RISK,
 ) -> CustomerInsightsListResponse:
-    """One page of the customers in ``scope``, ordered by churn risk, with signals and eligible
+    """One page of the customers in ``scope`` in the requested order, with signals and eligible
     products. The scope is applied before filtering and paging, so ``total`` is within it."""
     eval_time = now or utcnow()
     visible = policy.visible_customer_ids(session, scope)
@@ -163,33 +202,32 @@ def get_customer_insights(
         )
         if _matches(row, segment, min_churn_risk)
     ]
-    scored.sort(key=lambda r: (-r.score, -r.activity.balance_minor, str(r.activity.customer_id)))
+    scored.sort(key=_churn_key)
 
-    if min_loan_propensity is None:
+    if min_loan_propensity is None and order is InsightOrder.CHURN_RISK:
         page = scored[offset : offset + limit]
         items = [
             _item(row, _ranked_products(session, row.activity.customer_id, eval_time))
             for row in page
         ]
-        return CustomerInsightsListResponse(
-            items=items, total=len(scored), evaluated_at=eval_time, scope=listed
-        )
+        return _response(items, len(scored), eval_time, listed, order)
 
+    # A product score exists only after the rules run, so every candidate is scored (ADR-0022).
     candidates = [
         _item(row, _ranked_products(session, row.activity.customer_id, eval_time)) for row in scored
     ]
     matching = [
         item
         for item in candidates
-        if item.loan_propensity_score is not None
-        and item.loan_propensity_score >= min_loan_propensity
+        if min_loan_propensity is None
+        or (
+            item.loan_propensity_score is not None
+            and item.loan_propensity_score >= min_loan_propensity
+        )
     ]
-    return CustomerInsightsListResponse(
-        items=matching[offset : offset + limit],
-        total=len(matching),
-        evaluated_at=eval_time,
-        scope=listed,
-    )
+    if order is InsightOrder.PROPENSITY:
+        matching.sort(key=propensity_key)
+    return _response(matching[offset : offset + limit], len(matching), eval_time, listed, order)
 
 
 def get_customer_insight_detail(

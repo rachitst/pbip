@@ -42,6 +42,7 @@ const asha: CustomerInsightItem = {
   churn_risk_level: "HIGH",
   top_recommended_product: "Fixed deposit",
   top_product_score: 0.91,
+  top_product_reason: "You keep 4.0 months of spending as a buffer.",
   loan_product: "Personal credit line",
   loan_propensity_score: 0.64,
   high_value: true,
@@ -56,6 +57,9 @@ const ravi: CustomerInsightItem = {
   balance_decline_rate: 0,
   churn_risk_score: 0.1,
   churn_risk_level: "LOW",
+  top_recommended_product: null,
+  top_product_score: null,
+  top_product_reason: null,
   loan_product: null,
   loan_propensity_score: null,
   high_value: false,
@@ -65,8 +69,16 @@ function page(
   items: CustomerInsightItem[],
   total = items.length,
   scope: CustomerInsightsListResponse["scope"] = "ASSIGNED",
+  order: CustomerInsightsListResponse["order"] = "PROPENSITY",
 ): CustomerInsightsListResponse {
-  return { items, total, evaluated_at: "2026-11-01T12:00:00Z", scope };
+  return {
+    items,
+    total,
+    evaluated_at: "2026-11-01T12:00:00Z",
+    scope,
+    order,
+    product_score_version: "rules-v1",
+  };
 }
 
 const detail: CustomerInsightDetail = {
@@ -250,7 +262,7 @@ describe("RMInsights page (TASK-066)", () => {
     const fetchMock = mockApi({ list: () => json(200, many) });
     renderPage();
     await screen.findByRole("table");
-    expect(listCalls(fetchMock)[0]?.toString()).toBe("limit=20&offset=0");
+    expect(listCalls(fetchMock)[0]?.toString()).toBe("limit=20&offset=0&order_by=PROPENSITY");
 
     await user.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() => {
@@ -265,6 +277,49 @@ describe("RMInsights page (TASK-066)", () => {
       expect(last?.get("segment")).toBe("INACTIVE_SAVER");
       expect(last?.get("min_churn_risk")).toBe("0.7");
       expect(last?.get("min_loan_propensity")).toBe("0.5");
+      expect(last?.get("offset")).toBe("0");
+    });
+  });
+
+  it("orders an RM's list by product match and shows the rule-based score and reason (TASK-056)", async () => {
+    const fetchMock = mockApi({ list: () => json(200, page([asha, ravi])) });
+    renderPage(rm);
+    const table = await screen.findByRole("table");
+    expect(listCalls(fetchMock)[0]?.get("order_by")).toBe("PROPENSITY");
+    expect(screen.getByLabelText("Order")).toHaveValue("PROPENSITY");
+    expect(within(table).getByText("Customers, best product match first")).toBeInTheDocument();
+    expect(
+      within(table).getByRole("columnheader", { name: "Product match (rule-based)" }),
+    ).toBeInTheDocument();
+    const [, ashaRow, raviRow] = within(table).getAllByRole("row");
+    if (!ashaRow || !raviRow) throw new Error("rows missing");
+    expect(within(ashaRow).getByText("(Fixed deposit)")).toBeInTheDocument();
+    expect(
+      within(ashaRow).getByText("You keep 4.0 months of spending as a buffer."),
+    ).toBeInTheDocument();
+    expect(within(ashaRow).getByText("High · 82")).toBeInTheDocument(); // churn stays visible
+    expect(within(raviRow).getByText("No eligible product")).toBeInTheDocument();
+    expect(screen.getByText(/rule-based score \(not a trained model/)).toBeInTheDocument();
+  });
+
+  it("starts an administrator on churn risk and switches the order from the first page", async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockApi({
+      list: () => json(200, page([asha, ravi], 45, "ALL", "CHURN_RISK")),
+    });
+    renderPage(admin);
+    const table = await screen.findByRole("table");
+    expect(listCalls(fetchMock)[0]?.get("order_by")).toBe("CHURN_RISK");
+    expect(within(table).getByText("Customers, highest churn risk first")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => {
+      expect(listCalls(fetchMock).at(-1)?.get("offset")).toBe("20");
+    });
+    await user.selectOptions(screen.getByLabelText("Order"), "PROPENSITY");
+    await waitFor(() => {
+      const last = listCalls(fetchMock).at(-1);
+      expect(last?.get("order_by")).toBe("PROPENSITY");
       expect(last?.get("offset")).toBe("0");
     });
   });

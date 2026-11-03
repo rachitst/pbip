@@ -1,7 +1,7 @@
 """Unit tests for Relationship Manager behavioral insights (TASK-056)."""
 
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from pbip_api.modules.insights.policy import scope_for
@@ -9,12 +9,14 @@ from pbip_api.modules.insights.schemas import (
     ChurnRiskLevel,
     CustomerInsightItem,
     CustomerInsightsListResponse,
+    InsightOrder,
     InsightScope,
 )
 from pbip_api.modules.insights.service import (
     calculate_churn_signals,
     compute_balance_decline_rate,
     compute_inactivity_days,
+    propensity_key,
 )
 from pydantic import ValidationError
 
@@ -93,9 +95,12 @@ def test_customer_insights_list_response() -> None:
         total=0,
         evaluated_at=datetime.now(UTC),
         scope=InsightScope.ASSIGNED,
+        order=InsightOrder.PROPENSITY,
+        product_score_version="rules-v1",
     )
     assert resp.total == 0
     assert resp.scope == InsightScope.ASSIGNED
+    assert (resp.order, resp.product_score_version) == (InsightOrder.PROPENSITY, "rules-v1")
     assert resp.items == []
 
 
@@ -132,3 +137,49 @@ def test_scope_is_all_for_admin_and_assigned_for_an_rm() -> None:
     rm = scope_for(user, frozenset({"RELATIONSHIP_MANAGER"}))
     assert (rm.user_id, rm.sees_all) == (user, False)
     assert not scope_for(user, []).sees_all
+
+
+def _row(
+    product_score: float | None, churn: float = 0.0, balance: int = 0, customer_id: str = ""
+) -> CustomerInsightItem:
+    return CustomerInsightItem(
+        customer_id=UUID(customer_id) if customer_id else uuid4(),
+        full_name="Test Customer",
+        segment="UNSEGMENTED",
+        total_balance_minor=balance,
+        inactivity_days=0,
+        balance_decline_rate=0.0,
+        churn_risk_score=churn,
+        churn_risk_level=ChurnRiskLevel.LOW,
+        top_recommended_product=None if product_score is None else "Fixed deposit",
+        top_product_score=product_score,
+    )
+
+
+def test_propensity_order_is_score_then_churn_then_balance_then_id() -> None:
+    """TASK-056: best product score first, no eligible product last, and a fixed tie-break so the
+    same data always pages the same way."""
+    low_id, high_id = "00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002"
+    none_but_risky = _row(None, churn=0.9, balance=10**9)
+    best = _row(0.91)
+    tie_riskier = _row(0.6, churn=0.5)
+    tie_richer = _row(0.6, churn=0.2, balance=500)
+    tie_poorer_low_id = _row(0.6, churn=0.2, balance=100, customer_id=low_id)
+    tie_poorer_high_id = _row(0.6, churn=0.2, balance=100, customer_id=high_id)
+    rows = [
+        tie_poorer_high_id,
+        none_but_risky,
+        tie_richer,
+        tie_poorer_low_id,
+        best,
+        tie_riskier,
+    ]
+    expected = [
+        best,
+        tie_riskier,
+        tie_richer,
+        tie_poorer_low_id,
+        tie_poorer_high_id,
+        none_but_risky,
+    ]
+    assert sorted(rows, key=propensity_key) == expected

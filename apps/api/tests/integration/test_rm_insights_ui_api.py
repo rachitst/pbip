@@ -5,6 +5,7 @@
 - the customer detail: exact 30-day volume, health score, eligible products, no extra PII, 404
 - the outreach log: RM/admin with MFA only, validated, audited without the note, 404 for unknown
 - an RM works only on assigned customers (ADR-0032); ``assign_rm`` assigns through the admin API
+- TASK-056: ``order_by=PROPENSITY`` ranks by the rule-based product score (ADR-0038)
 """
 
 import json
@@ -125,6 +126,76 @@ def _pay(
         },
     )
     assert resp.status_code == 201, resp.text
+
+
+def test_propensity_order_ranks_by_product_score_within_the_rm_scope(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_staff: Callable[..., Actor],
+    make_verified_payee: Callable[..., dict[str, Any]],
+    migrated_engine: Engine,
+    assign_rm: Callable[..., None],
+    db: Session,
+) -> None:
+    """The churn order (equal churn here, so balance decides) and the propensity order differ on
+    the same portfolio, and the churn signals stay on every row."""
+    no_product = make_customer(funds=10_000_00)  # income 10,000: below every product's threshold
+    rich = make_customer(funds=200_000_00)
+    targeted = make_customer(funds=60_000_00)  # less money, but the credit line targets its segment
+    outsider = make_customer(funds=300_000_00)  # not assigned: never listed, whatever its score
+    _pay(client, no_product, rich, make_verified_payee, migrated_engine, 9_000_00)
+    assert targeted.customer_id is not None
+    _assign_segment(db, targeted.customer_id, "FREQUENT_TRANSACTOR")
+    rm = make_staff(RoleName.RELATIONSHIP_MANAGER)
+    assign_rm(rm, no_product, rich, targeted)
+    expected_churn = [str(a.customer_id) for a in (rich, targeted, no_product)]
+    expected_propensity = [str(a.customer_id) for a in (targeted, rich, no_product)]
+
+    churn = client.get(LIST, headers=rm.headers).json()
+    assert churn["order"] == "CHURN_RISK"
+    assert [i["customer_id"] for i in churn["items"]] == expected_churn
+
+    body = client.get(f"{LIST}?order_by=PROPENSITY", headers=rm.headers).json()
+    assert (body["order"], body["product_score_version"], body["scope"], body["total"]) == (
+        "PROPENSITY",
+        "rules-v1",
+        "ASSIGNED",
+        3,
+    )
+    items = body["items"]
+    assert [i["customer_id"] for i in items] == expected_propensity
+    assert str(outsider.customer_id) not in {i["customer_id"] for i in items}
+    best, second, last = items
+    assert best["top_product_score"] > second["top_product_score"]
+    assert best["top_recommended_product"] == "Personal credit line"
+    assert isinstance(best["top_product_reason"], str) and best["top_product_reason"]
+    assert (last["top_product_score"], last["top_product_reason"]) == (None, None)
+    for item in items:  # churn signals are still reported in this order
+        assert {"churn_risk_score", "churn_risk_level", "inactivity_days"} <= set(item)
+
+    paged = [
+        client.get(f"{LIST}?order_by=PROPENSITY&limit=1&offset={n}", headers=rm.headers).json()
+        for n in range(3)
+    ]
+    assert [p["items"][0]["customer_id"] for p in paged] == expected_propensity
+    assert client.get(f"{LIST}?order_by=SCORE", headers=rm.headers).status_code == 422
+
+
+def test_propensity_order_combines_with_the_loan_filter(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_staff: Callable[..., Actor],
+    assign_rm: Callable[..., None],
+) -> None:
+    rich = make_customer(funds=200_000_00)
+    poor_customer = make_customer(funds=100)
+    rm = make_staff(RoleName.RELATIONSHIP_MANAGER)
+    assign_rm(rm, rich, poor_customer)
+    body = client.get(
+        f"{LIST}?order_by=PROPENSITY&min_loan_propensity=0", headers=rm.headers
+    ).json()
+    assert body["total"] == 1
+    assert [i["customer_id"] for i in body["items"]] == [str(rich.customer_id)]
 
 
 def test_detail_has_exact_volume_health_and_products_and_no_extra_pii(
