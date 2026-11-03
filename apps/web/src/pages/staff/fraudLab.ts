@@ -118,8 +118,8 @@ export const SCENARIOS: Scenario[] = [
       "Mule adds a new external payee and forwards 95% of what arrived",
     ],
     signals:
-      "No dedicated pass-through signal exists yet (Blueprint F6); the forward is scored only on " +
-      "the new payee and amount, so the engine may allow it. The lab shows what it decides.",
+      "MULE_PASS_THROUGH (80% or more of INR 10,000.00 or more received from other customers in " +
+      "the last 60 minutes is sent on) with NEW_PAYEE: REVIEW under the rules alone.",
   },
 ];
 

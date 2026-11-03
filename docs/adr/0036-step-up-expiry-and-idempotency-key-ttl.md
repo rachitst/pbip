@@ -53,7 +53,7 @@ change, hence this ADR.
 * Purge: new beat entry `purge-expired-idempotency-keys` -> task `pbip.ledger.purge_expired_idempotency_keys`,
   daily at 04:15 UTC (after the nightly analytics jobs). `ledger/key_purge.py` deletes in batches of
   `idempotency_purge_batch_size` (default 1000, at most 100 batches per run), each its own short transaction, with
-  `FOR UPDATE SKIP LOCKED` so a row a live request is discarding is left for the next run. Migration `0025` adds
+  `FOR UPDATE SKIP LOCKED` so a row a live request is discarding is left for the next run. Migration `0026` adds
   `ix_idempotency_keys_expires_at` for it (downgrade drops the index). The purge never touches transactions.
 * Background jobs keep their own guards beyond the TTL: a scheduled occurrence moves `next_run_date` on, a matured
   deposit is `CLOSED` with a unique `closure_transaction_id` (ADR-0023, ADR-0029). Tested for the scheduled engine.
@@ -67,7 +67,7 @@ change, hence this ADR.
    moves no money; it takes the user lock then the row lock and re-checks, so re-delivery is harmless;
    `test_step_up_completion_racing_the_expiry_job_settles_exactly_once` races it against a confirmation on real
    PostgreSQL threads.
-3. **Migrations:** one index migration `0025` chained on `0024`, with a working downgrade (up, down, up and
+3. **Migrations:** one index migration `0026` chained on `0025`, with a working downgrade (up, down, up and
    `alembic check` run locally).
 4. **No new external service, paid dependency or data leaving the stack:** existing beat and worker only.
 5. **No fake data, invented rates or metrics:** the 15-minute default is a stated policy choice, configurable.

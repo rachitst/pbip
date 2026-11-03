@@ -563,7 +563,7 @@ Facts found while writing this reference. None is changed by this PR.
    `ck_customers_ck_customers_persona_valid`, and names longer than 63 characters are truncated with a hash
    suffix (e.g. `ck_customer_segments_ck_customer_segments_confidence_sc_d5bb`). Behaviour is unaffected; use the
    names in `er-diagram.md` when writing a migration that drops one.
-6. **`idempotency_keys.expires_at` is enforced (issue #314, ADR-0036).** A key past it counts as unused: every `_begin_idempotent` discards the caller's expired row under the user lock before claiming, and the daily job `pbip.ledger.purge_expired_idempotency_keys` deletes expired rows (index `ix_idempotency_keys_expires_at`, migration `0025`).
+6. **`idempotency_keys.expires_at` is enforced (issue #314, ADR-0036).** A key past it counts as unused: every `_begin_idempotent` discards the caller's expired row under the user lock before claiming, and the daily job `pbip.ledger.purge_expired_idempotency_keys` deletes expired rows (index `ix_idempotency_keys_expires_at`, migration `0026`).
 
 ---
 
