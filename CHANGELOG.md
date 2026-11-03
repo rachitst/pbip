@@ -80,7 +80,8 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
 - Synthetic data generator with deterministic personas and a fast COPY load (#36, #138).
 - MLflow tracking server with a local fallback (#36).
 - TLS terminated in nginx and required to PostgreSQL (NFR-02, #280).
-- k6 load suite, page-load budgets and hot-path indexes (#288); provisioned Grafana dashboards, alert rules,
+- k6 load suite, page-load budgets and hot-path indexes (#288); the API runs as two replicas, which the Performance
+  workflow measures (ADR-0045, #419); provisioned Grafana dashboards, alert rules,
   availability probes and error tracking (#289); OpenTelemetry tracing (#205, #210).
 - Release-tag verification and a health-gated staging deploy with rollback (#155).
 - Encrypted backups and a verified restore drill (#293).
@@ -129,8 +130,16 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
 - Circular transfer / mule ring detection spike with NetworkX (#267).
 - Training code kept off the request path, with an allow-listed artifact loader (#167, #354, #356).
 - Data generator v2.3 (churned customers stop transferring) and a retrained `hybrid-lgbm-iforest-2` with an Optuna
-  study and a SHAP summary (#392, #405). It is **not promoted**: the champion gate refused it on latency on a loaded
-  machine and must be re-run on an idle one.
+  study and a SHAP summary (#392, #405). It was never promoted: the champion gate refused it on latency on a loaded
+  machine.
+- `hybrid-lgbm-iforest-3`: isotonic calibration fitted on out-of-time folds and a less regularised stack, PR-AUC
+  0.945 / 0.887 and recall at REVIEW 0.923 / 0.894; it passed the champion gate (p95 20.2 ms) (ADR-0047, #421).
+- Cheaper scoring: the Isolation Forest is scored without scikit-learn's per-call overhead, and LightGBM and TreeSHAP
+  share one float64 matrix on one thread, with identical decisions; the share of transfers scored by rules only at a
+  50 ms budget fell from 47.5% to 0.05% under load (#417, #422).
+- Rules STRUCTURING (F7) and DORMANT_REACTIVATION (F8), `baseline-rules-0.6` (ADR-0046, #424).
+- Product propensity model trained on a documented simulation of uptake; it failed its pre-registered gate, so
+  `rules-v1` is still served (ADR-0049, #427).
 
 ### Fixes
 - Payments and transfers: a fraud block on a standing order's final run completes it without a pause reason (#313).
@@ -175,6 +184,6 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
 - Testing: local verification run (#191), test strategy and verification report (#373).
 - Demo: live demo script with verified amounts and a fallback plan (#377).
 - User manual with customer, staff and compliance guides (#374).
-- 44 ADRs (0001-0044 and 0048; the numbers 0026 and 0045-0047 are not on `main` yet) and the team execution plan with batch status updates (#118, #119, #121, #122, #126, #139, #142,
+- 48 ADRs (0001-0049; the number 0026 is not used) and the team execution plan with batch status updates (#118, #119, #121, #122, #126, #139, #142,
   #146, #151, #153, #157, #163-#166, #190, #195, #197, #199, #203, #208, #225, #226, #230, #240, #270, #291, #294,
   #298, #308, #320, #338, #355, #357, #361, #408).
