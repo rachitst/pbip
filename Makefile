@@ -4,7 +4,7 @@
 .DEFAULT_GOAL := help
 .PHONY: help doctor setup env infra-up infra-down up up-all down logs migrate seed \
 	datagen fraud-model promote-model fraud-champion notebooks ml-up mlflow-smoke dev-api dev-worker dev-web lint fmt typecheck imports security openapi \
-	test test-unit test-int test-web test-e2e smoke perf load fuzz check clean
+	test test-unit test-int test-web test-e2e smoke perf load load-events fuzz check clean
 
 PYTHON ?= python3
 
@@ -112,6 +112,9 @@ smoke: ## Post-deploy smoke test
 
 load: ## k6 load suite: 70% reads, 20% transfers, 10% auth with NFR thresholds (seeded stack)
 	@$(PYTHON) scripts/dev.py load
+
+load-events: ## k6 clickstream ingestion: 500 events/s to /events/batch, p95 < 500 ms (seeded stack)
+	@$(PYTHON) scripts/dev.py load-events
 
 perf: ## k6 baseline on health endpoints (50 VUs, p95 < 50 ms); needs a running API
 	@$(PYTHON) scripts/dev.py perf
