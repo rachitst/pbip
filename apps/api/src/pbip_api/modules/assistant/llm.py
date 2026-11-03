@@ -20,8 +20,9 @@ from pbip_api.modules.assistant.fallback import Route
 from pbip_api.modules.assistant.tools import REGISTRY, ToolName
 
 NO_TOOL = "none"
-# The system prompt is about 475 tokens and a message at most 500 characters, so 1024 fits with
-# room to spare; a smaller context is cheaper to allocate and evaluate on a CPU-only host.
+# The system prompt is about 650 tokens (2,600 characters with the nine tools, TASK-105) and a
+# message at most 500 characters (about 150 tokens), so 1024 still fits the prompt, the message and
+# the 64-token answer; a smaller context is cheaper to allocate and evaluate on a CPU-only host.
 NUM_CTX = 1024
 # The longest valid choice (a loan with three arguments) is about 40 tokens.
 NUM_PREDICT = 64

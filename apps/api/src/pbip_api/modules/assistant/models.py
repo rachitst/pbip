@@ -25,7 +25,8 @@ class AssistantMessage(Base):
         CheckConstraint(
             "tool_name IS NULL OR tool_name IN ('get_account_summary', 'get_recent_transactions', "
             "'get_spend', 'get_balance_forecast', 'get_loan_affordability', "
-            "'get_unusual_expenses')",
+            "'get_unusual_expenses', 'get_faq_answer', 'list_products', "
+            "'get_investment_suggestions')",
             name="tool_name_valid",
         ),
     )

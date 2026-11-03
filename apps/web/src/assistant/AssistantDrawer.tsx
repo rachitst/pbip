@@ -17,6 +17,9 @@ export const TOOL_LABELS: Record<StreamToolCall["tool"], string> = {
   get_balance_forecast: "Forecasting your balance...",
   get_loan_affordability: "Checking loan affordability...",
   get_unusual_expenses: "Comparing with your usual spending...",
+  get_faq_answer: "Looking up how PBIP works...",
+  list_products: "Checking the product catalogue...",
+  get_investment_suggestions: "Matching options to your risk profile...",
 };
 
 export const STARTER_PROMPTS = [
@@ -27,7 +30,15 @@ export const STARTER_PROMPTS = [
 ] as const;
 
 /** Only links to pages this app has; the server may name pages that are not built yet. */
-const ROUTABLE = new Set(["/accounts", "/insights", "/profile"]);
+const ROUTABLE = new Set([
+  "/accounts",
+  "/insights",
+  "/profile",
+  "/loans",
+  "/wealth",
+  "/statements",
+  "/scheduled",
+]);
 
 interface Message {
   id: string;

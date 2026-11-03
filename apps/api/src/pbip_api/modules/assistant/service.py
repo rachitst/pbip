@@ -36,6 +36,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from pbip_api.core.errors import DomainError
 from pbip_api.modules.assistant import fallback, guard, repository
 from pbip_api.modules.assistant.fallback import Route
+from pbip_api.modules.assistant.faq import FaqFacts
 from pbip_api.modules.assistant.llm import ChatModel, LLMUnavailableError, llm_route
 from pbip_api.modules.assistant.prompts import system_prompt
 from pbip_api.modules.assistant.sanitize import clean_user_message, redact_output
@@ -62,8 +63,10 @@ _logger = structlog.get_logger(__name__)
 
 HELP_TEXT = (
     "I can tell you your balance, your recent transactions, what you spent this month or last "
-    "month (by category too), any unusual expenses, a predicted balance up to 30 days ahead, and "
-    'whether a loan is affordable - for example: "Can I afford a 5 lakh car loan over 5 years?"'
+    "month (by category too), any unusual expenses, a predicted balance up to 30 days ahead, "
+    "whether a loan is affordable, which loans, deposits and funds PBIP offers, investment "
+    "options that fit your risk profile, and how things like transfer limits, statements or "
+    'two-factor sign-in work - for example: "Can I afford a 5 lakh car loan over 5 years?"'
 )
 UNAVAILABLE_TEXT = "I couldn't get that information right now. Please try again shortly."
 
@@ -97,9 +100,10 @@ class _Decision:
 
 
 class AssistantService:
-    def __init__(self, session: Session, model: ChatModel | None) -> None:
+    def __init__(self, session: Session, model: ChatModel | None, facts: FaqFacts) -> None:
         self.session = session
         self.model = model
+        self.facts = facts
 
     def chat(self, customer_id: UUID, user_id: UUID, message: str, now: datetime) -> ChatResponse:
         for event in self.run(customer_id, user_id, message, now):
@@ -131,7 +135,7 @@ class AssistantService:
                 )
             else:
                 yield ToolCalled(tool, decision.engine)
-                ctx = ToolContext(self.session, customer_id, user_id, now)
+                ctx = ToolContext(self.session, customer_id, user_id, now, self.facts)
                 reply, outcome = self._run_read_only(ctx, tool, decision.route.arguments)
                 yield ToolFinished(tool, outcome)
                 self._audit(
@@ -232,6 +236,7 @@ def _grounded(route: Route, message: str) -> Route:
 def stream_chat(
     engine: DbEngine,
     model: ChatModel | None,
+    facts: FaqFacts,
     customer_id: UUID,
     user_id: UUID,
     message: str,
@@ -246,7 +251,8 @@ def stream_chat(
     """
     with sessionmaker(bind=engine, expire_on_commit=False)() as session:
         try:
-            for event in AssistantService(session, model).run(customer_id, user_id, message, now):
+            service = AssistantService(session, model, facts)
+            for event in service.run(customer_id, user_id, message, now):
                 if isinstance(event, ToolCalled):
                     frame: BaseModel = StreamToolCall(tool=event.tool, engine=event.engine)
                     yield format_event("tool_call", frame.model_dump(mode="json"))
