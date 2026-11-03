@@ -14,6 +14,8 @@ const COMPOSE_DIR = process.env.E2E_COMPOSE_DIR ?? REPO_ROOT;
 
 /** Seeded staff (scripts/seed_dev.py). Their password is the one the seed was run with. */
 export const ANALYST_EMAIL = "analyst@demo.pbip";
+export const ADMIN_EMAIL = "admin@demo.pbip";
+export const RM_EMAIL = "rm@demo.pbip";
 
 export function uniqueTag(): string {
   return `${Date.now().toString(36)}${randomUUID().slice(0, 6)}`;
