@@ -335,6 +335,12 @@ Audit (`AuditService.record`, same transaction):
 
 For missed occurrences, every expired date receives its own 1:1 `SCHEDULED_TRANSFER_MISSED` audit entry containing `missed_date` in its details.
 
+Same-day retries (amended for #305): `SCHEDULED_TRANSFER_EXECUTION_FAILED` is written for the first
+failure of a day and again only when the failure reason changes, not on every beat tick. Each attempt
+still increments `failure_count`; the day's final outcome is the transfer's `TRANSFER_CREATED` row, or,
+for a day that expires, its `SCHEDULED_TRANSFER_MISSED` row with `failed_attempts` and
+`last_failure_reason`.
+
 ### 9. Concurrency, security and failure recovery
 * **Concurrent workers / duplicate deliveries:** the try-lock skips, the row re-check stops, the
   idempotency key replays; at most one posting per occurrence. Proved by a threaded PostgreSQL test

@@ -4,7 +4,7 @@ import time
 from datetime import date
 from enum import StrEnum
 from functools import cache
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import structlog
@@ -136,17 +136,23 @@ def _recover_missed_occurrences(
     )
 
     for missed_date in missed_dates:
+        details: dict[str, Any] = {
+            "actor": "scheduler",
+            "channel": "SCHEDULED",
+            "missed_date": missed_date.isoformat(),
+            "reason": "expired_without_execution",
+        }
+        if missed_date == instruction.last_failed_occurrence_date:
+            # Same-day retries are audited only on the first failure and on a change of reason
+            # (#305), so the day's final outcome carries how many attempts failed and why.
+            details["failed_attempts"] = instruction.failure_count
+            details["last_failure_reason"] = instruction.last_failure_reason
         audit.record(
             actor_user_id=None,
             action="SCHEDULED_TRANSFER_MISSED",
             resource_type="scheduled_transfer",
             resource_id=str(instruction.id),
-            details={
-                "actor": "scheduler",
-                "channel": "SCHEDULED",
-                "missed_date": missed_date.isoformat(),
-                "reason": "expired_without_execution",
-            },
+            details=details,
         )
         SCHEDULED_MISSED_OCCURRENCES_TOTAL.inc()
 
@@ -389,10 +395,15 @@ def _handle_transient_failure(
         "insufficient_funds" if isinstance(exc, InsufficientFundsError) else "daily_limit_exceeded"
     )
 
+    first_failure_today = instruction.last_failed_occurrence_date != now_date
+    # One audit row per state change, not per beat tick (#305): the first failure of the day and
+    # any change of reason are evidence; an identical retry only bumps ``failure_count``, which the
+    # day's final outcome (the transfer's own audit row, or SCHEDULED_TRANSFER_MISSED) reports.
+    audit_this_failure = first_failure_today or instruction.last_failure_reason != reason
     instruction.failure_count += 1
     instruction.last_failure_reason = reason
 
-    if instruction.last_failed_occurrence_date != now_date:
+    if first_failure_today:
         instruction.last_failed_occurrence_date = now_date
         notifications.enqueue(
             session,
@@ -408,19 +419,20 @@ def _handle_transient_failure(
             },
         )
 
-    AuditService(session).record(
-        actor_user_id=None,
-        action="SCHEDULED_TRANSFER_EXECUTION_FAILED",
-        resource_type="scheduled_transfer",
-        resource_id=str(instruction.id),
-        details={
-            "actor": "scheduler",
-            "channel": "SCHEDULED",
-            "failed_date": now_date.isoformat(),
-            "reason": reason,
-            "failure_count": instruction.failure_count,
-        },
-    )
+    if audit_this_failure:
+        AuditService(session).record(
+            actor_user_id=None,
+            action="SCHEDULED_TRANSFER_EXECUTION_FAILED",
+            resource_type="scheduled_transfer",
+            resource_id=str(instruction.id),
+            details={
+                "actor": "scheduler",
+                "channel": "SCHEDULED",
+                "failed_date": now_date.isoformat(),
+                "reason": reason,
+                "failure_count": instruction.failure_count,
+            },
+        )
     session.commit()
     SCHEDULED_TRANSFERS_TOTAL.labels(
         outcome=ScheduledExecutionOutcome.RETRYABLE_FAILURE.value
