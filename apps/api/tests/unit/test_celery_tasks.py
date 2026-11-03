@@ -57,6 +57,18 @@ def test_beat_expires_stale_step_ups_every_minute_and_purges_keys_daily() -> Non
     } <= (set(celery_app.tasks))
 
 
+def test_beat_evaluates_feature_drift_hourly_through_a_registered_task() -> None:
+    """#324 / ADR-0038: one hourly PSI entry on the existing beat, inside the 3-hour result TTL."""
+    from pbip_api.modules.fraud.drift import RESULT_TTL
+
+    schedule = celery_app.conf.beat_schedule
+    entries = [e for e in schedule.values() if e["task"] == "pbip.fraud.evaluate_feature_drift"]
+    assert len(entries) == 1
+    assert entries[0]["schedule"] == crontab(minute=20)
+    assert "pbip.fraud.evaluate_feature_drift" in celery_app.tasks
+    assert RESULT_TTL.total_seconds() >= 2 * 3600  # one missed run never drops the gauge
+
+
 def test_beat_relays_the_outbox_every_ten_seconds_and_purges_it_daily() -> None:
     """TASK-026 / ADR-0040: the relay keeps its 10 s cadence; one daily purge after the key purge."""
     schedule = celery_app.conf.beat_schedule

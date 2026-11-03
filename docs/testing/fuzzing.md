@@ -97,8 +97,10 @@ inputs, and equal digests confirm it across processes. The nightly job uses the 
 as the seed, so a failing night is replayed with `python scripts/dev.py fuzz --url ... --seed <run
 number>`; the uploaded artifact also holds `api-server.log` with the server-side traceback.
 
-`--cases` is a floor: every pass covers every operation and mode, so a run usually executes more
-cases than requested (two full passes for 500 with the current contract).
+`--cases` is a floor: the first pass covers every operation and mode, so a run executes at least one
+case per operation and mode, and may run more than requested when that pass alone exceeds the floor
+(578 for 500 with the current contract). When the first pass falls short, top-up passes are sized to
+the shortfall and stop once the floor is reached, instead of repeating a full pass.
 
 Ordinary unit tests cover the runner itself (`apps/api/tests/unit/test_fuzz_contract.py`, no
 database, stubbed executor), and `apps/api/tests/integration/test_fuzz_contract.py` runs the real

@@ -17,8 +17,10 @@ from pbip_api.modules.analytics.schemas import (
     SpendingTrendsResponse,
 )
 from pbip_api.modules.analytics.service import (
+    burn_rate_change,
     is_closed_month,
     percentage_change,
+    percentage_shares,
     previous_closed_months,
 )
 
@@ -291,3 +293,30 @@ def test_debt_repayment_detection_uses_word_boundaries(
 def test_window_start_covers_twelve_calendar_months() -> None:
     assert window_start(datetime(2026, 10, 29, tzinfo=UTC), 12) == datetime(2025, 11, 1, tzinfo=UTC)
     assert window_start(datetime(2026, 1, 5, tzinfo=UTC), 12) == datetime(2025, 2, 1, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    "amounts",
+    [[1, 1, 1], [1, 2, 3, 4, 5, 6, 7], [999_99, 1, 1], [7], [10_000, 3_333, 3_333, 3_334]],
+)
+def test_category_percentages_always_sum_to_exactly_100(amounts: list[int]) -> None:
+    """#175: rounding each share on its own gave 99.99 for three equal categories."""
+    shares = percentage_shares(amounts)
+    assert round(sum(shares) * 100) == 10_000
+    for share, amount in zip(shares, amounts, strict=True):
+        assert abs(share - amount / sum(amounts) * 100) < 0.01  # each within one hundredth
+
+
+def test_category_percentages_of_equal_amounts_differ_by_at_most_a_hundredth() -> None:
+    assert percentage_shares([1, 1, 1]) == [33.34, 33.33, 33.33]
+    assert percentage_shares([]) == []
+    assert percentage_shares([0, 0]) == [0.0, 0.0]
+
+
+def test_burn_rate_change_uses_exact_rates_not_truncated_ones() -> None:
+    """#175: 20 minor units over 30 days truncates to a 0/day rate, which made the change None
+    while the month-over-month change was a number."""
+    assert burn_rate_change(600, 10, 20, 30) == 8900.0  # 60/day against 0.67/day
+    assert burn_rate_change(300, 30, 300, 30) == 0.0
+    assert burn_rate_change(310, 31, 300, 30) == 0.0  # same daily rate, different month lengths
+    assert burn_rate_change(100, 10, 0, 30) is None  # no previous spend: nothing to compare

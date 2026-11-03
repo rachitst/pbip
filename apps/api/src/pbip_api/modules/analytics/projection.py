@@ -91,6 +91,30 @@ def discretionary_history(
     return adjusted, added_back
 
 
+def anchor(model_days: Sequence[ModelDay], current_minor: int) -> list[ModelDay]:
+    """Shift the model's days so the first one starts from the balance the account has now.
+
+    The history ends yesterday (today is still moving), and with 14-27 days of history the weekly
+    seasonal-naive forecast starts from the balance of a week ago: Alice's first point was
+    INR 2,50,000 against a ledger balance of INR 2,00,072 (TASK-089 bug bash). The model still
+    gives the shape and the intervals; the level is today's real balance. ``current_minor`` is on
+    the model's scale: the ledger balance plus the scheduled debits added back to the history.
+    """
+    if not model_days:
+        return []
+    shift = current_minor - model_days[0].median
+    return [
+        ModelDay(
+            median=m.median + shift,
+            lower_80=m.lower_80 + shift,
+            upper_80=m.upper_80 + shift,
+            lower_95=m.lower_95 + shift,
+            upper_95=m.upper_95 + shift,
+        )
+        for m in model_days
+    ]
+
+
 def project(
     model_days: Sequence[ModelDay],
     first_day: date,

@@ -141,6 +141,19 @@ describe("Regulatory indicators", () => {
     ).toEqual(["1", "0", "3"]);
   });
 
+  it("names the per-kind table outside its scroll box so the text wraps at phone width", () => {
+    // Regression (TASK-089 bug bash): a long centred <caption> is as wide as the table and was
+    // cut off inside the horizontal scroll box at 360 px.
+    renderWith(<Indicators data={full} />);
+    const table = screen.getByRole("table", {
+      name: "Exceptions by kind and status, last 30 days",
+    });
+    expect(table).toHaveAccessibleDescription(/acknowledged within 24 hours/);
+    expect(table.querySelector("caption")).toBeNull();
+    const note = screen.getByText(/Service levels are set by the bank/);
+    expect(note.closest(".entries")).toBeNull();
+  });
+
   it("flags a broken audit chain with the first failing entry", () => {
     renderWith(
       <Indicators

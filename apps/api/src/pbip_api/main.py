@@ -1,14 +1,18 @@
 """Application factory."""
 
-from fastapi import FastAPI, Response
+from threading import Lock
+
+from fastapi import Depends, FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from redis import Redis
 
 from pbip_api import __version__
 from pbip_api.core.config import Settings, get_settings
-from pbip_api.core.errors import register_error_handlers
+from pbip_api.core.errors import document_not_found_responses, register_error_handlers
 from pbip_api.core.logging import configure_logging
 from pbip_api.core.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
+from pbip_api.core.redis import get_redis
 from pbip_api.modules.accounts.router import router as accounts_router
 from pbip_api.modules.analytics.router import router as analytics_router
 from pbip_api.modules.assistant.router import router as assistant_router
@@ -18,6 +22,7 @@ from pbip_api.modules.bills.router import router as bills_router
 from pbip_api.modules.compliance.router import router as compliance_router
 from pbip_api.modules.customers.router import router as customers_router
 from pbip_api.modules.events.router import router as events_router
+from pbip_api.modules.fraud.drift import publish_feature_psi
 from pbip_api.modules.fraud.hybrid import load_engine
 from pbip_api.modules.fraud.router import router as fraud_router
 from pbip_api.modules.health.router import ReadinessCache
@@ -54,6 +59,8 @@ ROUTERS = (
     compliance_router,
     notifications_router,
 )
+
+_METRICS_LOCK = Lock()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -102,12 +109,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.fraud_engine = load_engine(settings)
     register_error_handlers(app)
     for router in ROUTERS:
+        document_not_found_responses(router)
         app.include_router(router)
 
     @app.get("/metrics", include_in_schema=False)
-    def metrics() -> Response:
-        """Prometheus scrape endpoint. Not proxied by nginx; internal Docker network only."""
-        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    def metrics(redis_client: Redis = Depends(get_redis)) -> Response:
+        """Prometheus scrape endpoint. Not proxied by nginx; internal Docker network only.
+
+        The worker computes PSI drift; this process exports it (ADR-0038). The lock keeps a
+        concurrent scrape from seeing the gauge between its clear and its refresh."""
+        with _METRICS_LOCK:
+            publish_feature_psi(redis_client)
+            body = generate_latest()
+        return Response(body, media_type=CONTENT_TYPE_LATEST)
 
     return app
 

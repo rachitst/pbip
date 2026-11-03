@@ -106,7 +106,9 @@ class Settings(BaseSettings):
     # Any model problem, or scoring slower than the budget, falls back to the rules.
     fraud_scorer: Literal["rules", "hybrid"] = "rules"
     fraud_model_dir: str | None = Field(default=None, max_length=500)
-    fraud_model_budget_ms: int = Field(default=50, ge=5, le=90)
+    # The model step's wait (#362). At most 100 ms: the scoring contract is p95 < 100 ms (AGENTS
+    # section 8). Measure a slow machine with scripts/benchmark_fraud_latency.py before raising it.
+    fraud_model_budget_ms: int = Field(default=50, ge=5, le=100)
     # MULE_PASS_THROUGH (#144, ADR-0035): inbound transfers from other customers within the window
     # totalling at least the minimum, and an outbound of at least the ratio of them. The ratio is
     # an integer percentage so the boundary is exact (0 < R <= 1). Not admin-overridable (ADR-0031).

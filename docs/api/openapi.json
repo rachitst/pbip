@@ -1567,6 +1567,18 @@
             "title": "Segment",
             "type": "string"
           },
+          "top_product_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The first rule-based reason for the top product, from the customer's data",
+            "title": "Top Product Reason"
+          },
           "top_product_score": {
             "anyOf": [
               {
@@ -1629,6 +1641,15 @@
             "title": "Items",
             "type": "array"
           },
+          "order": {
+            "$ref": "#/components/schemas/InsightOrder",
+            "description": "How ``items`` are ordered"
+          },
+          "product_score_version": {
+            "description": "Version of the rule-based product scoring (not a trained model)",
+            "title": "Product Score Version",
+            "type": "string"
+          },
           "scope": {
             "$ref": "#/components/schemas/InsightScope",
             "description": "ASSIGNED: the caller's own customers only; ALL: every customer (admin)"
@@ -1643,7 +1664,9 @@
         "required": [
           "total",
           "evaluated_at",
-          "scope"
+          "scope",
+          "order",
+          "product_score_version"
         ],
         "title": "CustomerInsightsListResponse",
         "type": "object"
@@ -3713,6 +3736,15 @@
         ],
         "title": "IndicativePremiumOut",
         "type": "object"
+      },
+      "InsightOrder": {
+        "description": "CHURN_RISK: retention first (churn score, then balance). PROPENSITY: the rule-based product\nscore of the customer's best eligible product first (``rules-v1``, not a trained model).",
+        "enum": [
+          "CHURN_RISK",
+          "PROPENSITY"
+        ],
+        "title": "InsightOrder",
+        "type": "string"
       },
       "InsightScope": {
         "description": "ASSIGNED: only the caller's portfolio (an RM). ALL: every customer (an administrator).",
@@ -7886,6 +7918,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -7963,6 +7998,9 @@
               "text/csv": {}
             },
             "description": "The statement file (attachment)"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "422": {
             "content": {
@@ -8173,6 +8211,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -8254,6 +8295,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "422": {
             "content": {
@@ -8349,6 +8393,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -8396,6 +8443,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "422": {
             "content": {
@@ -9478,6 +9528,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -9968,6 +10021,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -10395,6 +10451,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -10459,6 +10518,9 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "422": {
             "content": {
@@ -10735,7 +10797,7 @@
     },
     "/api/v1/insights/customers": {
       "get": {
-        "description": "One page of customers ordered by churn risk (RM: their assigned customers; admin: all).",
+        "description": "One page of customers in the requested order (RM: their assigned customers; admin: all).",
         "operationId": "get_prioritized_customer_insights_api_v1_insights_customers_get",
         "parameters": [
           {
@@ -10798,6 +10860,17 @@
             }
           },
           {
+            "description": "CHURN_RISK (default): highest churn risk first. PROPENSITY: highest rule-based product score first (rules-v1, not a trained model); scores every customer in scope",
+            "in": "query",
+            "name": "order_by",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/InsightOrder",
+              "default": "CHURN_RISK",
+              "description": "CHURN_RISK (default): highest churn risk first. PROPENSITY: highest rule-based product score first (rules-v1, not a trained model); scores every customer in scope"
+            }
+          },
+          {
             "description": "Page size",
             "in": "query",
             "name": "limit",
@@ -10853,7 +10926,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Customers in the caller's scope (an RM: assigned only) ordered by churn risk",
+        "summary": "Customers in the caller's scope (an RM: assigned only) by churn risk or propensity",
         "tags": [
           "insights"
         ]
@@ -11390,6 +11463,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -11529,6 +11605,9 @@
           "204": {
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -11644,6 +11723,9 @@
           "204": {
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -11689,6 +11771,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "422": {
             "content": {
@@ -11746,6 +11831,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -11793,6 +11881,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "422": {
             "content": {
@@ -12114,6 +12205,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -12159,6 +12253,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "422": {
             "content": {
@@ -12208,6 +12305,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -12255,6 +12355,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "422": {
             "content": {
@@ -12304,6 +12407,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -12351,6 +12457,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "422": {
             "content": {
@@ -12423,6 +12532,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "422": {
             "content": {
@@ -12603,6 +12715,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -12664,6 +12779,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "409": {
             "description": "Already closed"
