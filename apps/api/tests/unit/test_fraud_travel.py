@@ -2,7 +2,7 @@
 
 import math
 import os
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -17,6 +17,7 @@ from pbip_api.modules.fraud.travel import (
     HALF_CIRCUMFERENCE_KM,
     PriorLocation,
     TravelPolicy,
+    _reason,
     great_circle_km,
     measure,
 )
@@ -118,6 +119,26 @@ def test_travel_defaults_and_policy_from_settings() -> None:
     assert TravelPolicy.disabled().max_speed_kmh == 900
 
 
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_an_empty_geoip_path_in_the_environment_means_no_database(
+    monkeypatch: pytest.MonkeyPatch, blank: str
+) -> None:
+    """``GEOIP_CITY_DB_PATH=`` from .env.example must disable the rule exactly like an unset path
+    (it came through as ``''`` on Windows and broke the defaults test above). The country path
+    gets the same treatment so NEW_COUNTRY behaves the same way."""
+    monkeypatch.setenv("GEOIP_CITY_DB_PATH", blank)
+    monkeypatch.setenv("GEOIP_COUNTRY_DB_PATH", blank)
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]  # pydantic-settings kwarg
+    assert settings.geoip_city_db_path is None
+    assert settings.geoip_country_db_path is None
+
+
+def test_a_set_geoip_path_is_kept_as_given(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEOIP_CITY_DB_PATH", "/data/geoip/dbip-city-lite.mmdb")
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]  # pydantic-settings kwarg
+    assert settings.geoip_city_db_path == "/data/geoip/dbip-city-lite.mmdb"
+
+
 def test_no_city_database_locates_nothing() -> None:
     assert NoLocationResolver().locate("81.2.69.142") is None
     assert isinstance(location_resolver_for(None), NoLocationResolver)
@@ -202,3 +223,14 @@ def test_both_scorers_get_the_travel_policy_from_settings(scorer: str) -> None:
     baseline = built.baseline if isinstance(built, HybridFraudScorer) else built
     assert isinstance(baseline, BaselineRulesScorer)
     assert baseline.travel == TravelPolicy(locations, 700, 500)
+
+
+def test_reason_times_are_in_utc_whatever_zone_the_database_returns() -> None:
+    """The reason says "UTC": a timestamp read back in another session zone (e.g. IST) must be
+    converted, not printed as local time with a UTC label (post-merge review of #365)."""
+    ist = timezone(timedelta(hours=5, minutes=30))
+    prior = PriorLocation("Sign-in", datetime(2026, 11, 3, 6, 12, tzinfo=ist), LONDON)
+    travel = measure(prior, MUMBAI, AT)
+    message = _reason(prior, MUMBAI, AT.astimezone(ist), travel).message
+    assert "Sign-in from GB (London) at 00:42 UTC" in message
+    assert "this payment from IN at 02:40 UTC" in message
