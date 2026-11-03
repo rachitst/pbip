@@ -337,7 +337,9 @@ class PaymentsService:
     def _begin_idempotent(
         self, user_id: UUID, key: str, request_hash: str
     ) -> tuple[UUID, TransferResult | None]:
-        """Claim the key. A concurrent duplicate BLOCKS on the unique index until we finish."""
+        """Claim the key. A concurrent duplicate BLOCKS on the unique index until we finish.
+        An expired key counts as unused (ADR-0036)."""
+        ledger.discard_expired_idempotency_key(self.session, user_id, key)
         statement = (
             pg_insert(IdempotencyKey)
             .values(
@@ -361,9 +363,10 @@ class PaymentsService:
     def _existing_outcome(
         self, user_id: UUID, key: str, request_hash: str
     ) -> tuple[UUID, TransferResult] | None:
-        """The stored answer for this key, or None if the key was never used.
+        """The stored answer for this key, or None if the key was never used or has expired.
 
         Raises if the key belongs to a different request (422) or has no answer yet (409)."""
+        ledger.discard_expired_idempotency_key(self.session, user_id, key)
         existing = self.session.execute(
             select(IdempotencyKey).where(
                 IdempotencyKey.user_id == user_id, IdempotencyKey.key == key
@@ -538,8 +541,7 @@ class PaymentsService:
         if stored is not None:
             return stored[1]
         transaction = self._owned_transaction(user_id, transaction_id)
-        if transaction.status != TransactionStatus.PENDING_STEP_UP:
-            raise ConflictError("this transfer is not waiting for verification")
+        self._require_waiting_for_code(transaction)
         try:  # a failure commits its own evidence (security event, lockout counter)
             self.auth.verify_step_up(user_id, code, meta, subject=str(transaction.id))
         except UnprocessableError:
@@ -552,8 +554,7 @@ class PaymentsService:
         if replay is not None:  # unreachable under the user lock; kept for the same semantics
             return replay
         transaction = self._owned_transaction(user_id, transaction_id, lock=True)
-        if transaction.status != TransactionStatus.PENDING_STEP_UP:
-            raise ConflictError("this transfer is not waiting for verification")
+        self._require_waiting_for_code(transaction)
         self._enforce_daily_limit(user_id, transaction)
         ledger.post_transaction(self.session, transaction, ledger.transfer_legs(transaction))
         self._enqueue(notifications.TRANSFER_POSTED, user_id, transaction)
@@ -570,6 +571,16 @@ class PaymentsService:
         self.session.commit()
         TRANSFERS_TOTAL.labels(transaction.status.value).inc()
         return outcome
+
+    def _require_waiting_for_code(self, transaction: Transaction) -> None:
+        """409 unless the transfer still waits for a code. Past the timeout it no longer does,
+        even before the expiry job has declined it (ADR-0036): the deadline does not depend on
+        when the beat last ran."""
+        overdue = transaction.created_at <= utcnow() - timedelta(
+            minutes=self.settings.step_up_expiry_minutes
+        )
+        if transaction.status != TransactionStatus.PENDING_STEP_UP or overdue:
+            raise ConflictError("this transfer is not waiting for verification")
 
     def _step_up_failures(self, user_id: UUID, transaction_id: UUID) -> int:
         count = self.session.scalar(

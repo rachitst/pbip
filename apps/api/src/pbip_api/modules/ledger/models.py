@@ -139,7 +139,10 @@ class IdempotencyKey(Base):
     """One row per (user, Idempotency-Key). The UNIQUE constraint is what makes retries safe."""
 
     __tablename__ = "idempotency_keys"
-    __table_args__ = (UniqueConstraint("user_id", "key", name="uq_idempotency_keys_user_key"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "key", name="uq_idempotency_keys_user_key"),
+        Index("ix_idempotency_keys_expires_at", "expires_at"),  # the daily purge (ADR-0036)
+    )
 
     id: Mapped[UUID] = uuid_pk()
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False)

@@ -94,7 +94,14 @@ class Settings(BaseSettings):
     internal_bank_code: str = "PBIP0001"
     max_transfer_minor: int = 20_000_000  # 2,00,000.00 per transfer
     daily_transfer_limit_minor: int = 50_000_000  # 5,00,000.00 per customer per UTC day
-    idempotency_ttl_hours: int = 24
+    # A key replays its answer for this long, then counts as unused and is purged (ADR-0036).
+    idempotency_ttl_hours: int = Field(default=24, ge=1, le=720)
+    idempotency_purge_batch_size: int = Field(default=1000, ge=1, le=10_000)
+    # An unanswered step-up is declined after this many minutes (ADR-0036): long enough to fetch a
+    # phone and open an authenticator, short enough that a stale fraud decision is not completed
+    # hours later and an abandoned transfer stops counting against the day's limit.
+    step_up_expiry_minutes: int = Field(default=15, ge=1, le=1440)
+    step_up_expiry_batch_size: int = Field(default=200, ge=1, le=1000)
     scheduled_transfers_batch_size: int = Field(default=100, ge=1, le=1000)
     # Matured fixed deposits paid out per hourly run (ADR-0029).
     fd_maturity_payout_batch_size: int = Field(default=100, ge=1, le=1000)
