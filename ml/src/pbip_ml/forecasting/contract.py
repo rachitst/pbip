@@ -35,4 +35,4 @@ class Forecast(BaseModel):
     confidence_level: float = Field(gt=0, lt=1, description="e.g. 0.8 for an 80% interval")
     points: list[ForecastPoint] = Field(min_length=1)
     model_version: str
-    method: str = Field(description="e.g. ets, auto_arima, seasonal_naive")
+    method: str = Field(description="e.g. auto_arima, naive")

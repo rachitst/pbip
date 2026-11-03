@@ -8,8 +8,11 @@ balance with 80% and 95% prediction intervals. Every response carries
 | History (days) | Method | Why |
 |---|---|---|
 | 28 or more | statsforecast **AutoARIMA**, weekly season | Best in the backtest below |
-| 14-27 | Seasonal naive (weekly) | Too little history to fit a model honestly |
-| Under 14 | Naive (last balance) | |
+| Under 28 | Naive (last balance) | Too little history to fit a model honestly; best in the short-history backtest below |
+
+Until `forecast-arima-2` (#384), 14-27 days used weekly seasonal naive. It repeats last week's balance
+**levels**, so a one-off debit (Alice: INR 50,000 out around 1 Nov) was projected to swing back to the
+old balance every week, and the 30-day point read as "your money comes back".
 
 ## Rolling-origin backtest (real run)
 `uv run python -m pbip_ml.forecasting.backtest --customers 60 --months 12` with seed 42: 59 synthetic
@@ -24,6 +27,28 @@ each using only the data before it, 30-day horizon, 233 forecasts per method.
 
 AutoARIMA has the lowest error and the best-calibrated 80% interval (AutoETS's is too wide).
 Coverage above the nominal level means the intervals are slightly conservative.
+
+### Short-history backtest (real run, #384)
+`uv run python -m pbip_ml.forecasting.backtest --short-history` with seed 42: the same 59 series and 4 origins
+per series 30 days apart, but each forecast sees only a fixed 14, 21 or 27-day window before its origin;
+30-day horizon, 235 forecasts per method and window.
+
+| Window | Method | sMAPE mean | sMAPE median | 80% coverage | 95% coverage |
+|---|---|---|---|---|---|
+| 14 days | Seasonal naive (before) | 15.15% | 14.39% | 76.1% | 89.0% |
+| 14 days | **Naive (served)** | **12.44%** | **10.89%** | **80.1%** | 85.7% |
+| 21 days | Seasonal naive (before) | 15.15% | 14.38% | 74.1% | 87.1% |
+| 21 days | **Naive (served)** | **12.53%** | **10.93%** | **81.3%** | 86.9% |
+| 27 days | Seasonal naive (before) | 15.11% | 14.38% | 74.3% | 87.7% |
+| 27 days | **Naive (served)** | **12.45%** | **10.93%** | **85.0%** | **90.7%** |
+
+Naive has the lower error at every window and an 80% interval near or above nominal, where seasonal naive's
+under-covers. Both 95% intervals under-cover (85.7-90.7%), naive's slightly more than seasonal naive's on 14
+and 21 days: treat the 95% band of a short-history forecast as narrower than it claims. Two variants that
+forecast the daily net flow instead of the level (last balance plus last week's daily changes, with and
+without large one-off changes zeroed) were tried in a scratch run and not adopted: the unfiltered one repeats
+a one-off debit every week (sMAPE about 37%), the filtered one had a higher mean sMAPE than naive (about
+14.2-14.5%) and no interval model.
 
 ## End-of-month projection (TASK-043)
 The same endpoint combines the model with the payments the bank already knows about:
@@ -53,6 +78,8 @@ forecast is not alerted. The assistant's forecast tool uses the read-only varian
 
 ## Limits
 * Synthetic data only: real customer behaviour will differ; re-run the backtest on real history.
+* Under 28 days the forecast is flat (naive): it shows no weekly pattern and no salary, and its 95% interval
+  is slightly narrow (short-history backtest above).
 * AutoARIMA costs about 0.9 s per fit on a 2-CPU laptop (AutoETS about 0.2 s); statsforecast's
   numba compile adds about 2 s to the first forecast in each API process. Not measured in staging.
 * The history is the ledger only. Scheduled payments are handled outside the model (above); salary dates are not

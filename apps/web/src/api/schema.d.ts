@@ -1942,7 +1942,7 @@ export interface components {
             label: "Predicted, not exact";
             /**
              * Method
-             * @description auto_arima, seasonal_naive or naive (by history length); none when status is INSUFFICIENT_HISTORY
+             * @description auto_arima or naive (by history length); none when status is INSUFFICIENT_HISTORY
              */
             method: string;
             /** Model Version */

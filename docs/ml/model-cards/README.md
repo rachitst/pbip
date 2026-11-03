@@ -9,7 +9,7 @@ evaluation report exists, the card says so instead of giving a number.
 | [LightGBM fraud classifier](lightgbm-fraud.md) | `ml/src/pbip_ml/fraud/training.py` | part of `hybrid-lgbm-iforest-2` | through the hybrid (`FRAUD_SCORER=hybrid`) | `docs/ml/model-evaluation-report-v1.md` §3.2, §8, §9 |
 | [Isolation Forest anomaly model](isolation-forest.md) | `ml/src/pbip_ml/fraud/training.py` | part of `hybrid-lgbm-iforest-2` | through the hybrid | `docs/ml/model-evaluation-report-v1.md` §3.2; `docs/ml/fraud-models.md` |
 | [Hybrid fraud combiner](hybrid-fraud-combiner.md) | `ml/src/pbip_ml/fraud/hybrid.py` | `hybrid-lgbm-iforest-2` (`+rules-only` on fallback; the demo stack still serves `-1`) | yes: transfers and bill payments | `docs/ml/model-evaluation-report-v1.md` §3.1, §8, §9 |
-| [Balance forecast](balance-forecast.md) | `ml/src/pbip_ml/forecasting/model.py` | `forecast-arima-1` | yes: `GET /api/v1/analytics/forecast` | `docs/ml/balance-forecast.md` |
+| [Balance forecast](balance-forecast.md) | `ml/src/pbip_ml/forecasting/model.py` | `forecast-arima-2` | yes: `GET /api/v1/analytics/forecast` | `docs/ml/balance-forecast.md` |
 | [K-Means customer segmentation](kmeans-segmentation.md) | `ml/src/pbip_ml/segmentation/pipeline.py` | none defined in code | stored by an offline job, read by `GET /api/v1/analytics/segment` | no evaluation report on main |
 | [Rule-based product recommendation score](recommendation-score.md) | `ml/src/pbip_ml/recommendations/engine.py` | `rules-v1` | yes | no ranking evaluation (no outcome labels); latency and the no-model decision: [`docs/ml/recommendation-propensity-decision.md`](../recommendation-propensity-decision.md) |
 
