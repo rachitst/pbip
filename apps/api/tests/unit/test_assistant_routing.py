@@ -404,26 +404,46 @@ def test_untrusted_text_is_stripped_and_capped() -> None:
     assert clean_untrusted_text(None) == ""
 
 
+def _fallback_seconds(message: str) -> float:
+    """Best of five runs: the minimum discards the time this process was descheduled."""
+    best = float("inf")
+    for _ in range(5):
+        started = time.perf_counter()
+        for _ in range(5):
+            fallback.route(message)
+            fallback.parse_rupees(message)
+            guard.check(message)
+        best = min(best, time.perf_counter() - started)
+    return best
+
+
 @pytest.mark.parametrize(
-    "message",
+    ("head", "unit", "tail", "repeats"),
     [
-        "account" + " " * 400 + "x",
-        "9" * 30 + ",9" * 200 + "!",
-        "9," * 240 + "x",
-        " " * 499 + "x",
-        "loan " + "1 " * 240,
-        "bob's " + "a " * 240 + "x",
-        "x's" * 160,
+        ("account", " ", "x", 400),
+        ("9" * 30, ",9", "!", 200),
+        ("", "9,", "x", 240),
+        ("", " ", "x", 499),
+        ("loan ", "1 ", "", 240),
+        ("bob's ", "a ", "x", 240),
+        ("", "x's", "", 160),
     ],
 )
-def test_fallback_regexes_stay_fast_on_adversarial_input(message: str) -> None:
-    """Regression for CodeQL py/polynomial-redos: worst-case inputs at the 500-char cap."""
-    started = time.perf_counter()
-    for _ in range(20):
-        fallback.route(message)
-        fallback.parse_rupees(message)
-        guard.check(message)
-    assert time.perf_counter() - started < 0.5
+def test_fallback_regexes_stay_fast_on_adversarial_input(
+    head: str, unit: str, tail: str, repeats: int
+) -> None:
+    """Regression for CodeQL py/polynomial-redos: worst-case inputs at the 500-char cap.
+
+    Asserted as growth, not as a wall-clock limit (which failed under load, #317): sixteen times
+    the input may cost at most 3x linear. Linear matching grows ~16x; a quadratic backtracking
+    pattern grows towards 256x and an exponential one never finishes. Both sizes are timed in the
+    same process moments apart, so machine speed and load cancel out of the ratio.
+    """
+    small = head + unit * repeats + tail
+    large = head + unit * (repeats * 16) + tail
+    assert len(small) <= MAX_MESSAGE_CHARS  # the real worst case at the cap is still exercised
+    ratio = _fallback_seconds(large) / _fallback_seconds(small)
+    assert ratio < 48, f"16x input took {ratio:.0f}x as long: super-linear backtracking"
 
 
 def test_the_conversation_store_accepts_every_registered_tool() -> None:

@@ -19,8 +19,7 @@ from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.fraud.dependencies import get_fraud_scorer
 from pbip_ml.fraud.contract import FraudDecision
 from pbip_ml.fraud.testing import FixedDecisionScorer
-from pbip_test_support import PASSWORD, Actor, FakeClock, age_payee
-from redis import Redis
+from pbip_test_support import PASSWORD, Actor, FakeClock, age_payee, unreachable_redis
 from sqlalchemy import Engine
 
 pytestmark = pytest.mark.integration
@@ -291,7 +290,7 @@ def test_monitoring_is_cached_for_60_seconds_and_survives_redis_down(
     assert 0 < int(fake_redis.ttl("fraud:monitoring:v1")) <= 60
     send(app, client, sender, payee, FraudDecision.REVIEW)
     assert client.get(URL, headers=analyst.headers).json() == first  # still the cached panels
-    down = Redis(host="127.0.0.1", port=9, socket_connect_timeout=0.2, decode_responses=True)
+    down = unreachable_redis()
     app.dependency_overrides[get_redis] = lambda: down
     fresh = client.get(URL, headers=analyst.headers)
     assert fresh.status_code == 200 and len(fresh.json()["fraud_events"]["latest"]) == 1
