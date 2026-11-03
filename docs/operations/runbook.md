@@ -206,7 +206,7 @@ but only downgrade when the previous release cannot run on the new schema, and t
 
 ---
 
-### 2.4 Refresh the GeoIP country database (monthly, optional)
+### 2.4 Refresh the GeoIP country and city databases (monthly, optional)
 
 The NEW_COUNTRY fraud rule (ADR-0014) needs DB-IP's free country database. Without it the rule is
 off and nothing else changes. DB-IP publishes a new file each month (CC BY 4.0).
@@ -218,8 +218,16 @@ off and nothing else changes. DB-IP publishes a new file each month (CC BY 4.0).
    at `/data/geoip`), and set `GEOIP_COUNTRY_DB_PATH=/data/geoip/dbip-country-lite.mmdb` in `~/pbip/.env`.
 3. Apply it as in 2.3 (restart `api`). The reader is opened once per process.
 
+The IMPOSSIBLE_TRAVEL rule (ADR-0034) needs DB-IP's free city database instead (about 60 MB to
+download, 120 MB on disk, memory-mapped). Same steps with
+`uv run python scripts/fetch_geoip.py --product city --month YYYY-MM --dest geoip/dbip-city-lite.mmdb`
+and `GEOIP_CITY_DB_PATH=/data/geoip/dbip-city-lite.mmdb`. Without it the rule records
+`location_unknown` and never scores. A stale file only drifts slowly; a missing or unreadable file
+also switches the rule off (payments continue) and logs `geoip_city_db_unavailable` once per
+process: after fixing the file, restart `api` and `worker`.
+
 Keep the attribution "IP Geolocation by DB-IP" (https://db-ip.com) wherever location results are
-shown (the staff alert view shows the NEW_COUNTRY reason text).
+shown (the staff alert view shows the NEW_COUNTRY and IMPOSSIBLE_TRAVEL reason text).
 
 ## 3. Secret rotation
 

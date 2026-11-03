@@ -107,5 +107,5 @@ filled in from a real run in a follow-up commit on this branch. No numbers are r
   real deployment would need a legal review (cross-border transfer, outsourcing rules) and ZDR enabled.
 - Free-tier org limits (8K tokens/min) cap throughput at a few routed questions per minute for the whole
   deployment; beyond that the cooldown and Ollama take over. A paid tier is needed for real traffic.
-- New operational secret (`GROQ_API_KEY`) with a rotation procedure (runbook). Threat model T54.
+- New operational secret (`GROQ_API_KEY`) with a rotation procedure (runbook). Threat model T55.
 - Audit volume: one extra row per model attempt (at most two per unclear question).

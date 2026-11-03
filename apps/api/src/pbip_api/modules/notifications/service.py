@@ -22,6 +22,8 @@ BILL_PAYMENT_UNDER_REVIEW = "BILL_PAYMENT_UNDER_REVIEW"
 SCHEDULED_TRANSFER_FAILED = "SCHEDULED_TRANSFER_FAILED"
 SCHEDULED_TRANSFER_MISSED = "SCHEDULED_TRANSFER_MISSED"
 SCHEDULED_TRANSFER_PAUSED = "SCHEDULED_TRANSFER_PAUSED"
+# A fraud analyst lifted a FRAUD_BLOCK pause (#304); the order waits for the customer to resume.
+SCHEDULED_TRANSFER_UNLOCKED = "SCHEDULED_TRANSFER_UNLOCKED"
 # Loans (ADR-0024): both link to the ledger transaction, like transfers.
 LOAN_DISBURSED = "LOAN_DISBURSED"
 LOAN_REPAYMENT_POSTED = "LOAN_REPAYMENT_POSTED"
@@ -56,6 +58,7 @@ _SCHEDULED_TRANSFER_TYPES = {
     SCHEDULED_TRANSFER_FAILED,
     SCHEDULED_TRANSFER_MISSED,
     SCHEDULED_TRANSFER_PAUSED,
+    SCHEDULED_TRANSFER_UNLOCKED,
 }
 _SECURITY_TEXT = {
     PASSWORD_CHANGED: (
@@ -288,6 +291,14 @@ def _scheduled_transfer_text(event: OutboxEvent) -> tuple[str, str] | None:
             (
                 f"Your scheduled transfer of {amount} was paused. "
                 "Action is required to resume transfers."
+            ),
+        )
+    if event.event_type == SCHEDULED_TRANSFER_UNLOCKED:
+        return (
+            "Scheduled transfer can be resumed",
+            (
+                f"The bank has reviewed your scheduled transfer of {amount}. "
+                "It stays paused until you resume it."
             ),
         )
     if event.event_type == SCHEDULED_TRANSFER_MISSED:

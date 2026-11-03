@@ -17,6 +17,8 @@ x-api-env: &api-env
   COOKIE_SECURE: ${COOKIE_SECURE:-true}
   # Optional DB-IP country database for the NEW_COUNTRY fraud rule (ADR-0014, runbook 2.4).
   GEOIP_COUNTRY_DB_PATH: ${GEOIP_COUNTRY_DB_PATH:-}
+  # Optional DB-IP City Lite database for IMPOSSIBLE_TRAVEL (ADR-0034, runbook 2.4).
+  GEOIP_CITY_DB_PATH: ${GEOIP_CITY_DB_PATH:-}
 
 services:
   db:
