@@ -893,7 +893,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #49 | **Sprint:** 2 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Sujal (`SUJALGPM`)
-- **Start:** Mon 26 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (7.6 days of slack)
+- **Start:** Mon 26 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** Tue 03 Nov (#393, 67429dc, with #390 and #315: outbox relay retries with exponential backoff, dead letters (audited), daily purge and exactly-once delivery, ADR-0040, migrations 0027-0028) | **Status:** Done (criterion 1: the relay claims rows with `FOR UPDATE SKIP LOCKED`, `test_concurrent_relays_deliver_each_event_exactly_once`; criterion 2: `test_failing_event_is_retried_with_backoff_and_does_not_block_the_batch`, `test_outbox_retry_policy.py`; criterion 3: `test_purge_deletes_only_processed_events_past_retention_in_batches`; criterion 4 and the DoD: `test_worker_killed_between_dispatch_and_commit_delivers_exactly_once_on_restart`, `test_crash_after_some_handlers_ran_loses_and_duplicates_nothing`. Two recorded deviations, both in ADR-0040: there is no external webhook consumer in PBIP, so only notifications are dispatched; processed rows past `OUTBOX_RETENTION_DAYS` are deleted, not archived) | **Risk:** Low
 - **Depends on:** TASK-018 (#41, Abbas). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-018
 - **Goal:** Background Celery worker polling outbox_events table and dispatching notifications.
@@ -906,10 +906,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Zero event loss even under forced process termination
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #49`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Polls outbox_events with SELECT ... FOR UPDATE SKIP LOCKED
-  - [ ] Dispatches notifications and external webhooks with exponential backoff retry
-  - [ ] Marks processed events and archives rows older than retention threshold
-  - [ ] Zero event loss even under forced process termination
+  - [x] Polls outbox_events with SELECT ... FOR UPDATE SKIP LOCKED
+  - [x] Dispatches notifications and external webhooks with exponential backoff retry
+  - [x] Marks processed events and archives rows older than retention threshold
+  - [x] Zero event loss even under forced process termination
 - **Definition of done (evidence):** Integration tests simulate worker crash and verify exactly-once outbox dispatch.
 - **Required checks:**
   - Automated: CI job or `scripts/dev.py` command exercised in tests; works from a fresh clone; pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths
@@ -2582,7 +2582,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #107 | **Sprint:** 6 | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Pranay (`pranaysanap`)
-- **Start:** Sat 31 Oct | **Target deadline:** Sun 01 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (1.5 days of slack)
+- **Start:** Sat 31 Oct | **Target deadline:** Sun 01 Nov | **Actual completion:** - (#405 with #392 in batch #407, fc4279a: data-gen v2.3, retrained `hybrid-lgbm-iforest-2`, Optuna study, SHAP summary) | **Status:** In Progress (criterion 1 is met: `scripts/fraud_tune.py`, 30 seeded TPE trials over learning rate, depth and L1/L2, the current params were kept, `test_fraud_tuning.py`; criterion 2 is partly met: metrics and mean-|SHAP| are logged to MLflow, the SHAP plot is committed under `docs/ml/img` but not logged to MLflow; criterion 3 is **not met**: the TASK-038 gate refused promotion on p95 latency (112 ms > 50 ms on a loaded laptop) and must be re-run on an idle machine; the DoD's frozen bundle in `ml/models/` is not committed, an owner decision) | **Risk:** Medium
 - **Depends on:** TASK-029 (#52, Rachit), TASK-038 (#61, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-029, TASK-038
 - **Goal:** Final hyperparameter tuning run (Optuna) producing production frozen model weights.
@@ -2665,7 +2665,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #110 | **Sprint:** 6 | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Mon 02 Nov | **Target deadline:** Tue 03 Nov | **Actual completion:** - (#373, 10a26fe, merged Tue 03 Nov: `docs/testing/test-strategy-and-report.md`; criterion 2 not met) | **Status:** In Progress (criteria 1 and 3 are met: test distribution from CI run 41600683787, and the lock-order argument with real-thread tests and 0 deadlocks in 8 CI k6 runs; criterion 2 is not: ledger branch coverage 98.08%, but **auth branch coverage is 89.58% (86/96), below 90%**) | **Risk:** Medium
+- **Start:** Mon 02 Nov | **Target deadline:** Tue 03 Nov | **Actual completion:** Tue 03 Nov (#373, 10a26fe: `docs/testing/test-strategy-and-report.md`; #410 in batch #407, fc4279a: 5 auth edge-case tests) | **Status:** Done (criteria 1 and 3 since #373; criterion 2 since #410: in CI run 41689113122 (PR #407, the commit merged as fc4279a) auth branch coverage is 92/96 = 95.83% and ledger 54/56 = 96.43%, total coverage 96.71%. The plan's manual check, a teammate following the report end to end, was not done) | **Risk:** Low
 - **Depends on:** TASK-077 (#100, Rachit), TASK-078 (#101, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-077, TASK-078
 - **Goal:** Formal verification report summarizing test pyramid counts, coverage, and concurrency results.
@@ -2677,9 +2677,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Documents concurrency stress test outcomes and deadlock prevention proof
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #110`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Details test distribution: unit tests, integration tests, security tests, and E2E journeys
-  - [ ] Reports branch coverage across core modules (ledger >= 90%, auth >= 90%)
-  - [ ] Documents concurrency stress test outcomes and deadlock prevention proof
+  - [x] Details test distribution: unit tests, integration tests, security tests, and E2E journeys
+  - [x] Reports branch coverage across core modules (ledger >= 90%, auth >= 90%)
+  - [x] Documents concurrency stress test outcomes and deadlock prevention proof
 - **Definition of done (evidence):** Committed to docs/testing/test-strategy-and-report.md, peer-reviewed and approved.
 - **Required checks:**
   - Automated: document builds/renders, links valid, content matches the code and backlog
@@ -2721,7 +2721,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #112 | **Sprint:** 7 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Tue 03 Nov | **Target deadline:** Tue 03 Nov | **Actual completion:** - (fixes merging: #386 web layout in batch #397, bae2580; #388, 2c6230d: demo fixes for #383 and the forecast starting at the balance) | **Status:** In Progress | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
+- **Start:** Tue 03 Nov | **Target deadline:** Tue 03 Nov | **Actual completion:** - (fixes merged: #386 in #397, bae2580; #388, 2c6230d; #387; #406, 0dc2315, ADR-0044: expected states log no console errors; #401, #411 and #412 in #407, fc4279a) | **Status:** In Progress (defects found in the bug bash are triaged, and most are fixed with regression tests, but #384, #396, #398, #399 and #403 are still open, so criterion 2 is not met; no written record of the pair-testing session (criterion 1) is linked yet) | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
 - **Depends on:** TASK-077 (#100, Rachit), TASK-081 (#104, Abbas). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-077, TASK-081
 - **Goal:** Full team defect hunting session identifying and resolving edge-case bugs and UI glitches.
@@ -2832,7 +2832,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #116 | **Sprint:** 7 | **Priority:** must | **Size:** S (0.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Tue 03 Nov | **Target deadline:** Tue 03 Nov | **Actual completion:** - (#377 open) | **Status:** In Progress | **Risk:** High (0.1 day(s) of slack; a slip here moves Nov 3 work)
+- **Start:** Tue 03 Nov | **Target deadline:** Tue 03 Nov | **Actual completion:** - (#377 in batch #407, fc4279a: live demo script with verified amounts and the fallback plan) | **Status:** In Progress (#377 adds the minute-by-minute script; the rehearsal, the slide deck and the fallback video (criteria 3-4 and the DoD) are the owner's, and the live demo was cancelled on Tue 03 Nov) | **Risk:** High (0.1 day(s) of slack; a slip here moves Nov 3 work)
 - **Depends on:** TASK-081 (#104, Abbas), TASK-092 (#115, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-081, TASK-092
 - **Goal:** Rehearsed 18-minute presentation script with deterministic demo data and fallback video.
