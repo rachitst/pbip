@@ -59,14 +59,24 @@ came from another customer.
 | 120 min | 0 / 20 (0.039%) | 0 / 3 (0.071%) | 3 / 16 |
 | 360 min | 0 / 61 (0.120%) | 0 / 9 (0.214%) | 16 / 16 |
 
-Effect on the hybrid bars (evaluation report v1, section 3.3): the ML package has its own rule registry
-(`pbip_ml/fraud/rules.py`) and does not contain this rule, so the trained model, its features and the measured bars are
-unchanged by this ADR. In serving, the API takes `max(baseline, hybrid)`, so the rule can only raise a decision. Upper
-bounds with W = 60 under the conservative reading: a legitimate new-payee transfer that fires scores at least 60, so
-"new-payee held at REVIEW" rises by at most 0.024 points (bar 1%, measured 0.09% / 0.30%); "new-payee asked for
-STEP_UP" cannot rise from this rule, because a new-payee transfer that fires goes to REVIEW; and "all legitimate debits
-held at REVIEW" rises by at most 0.022 points even if every firing debit were held (bar 0.1%, measured 0.02% / 0.04%).
-All bars still pass under these bounds. With W = 360 the last bound (0.12 points) could breach the 0.1% bar.
+Effect on the hybrid bars (evaluation report v1, sections 3.3 and 8): the ML package has its own rule registry
+(`pbip_ml/fraud/rules.py`) and does not contain this rule, so the trained model and its features are unchanged. In
+serving, the API takes `max(baseline, hybrid)`, so the rule can only raise a decision. To measure that, the v2.2 models
+were retrained with the evaluation harness (`python -m pbip_ml.fraud.train`, seed 42, 3,000 customers x 6 months,
+held-out seed 4242, 1,500 x 6), which reproduced the report's numbers exactly, and each row where an offline replica of
+the rule fires was given `max(hybrid, 45 + NEW_PAYEE / NEW_PAYEE_LARGE_AMOUNT / LARGE_AMOUNT points)` (the other API
+rules were not replicated; they can only add points). New payee means added less than 3 days earlier, as in the report.
+
+| Bar (test / held-out) | Bar | Before | After, P2P credits only | After, income counted as inbound |
+|---|---|---|---|---|
+| Legitimate new-payee transfers held at REVIEW | <= 1% | 0.09% / 0.30% | 0.09% / 0.30% | 0.09% / 0.34% |
+| Legitimate new-payee transfers asked for STEP_UP or more | <= 10% | 7.49% / 7.99% | unchanged | unchanged |
+| All legitimate debits held at REVIEW | <= 0.1% | 0.020% / 0.039% | unchanged | 0.020% / 0.043% |
+| Hybrid recall at REVIEW (test) vs rules only | hybrid clearly better | 0.808 vs 0.202 | unchanged | unchanged |
+
+The rule fired on 2 test rows and 2 held-out rows (3 legitimate, all only under the income reading); the one fraud row
+it fired on was already at REVIEW. All bars still pass. With W = 360 the whole-period count above (0.12% of legitimate
+debits under the income reading) shows the all-legitimate bar could be at risk; this was not re-measured on the splits.
 
 Limits: the generator's F6 forward waits 15 to 300 minutes after the last credit, a choice of the generator, not
 evidence about real mules; tuning W to catch 16 / 16 would fit the rule to its own test data. There is no labelled

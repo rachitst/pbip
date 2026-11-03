@@ -38,7 +38,7 @@ The older specs stay: `smoke.spec.ts`, `sprint1.spec.ts` (account opening, devic
   first transfer goes to a payee added seconds earlier, with no failed sign-ins and no history, so the inputs
   are the same on every run:
 
-  | Input | Rules (`baseline-rules-0.4`, all CI has: no model files) | Trained hybrid (`hybrid-lgbm-iforest-1`, local) | Outcome |
+  | Input | Rules (`baseline-rules-0.3`, all CI has: no model files) | Trained hybrid (`hybrid-lgbm-iforest-1`, local) | Outcome |
   |---|---|---|---|
   | INR 100 to a new payee | NEW_PAYEE, 15 -> ALLOW | 0 | POSTED |
   | INR 25,000 to a new payee, customer with MFA | NEW_PAYEE_LARGE_AMOUNT, 45 -> STEP_UP | 30 (the rule's STEP_UP floor) | step-up, then POSTED |
