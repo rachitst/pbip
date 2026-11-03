@@ -103,11 +103,7 @@ def categorize_transaction(reference: str | None, tx_type: str | None = None) ->
             if pattern.search(clean_ref):
                 return cat_name
 
-    if tx_type:
-        t = tx_type.upper()
-        if "TRANSFER" in t:
-            return "transfers"
-        if "FEE" in t:
-            return "fees"
+    if tx_type and "TRANSFER" in tx_type.upper():
+        return "transfers"
 
     return "other"

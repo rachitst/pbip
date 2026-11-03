@@ -218,7 +218,7 @@ class BaselineRulesScorer:
         """F6: money received from other customers in the window, most of it now sent on.
 
         Inbound is POSTED TRANSFER credits from accounts held by other customers only: DEPOSIT
-        (the funding path), REVERSAL, FEE and moves between this customer's own accounts are not
+        (the funding path), REVERSAL and moves between this customer's own accounts are not
         someone else's money passing through. Read-only: no lock, no write.
         """
         cfg = self.settings

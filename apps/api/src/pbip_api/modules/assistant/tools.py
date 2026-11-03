@@ -76,7 +76,6 @@ class SpendCategory(StrEnum):
     EDUCATION = "education"
     HOUSING = "housing"
     TRANSFERS = "transfers"
-    FEES = "fees"
     OTHER = "other"
 
 
