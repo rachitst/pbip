@@ -296,9 +296,18 @@ class BalanceForecastResponse(BaseModel):
     label: Literal["Predicted, not exact"] = Field(
         default=PREDICTED_LABEL, description="Always shown with the numbers"
     )
+    status: Literal["OK", "INSUFFICIENT_HISTORY"] = Field(
+        default="OK",
+        description="INSUFFICIENT_HISTORY: fewer than two days of balance history, so there is no "
+        "forecast yet (points and history are empty, end_of_month is null). An expected state of "
+        "a new account, not an error",
+    )
     account_id: UUID
     currency: str
-    method: str = Field(description="auto_arima, seasonal_naive or naive (by history length)")
+    method: str = Field(
+        description="auto_arima, seasonal_naive or naive (by history length); none when status "
+        "is INSUFFICIENT_HISTORY"
+    )
     model_version: str
     history_days: int = Field(description="Days of balance history the forecast used")
     horizon_days: int
@@ -312,7 +321,9 @@ class BalanceForecastResponse(BaseModel):
     obligations: list[ForecastObligation] = Field(
         description="Known upcoming debits to the later of the horizon end and the month end"
     )
-    end_of_month: EndOfMonthProjection
+    end_of_month: EndOfMonthProjection | None = Field(
+        description="Null only when status is INSUFFICIENT_HISTORY"
+    )
 
 
 # --- Behavioural analytics dashboard (TASK-101): aggregates only, never a customer id ---

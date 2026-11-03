@@ -125,6 +125,18 @@ def test_refresh_rotation_and_reuse_detection(client: TestClient) -> None:
     assert legit_now_dead.status_code == 401
 
 
+def test_refresh_without_a_cookie_is_a_signed_out_204_not_a_401(client: TestClient) -> None:
+    """#382: every page load without a session asks once; that is not a failed authentication."""
+    client.cookies.clear()
+    empty = client.post("/api/v1/auth/refresh", headers=CSRF)
+    assert empty.status_code == 204 and empty.content == b""
+    assert "set-cookie" not in empty.headers
+    # the CSRF guard still runs first, and a cookie that is sent but invalid is still a 401
+    assert client.post("/api/v1/auth/refresh").status_code == 403
+    bogus = client.post("/api/v1/auth/refresh", headers={**CSRF, "Cookie": "pbip_refresh=nope"})
+    assert bogus.status_code == 401
+
+
 def test_refresh_requires_csrf_header_and_trusted_origin(client: TestClient) -> None:
     register(client, "csrf@example.com")
     login_json(client, "csrf@example.com")

@@ -3,11 +3,11 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
-import type { BalanceForecastResponse } from "../api/client";
 import { AuthProvider } from "../auth/AuthContext";
 import { customerMe } from "../test-utils";
 import { ForecastTooltip } from "./BalanceForecastSection";
 import { axisAmount, forecastRows, forecastSummary, obligationLabel } from "./forecastChart";
+import type { ProjectedForecast } from "./forecastChart";
 // Loaded lazily by the route; importing it warms the module cache (see Insights.test.tsx).
 import "./Insights";
 
@@ -45,9 +45,10 @@ const point = (date: string, predicted: number, spread: number, due = 0) => ({
   obligations_minor: due,
 });
 
-function forecast(overrides: Partial<BalanceForecastResponse> = {}): BalanceForecastResponse {
+function forecast(overrides: Partial<ProjectedForecast> = {}): ProjectedForecast {
   return {
     label: "Predicted, not exact",
+    status: "OK",
     account_id: "acc-1",
     currency: "INR",
     method: "auto_arima",
@@ -296,8 +297,18 @@ describe("Balance forecast chart (TASK-050)", () => {
   });
 
   it("explains a missing history as an empty state, not an error", async () => {
+    // #382: a new account's forecast is a 200 with status INSUFFICIENT_HISTORY, not a 422.
     mockApi(fetchMock, () =>
-      json(422, { title: "Unprocessable", status: 422, detail: "at least two days" }),
+      json(200, {
+        ...forecast(),
+        status: "INSUFFICIENT_HISTORY",
+        method: "none",
+        history_days: 0,
+        points: [],
+        history: [],
+        obligations: [],
+        end_of_month: null,
+      }),
     );
     renderInsights();
     const section = within(await forecastSection());
