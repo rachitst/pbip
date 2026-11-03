@@ -32,6 +32,14 @@ class InsightScope(StrEnum):
     ALL = "ALL"
 
 
+class InsightOrder(StrEnum):
+    """CHURN_RISK: retention first (churn score, then balance). PROPENSITY: the rule-based product
+    score of the customer's best eligible product first (``rules-v1``, not a trained model)."""
+
+    CHURN_RISK = "CHURN_RISK"
+    PROPENSITY = "PROPENSITY"
+
+
 class CustomerInsightItem(BaseModel):
     """What an RM needs to prioritise outreach: no email, address, birth date or account number."""
 
@@ -61,6 +69,10 @@ class CustomerInsightItem(BaseModel):
     top_product_score: float | None = Field(
         default=None, ge=0.0, le=1.0, description="Rule-based relevance (not a probability)"
     )
+    top_product_reason: str | None = Field(
+        default=None,
+        description="The first rule-based reason for the top product, from the customer's data",
+    )
     loan_product: str | None = Field(
         default=None, description="Best eligible loan or credit product, if any is eligible"
     )
@@ -87,6 +99,10 @@ class CustomerInsightsListResponse(BaseModel):
     evaluated_at: datetime = Field(..., description="Server evaluation timestamp in UTC")
     scope: InsightScope = Field(
         ..., description="ASSIGNED: the caller's own customers only; ALL: every customer (admin)"
+    )
+    order: InsightOrder = Field(..., description="How ``items`` are ordered")
+    product_score_version: str = Field(
+        ..., description="Version of the rule-based product scoring (not a trained model)"
     )
 
 
