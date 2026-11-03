@@ -63,7 +63,7 @@ Previous model, generator v2.1 (`model-evaluation-report-v1.md` §3.2):
 - Synthetic data with planted signatures: high scores mean "learns the planted patterns", not real-world
   performance (`fraud-models.md` "Limitations"; report §7).
 - On generator v2.0 it learned a "new payee = fraud" shortcut. Fixed in v2.1 by adding legitimate
-  first-time behaviour (#251, report §3.3); those rates are assumed, not observed (report §7).
+  first-time behaviour (GitHub issue #251, report §3.3); those rates are assumed, not observed (report §7).
 - No location feature, so F4 (geo jump) is partly missed: hybrid recall at REVIEW 0.63 test / 0.69 held-out
   (report §8).
 - Small positive counts: one miss moves test recall by about 0.9 points (report §7).
