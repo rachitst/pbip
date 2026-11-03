@@ -7,6 +7,8 @@ interface; these rules become its deterministic layer.
 """
 
 import time
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from pbip_ml.fraud.contract import (
@@ -19,9 +21,11 @@ from pbip_ml.fraud.contract import (
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.db import utcnow
 from pbip_api.core.money import format_minor
 from pbip_api.core.velocity import VelocityCounters
+from pbip_api.modules.accounts.models import AccountHolder
 from pbip_api.modules.auth.models import SecurityEvent, SecurityEventType
 from pbip_api.modules.customers.models import Customer, Device
 from pbip_api.modules.fraud.models import FraudEvent
@@ -30,8 +34,8 @@ from pbip_api.modules.fraud.travel import TravelPolicy, impossible_travel
 from pbip_api.modules.ledger.models import Transaction, TransactionStatus, TransactionType
 from pbip_api.modules.payees.models import Payee
 
-MODEL_VERSION = "baseline-rules-0.4"  # 0.2: NEW_COUNTRY (ADR-0014); 0.3: TASK-095 signals;
-# 0.4: IMPOSSIBLE_TRAVEL (ADR-0034)
+MODEL_VERSION = "baseline-rules-0.5"  # 0.2: NEW_COUNTRY (ADR-0014); 0.3: TASK-095 signals;
+# 0.4: IMPOSSIBLE_TRAVEL (ADR-0034); 0.5: MULE_PASS_THROUGH (#144, ADR-0035)
 
 NEW_PAYEE_WINDOW = timedelta(hours=24)
 NEW_PAYEE_LARGE_MINOR = 2_500_000  # 25,000.00
@@ -47,6 +51,11 @@ LOGIN_FAILURES_MIN = 3
 LOGIN_FAILURES_POINTS = 20  # signals: each alone stays below STEP_UP_AT; together they reach it
 NEW_DEVICE_OR_NETWORK_POINTS = 15
 VOLUME_WINDOW = timedelta(hours=1)
+# MULE_PASS_THROUGH (ADR-0035): alone STEP_UP, with NEW_PAYEE (+15) REVIEW; a repeat alone REVIEW.
+MULE_POINTS = 45
+MULE_REPEAT_POINTS = 60
+MULE_REPEAT_WINDOW = timedelta(days=30)
+MULE_SNAPSHOT_IDS = 20  # inbound ids kept in the snapshot; the count and total are always complete
 
 STEP_UP_AT = 30
 REVIEW_AT = 60
@@ -71,14 +80,18 @@ class BaselineRulesScorer:
         session: Session,
         counters: VelocityCounters | None = None,
         travel: TravelPolicy | None = None,
+        settings: Settings | None = None,
+        clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self.session = session
         self.counters = counters  # Redis windows (TASK-034); None or unreachable -> PostgreSQL
         self.travel = travel or TravelPolicy.disabled()  # no city database: rule never scores
+        self.settings = settings or get_settings()
+        self.clock = clock  # injected by tests; scoring reads no other time source
 
     def score(self, context: TransactionContext) -> FraudScoreResult:
         started = time.perf_counter()
-        now = utcnow()
+        now = self.clock()
         reasons: list[FraudReason] = []
         score = 0
 
@@ -164,14 +177,15 @@ class BaselineRulesScorer:
 
         failures = self._login_failures(context, now)
         new_device, new_network = self._new_device_or_network(context, now)
-        for reason in _session_signals(failures, new_device, new_network, context.ip_network):
+        travel_reason, travel_features = impossible_travel(self.session, context, self.travel)
+        mule = self._mule_pass_through(context, now)
+        late_rules = (travel_reason, mule.reason)
+        for reason in [
+            *_session_signals(failures, new_device, new_network, context.ip_network),
+            *(rule for rule in late_rules if rule is not None),
+        ]:
             score += int(reason.contribution or 0)
             reasons.append(reason)
-
-        travel_reason, travel_features = impossible_travel(self.session, context, self.travel)
-        if travel_reason is not None:
-            score += int(travel_reason.contribution or 0)
-            reasons.append(travel_reason)
 
         score = min(score, 100)
         return FraudScoreResult(
@@ -196,8 +210,102 @@ class BaselineRulesScorer:
                 "geo_lat": context.geo_lat,
                 "geo_lon": context.geo_lon,
                 **travel_features,
+                **mule.features,
             },
         )
+
+    def _mule_pass_through(self, context: TransactionContext, now: datetime) -> "_MuleCheck":
+        """F6: money received from other customers in the window, most of it now sent on.
+
+        Inbound is POSTED TRANSFER credits from accounts held by other customers only: DEPOSIT
+        (the funding path), REVERSAL, FEE and moves between this customer's own accounts are not
+        someone else's money passing through. Read-only: no lock, no write.
+        """
+        cfg = self.settings
+        window = timedelta(minutes=cfg.fraud_mule_window_minutes)
+        own = select(AccountHolder.account_id).where(
+            AccountHolder.customer_id == context.customer_id
+        )
+        others = select(AccountHolder.account_id).where(
+            AccountHolder.customer_id != context.customer_id
+        )
+        inbound = (
+            Transaction.credit_account_id == context.account_id,  # ix_..._credit_account_id_..
+            Transaction.created_at >= now - window,
+            Transaction.type == TransactionType.TRANSFER,
+            Transaction.status == TransactionStatus.POSTED,
+            Transaction.debit_account_id.in_(others),
+            Transaction.debit_account_id.not_in(own),
+        )
+        summed, count, first = self.session.execute(
+            select(
+                func.coalesce(func.sum(Transaction.amount), 0),
+                func.count(),
+                func.min(Transaction.created_at),
+            ).where(*inbound)
+        ).one()
+        total = int(summed)
+        ids = (
+            self.session.execute(
+                select(Transaction.id)
+                .where(*inbound)
+                .order_by(Transaction.created_at)
+                .limit(MULE_SNAPSHOT_IDS)
+            ).scalars()
+            if count
+            else ()
+        )
+        check = _MuleCheck(
+            features={
+                "mule_window_minutes": cfg.fraud_mule_window_minutes,
+                "mule_inbound_total_minor": total,
+                "mule_inbound_count": int(count),
+                "mule_ratio": round(context.amount_minor / total, 4) if total else None,
+                # staff-only (fraud queue); the snapshot holds scalars, so ids are comma-joined
+                "mule_inbound_transaction_ids": ",".join(str(i) for i in ids),
+            }
+        )
+        fires = (
+            total >= cfg.fraud_mule_min_inbound_minor
+            and context.amount_minor * 100 >= cfg.fraud_mule_min_ratio_percent * total
+        )
+        check.features["mule_pass_through"] = fires
+        if not fires:
+            return check
+        earlier = self._mule_episodes(context, now)
+        check.features["mule_earlier_episodes_30d"] = earlier
+        repeat = earlier >= cfg.fraud_mule_repeat_episodes
+        minutes = int((now - first).total_seconds() // 60)
+        message = (
+            f"Received {format_minor(total, context.currency)} in {count} "
+            f"transfer{'s' if count != 1 else ''} from other customers, the first "
+            f"{minutes} min ago; sending {format_minor(context.amount_minor, context.currency)} "
+            f"({context.amount_minor * 100 // total}%)"
+        )
+        if repeat:
+            message += f"; repeat pattern: {earlier} earlier pass-throughs in 30 days"
+        points = MULE_REPEAT_POINTS if repeat else MULE_POINTS
+        check.reason = FraudReason(
+            code="MULE_PASS_THROUGH",
+            message=message,
+            source=ReasonSource.RULE,
+            contribution=points,
+        )
+        return check
+
+    def _mule_episodes(self, context: TransactionContext, now: datetime) -> int:
+        """Earlier transfers from this account flagged MULE_PASS_THROUGH in 30 days."""
+        count = self.session.execute(
+            select(func.count(func.distinct(Transaction.id)))
+            .join(FraudEvent, FraudEvent.transaction_id == Transaction.id)
+            .where(
+                Transaction.debit_account_id == context.account_id,
+                Transaction.created_at >= now - MULE_REPEAT_WINDOW,
+                Transaction.id != context.transaction_id,
+                FraudEvent.reasons.contains([{"code": "MULE_PASS_THROUGH"}]),
+            )
+        ).scalar_one()
+        return int(count)
 
     def _payee_age_minutes(self, context: TransactionContext, now: datetime) -> int | None:
         if context.payee_id is None:
@@ -321,6 +429,12 @@ class BaselineRulesScorer:
             source=ReasonSource.RULE,
             contribution=NEW_COUNTRY_POINTS,
         )
+
+
+@dataclass
+class _MuleCheck:
+    features: dict[str, float | int | str | bool | None]
+    reason: FraudReason | None = field(default=None)
 
 
 def _session_signals(
