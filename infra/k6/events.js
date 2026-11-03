@@ -18,6 +18,7 @@ import http from "k6/http";
 import { check } from "k6";
 import { Counter } from "k6/metrics";
 import exec from "k6/execution";
+import crypto from "k6/crypto";
 
 const BASE_URL = (__ENV.BASE_URL || "http://localhost:8000").replace(/\/$/, "");
 const USERS = Number(__ENV.USERS || 20);
@@ -59,11 +60,12 @@ export const options = {
 };
 
 function uuid4() {
-  // RFC 4122 v4 from Math.random: only a client event id for de-duplication, not a security token.
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
-  });
+  // RFC 4122 v4 from k6's crypto random bytes: the event id is the server's de-duplication key.
+  const b = new Uint8Array(crypto.randomBytes(16));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
 function email(i) {
