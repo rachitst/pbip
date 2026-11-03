@@ -39,7 +39,7 @@ and is never joined to the operational schema ([ADR-0009](../adr/0009-synthetic-
 
 ## 2. Table inventory
 
-36 tables: 33 in `public`, 3 in `synthetic` (the same count as `er-diagram.md`). Partitions of
+38 tables: 35 in `public`, 3 in `synthetic` (the same count as `er-diagram.md`). Partitions of
 `clickstream_events` and `alembic_version` are not counted.
 
 | # | Table | Owning module (`models.py`) | Created in | Purpose |

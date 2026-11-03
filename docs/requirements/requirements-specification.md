@@ -43,11 +43,11 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | ID | Requirement | Source | Status | Tasks | Gap |
 |---|---|---|---|---|---|
 | FR-01 | The system shall authenticate a customer with an e-mail and password. | UC-01 flow 1-2 | Implemented | TASK-006 | |
-| FR-02 | The system shall support TOTP multi-factor authentication with single-use recovery codes. A customer with MFA enabled must enter a code before access is granted. | UC-01 flow 3 | Partial | TASK-006; no task for UI | MFA is optional for customers (mandatory for staff); there is no MFA-enrolment screen in the web app |
+| FR-02 | The system shall support TOTP multi-factor authentication with single-use recovery codes. A customer with MFA enabled must enter a code before access is granted. | UC-01 flow 3 | Implemented | TASK-006; #201 (UI) | MFA is optional for customers (mandatory for staff); enrolment screens on Profile & security and staff Sign-in security (`MfaEnrolment.tsx`, #201) |
 | FR-03 | The system shall record a security event for every failed login and MFA failure, and lock the account progressively after repeated failures. | UC-01 alternative flow | Implemented | TASK-006, TASK-007 | |
 | FR-04 | The system shall issue short-lived access tokens and rotating refresh tokens, revoke a token family on reuse, and revoke all sessions on password change. | UC-01, section 8 "secure authentication" | Implemented | TASK-006 | |
 | FR-05 | An administrator shall be able to create staff users with explicit roles and inspect and clear a user's lockout. Each action is audited. | Section 6 (administrator) | Implemented | TASK-007; TASK-108 (#282, merged #346) | Web screens on `/staff/admin`. The runtime-configurable settings are exactly the ADR-0031 allow-list (daily transfer limit, per-transfer limit, standing-order cap, each bounded); secrets and security settings are deployment configuration only. No E2E journey for the screens yet |
-| FR-06 | A retail customer shall be able to self-register (disabled in production by configuration). | UC-01 precondition "valid customer account exists" | Partial | no task for UI | API only; the web app has no registration page |
+| FR-06 | A retail customer shall be able to self-register (disabled in production by configuration). | UC-01 precondition "valid customer account exists" | Implemented | #201 (UI) | Web registration page (`Register.tsx`, #201) |
 
 ### 2.2 Dashboard and account services (UC-02, UC-03, section 5)
 
@@ -57,11 +57,11 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | FR-08 | The dashboard shall show the total balance across the customer's accounts. | Section 5 "total balance overview" | Implemented | TASK-109 (#283, merged #330) | `GET /api/v1/accounts/summary`, per currency, savings and current accounts only (see US-04) |
 | FR-09 | The customer shall see recent transactions for an account, paginated. | UC-02, section 5 | Implemented | TASK-008, TASK-019 | |
 | FR-10 | The customer shall see spending insights: category breakdown, month-over-month trends, daily burn rate. | UC-02, section 5 "spending insights" | Implemented | TASK-040, TASK-049 | |
-| FR-11 | The customer shall see financial health indicators: a 0-100 health score with components and tips, and a balance forecast labelled as a prediction. | Section 5 "financial health indicators" | Partial | TASK-041, TASK-042, TASK-049; TASK-050 | The forecast has an API but no chart |
+| FR-11 | The customer shall see financial health indicators: a 0-100 health score with components and tips, and a balance forecast labelled as a prediction. | Section 5 "financial health indicators" | Implemented | TASK-041, TASK-042, TASK-049, TASK-050 | Forecast chart on `/insights` (`BalanceForecastSection.tsx`, TASK-050) |
 | FR-12 | The dashboard shall show personalised product recommendations. | UC-02, section 5 | Partial | TASK-054; TASK-062 | Carousel on `/accounts` (TASK-062, merged #328); the ranking is rules-based (`rules-v1`) |
 | FR-13 | The customer shall be able to open an account and view its details. | Section 5 "view account details" | Implemented | TASK-005 | |
-| FR-14 | The customer shall be able to search and filter transactions by date and amount. | Section 5 "transaction search" | Planned | TASK-017 | |
-| FR-15 | The customer shall be able to view a statement for a chosen account and period and download it as PDF. | UC-03, section 5 | Planned | TASK-016, TASK-074 | `modules/statements` is empty |
+| FR-14 | The customer shall be able to search and filter transactions by date and amount. | Section 5 "transaction search" | Implemented | TASK-017 | Filters on the account history (`AccountTransactions.tsx`) |
+| FR-15 | The customer shall be able to view a statement for a chosen account and period and download it as PDF. | UC-03, section 5 | Implemented | TASK-016, TASK-074 | PDF or CSV from `/statements` (`Statements.tsx`, `modules/statements`) |
 | FR-16 | The customer shall be able to manage account settings: view the profile, list and register devices, change the password. | Section 5 "account settings management" | Implemented | TASK-004, TASK-006 | |
 | FR-17 | The customer shall receive in-app notifications (transfer posted, under review, declined; bill payment declined) with an unread badge, and can mark them read. | UC-10 "customer is notified" | Implemented | TASK-018, TASK-022 | |
 
@@ -74,21 +74,21 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | FR-20 | A transfer shall be refused above the per-transfer limit (₹2,00,000) or above the daily limit (₹5,00,000 per UTC day, shared with bill payments). | UC-04 validation "transfer limits" | Implemented | baseline payments (before the backlog), TASK-014 | |
 | FR-21 | Every transfer shall be fraud-scored before posting. ALLOW posts it; STEP_UP requires a TOTP code (3 wrong codes, or no MFA enrolled, hand it to an analyst); REVIEW holds the funds for an analyst; BLOCK declines it. The customer never sees the reasons. | UC-04 validation "fraud checks" | Implemented | TASK-025, TASK-033 | |
 | FR-22 | Money-moving requests shall be idempotent: a retry with the same key returns the original result and never moves money twice. | UC-04 outcome "successfully submitted" (interpreted for safe retries) | Implemented | baseline payments (before the backlog), TASK-014 | |
-| FR-23 | The customer shall add a payee and verify it by a confirmation-of-payee name check. Only verified payees can receive transfers. | UC-05 add, verify | Partial | TASK-020 | API only; no UI |
-| FR-24 | The customer shall edit a payee; changing the name forces re-verification. | UC-05 edit | Planned | TASK-094 | |
-| FR-25 | The customer shall delete a payee. | UC-05 delete | Partial | TASK-020 | API only; no UI |
-| FR-26 | The customer shall pay a bill to a registered biller, idempotently and fraud-scored; a flagged payment is held for analyst review like a transfer. | Section 5 "bill payments" | Partial | TASK-014; TASK-020 | API only; no UI |
-| FR-27 | The customer shall schedule one-off and recurring transfers, executed once per occurrence. | Section 5 "scheduled transfers" | Planned | TASK-015, TASK-021 | |
+| FR-23 | The customer shall add a payee and verify it by a confirmation-of-payee name check. Only verified payees can receive transfers. | UC-05 add, verify | Implemented | TASK-020 | Web `/payees` (`Payees.tsx`) |
+| FR-24 | The customer shall edit a payee; changing the name forces re-verification. | UC-05 edit | Implemented | TASK-094 | `PATCH /api/v1/payees/{id}` and the edit dialog on `/payees` |
+| FR-25 | The customer shall delete a payee. | UC-05 delete | Implemented | TASK-020 | Web `/payees` (`Payees.tsx`) |
+| FR-26 | The customer shall pay a bill to a registered biller, idempotently and fraud-scored; a flagged payment is held for analyst review like a transfer. | Section 5 "bill payments" | Implemented | TASK-014, TASK-020 | Web `/bills` (`PayBills.tsx`) |
+| FR-27 | The customer shall schedule one-off and recurring transfers, executed once per occurrence. | Section 5 "scheduled transfers" | Implemented | TASK-015, TASK-021 | API and web `/scheduled` (`ScheduledTransfers.tsx`, ADR-0023) |
 | FR-28 | The customer shall see transaction history. | Section 5 "transaction history" | Implemented | TASK-008 | Per-account ledger history; there is no list of transfers as such |
 
 ### 2.4 Loans and wealth (UC-06, UC-07, section 5)
 
 | ID | Requirement | Source | Status | Tasks | Gap |
 |---|---|---|---|---|---|
-| FR-29 | The system shall provide a loan catalogue and an EMI calculator with a repayment schedule. | Section 5 "loan catalogue, EMI calculator" | Partial | TASK-045; TASK-051 | API only; no UI |
+| FR-29 | The system shall provide a loan catalogue and an EMI calculator with a repayment schedule. | Section 5 "loan catalogue, EMI calculator" | Implemented | TASK-045, TASK-051 | Web `/loans` (`Loans.tsx`) |
 | FR-30 | The system shall assess loan eligibility from the customer's own income and existing repayments, with the reasons explained. | UC-06 "generates eligibility assessment" | Partial | TASK-046 | Uses income and EMIs (DTI ≤ 50%), not balances or spending patterns as UC-06 lists |
 | FR-31 | The system shall display personalised loan suggestions. | UC-06 "displays recommendations" | Partial | TASK-054, TASK-062 | The recommendation engine suggests a credit line and a rewards card, not the catalogue loans; the carousel (TASK-062, PR #328) links the credit line to `/loans` without preselecting a catalogue loan |
-| FR-32 | The customer shall apply for a loan and track it. | Section 5 "loan applications, loan tracking" | Planned | TASK-047, TASK-051 | |
+| FR-32 | The customer shall apply for a loan and track it. | Section 5 "loan applications, loan tracking" | Implemented | TASK-047, TASK-051 | API and web `/loans` (application, disbursal receipt, amortisation progress; ADR-0024) |
 | FR-33 | The system shall record the customer's risk tolerance. | UC-07 input | Implemented | TASK-097 | Five-question questionnaire, deterministic LOW/MODERATE/HIGH band, answers and assessment time stored and audited (`/api/v1/customers/me/risk-profile`) |
 | FR-34 | The system shall suggest investment products using risk tolerance, savings behaviour, income and available funds. | UC-07 | Partial | TASK-054; TASK-097, TASK-105 | Fixed deposit and index-fund SIP suggestions use income, savings ratio, buffer and balance; the risk band is recorded (FR-33) but not yet an input |
 | FR-35 | The customer shall browse fixed deposits, mutual funds, stocks and bonds, and insurance products. | Section 5 wealth | Partial | TASK-063, TASK-064, TASK-065, TASK-096 (merged #337) | Seeded catalogues: deposits, illustrative funds and a gold bond (`GET /api/v1/wealth/products`, ADR-0025), term-life and health insurance with indicative premiums and entry-age hints (`GET /api/v1/wealth/insurance`, ADR-0028); fixed deposits pay out automatically at maturity (#332, merged #341, ADR-0029); no stocks |
@@ -158,7 +158,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 
 | ID | Requirement | Status | Tasks | Gap |
 |---|---|---|---|---|
-| ER-01 | Responsive web application | Partial | Remaining UI tasks above | Most staff journeys and several customer journeys have no screen |
+| ER-01 | Responsive web application | Partial | Remaining UI tasks above | Customer and staff screens exist for the journeys above (`apps/web/src/shell/routes.tsx`); the fraud statistics are not charted (FR-49) |
 | ER-02 | Backend API and database implementation | Implemented | | 57 operations, migrations 0001-0010, [ER diagram](../architecture/er-diagram.md) |
 | ER-03 | API documentation | Implemented | | `docs/api/openapi.json`, drift-checked in CI |
 | ER-04 | Automated tests, ≥ 70% coverage | Implemented | TASK-087 (report) | CI coverage gate is 80% (backend) |

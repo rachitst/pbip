@@ -73,7 +73,7 @@ the tests that prove them, in [user-stories.md](user-stories.md).
 
 | Item | Status | Owning tasks | Gap |
 |---|---|---|---|
-| Responsive web application | Partial | 019 (Done) and the Todo UI tasks | Most journeys have no UI |
+| Responsive web application | Partial | 019 (Done) and the UI tasks per use case above | Customer and staff screens exist for the journeys above (`apps/web/src/shell/routes.tsx`); the fraud statistics are not charted |
 | Backend API services, database | Verified | | 57 operations, migrations 0001-0010 |
 | AI assistant | Partial | 057-061, 067, 076, 105 | Chat drawer UI, streaming API, adversarial suite, security architecture document; LLM latency target unmet on CPU-only hardware |
 | Fraud monitoring dashboard, reporting dashboard | Partial | 035, 036, 048, 049 (Done); 066 #89 (RM insights page); 099, 100, 101 (Todo) | Fraud alert queue and detail, customer insights, RM insights and audit log pages exist; no charted fraud/security, compliance-exception or behavioural dashboard |

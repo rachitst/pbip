@@ -75,7 +75,7 @@ The use-case document lists six actors. Here is the support for each:
 |---|---|---|---|
 | Retail customer | `CUSTOMER` (plus a customer profile) | Web app and API | Partial (see [traceability](../requirements/traceability.md)) |
 | Relationship manager | `RELATIONSHIP_MANAGER` | `GET /api/v1/insights/customers` and the RM page, scoped to the customers an ADMIN assigned to the RM ([ADR-0032](../adr/0032-rm-customer-assignment.md)); behavioural analytics dashboard (`GET /api/v1/insights/behaviour`, `/staff/behaviour`, TASK-101) | Partial |
-| Fraud analyst | `FRAUD_ANALYST` | Alert queue and alert detail screens (`/staff/fraud`) with release/reject; telemetry API `GET /fraud/stats` | Implemented. The telemetry charts are part of the security dashboard (TASK-099, Planned) |
+| Fraud analyst | `FRAUD_ANALYST` | Alert queue and alert detail screens (`/staff/fraud`) with release/reject; telemetry API `GET /fraud/stats` | Implemented. The `/fraud/stats` telemetry is not charted in the UI; the security monitoring page `/staff/monitoring` (TASK-099) shows flagged events and alerts |
 | Compliance officer | `COMPLIANCE_OFFICER` | Audit-log API and web page with chain verification; exceptions and regulatory indicators (`/compliance/exceptions`, `/staff/compliance`, TASK-100, ADR-0027) | Implemented |
 | Banking administrator | `ADMIN` | Create staff users, inspect and clear lockouts, change the allow-listed runtime settings (`/staff/admin`, TASK-108, [ADR-0031](../adr/0031-runtime-configuration.md)); assign customers to RMs ([ADR-0032](../adr/0032-rm-customer-assignment.md)) | Implemented (no E2E journey for the admin screens yet) |
 | AI assistant | none; it acts as the customer | Read-only tools with the customer id injected server-side | Implemented (narrow scope; TASK-105 for FAQ, product discovery and investments) |
@@ -157,16 +157,16 @@ Across modules, code calls the other module's `service` or `policy` functions on
 
 | Module | Responsibility | Main endpoints (`/api/v1`) | Status |
 |---|---|---|---|
-| `auth` | Registration, password login, TOTP MFA and recovery codes, refresh rotation, logout, password change, admin user and lockout management | `/auth/*`, `/admin/users*` | Implemented (API). No web registration or MFA-enrolment screens (no task) |
+| `auth` | Registration, password login, TOTP MFA and recovery codes, refresh rotation, logout, password change, admin user and lockout management | `/auth/*`, `/admin/users*` | Implemented (API and web: registration page, MFA enrolment on Profile & security and staff Sign-in security, GitHub issue #201) |
 | `customers` | Profile, device fingerprints, risk-tolerance questionnaire (TASK-097), consented date of birth and the only age-band derivation (TASK-107, ADR-0015) | `/customers/me`, `/customers/me/risk-profile`, `/customers/me/demographics`, `/customers/me/date-of-birth`, `/customers/me/recommendations-consent`, `/customers/devices*` | Implemented |
-| `accounts` | Open and list accounts; ledger history with keyset pagination | `/accounts*` | Implemented. Search and filter Planned (TASK-017) |
+| `accounts` | Open and list accounts; ledger history with keyset pagination | `/accounts*` | Implemented, including search and filters on the account history (TASK-017) |
 | `ledger` | The only writer of balances, holds and entries (no router) | none | Implemented ([ADR-0002](../adr/0002-double-entry-ledger.md)) |
-| `payees` | Add, list, get, delete, confirmation-of-payee verify | `/payees*` | Partial: no edit (TASK-094), no UI (TASK-020) |
+| `payees` | Add, list, get, edit (name and nickname; a new name resets verification), delete, confirmation-of-payee verify | `/payees*` | Implemented (API and web `/payees`, TASK-020, TASK-094) |
 | `payments` | Idempotent transfers, limits, fraud decision, TOTP step-up (3 wrong codes escalate to analyst review), analyst release/reject of transfers and held bill payments; scheduled/recurring transfers ([ADR-0023](../adr/0023-scheduled-transfers.md)) | `/transfers*` | Implemented (API and web) |
-| `bills` | Biller catalogue, idempotent bill payments sharing the daily limit; flagged payments held for analyst review | `/bills/*` | Implemented (API). UI Planned (TASK-020) |
+| `bills` | Biller catalogue, idempotent bill payments sharing the daily limit; flagged payments held for analyst review | `/bills/*` | Implemented (API and web `/bills`, TASK-020) |
 | `fraud` | Baseline rules, hybrid scorer adapter, event persistence, alert queue, telemetry (decisions over time, top reasons, masked risky payees; 60 s Redis cache) | `/fraud/alerts*`, `/fraud/stats` | Implemented (API and analyst web screens) |
 | `notifications` | Inbox, read state, outbox relay target | `/notifications*` | Implemented (API and web bell) |
-| `analytics` | Spending, trends, health score, balance forecast, segment; nightly and weekly jobs | `/analytics/*` | Implemented. Forecast UI Planned (TASK-050) |
+| `analytics` | Spending, trends, health score, balance forecast, segment; nightly and weekly jobs | `/analytics/*` | Implemented, including the forecast chart on `/insights` (TASK-050) |
 | `insights` | Relationship-manager churn signals; staff route of the aggregate behavioural dashboard (queries in `analytics/behaviour.py`, ADR-0027); RM-to-customer assignment: RM insights are scoped per RM by `rm_assignments` and ADMIN sees all ([ADR-0032](../adr/0032-rm-customer-assignment.md)) | `/insights/customers`, `/insights/behaviour`, `/insights/customers/{id}/assignment`, `/insights/relationship-managers` | Partial |
 | `recommendations` | Rule-based product recommendations with reasons (`rules-v1`: a hand-weighted relevance formula, not a trained model; the score is not a probability) | `/recommendations` | Partial: customer carousel on `/accounts` (TASK-062, GitHub PR #328); age band from `customers.service.recommendation_age_band`, `unknown` without date of birth and consent (TASK-107); held products from the accounts, loans and wealth services (TASK-111, ADR-0030); no propensity model is trained (TASK-054, `docs/ml/recommendation-propensity-decision.md`) |
 | `loans` | Catalogue (3 products), EMI schedule, explainable eligibility; idempotent application with ledger disbursal, stored schedule and a repayment instruction on the scheduled transfers engine ([ADR-0024](../adr/0024-loan-disbursal-and-repayments.md)) | `/loans*` | Implemented (API and web) |
@@ -175,7 +175,7 @@ Across modules, code calls the other module's `service` or `policy` functions on
 | `runtime_config` | ADMIN runtime overrides of allow-listed business limits (daily limit, per-transfer limit, standing-order cap; bounded), read at each check by payments and bills; every change audited ([ADR-0031](../adr/0031-runtime-configuration.md)) | `/admin/settings*` | Implemented (API and web `/staff/admin`, TASK-108, GitHub PR #346) |
 | `compliance` | Hash-chained audit log read and verify; exceptions (blocked payments, lockouts, chain failures) with audited acknowledge/resolve and SLA indicators (ADR-0027) | `/compliance/audit-logs*`, `/compliance/exceptions*` | Implemented |
 | `health` | Liveness and readiness (DB + Redis) | `/api/health/live`, `/api/health/ready` | Implemented |
-| `statements` | PDF/CSV statements | none (empty package) | Planned (TASK-016, TASK-074) |
+| `statements` | PDF/CSV statements for an owned account and period, audited | `/accounts/{id}/statements` | Implemented (API and web `/statements`, TASK-016, TASK-074) |
 | `wealth` | Seeded catalogue (fixed deposits, illustrative funds and gold bond, risk filter); exact quarterly-compounded deposit maths; idempotent fixed-deposit booking and closure through the ledger (`SYS-FIXED-DEPOSITS`), maturity and portfolio computed on read ([ADR-0025](../adr/0025-wealth-catalogue-and-fixed-deposits.md)); matured deposits are paid automatically within the hour by a beat job, and the customer can still withdraw first ([ADR-0029](../adr/0029-fd-maturity-payout.md)) | `/wealth/products`, `/wealth/insurance`, `/wealth/fixed-deposits*`, `/wealth/portfolio` | Implemented (API and web `/wealth`, GitHub PR #327); seeded insurance catalogue ([ADR-0028](../adr/0028-insurance-catalogue.md)) and the comparison page `/wealth/compare` (TASK-096, TASK-098, GitHub PR #337); the risk band (TASK-097, GitHub PR #326) is recorded but does not filter the catalogue |
 
 Scheduled and recurring transfers live in the `payments` module (`scheduled_service.py`, table `scheduled_transfers`,
@@ -206,7 +206,8 @@ source of API types.
 * accounts with balances, the total balance per currency (TASK-109, GitHub PR #330), open account, expandable ledger history,
   and the product recommendations carousel (TASK-062, GitHub PR #328);
 * send money: source-account choice, verified payees, a review/confirm dialog, a TOTP step-up modal and the real outcome (posted, under review, declined without reasons);
-* insights (spending, trends, health score);
+* insights (spending, trends, health score, balance forecast chart);
+* payees (`/payees`), bill payments (`/bills`), scheduled transfers (`/scheduled`), statements (`/statements`) and loans (`/loans`);
 * profile, devices and password change, the risk-profile questionnaire and the date of birth and recommendations
   consent (TASK-097, TASK-107, GitHub PR #326);
 * wealth: portfolio, allocation, fixed deposits with booking and closure, catalogue (TASK-063 to TASK-065, GitHub PR #327), and
@@ -219,7 +220,9 @@ behavioural analytics dashboard (`/staff/behaviour`) (TASK-100, TASK-101, GitHub
 (staff users, lockouts, runtime settings; ADMIN only; TASK-108, GitHub PR #346), and in the RM insights customer flyout an
 ADMIN-only RM assignment control (GitHub PR #347).
 
-Every other screen is Planned under the task named in section 4.1.
+The staff area also has the security monitoring page (`/staff/monitoring`), the RM insights page (`/staff/insights`), the
+local-only fraud demo lab (`/staff/fraud-lab`) and Sign-in security (`/staff/security`). The routes are in
+`apps/web/src/shell/routes.tsx`.
 
 ### 4.4 ML and data packages
 
@@ -536,6 +539,20 @@ is the first candidate, because it already sits behind the `FraudScorer` protoco
 | [0018](../adr/0018-assistant-llm-routes-server-answers.md) | The assistant's LLM only chooses a tool; the server writes the answer |
 | [0019](../adr/0019-hybrid-fraud-scorer-serving.md) | Serving the hybrid fraud scorer on the transfer and bill-payment paths |
 | [0020](../adr/0020-device-network-signals-and-velocity-counters.md) | Device and network fraud signals, and Redis velocity counters |
+| [0021](../adr/0021-access-token-revocation.md) | Access tokens are checked against the user's status and token version on every request (Accepted) |
+| [0022](../adr/0022-rm-insights-detail-and-outreach-log.md) | RM insights detail, loan-propensity filter and the outreach log (Accepted; decision 5 amended by ADR-0032) |
+| [0023](../adr/0023-scheduled-transfers.md) | Scheduled and recurring transfers engine (Proposed: refined draft for final review) |
+| [0024](../adr/0024-loan-disbursal-and-repayments.md) | Loan applications, ledger disbursal and repayments through the scheduled transfers engine (Accepted for TASK-047 and TASK-051) |
+| [0025](../adr/0025-wealth-catalogue-and-fixed-deposits.md) | Wealth catalogue, fixed-deposit booking and closure through the ledger (Accepted for TASK-063 to TASK-065) |
+| [0027](../adr/0027-compliance-exceptions-and-behavioural-dashboard.md) | Compliance exceptions from existing facts, and an aggregate-only behavioural dashboard (Accepted, with owner conditions) |
+| [0028](../adr/0028-insurance-catalogue.md) | Insurance catalogue as migration-seeded reference data, with no underwriting (Accepted) |
+| [0029](../adr/0029-fd-maturity-payout.md) | Automatic payout of fixed deposits at maturity (Accepted) |
+| [0030](../adr/0030-held-products-recommendation-input.md) | Held products as a recommendation input (Accepted) |
+| [0031](../adr/0031-runtime-configuration.md) | Runtime configuration of an allow-listed set of business limits (Accepted under the owner's standing approval) |
+| [0032](../adr/0032-rm-customer-assignment.md) | Relationship-manager-to-customer assignment (Accepted under the owner's standing approval) |
+| [0033](../adr/0033-fraud-artifact-schema-and-allow-listed-unpickler.md) | Inference-safe fraud artifact module and an allow-listed unpickler (Accepted under the owner's standing approval) |
+
+There is no ADR-0026 (no file uses that number). The status in brackets is the one in each ADR file on 2026-11-03.
 
 ## 15. Known discrepancies with older documents
 
