@@ -139,10 +139,10 @@ def test_propensity_order_ranks_by_product_score_within_the_rm_scope(
 ) -> None:
     """The churn order (equal churn here, so balance decides) and the propensity order differ on
     the same portfolio, and the churn signals stay on every row."""
-    no_product = make_customer(funds=10_000_00)  # income 10,000: below every product's threshold
-    rich = make_customer(funds=200_000_00)
-    targeted = make_customer(funds=60_000_00)  # less money, but the credit line targets its segment
-    outsider = make_customer(funds=300_000_00)  # not assigned: never listed, whatever its score
+    no_product = make_customer(salary=10_000_00)  # income 10,000: below every product's threshold
+    rich = make_customer(salary=200_000_00)
+    targeted = make_customer(salary=60_000_00)  # less money; the credit line targets its segment
+    outsider = make_customer(salary=300_000_00)  # not assigned: never listed, whatever its score
     _pay(client, no_product, rich, make_verified_payee, migrated_engine, 9_000_00)
     assert targeted.customer_id is not None
     _assign_segment(db, targeted.customer_id, "FREQUENT_TRANSACTOR")
@@ -187,7 +187,7 @@ def test_propensity_order_combines_with_the_loan_filter(
     make_staff: Callable[..., Actor],
     assign_rm: Callable[..., None],
 ) -> None:
-    rich = make_customer(funds=200_000_00)
+    rich = make_customer(salary=200_000_00)
     poor_customer = make_customer(funds=100)
     rm = make_staff(RoleName.RELATIONSHIP_MANAGER)
     assign_rm(rm, rich, poor_customer)
