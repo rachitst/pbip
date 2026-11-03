@@ -9,32 +9,25 @@ trees in plain Python is ~0.1 ms per row.
 
 The result is **bit-identical** to ``score_samples``, not an approximation: the walk uses the
 fitted trees' own split features and thresholds, the input is rounded to float32 first exactly as
-scikit-learn's validation does, and the per-tree depths are summed in the same order with the same
-float64 arithmetic. :func:`compile_forest` proves that on a deterministic probe set before it
-returns, and returns ``None`` on any mismatch (for example a scikit-learn upgrade that changed the
-formula), so the caller keeps using ``score_samples``. Only public tree attributes are read; the
-path-length correction is the published formula (Liu et al. 2008), as scikit-learn implements it.
+scikit-learn's validation does, each leaf adds the per-tree path lengths scikit-learn itself stored
+at fit time, the depths are summed in the same order, and the final ``2 ** -(depth / c(n))`` is the
+same NumPy expression over the same array. (Recomputing the logarithms or the power in plain Python
+is NOT exact: NumPy's vectorised ``log``/``pow`` differ from libm by one ulp on CPUs with AVX-512,
+which the CI runners have.) :func:`compile_forest` proves equality on a deterministic probe set
+before it returns, and returns ``None`` on any mismatch or missing attribute (for example after a
+scikit-learn upgrade), so the caller keeps using ``score_samples``.
 """
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 
 import numpy as np
 from sklearn.ensemble import IsolationForest
+from sklearn.ensemble._iforest import _average_path_length
 
 _PROBE_ROWS = 512
 _PROBE_SEED = 20261104
-
-
-def _average_path_length(n: int) -> float:
-    """c(n): the mean path length of an unsuccessful search in a binary tree of n samples."""
-    if n <= 1:
-        return 0.0
-    if n == 2:
-        return 1.0
-    return 2.0 * (math.log(n - 1.0) + np.euler_gamma) - 2.0 * (n - 1.0) / n
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,18 +36,7 @@ class _Tree:
     right: list[int]
     feature: list[int]  # index into the forest's input columns; -1 at a leaf
     threshold: list[float]
-    leaf_value: list[float]  # depth + c(samples in the leaf) - 1, as scikit-learn adds it
-
-
-def _node_depths(left: list[int], right: list[int]) -> list[float]:
-    """Number of nodes on the path from the root, root = 1 (``Tree.compute_node_depths``)."""
-    depths = [0.0] * len(left)
-    depths[0] = 1.0
-    for node in range(len(left)):  # children always have a larger index than their parent
-        if left[node] != -1:
-            depths[left[node]] = depths[node] + 1.0
-            depths[right[node]] = depths[node] + 1.0
-    return depths
+    leaf_value: list[float]  # scikit-learn's stored depth + c(samples in the leaf) - 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,15 +44,22 @@ class CompiledForest:
     """A fitted Isolation Forest as plain lists, scored one row at a time."""
 
     trees: tuple[_Tree, ...]
-    denominator: float
+    denominator: np.ndarray  # shape (1,), as scikit-learn computes it
     n_features: int
 
     def score_samples(self, x: np.ndarray) -> np.ndarray:
         """Same contract and values as ``IsolationForest.score_samples`` (2-D input)."""
         rows = np.asarray(x, dtype=np.float32)
-        return np.array([self._score_row(row) for row in rows], dtype=np.float64)
+        depths = np.array([self._depth(row) for row in rows], dtype=np.float64)
+        # scikit-learn's own final step, verbatim (one training sample: ratio set to 1).
+        scores = 2 ** (
+            -np.divide(
+                depths, self.denominator, out=np.ones_like(depths), where=self.denominator != 0
+            )
+        )
+        return np.asarray(-scores, dtype=np.float64)
 
-    def _score_row(self, row: np.ndarray) -> float:
+    def _depth(self, row: np.ndarray) -> float:
         values = [float(v) for v in row]
         depth = 0.0
         for tree in self.trees:
@@ -81,37 +70,36 @@ class CompiledForest:
                 else:
                     node = tree.right[node]
             depth += tree.leaf_value[node]
-        if self.denominator == 0:  # one training sample: scikit-learn sets the ratio to 1
-            return -0.5
-        return float(-(2.0 ** (-depth / self.denominator)))
+        return depth
 
 
 def _compile(forest: IsolationForest) -> CompiledForest:
     n_features = int(forest.n_features_in_)
     trees = []
-    for estimator, columns in zip(forest.estimators_, forest.estimators_features_, strict=True):
+    per_tree = zip(
+        forest.estimators_,
+        forest.estimators_features_,
+        forest._decision_path_lengths,  # what score_samples adds per leaf, stored at fit time
+        forest._average_path_length_per_tree,
+        strict=True,
+    )
+    for estimator, columns, path_lengths, average_lengths in per_tree:
         tree = estimator.tree_
         # scikit-learn indexes the columns per tree only when it subsampled features; otherwise
         # the tree was fitted on, and is applied to, the input columns as they are.
         mapping = (
             [int(c) for c in columns] if len(columns) != n_features else list(range(n_features))
         )
-        left = [int(v) for v in tree.children_left]
-        right = [int(v) for v in tree.children_right]
-        depths = _node_depths(left, right)
-        samples = [int(v) for v in tree.n_node_samples]
         trees.append(
             _Tree(
-                left=left,
-                right=right,
+                left=[int(v) for v in tree.children_left],
+                right=[int(v) for v in tree.children_right],
                 feature=[mapping[f] if f >= 0 else -1 for f in tree.feature],
                 threshold=[float(v) for v in tree.threshold],
-                leaf_value=[
-                    d + _average_path_length(n) - 1.0 for d, n in zip(depths, samples, strict=True)
-                ],
+                leaf_value=[float(v) for v in path_lengths + average_lengths - 1.0],
             )
         )
-    denominator = len(forest.estimators_) * _average_path_length(int(forest.max_samples_))
+    denominator = len(forest.estimators_) * _average_path_length([forest._max_samples])
     return CompiledForest(tuple(trees), denominator, n_features)
 
 
