@@ -148,7 +148,7 @@ def auth_service_factory(
 @pytest.fixture
 def make_customer(client: TestClient, migrated_engine: Engine) -> Callable[..., Actor]:
     def factory(email: str | None = None, funds: int = 0, salary: int = 0) -> Actor:
-        """``funds`` is a one-off deposit (not income, ADR-0041). ``salary`` is a recurring credit
+        """``funds`` is a one-off deposit (not income, ADR-0043). ``salary`` is a recurring credit
         paid last month and this month, so monthly income is ``salary`` and the balance gains
         twice it."""
         email = email or f"user-{uuid.uuid4().hex[:8]}@example.com"

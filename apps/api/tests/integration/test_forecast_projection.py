@@ -108,7 +108,7 @@ def _instruction(
 @pytest.fixture
 def income_for_the_loan(monkeypatch: pytest.MonkeyPatch) -> None:
     """These tests need a loan's EMIs, not an income history. Recurring income needs credits in
-    two calendar months (ADR-0041), which would break the flat 20-day balance history the
+    two calendar months (ADR-0043), which would break the flat 20-day balance history the
     projection is checked against, so eligibility is given INCOME a month and no repayments."""
     monkeypatch.setattr(loans_service, "_income_and_debt", lambda *_: (INCOME, 0))
 

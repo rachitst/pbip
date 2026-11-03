@@ -206,7 +206,7 @@ def post_deposit_at(
 ) -> UUID:
     """Credit the account through ``ledger.deposit``, then date it ``when`` (like ``post_spend_at``).
 
-    Income history needs credits in several calendar months (ADR-0041: income is recurring).
+    Income history needs credits in several calendar months (ADR-0043: income is recurring).
     """
     from pbip_api.modules.ledger import service as ledger
     from sqlalchemy.orm import sessionmaker

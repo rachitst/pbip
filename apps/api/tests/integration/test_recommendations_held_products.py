@@ -113,7 +113,7 @@ def _spend(
 
 def _paid_this_month_and_next(engine: Engine, actor: Actor, salary: int, month: datetime) -> None:
     """A salary credited now and on the 1st of ``month`` (next month, when the engine is asked):
-    recurring income then (ADR-0041) without adding an earlier, spend-free month to the buffer."""
+    recurring income then (ADR-0043) without adding an earlier, spend-free month to the buffer."""
     post_deposit_at(engine, actor.account_id, salary, "Salary", utcnow())
     post_deposit_at(engine, actor.account_id, salary, "Salary", month.replace(day=1, hour=0))
 

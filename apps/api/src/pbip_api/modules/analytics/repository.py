@@ -40,7 +40,7 @@ NOT_ACTIVITY_TYPES = (
     TransactionType.FD_BOOKING,
     TransactionType.FD_CLOSURE,
 )
-# Income is recurring inflow (ADR-0041): a source of credits (the paying account and the payment
+# Income is recurring inflow (ADR-0043): a source of credits (the paying account and the payment
 # reference without its dates and numbers) counts only when it paid in at least
 # INCOME_MIN_RECURRING_MONTHS distinct calendar months among the running month and the
 # INCOME_RECURRENCE_MONTHS - 1 before it. A one-off credit, such as an opening deposit, is not
@@ -64,7 +64,7 @@ class HealthMetrics:
     """
 
     income_minor: int  # CREDIT entries of POSTED deposits and transfers from other parties,
-    # from recurring sources only (``recurring_income_minor``; ADR-0041)
+    # from recurring sources only (``recurring_income_minor``; ADR-0043)
     spend_minor: int  # DEBIT entries of POSTED non-REVERSAL transactions to other parties
     closed_monthly_spend_minor: list[int]  # every closed calendar month since the first entry,
     # oldest first, zero-filled; the running month is excluded (it is partial)

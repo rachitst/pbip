@@ -1,4 +1,4 @@
-# ADR 0041: Income is recurring inflow, not every credit
+# ADR 0043: Income is recurring inflow, not every credit
 - Status: Accepted (under owner's standing approval, 2026-11-03)
 - Date: 2026-11-03
 - Deciders: Architecture Team (issue #381, found in the TASK-089 bug bash)
