@@ -89,6 +89,13 @@ class Settings(BaseSettings):
     fraud_scorer: Literal["rules", "hybrid"] = "rules"
     fraud_model_dir: str | None = Field(default=None, max_length=500)
     fraud_model_budget_ms: int = Field(default=50, ge=5, le=90)
+    # MULE_PASS_THROUGH (#144, ADR-0035): inbound transfers from other customers within the window
+    # totalling at least the minimum, and an outbound of at least the ratio of them. The ratio is
+    # an integer percentage so the boundary is exact (0 < R <= 1). Not admin-overridable (ADR-0031).
+    fraud_mule_window_minutes: int = Field(default=60, ge=1, le=1440)
+    fraud_mule_min_inbound_minor: int = Field(default=1_000_000, ge=1)  # 10,000.00
+    fraud_mule_min_ratio_percent: int = Field(default=80, ge=1, le=100)
+    fraud_mule_repeat_episodes: int = Field(default=2, ge=1, le=100)  # earlier episodes, 30 days
 
     # Banking limits (INTEGER MINOR UNITS)
     internal_bank_code: str = "PBIP0001"

@@ -67,6 +67,8 @@ class Transaction(Base):
             "ix_transactions_initiated_by_user_id_created_at", "initiated_by_user_id", "created_at"
         ),
         Index("ix_transactions_debit_account_id_created_at", "debit_account_id", "created_at"),
+        # MULE_PASS_THROUGH sums recent credits to the debited account (#144, migration 0025).
+        Index("ix_transactions_credit_account_id_created_at", "credit_account_id", "created_at"),
         Index("ix_transactions_status", "status"),
         Index("ix_transactions_payee_id", "payee_id"),  # payee deletion check; FK index (TASK-079)
     )

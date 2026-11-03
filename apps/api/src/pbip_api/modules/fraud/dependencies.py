@@ -41,8 +41,10 @@ def build_fraud_scorer(
     """The scorer choice itself, shared by requests and the scheduled-transfer worker (ADR-0023),
     so an unattended run is scored by exactly the engine an interactive transfer would get."""
     if settings.fraud_scorer == "hybrid":
-        return HybridFraudScorer(session, engine, settings.fraud_model_budget_ms, counters)
-    return BaselineRulesScorer(session, counters)
+        return HybridFraudScorer(
+            session, engine, settings.fraud_model_budget_ms, counters, settings=settings
+        )
+    return BaselineRulesScorer(session, counters, settings=settings)
 
 
 def get_country_resolver(settings: Settings = Depends(get_settings)) -> CountryResolver:
