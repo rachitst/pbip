@@ -35,14 +35,17 @@ ensure_tls() {
   chmod 0755 certs/db certs/web acme # mounted into containers that run as non-root users
   if [ ! -s certs/db/server.crt ] || [ ! -s certs/db/server.key ]; then
     echo "==> Creating the PostgreSQL TLS certificate (certs/db)"
-    openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 3650 \
+    # MSYS_NO_PATHCONV=1: Git Bash on Windows rewrites the argument "/CN=db" into a Windows path
+    # ("C:/Program Files/Git/CN=db") before a native openssl sees it, and the call fails. Ignored on
+    # Linux and macOS (#329).
+    MSYS_NO_PATHCONV=1 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 3650 \
       -subj "/CN=db" -addext "subjectAltName=DNS:db" \
       -keyout certs/db/server.key -out certs/db/server.crt 2>/dev/null
     chmod 0600 certs/db/server.key # copied and re-owned by tls-entrypoint.sh
   fi
   if [ ! -s certs/web/tls.crt ] || [ ! -s certs/web/tls.key ]; then
     echo "==> Creating a placeholder web certificate for ${host:-localhost}; run certbot next (runbook 1.4)"
-    openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 30 \
+    MSYS_NO_PATHCONV=1 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 30 \
       -subj "/CN=${host:-localhost}" -addext "subjectAltName=DNS:${host:-localhost}" \
       -keyout certs/web/tls.key -out certs/web/tls.crt 2>/dev/null
     chmod 0644 certs/web/tls.key # nginx-unprivileged (uid 101) reads it; certs/ itself is 0700

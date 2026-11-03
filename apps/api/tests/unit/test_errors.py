@@ -68,3 +68,25 @@ def test_unhandled_exception_is_tracked_with_route_and_location_but_no_data() ->
     assert event["raised_at"].startswith("test_errors.py:") and event["raised_at"].endswith(":boom")
     assert "hunter2" not in repr(event)  # the exception message never reaches the log
     assert UNHANDLED_ERRORS_TOTAL.labels("/boom", "RuntimeError")._value.get() == before + 1
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        r"C:\Users\dev\pbip\apps\api\src\pbip_api\modules\payments\service.py",
+        "/home/dev/pbip/apps/api/src/pbip_api/modules/payments/service.py",
+        "service.py",
+    ],
+)
+def test_raised_at_keeps_only_the_basename_for_any_path_separator(filename: str) -> None:
+    """#329: on Windows ``co_filename`` uses backslashes, and the whole local path reached the log."""
+    from pbip_api.core.errors import _raised_at
+
+    namespace: dict[str, object] = {}
+    exec(compile("def transfer():\n    raise RuntimeError('x')\n", filename, "exec"), namespace)  # noqa: S102 - fixed source, only to give the frame a Windows-style filename
+    transfer = namespace["transfer"]
+    assert callable(transfer)
+    with pytest.raises(RuntimeError) as caught:
+        transfer()
+
+    assert _raised_at(caught.value) == "service.py:2:transfer"

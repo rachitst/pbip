@@ -40,18 +40,22 @@ def host(tmp_path: Path) -> Path:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     fake = bin_dir / "docker"
-    fake.write_text(_FAKE_DOCKER, encoding="utf-8")
+    # newline="\n": on Windows write_text would emit CRLF, which bash rejects (`then\r`; #329).
+    fake.write_text(_FAKE_DOCKER, encoding="utf-8", newline="\n")
     fake.chmod(0o755)
     return tmp_path
 
 
-def _run(host: Path, *args: str, fail_up: bool = False) -> subprocess.CompletedProcess[str]:
+def _run(
+    host: Path, *args: str, fail_up: bool = False, extra_env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     env = {
         **os.environ,
         "PATH": f"{host / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}",
         "FAKE_DOCKER_LOG": str(host / "docker.log"),
         "FAKE_DOCKER_FAIL_UP": "1" if fail_up else "0",
         "DEPLOY_WAIT_TIMEOUT": "7",
+        **(extra_env or {}),
     }
     bash = shutil.which("bash")
     assert bash is not None
@@ -150,11 +154,14 @@ def test_deploy_creates_tls_material_once_and_never_overwrites_it(host: Path) ->
         certs / "web" / "tls.crt",
         certs / "web" / "tls.key",
     )
-    assert stat.S_IMODE(certs.stat().st_mode) == 0o700
-    assert stat.S_IMODE((certs / "db" / "server.key").stat().st_mode) == 0o600
-    assert (
-        stat.S_IMODE(web_key.stat().st_mode) == 0o644
-    )  # nginx-unprivileged reads it via a bind mount
+    # POSIX permission bits exist on the Linux deploy host, not on NTFS, where Python reports every
+    # directory as 0o777 whatever chmod did under Git Bash (#329).
+    if os.name == "posix":
+        assert stat.S_IMODE(certs.stat().st_mode) == 0o700
+        assert stat.S_IMODE((certs / "db" / "server.key").stat().st_mode) == 0o600
+        assert (
+            stat.S_IMODE(web_key.stat().st_mode) == 0o644
+        )  # nginx-unprivileged reads it via a bind mount
     names = (
         x509.load_pem_x509_certificate(web_crt.read_bytes())
         .extensions.get_extension_for_class(x509.SubjectAlternativeName)
@@ -177,3 +184,34 @@ def test_deploy_without_a_host_env_uses_a_localhost_placeholder(host: Path) -> N
     result = _run(host, "deploy", PREFIX, "v0.1.0")
     assert result.returncode == 0, result.stderr
     assert "placeholder web certificate for localhost" in result.stdout
+
+
+_FAKE_OPENSSL = """#!/usr/bin/env bash
+# Records how it was called, then writes the files named by -keyout and -out.
+echo "MSYS_NO_PATHCONV=${MSYS_NO_PATHCONV:-unset} $*" >> "$FAKE_OPENSSL_LOG"
+while [ $# -gt 0 ]; do
+  case "$1" in -keyout | -out) echo fake > "$2"; shift ;; esac
+  shift
+done
+"""
+
+
+@needs_bash
+def test_certificate_subjects_are_shielded_from_git_bash_path_conversion(host: Path) -> None:
+    """#329: Git Bash on Windows turns the argument "/CN=db" into "C:/Program Files/Git/CN=db"
+    before a native openssl runs, so the deploy stopped after "Creating the PostgreSQL TLS
+    certificate". Each openssl call must run with MSYS_NO_PATHCONV=1 and the subject unchanged."""
+    fake = host / "bin" / "openssl"
+    fake.write_text(_FAKE_OPENSSL, encoding="utf-8", newline="\n")
+    fake.chmod(0o755)
+    (host / ".env").write_text("PUBLIC_HOSTNAME=staging.example.test\n", encoding="utf-8")
+    log = host / "openssl.log"
+
+    result = _run(host, "deploy", PREFIX, "v0.1.0", extra_env={"FAKE_OPENSSL_LOG": str(log)})
+
+    assert result.returncode == 0, result.stderr
+    calls = log.read_text(encoding="utf-8").splitlines()
+    assert len(calls) == 2
+    assert all(call.startswith("MSYS_NO_PATHCONV=1 req ") for call in calls)
+    assert " -subj /CN=db " in calls[0]
+    assert " -subj /CN=staging.example.test " in calls[1]

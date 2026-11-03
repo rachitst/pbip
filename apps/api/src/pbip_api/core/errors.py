@@ -112,14 +112,19 @@ async def _validation_error_handler(request: Request, exc: Exception) -> JSONRes
 
 
 def _raised_at(exc: BaseException) -> str:
-    """`module.py:line:function` of the innermost frame: actionable, and carries no data values."""
+    """`module.py:line:function` of the innermost frame: actionable, and carries no data values.
+
+    Only the file's basename is kept, for both separators: a Windows ``co_filename`` uses ``\\``,
+    and the full path would put the developer's or server's directory layout into the log (#329).
+    """
     tb = exc.__traceback__
     if tb is None:
         return "unknown"
     while tb.tb_next is not None:
         tb = tb.tb_next
     code = tb.tb_frame.f_code
-    return f"{code.co_filename.rsplit('/', 1)[-1]}:{tb.tb_lineno}:{code.co_name}"
+    filename = code.co_filename.replace("\\", "/").rsplit("/", 1)[-1]
+    return f"{filename}:{tb.tb_lineno}:{code.co_name}"
 
 
 async def _unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
