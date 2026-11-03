@@ -90,6 +90,20 @@ def test_same_seed_reproduces_the_inputs_and_every_operation_is_fuzzed_in_both_m
     assert first.is_success and first.authenticated is False
 
 
+def test_a_short_first_pass_is_topped_up_to_the_floor_not_repeated_in_full() -> None:
+    """#175: a floor just above one pass made the old loop run a second full pass (about twice the
+    budget). The top-up pass stops once the floor is reached."""
+    one_pass = run_fuzz(
+        spec_path=SPEC_PATH, app=NOT_AN_APP, auth=False, min_cases=1, seed=3, execute=_ok
+    ).total_cases  # one case per operation and mode that has an input
+    floor = one_pass + 2
+    result = run_fuzz(
+        spec_path=SPEC_PATH, app=NOT_AN_APP, auth=False, min_cases=floor, seed=3, execute=_ok
+    )
+    assert len(result.per_operation) == result.operations_count  # the first pass covered all
+    assert floor <= result.total_cases < floor + len(GENERATION_MODES)
+
+
 def test_bearer_token_is_sent_with_every_request() -> None:
     seen: set[str | None] = set()
 

@@ -157,3 +157,63 @@ def test_transfers_between_own_accounts_are_not_segmentation_features(
     assert rfm is not None  # the funding deposit remains
     assert rfm.frequency == 0.0 and rfm.monetary_minor == 0  # no spend
     assert rfm.savings_ratio == 1.0 and rfm.discretionary_ratio == 0.0
+
+
+def test_the_batch_pass_matches_the_per_customer_features_in_two_queries(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_verified_payee: Callable[..., dict[str, Any]],
+    migrated_engine: Engine,
+    db: Session,
+) -> None:
+    """#175 (audit M9): one aggregate pass per run, not two queries per customer, with the same
+    features (own-account moves excluded) as the per-customer function the API uses."""
+    import uuid
+
+    from sqlalchemy import event
+
+    alice = make_customer(funds=100_000)
+    bob = make_customer(funds=50_000)
+    make_customer()  # no activity: no features
+    payee = make_verified_payee(alice, bob)
+    age_payee(migrated_engine, payee["id"], 48)
+    _transfer(client, alice, payee["id"], 20_000, "Swiggy dinner order")
+    _transfer(client, alice, payee["id"], 5_000, "October rent")
+    second = client.post(
+        "/api/v1/accounts", headers=alice.headers, json={"account_type": "CURRENT"}
+    )
+    assert second.status_code == 201, second.text
+    moved = client.post(
+        "/api/v1/transfers",
+        headers={**alice.headers, "Idempotency-Key": uuid.uuid4().hex},
+        json={
+            "from_account_id": str(alice.account_id),
+            "amount_minor": 10_000,
+            "to_account_id": second.json()["id"],
+        },
+    )
+    assert moved.status_code == 201, moved.text
+
+    now = utcnow()
+    statements: list[str] = []
+
+    def count(*_args: object) -> None:
+        statements.append("q")
+
+    bind = db.get_bind()
+    event.listen(bind, "before_cursor_execute", count)
+    try:
+        batch = repository.extract_all_customers_rfm_features(db, now)
+    finally:
+        event.remove(bind, "before_cursor_execute", count)
+
+    expected = [
+        f
+        for f in (
+            repository.extract_customer_rfm_features(db, cid, now)
+            for cid in sorted(a.customer_id for a in (alice, bob) if a.customer_id)
+        )
+        if f is not None
+    ]
+    assert batch == expected and len(batch) == 2
+    assert len(statements) == 2  # holdings, then every counted entry in one pass

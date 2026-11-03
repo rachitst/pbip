@@ -698,3 +698,38 @@ def test_nightly_job_materializes_a_hundred_accounts_idempotently(
     assert (
         db.execute(select(func.count()).select_from(MonthlyCategorySpending)).scalar_one() == stored
     )
+
+
+def test_live_monthly_spending_is_plain_values_not_detached_orm_rows(
+    client: TestClient,
+    db: Session,
+    make_customer: Callable[..., Actor],
+    make_verified_payee: Callable[..., dict[str, Any]],
+    migrated_engine: Engine,
+) -> None:
+    """#175: the read path used to return transient MonthlyCategorySpending objects, so a later
+    ``session.add`` of one would have turned a GET into a write."""
+    from pbip_api.modules.analytics.repository import CategorySpend
+
+    alice = make_customer(funds=50_000)
+    payee = make_verified_payee(alice, make_customer())
+    age_payee(migrated_engine, payee["id"], 48)
+    sent = client.post(
+        "/api/v1/transfers",
+        headers={**alice.headers, "Idempotency-Key": uuid.uuid4().hex},
+        json={
+            "from_account_id": str(alice.account_id),
+            "amount_minor": 1_000,
+            "payee_id": payee["id"],
+            "reference": "Swiggy dinner order",
+        },
+    )
+    assert sent.status_code == 201, sent.text
+    assert alice.account_id is not None
+    now = utcnow()
+    records = repository.compute_monthly_spending_from_entries(
+        db, alice.account_id, now.year, now.month
+    )
+    assert records and all(isinstance(r, CategorySpend) for r in records)
+    assert not any(isinstance(r, MonthlyCategorySpending) for r in records)
+    assert not db.new and not db.dirty
