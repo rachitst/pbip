@@ -125,8 +125,9 @@ SR 11-7 "ongoing monitoring" and "outcomes analysis"; EU AI Act Art. 12 (record-
 - **Outcome labels.** An analyst's RELEASE or REJECT sets the alert status to `FALSE_POSITIVE` or
   `CONFIRMED_FRAUD` (`apps/api/src/pbip_api/modules/fraud/models.py`), so labelled outcomes build up. No
   pipeline uses them for retraining yet.
-- **Feature drift (PSI, TASK-068): not on `main`.** It is in open PR #336. Until it merges, nothing measures
-  input drift. See gaps.
+- **Feature drift (PSI, TASK-068): computed but not scheduled.** PR #336 added PSI for amount and velocity
+  (`pbip_ml/monitoring/psi.py`, warning 0.1, critical 0.25), but nothing runs it or sets the
+  `pbip_feature_psi` gauge yet, and there is no Grafana panel or alert (GitHub issue #324). See gaps.
 
 ## 7. Documentation and model-risk management
 
@@ -159,8 +160,8 @@ EU AI Act Art. 11; SS1/23 principles 3 and 4; SR 11-7 "conceptual soundness".
    features correlate with income, and `NEW_COUNTRY` uses location.
 3. **No independent validation** (SS1/23 principle 4, SR 11-7 "effective challenge"). One CODEOWNER owns all
    ML code. PR review is peer review, not a separate validation function.
-4. **No input-drift monitoring on `main`** until TASK-068 (PR #336) merges. There is no scheduled retraining
-   and no automated outcome-based performance tracking.
+4. **No scheduled input-drift monitoring.** PSI exists (PR #336), but no job runs it or exports it until
+   GitHub issue #324. There is no scheduled retraining and no automated outcome-based performance tracking.
 5. **No affected-person explanation or contest route for fraud holds.** Customers are told the outcome but not
    the reasons (deliberate, for security). There is no in-app dispute flow for a declined payment.
 6. **Weaker model-risk controls for the non-fraud models.** No MLflow tracking or registry for forecast,
