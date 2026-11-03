@@ -335,7 +335,7 @@ Postgres (port 5432) and Redis (port 6379) will start in detached background con
 with `APP_ENV=local`, the `DEMO_PASSWORD` constant in `scripts/seed_dev.py`. Any other `APP_ENV` must set the
 variable (the CI E2E job generates one per run, see `docs/testing/e2e.md`). Existing users are skipped, so the
 password of an already-seeded database does not change.
-- Retail customer: `alice@demo.pbip` / `bob@demo.pbip`
+- Retail customers: `alice@demo.pbip` (authenticator enrolled, for the step-up dialog; code: `uv run python scripts/totp.py alice@demo.pbip`), `bob@demo.pbip` and `carol@demo.pbip` (no authenticator: the fraud demo lab signs in as Carol, F6 sender Bob)
 - Bank staff (analyst): `analyst@demo.pbip`
 - Admin: `admin@demo.pbip`
 - Relationship manager: `rm@demo.pbip` (RM insights page, TASK-066)
