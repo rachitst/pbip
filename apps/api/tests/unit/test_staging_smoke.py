@@ -170,6 +170,7 @@ def _serve(tmp_path: Path, leaf_days: int = 60) -> Iterator[Stack]:
     api = FakeApi()
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _handler(api))
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2  # like nginx on the host
     context.load_cert_chain(cert, key)
     server.socket = context.wrap_socket(server.socket, server_side=True)
     thread = threading.Thread(target=server.serve_forever, daemon=True)

@@ -291,7 +291,8 @@ What happens (runbook section 2.1): `deploy.sh` creates `certs/db` (PostgreSQL T
 certificate; pulls the images; starts `db` and `redis`; runs `migrate` (`alembic upgrade head`) to completion before any
 `api` replica starts; starts `web` once `api` is healthy; and records the tag only when every container is healthy
 within 180 s. Migrations run on every deploy and are a no-op when the schema is current; they are never downgraded
-automatically (runbook section 2.2). With ADR-0045 merged, `api` runs as `API_REPLICAS` (default 2) replicas.
+automatically (runbook section 2.2). `api` runs as `API_REPLICAS` replicas, two by default (ADR-0045); set
+`API_REPLICAS` in `.env` only to change that.
 
 Option A: now run certbot (section 9.1, step 3). Then, from the laptop:
 
@@ -564,7 +565,7 @@ vm$ uv sync --all-packages --frozen
 vm$ python3 scripts/init_env.py                             # local-only .env with fresh secrets
 vm$ uv run python scripts/dev_certs.py
 vm$ uv run python scripts/dev.py fraud-model   # the hybrid scorer the suite measures
-vm$ export API_REPLICAS=2                                    # production topology (ADR-0045, once merged)
+vm$ export API_REPLICAS=2                                    # production topology (ADR-0045)
 vm$ docker compose -f docker-compose.yml -f infra/k6/compose.load.yml up -d --build
 vm$ curl --fail --silent --retry 60 --retry-delay 2 --retry-all-errors --cacert infra/certs/ca.crt https://localhost:8443/api/health/ready
 vm$ mkdir -p perf-results
@@ -580,9 +581,14 @@ laptop$ scp -r -i ~/.ssh/pbip-oci-admin pbip@<vm-ip>:pbip-perf/perf-results ./pe
 keep every run's `environment.txt`. The k6 thresholds are the NFR budgets (p95 < 500 ms per route group, login < 3 s,
 errors < 0.5%), and `load_invariants.py` proves no overdraft, balanced ledger and no new deadlocks.
 
-TASK-079 (slow statements under load): once ADR-0045's PR (#419) is merged, `infra/k6/compose.load.yml` loads
-`pg_stat_statements`, and `.github/workflows/perf.yml` shows the exact reset-before and report-after commands
-(`top-statements.sql` in `infra/k6/`); run the same two commands around the k6 step above.
+TASK-079 (slow statements under load): `infra/k6/compose.load.yml` loads `pg_stat_statements`. Reset the statistics
+just before the k6 step and save the slowest statements just after it (the same commands as
+`.github/workflows/perf.yml`):
+
+```bash
+vm$ docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -qc "CREATE EXTENSION IF NOT EXISTS pg_stat_statements; SELECT pg_stat_statements_reset();"' > /dev/null
+vm$ docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < infra/k6/top-statements.sql | tee perf-results/pg-stat-statements.txt
+```
 
 When finished, remove the perf stack and its volumes. This names the perf project explicitly and cannot touch
 `pbip-prod`. **Run it only on the VM**: on your laptop, project `pbip` is your local demo stack and `-v` would
