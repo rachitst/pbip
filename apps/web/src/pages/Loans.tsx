@@ -20,6 +20,7 @@ import { Field } from "../ui/Field";
 import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 import { StatusBadge } from "../ui/StatusBadge";
+import "./LoanCard.css";
 
 /** Slider step for the principal: INR 5,000 in paise. Every catalogue bound is a multiple. */
 export const AMOUNT_STEP_MINOR = 5_000_00;

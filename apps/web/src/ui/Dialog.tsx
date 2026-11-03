@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef } from "react";
 import type { ReactNode } from "react";
+import "./Dialog.css";
 
 interface DialogProps {
   open: boolean;
