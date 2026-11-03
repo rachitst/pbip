@@ -57,3 +57,12 @@ def execute_scheduled_transfers_task() -> dict[str, int]:
     from pbip_api.modules.payments.scheduled_service import process_due_scheduled_transfers
 
     return process_due_scheduled_transfers()
+
+
+@celery_app.task(name="pbip.wealth.pay_out_matured_deposits")
+def pay_out_matured_deposits_task() -> dict[str, int]:
+    """Pay matured fixed deposits to their source accounts (hourly beat; ADR-0029). Idempotent:
+    one key per deposit plus the deposit row lock, so a re-delivered run never pays twice."""
+    from pbip_api.modules.wealth.maturity_service import process_matured_deposits
+
+    return process_matured_deposits()

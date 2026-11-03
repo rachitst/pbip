@@ -96,6 +96,8 @@ class Settings(BaseSettings):
     daily_transfer_limit_minor: int = 50_000_000  # 5,00,000.00 per customer per UTC day
     idempotency_ttl_hours: int = 24
     scheduled_transfers_batch_size: int = Field(default=100, ge=1, le=1000)
+    # Matured fixed deposits paid out per hourly run (ADR-0029).
+    fd_maturity_payout_batch_size: int = Field(default=100, ge=1, le=1000)
     # Live (ACTIVE or PAUSED) standing orders one customer may hold (ADR-0023 R6).
     max_active_scheduled_transfers_per_customer: int = Field(default=20, ge=1, le=1000)
 

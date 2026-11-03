@@ -32,6 +32,12 @@ celery_app.conf.update(
             "task": "pbip.transfers.execute_scheduled",
             "schedule": 60.0,
         },
+        # Issue #332 / ADR-0029: pay matured fixed deposits back to their source account. Hourly,
+        # so a deposit is paid within the hour after its IST maturity day starts; held ones retry.
+        "pay-out-matured-deposits": {
+            "task": "pbip.wealth.pay_out_matured_deposits",
+            "schedule": crontab(minute=5),
+        },
         # TASK-052 / ADR-0011: one nightly spending job (no second materialisation job).
         "materialize-monthly-spending": {
             "task": "pbip.analytics.materialize_monthly_spending",
