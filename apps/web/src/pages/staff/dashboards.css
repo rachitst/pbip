@@ -1,0 +1,12 @@
+/* Compliance and behavioural analytics dashboards (TASK-100, TASK-101). Their sections use .card for
+   the frame, but .card is also the narrow, centred sign-in box (max-width 640px); on a dashboard a
+   section fills the page width so its charts and tables have room. Wide tables scroll inside their
+   section instead of being clipped. */
+.dashboard-page .card {
+  max-width: none;
+  margin: 0 0 var(--space-5);
+}
+.dashboard-page .entries {
+  max-width: 100%;
+  overflow-x: auto;
+}

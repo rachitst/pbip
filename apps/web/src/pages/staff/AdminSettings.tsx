@@ -156,7 +156,7 @@ function SettingsTable({
   onChange: (setting: RuntimeSettingOut) => void;
 }) {
   return (
-    <div className="entries">
+    <div className="entries admin-settings-scroll">
       <table className="admin-settings-table">
         <caption className="sr-only">Runtime-configurable settings</caption>
         <thead>
