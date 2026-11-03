@@ -21,9 +21,10 @@ customers, ONE injected incident of a scenario:
   per-transfer amount (INR 2,00,000, the API's ``max_transfer_minor``) to a payee added minutes
   earlier, from a device never seen, more than ``dormancy_days`` (180) after the last activity.
   Only dormant accounts qualify, so its rate is the share of DORMANT accounts that are hit, and it
-  needs a dataset long enough to contain the dormancy (none in 6 months; some in 12). v2.0 still
-  makes ordinary transfers after ``churned_on``; for an F8 customer those are dropped, as a
-  dormant account has none (the only v2.1 rows TASK-071 removes).
+  needs a dataset long enough to contain the dormancy (none in 6 months; some in 12).
+
+v2.3 (#276) fixes a v2.0 defect: ordinary transfers continued after ``churned_on`` (v2.2 dropped
+them only for F8 customers). Now, as in v1, nobody transfers after the day they churned.
 
 Every row of an incident is labelled (``fraud_labels``: transaction id -> scenario, incident, role).
 Normal customers also do things for the first time (v2.1, #251), because real ones do:
@@ -37,7 +38,7 @@ new device never comes with failed logins or a new payee), so labels stay clean 
 They draw from their own random stream, so ordinary and fraud rows are identical to v2.0.
 F7 and F8 (v2.2) are drawn last, on a third stream ``[seed, index, 9]``, only for customers with no
 F1-F6 incident, so every v2.1 row and label is unchanged (``test_v2_1_rows_are_unchanged``) except
-the post-churn ordinary transfers of an F8 customer (above).
+the post-churn ordinary transfers (v2.3, above).
 
 Determinism: each customer draws from ``default_rng([seed, index, 7])`` (independent of v1's stream
 ``[seed, index, 1]``) and ids are UUIDv5 from the run, so the same config yields identical output.
@@ -63,7 +64,7 @@ from pbip_datagen.generator import (
     run_id_for,
 )
 
-FRAUD_VERSION = "2.2.0"  # 2.1: legitimate first-time behaviour (#251); 2.2: F7, F8 (TASK-071)
+FRAUD_VERSION = "2.3.0"  # 2.1: first-time behaviour (#251); 2.2: F7, F8 (TASK-071); 2.3: #276
 Scenario = Literal["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8"]
 SCENARIOS: tuple[Scenario, ...] = ("F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8")
 _V2_0_SCENARIOS = SCENARIOS[:6]  # drawn on the original stream, exactly as in v2.0 and v2.1
@@ -240,6 +241,9 @@ def _ordinary_transfers(ctx: _Ctx, months: list[datetime]) -> None:
             when = at_ist(month.date().replace(day=day), int(ctx.rng.integers(8 * 60, 22 * 60)))
             amount = ctx.money(income * float(ctx.rng.uniform(0.01, 0.12)))
             ctx.add(when, "DEBIT", amount, payee, added)
+    # v2.3 (#276): nothing after churn, like v1 and the v2.1 additions. The draws above are kept so
+    # every other row's amount, time and id stays as in v2.2; only the post-churn rows go.
+    ctx.rows = [t for t in ctx.rows if t.occurred_at < ctx.window_end]
 
 
 def _median_debit(ctx: _Ctx) -> int:
@@ -369,10 +373,6 @@ def _later_scenarios(
         rows = _f7(ctx, fraud.reporting_threshold_minor)
     elif dormant is not None and f7 <= draw < f7 + fraud.rates["F8"]:
         scenario = "F8"
-        # v2.0 keeps making ordinary transfers after churn (#276; v1 and the v2.1 additions stop).
-        # A dormant account has none: drop them for THIS customer only. Every other v2.1 row is
-        # untouched, and 6-month datasets (training) have no F8, so they stay byte-identical.
-        ctx.rows = [t for t in ctx.rows if t.occurred_at < ctx.window_end]
         rows = _f8(ctx, *dormant, fraud.max_transfer_minor)
     if not rows:
         return []

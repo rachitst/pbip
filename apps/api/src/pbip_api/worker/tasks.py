@@ -1,10 +1,20 @@
 """Celery tasks. Tasks must be idempotent: with acks_late a task may run twice."""
 
+from celery.signals import task_postrun, worker_init, worker_process_init
+
+from pbip_api.core import worker_metrics
 from pbip_api.core.db import session_scope
 from pbip_api.modules.analytics.service import materialize_monthly_spending
 from pbip_api.modules.events.partitions import ensure_monthly_partitions
 from pbip_api.modules.notifications.service import RetryPolicy, relay_outbox
 from pbip_api.worker.celery_app import celery_app
+
+# ADR-0039: a worker process publishes its metric increments to Redis after every task; the API's
+# /metrics exports them. Only processes Celery starts as workers are marked, so the API (which
+# imports this module to enqueue tasks) never publishes its own increments a second time.
+worker_init.connect(worker_metrics.mark_worker_process, weak=False)
+worker_process_init.connect(worker_metrics.mark_worker_process, weak=False)
+task_postrun.connect(worker_metrics.flush_after_task, weak=False)
 
 
 @celery_app.task(name="pbip.ping")

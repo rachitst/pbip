@@ -24,7 +24,7 @@ from pbip_ml.fraud import hybrid as h
 from pbip_ml.fraud import training as t
 from pbip_ml.fraud.evaluation import cheapest, cost_curve, latency_profile
 from pbip_ml.fraud.inference import load
-from pbip_ml.fraud.train import load_export
+from pbip_ml.fraud.train import load_export, shap_summary
 from sklearn.metrics import precision_recall_curve
 
 REVIEW_COSTS_INR = (50, 150, 500)  # analyst cost per flagged transfer; 150 = ~10 min at 900/h
@@ -122,6 +122,15 @@ def main() -> None:
     ax.grid(alpha=0.3)
     fig.tight_layout()
     fig.savefig(args.img / "fraud-pr-curves.png", dpi=120)
+
+    shap = shap_summary(scorer.booster, test[list(t.MODEL_FEATURES)])
+    report["test"]["lightgbm_shap_mean_abs"] = shap
+    fig, ax = plt.subplots(figsize=(6.4, 4.4))
+    ax.barh(list(shap)[::-1], list(shap.values())[::-1])
+    ax.set(xlabel="Mean |SHAP| (log-odds), test period", title="LightGBM feature contributions")
+    ax.grid(alpha=0.3, axis="x")
+    fig.tight_layout()
+    fig.savefig(args.img / "fraud-shap-summary.png", dpi=120)
 
     risk_test = h.batch_risk(scorer, test)
     risk_held = h.batch_risk(scorer, held)

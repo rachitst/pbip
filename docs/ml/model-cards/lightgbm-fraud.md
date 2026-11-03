@@ -4,7 +4,7 @@
 |---|---|
 | Code | `ml/src/pbip_ml/fraud/training.py` (fit), `ml/src/pbip_ml/fraud/train.py` (CLI and MLflow logging), `ml/src/pbip_ml/fraud/inference.py` (load) |
 | Artifact | `models/fraud/lightgbm.txt`, checksummed in `manifest.json` |
-| `model_version` | not served alone; part of the hybrid `hybrid-lgbm-iforest-1` (`HYBRID_VERSION` in `train.py`) |
+| `model_version` | not served alone; part of the hybrid `hybrid-lgbm-iforest-2` (`HYBRID_VERSION` in `train.py`; `-1` = the v2.1/v2.2 models) |
 | Owner | `rachitst` (`.github/CODEOWNERS`, rule `*`) |
 | Tasks | TASK-029, TASK-033, TASK-038, TASK-039, TASK-071 |
 
@@ -39,7 +39,18 @@ and `is_debit`. No demographic, location or identity field.
 
 ## Evaluation (copied from existing reports)
 
-Current model, generator v2.2, outgoing transfers only (`model-evaluation-report-v1.md` §8, MLflow run
+Current recipe, generator v2.3, `hybrid-lgbm-iforest-2` (`model-evaluation-report-v1.md` §9, MLflow run
+`7b43ecc3827f4e8ebef35699f9a8f1ab`): PR-AUC 0.977 on the test period and 0.965 on the held-out seed, with early
+stopping at iteration 81.
+
+Hyper-parameters: TASK-084 ran a bounded Optuna search (`scripts/fraud_tune.py`: 30 trials, time folds inside
+training and validation only). The best trial beat the current `LGBM_PARAMS` by +0.003 fold PR-AUC, which is
+noise. In the full pipeline it was worse: PR-AUC 0.887 / 0.832, and the hybrid failed the 0.1% review bar on
+held-out data. **The current parameters are kept** (§9). Global SHAP importance (mean |TreeSHAP|, test):
+log_amount 0.39, payee_age_seconds 0.28, ratio_to_avg_amount 0.23, hour_ist 0.21, velocity_10m 0.05; the rest
+are below 0.01. The chart is `docs/ml/img/fraud-shap-summary.png`.
+
+Previous model, generator v2.2, outgoing transfers only (`model-evaluation-report-v1.md` §8, MLflow run
 `394b64764f694164b3a1e0d356f4cf1d`):
 
 | Set | Threshold | Precision | Recall | PR-AUC |

@@ -566,7 +566,7 @@ def test_bola_loans_are_only_visible_to_their_borrower(
     client: TestClient, db: Session, make_customer: Callable[..., Actor]
 ) -> None:
     """TASK-047: loans are read through loans/policy with the AUTHENTICATED customer id."""
-    alice = make_customer(funds=1_00_000_00)  # income for an eligible loan
+    alice = make_customer(salary=1_00_000_00)  # income for an eligible loan
     mallory = make_customer(funds=1_00_000_00)
     product = "10000000-0000-4000-a000-000000000001"  # personal loan (catalogue)
 
@@ -595,7 +595,7 @@ def test_bola_loans_are_only_visible_to_their_borrower(
         assert response.status_code == 404, f"{name}: expected 404 got {response.status_code}"
     assert client.get("/api/v1/loans", headers=h).json() == []
     own = client.get(f"/api/v1/accounts/{alice.account_id}", headers=alice.headers).json()
-    assert own["ledger_balance_minor"] == 2_00_000_00  # income + one loan, nothing from Mallory
+    assert own["ledger_balance_minor"] == 3_00_000_00  # 2 salaries + one loan, nothing from Mallory
 
 
 def test_bola_fixed_deposits_are_only_visible_to_their_owner(

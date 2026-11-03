@@ -1,7 +1,9 @@
 """TASK-029/030: time split, LightGBM and Isolation Forest on labelled synthetic data."""
 
+import json
 from pathlib import Path
 
+import mlflow
 import numpy as np
 import pandas as pd
 import pytest
@@ -141,3 +143,41 @@ def test_cli_run_writes_artifacts_and_logs_to_mlflow(
     assert report["hybrid"]["at_review"]["recall"] >= report["rules_only"]["at_review"]["recall"]
     run_id = log_to_mlflow(report, out, tmp_path / "mlruns", local_target(tmp_path / "mlruns"))
     assert run_id and any((tmp_path / "mlruns").rglob("lightgbm.txt"))
+    assert report["hybrid"]["params"]["model_version"] == train_cli.HYBRID_VERSION
+    assert report["lightgbm"]["params"]["learning_rate"] == t.LGBM_PARAMS["learning_rate"]
+    shap = report["lightgbm"]["shap_mean_abs_test"]  # TASK-084: SHAP summary in the logged report
+    assert list(shap) == sorted(shap, key=lambda f: -shap[f]) and set(shap) == set(t.MODEL_FEATURES)
+    assert all(v >= 0 for v in shap.values()) and max(shap.values()) > 0
+    logged = mlflow.MlflowClient(local_target(tmp_path / "mlruns").uri).get_run(run_id)
+    assert logged.data.params["model_version"] == train_cli.HYBRID_VERSION
+    assert any(k.startswith("shap_mean_abs_") for k in logged.data.metrics)
+
+
+def test_hybrid_version_is_not_the_one_of_the_v2_1_and_v2_2_models() -> None:
+    """TASK-084: both earlier models were served as ``-1``; a retrain must be told apart."""
+    assert train_cli.HYBRID_VERSION == "hybrid-lgbm-iforest-2"
+
+
+def test_lightgbm_params_override_is_used_and_recorded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A tuning candidate (``--lgbm-params``) is what trains, and the report says so."""
+
+    def _local_only(local_dir: Path) -> TrackingTarget:  # never probe a shared server
+        target = local_target(local_dir)
+        mlflow.set_tracking_uri(target.uri)
+        return target
+
+    monkeypatch.setattr(train_cli, "configure_tracking", _local_only)
+    small = tmp_path / "data"
+    small.mkdir()
+    _export_fraud(GeneratorConfig(seed=3, customers=300, months=6), small)  # small: CLI timing
+    overrides = tmp_path / "params.json"
+    overrides.write_text('{"learning_rate": 0.1, "max_depth": 3, "num_leaves": 7}', "utf-8")
+    out = tmp_path / "models"
+    train_cli.main(["--data", str(small), "--out", str(out), "--lgbm-params", str(overrides),
+                    "--mlflow-local-dir", str(tmp_path / "mlruns")])  # fmt: skip
+    report = json.loads((out / "report.json").read_text(encoding="utf-8"))
+    assert report["lightgbm"]["params"]["learning_rate"] == 0.1
+    model = (out / "lightgbm.txt").read_text(encoding="utf-8")
+    assert "[max_depth: 3]" in model and "[num_leaves: 7]" in model  # what LightGBM trained with

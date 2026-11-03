@@ -11,6 +11,7 @@ FNR and the confusion matrix - never accuracy.
 
 import math
 import time
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -146,13 +147,19 @@ def _xy(frame: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray]:
     return frame[list(MODEL_FEATURES)], frame["label"].to_numpy()
 
 
-def train_lightgbm(split: Split, rounds: int = 600) -> tuple[lgb.Booster, float]:
-    """Class-weighted LightGBM, early stopping on validation PR-AUC. Returns (model, threshold)."""
+def train_lightgbm(
+    split: Split, rounds: int = 600, params: Mapping[str, Any] | None = None
+) -> tuple[lgb.Booster, float]:
+    """Class-weighted LightGBM, early stopping on validation PR-AUC. Returns (model, threshold).
+
+    ``params`` replaces ``LGBM_PARAMS`` (the tuning search, TASK-084); the class weight and the
+    early-stopping metric are always set here.
+    """
     x_train, y_train = _xy(split.train)
     x_val, y_val = _xy(split.validation)
     positives = max(int(y_train.sum()), 1)
     params = {
-        **LGBM_PARAMS,
+        **(LGBM_PARAMS if params is None else params),
         "scale_pos_weight": (len(y_train) - positives) / positives,
         "metric": "average_precision",
     }

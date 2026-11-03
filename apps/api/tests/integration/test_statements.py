@@ -2,7 +2,6 @@
 
 import csv
 import io
-import time
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -17,7 +16,7 @@ from pbip_api.modules.notifications import service as notifications
 from pbip_api.modules.notifications.models import Notification, OutboxEvent
 from pbip_api.modules.statements import service as statements
 from pbip_api.modules.statements.service import BANK_TZ
-from pbip_test_support import Actor, age_payee
+from pbip_test_support import Actor, age_payee, count_statements
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
@@ -189,34 +188,46 @@ def test_a_statement_needs_authentication(client: TestClient, funded: Actor) -> 
     assert response.status_code == 401
 
 
-def test_one_thousand_transactions_are_computed_within_200_ms(
+def _statement_queries(session: Session, account: Account, now: datetime) -> tuple[int, int]:
+    """(lines, SQL statements) for building and rendering today's statement as CSV and PDF."""
+    day = now.astimezone(BANK_TZ).date()
+    bind = session.get_bind()
+    assert isinstance(bind, Engine)
+    with count_statements(bind) as sent:
+        statement = statements.build_statement(session, account, "Test Customer", day, day, now)
+        statements.render_csv(statement)
+        statements.render_pdf(statement)
+    return len(statement.lines), len(sent)
+
+
+def test_one_thousand_transactions_cost_the_same_queries_as_ten(
     make_customer: Callable[..., Actor], migrated_engine: Engine
 ) -> None:
-    """TASK-016 acceptance: computing a 1,000-entry statement (query, build, CSV and PDF) < 200 ms.
+    """TASK-016: a 1,000-entry statement (query, build, CSV and PDF) is a fixed number of queries.
 
-    Measured as this process's CPU time, not wall time: on a shared 2-CPU machine, PostgreSQL's
-    autovacuum after the 1,000 inserts (or any other process) can deschedule the test for
-    hundreds of milliseconds, which says nothing about this code. The query itself runs in
-    ~5 ms (index scan on ix_transaction_entries_account_id_created_at; see PR #302).
+    The cost is asserted as the SQL statement count, the same with 10 entries as with 1,000, not
+    as a wall-clock bound: a timing limit failed on loaded and Windows machines (#317) and says
+    nothing about this code. A per-line query (N+1) makes the counts differ. The query itself is
+    an index scan on ix_transaction_entries_account_id_created_at (~5 ms, PR #302).
     """
     alice = make_customer()
     with Session(migrated_engine) as session:
-        for _ in range(1_000):
+        for _ in range(10):
             ledger.deposit(session, alice.account_id, 1_00)
         session.commit()
         account = session.get(Account, alice.account_id)
         assert account is not None
-        now = datetime.now(UTC)
-        day = now.astimezone(BANK_TZ).date()
-        best = float("inf")
-        for _ in range(3):
-            started = time.process_time()
-            statement = statements.build_statement(session, account, "Test Customer", day, day, now)
-            statements.render_csv(statement)
-            statements.render_pdf(statement)
-            best = min(best, time.process_time() - started)
-    assert len(statement.lines) == 1_000
-    assert best < 0.2, f"{best * 1000:.0f} ms of CPU"
+        small_lines, small_queries = _statement_queries(session, account, datetime.now(UTC))
+        for _ in range(990):
+            ledger.deposit(session, alice.account_id, 1_00)
+        session.commit()
+        session.expire_all()
+        account = session.get(Account, alice.account_id)
+        assert account is not None
+        lines, queries = _statement_queries(session, account, datetime.now(UTC))
+    assert (small_lines, lines) == (10, 1_000)
+    assert queries == small_queries, "statement queries grow with the number of entries (N+1)"
+    assert queries <= 5, queries
 
 
 def test_the_bell_says_a_statement_was_downloaded(

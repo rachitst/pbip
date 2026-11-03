@@ -9,6 +9,9 @@ v2.0) used run `79157b22dc9a46d0b2dcfbb0ccde5cd9`; its headline numbers are kept
 > **Update for generator v2.2 (TASK-071): see §8.** From v2.2, models are trained and evaluated on outgoing
 > transfers only, which is what the API scores. §8 has the retrained model's numbers, and they supersede §3.1
 > and the four bars in §3.3. §1-§7 and the charts are the v1.1 (generator v2.1) evaluation, kept for comparison.
+>
+> **Update for generator v2.3 (#276) and TASK-084: see §9.** It covers the `hybrid-lgbm-iforest-2` retrain, the
+> tuning run (the current params are kept) and the promotion gate result. Its numbers supersede §8.
 
 > **All data in this report is synthetic.** It comes from the seeded generator (`pbip_datagen`, TASK-023),
 > which plants six fraud scenarios (F1-F6) and, since v2.1, three kinds of legitimate first-time behaviour.
@@ -257,3 +260,95 @@ F6 legs. Those legs were easy for the model and almost never caught by the rules
 - **F8 is caught by the takeover signals, not by dormancy.** It looks like F1/F3: a new device, a payee added
   minutes earlier and the maximum amount. No feature measures the time since the last activity, so a careful
   dormant-account fraud without those signals would be missed. That is also a follow-up (GitHub issue #275).
+
+## 9. Generator v2.3 (#276) retrain and the TASK-084 tuning run
+
+**Date:** 3 Nov 2026. **Scorer:** `hybrid-lgbm-iforest-2`, current `LGBM_PARAMS`, MLflow run
+`7b43ecc3827f4e8ebef35699f9a8f1ab` (scratch tracking store; experiment `pbip-fraud`). **Data:** generator v2.3.0.
+Exports are the same as §1 (seed 42, 3,000 customers × 6 months; held-out seed 4242, 1,500 × 6). The machine was
+a shared 2-CPU laptop, and every run used `nice -n 19`.
+
+**Data change.** v2.3 drops the ordinary transfers that churned customers made after they left (#276, a v2.0
+defect). The seed-42 export loses 559 legitimate rows (51,509 to 50,950). No fraud row or label changes, and every
+other row is byte-identical (`test_v2_1_rows_are_unchanged`). The test split now holds 10,146 outgoing transfers
+(104 fraud), and the held-out split holds 25,602 (226 fraud).
+
+**Model version.** The v2.1 and v2.2 models were both served as `hybrid-lgbm-iforest-1`, so their `fraud_events`
+rows could not be told apart. The retrain is `hybrid-lgbm-iforest-2` (`HYBRID_VERSION`, `train.py`).
+
+**The four bars (test / held-out).** "Before" is the model the demo stack serves today (v2.2 artifacts,
+`-1`), scored on the same v2.3 rows with `scripts/fraud_eval_report.py`:
+
+| Criterion | Bar | Before: `-1` on v2.3 rows | After: `-2` retrain |
+|---|---|---|---|
+| Legitimate new-payee transfers held for REVIEW | ≤ 1% | 0.09% / 0.24% | 0.28% / 0.37% (pass) |
+| Legitimate new-payee transfers asked for STEP_UP | ≤ 10% | 7.61% / 7.96% | 7.61% / 8.02% (pass) |
+| All legitimate debits held at REVIEW | ≤ 0.1% | 0.030% / 0.030% | 0.040% / 0.050% (pass) |
+| Recall at REVIEW, hybrid vs rules alone (test) | hybrid clearly better | 0.817 vs 0.202 | **0.865 vs 0.202** (pass) |
+
+| Measure (test / held-out) | Before: `-1` | After: `-2` |
+|---|---|---|
+| Hybrid PR-AUC | 0.852 / 0.826 | **0.922 / 0.852** |
+| Hybrid recall at REVIEW | 0.817 / 0.801 | 0.865 / 0.845 |
+| Precision at REVIEW | 0.966 / 0.958 | 0.957 / 0.936 |
+| Confusion at REVIEW (TN / FP / FN / TP), test | 10,039 / 3 / 19 / 85 | 10,038 / 4 / 14 / 90 |
+| Confusion at REVIEW (TN / FP / FN / TP), held-out | 25,368 / 8 / 45 / 181 | 25,363 / 13 / 35 / 191 |
+| LightGBM alone, PR-AUC | - | 0.977 / 0.965 |
+
+The trade-off is a few more legitimate reviews (test FP 3 to 4, held-out 8 to 13) in exchange for 5 / 10 more
+frauds caught. All four bars still pass. On the test split, STEP_UP has precision 0.539, recall 0.942 and FPR
+0.84%; BLOCK has precision 0.957, recall 0.846 and FPR 0.040%.
+
+**Recall at REVIEW by scenario, `-2` (test / held-out):** F1 0.86 / 0.79, F2 0.88 / 0.90, F3 1.00 / 1.00,
+F4 0.63 / 0.77, F5 0.83 / 0.50, F6 outbound 1.00 / 0.90. F7 and F8 are as in §8: F7 is not scored, and F8 was not
+re-measured on a 12-month export in this run.
+
+**SHAP summary.** The mean |TreeSHAP| on the test period (log-odds) is now in `report.json` and in MLflow as
+`shap_mean_abs_<feature>`, and is drawn as `img/fraud-shap-summary.png`. Values: log_amount 0.387,
+payee_age_seconds 0.282, ratio_to_avg_amount 0.227, hour_ist 0.206, velocity_10m 0.050, failure_count_24h 0.009,
+new_device 0.004, distinct_devices_7d 0.000, is_debit 0.000. The weight on `hour_ist` reflects the generator's
+planted timing (scenarios are drawn at daytime hours), not a real-world signal (§7).
+
+![SHAP summary](img/fraud-shap-summary.png)
+
+**Tuning (TASK-084).** `scripts/fraud_tune.py`, Optuna 5.0 TPE with seed 42, 30 trials:
+- Search space: learning rate, max depth, num_leaves, min_child_samples, L1/L2 and feature fraction.
+- Folds: 3 expanding-window time folds inside the training and validation periods only. Each fold fits on the
+  past, stops early on the first half of the next block and is scored on its second half. The test period is
+  never used. Each fold has 55-91 positives.
+- Result: the current params score a mean fold PR-AUC of **0.9839**; the best trial (#29: learning rate 0.021,
+  max_depth 7, 8 leaves, min_child_samples 27, L1 0.015, L2 0.013, feature fraction 0.60) scores **0.9871**.
+
+That +0.003 is within fold noise. When the full pipeline was trained with the winner (run
+`e6a505d9e69042b3965148ef5cefe705`), it did worse on every measure:
+
+| Measure (test / held-out) | Current params | Tuned params |
+|---|---|---|
+| Early-stopping iteration | 81 | 4 |
+| LightGBM PR-AUC | 0.977 / 0.965 | 0.887 / 0.832 |
+| Hybrid PR-AUC | 0.922 / 0.852 | 0.855 / 0.820 |
+| Recall at REVIEW | 0.865 / 0.845 | 0.760 / 0.730 |
+| All legitimate debits held at REVIEW | 0.040% / 0.050% | 0.090% / **0.120% (fails the 0.1% bar)** |
+
+At its low learning rate, the tuned model peaks on the validation period after 4 trees, so it is under-trained. It
+misses F4 and F5 completely. **Decision: keep the current `LGBM_PARAMS`.** Tuning on synthetic data mostly fits the
+generator. The search is kept as a reproducible tool for when real labelled data exists.
+
+**Behaviour baseline (TASK-080).** The suite trains with the production recipe (3,000 customers). With 1,500
+customers on v2.3 data, the canonical APP scam scored 30. That model's raw score of 0.90 fell on a 0.40 step of an
+isotonic calibration fitted on only 42 validation positives. The production-size model scores it 93 (BLOCK), the
+velocity burst 30 and the takeover 60, so the recorded baseline (92, 30, 60) holds. The fragility is in the
+calibration with few positives, and the follow-up issue tracks it.
+
+**Promotion gate (TASK-038), in a scratch registry:** the gate measured:
+- served PR-AUC 0.922 test and 0.852 held-out (gate ≥ 0.80: pass);
+- recall at REVIEW 0.865;
+- **p95 latency of 112 ms** against the 50 ms gate (**fail**). The laptop was CPU-starved at the time: load
+  average 5-11 on 2 CPUs, and the gate ran at `nice -n 19`.
+
+So the gate **did not promote** the model. There was also no champion to compare with. The demo's artifacts
+(`models/fraud`, 1 Nov 2026) cannot be re-measured through the gate, because their `report.json` test period
+matches no export from current code (10,274 test rows versus 10,258 for a v2.2 export of `main` today). The
+`-1` vs `-2` comparison above uses the gate's own served scorer on the same rows. The model has to be re-gated
+on an idle machine before it is exported. **Nothing was exported to `models/fraud` and nothing was loaded into
+the demo stack.**

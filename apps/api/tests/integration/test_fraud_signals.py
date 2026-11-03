@@ -17,8 +17,7 @@ from pbip_api.core.redis import get_redis
 from pbip_api.modules.auth.dependencies import get_request_meta
 from pbip_api.modules.auth.service import RequestMeta
 from pbip_api.modules.fraud.models import FraudEvent
-from pbip_test_support import Actor, age_payee
-from redis import Redis
+from pbip_test_support import Actor, age_payee, unreachable_redis
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
@@ -176,7 +175,7 @@ def test_velocity_falls_back_to_postgresql_when_redis_is_down(
     client: TestClient, app: FastAPI, pair: tuple[Actor, dict[str, Any]], db: Session
 ) -> None:
     alice, payee = pair
-    down = Redis(host="127.0.0.1", port=9, socket_connect_timeout=0.2, decode_responses=True)
+    down = unreachable_redis()
     app.dependency_overrides[get_redis] = lambda: down
     bodies = [send(client, alice, payee) for _ in range(4)]  # transfers still work
     last = event(db, bodies[-1])

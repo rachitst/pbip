@@ -6,7 +6,6 @@ The city database is replaced by an in-memory MMDB reader (no file, no network),
 """
 
 import math
-import time
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timedelta
@@ -17,16 +16,16 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.db import utcnow
-from pbip_api.core.geoip import MmdbLocationResolver
+from pbip_api.core.geoip import GeoPoint, MmdbLocationResolver
 from pbip_api.modules.auth.dependencies import get_request_meta
 from pbip_api.modules.auth.models import SecurityEvent, SecurityEventType
 from pbip_api.modules.auth.service import RequestMeta
 from pbip_api.modules.fraud.baseline import BaselineRulesScorer
 from pbip_api.modules.fraud.dependencies import get_location_resolver
 from pbip_api.modules.fraud.models import FraudEvent
-from pbip_api.modules.fraud.travel import TravelPolicy
+from pbip_api.modules.fraud.travel import PRIOR_EVENTS_SCANNED, TravelPolicy
 from pbip_ml.fraud.contract import FraudDecision, FraudScoreResult, TransactionContext
-from pbip_test_support import Actor, age_payee
+from pbip_test_support import Actor, age_payee, count_statements
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
@@ -247,24 +246,59 @@ def test_without_a_city_database_the_rule_never_scores(
     assert result.features["location_unknown"] is True and result.risk_score == 0
 
 
+class _CountingResolver(MmdbLocationResolver):
+    def __init__(self) -> None:
+        super().__init__(_Reader())
+        self.lookups = 0
+
+    def locate(self, ip: str | None) -> GeoPoint | None:
+        self.lookups += 1
+        return super().locate(ip)
+
+
+def _scoring_cost(db: Session, actor: Actor, at: datetime) -> tuple[FraudScoreResult, int, int]:
+    """(result, SQL statements, GeoIP lookups) for one scoring with the travel rule on."""
+    resolver = _CountingResolver()
+    policy = TravelPolicy(resolver, max_speed_kmh=900, min_distance_km=500)
+    context = TransactionContext(
+        transaction_id=uuid.uuid4(),
+        customer_id=actor.customer_id,
+        account_id=actor.account_id,
+        amount_minor=1_000,
+        currency="INR",
+        occurred_at=at,
+        ip_country="IN",
+        geo_lat=MUMBAI[0],
+        geo_lon=MUMBAI[1],
+    )
+    bind = db.get_bind()
+    assert isinstance(bind, Engine)
+    with count_statements(bind) as sent:
+        result = BaselineRulesScorer(db, None, policy).score(context)
+    return result, len(sent), resolver.lookups
+
+
 def test_scoring_with_the_travel_lookup_stays_fast(
     make_customer: Callable[..., Actor], db: Session
 ) -> None:
-    """p95 < 100 ms (AGENTS.md section 8) with the travel queries and lookups included."""
+    """p95 < 100 ms (AGENTS.md section 8) rests on bounded work, asserted here as cost, not time.
+
+    However long the sign-in history, one scoring sends the same number of SQL statements and
+    makes at most PRIOR_EVENTS_SCANNED GeoIP lookups. A wall-clock p95 failed under load (#317);
+    the real latency is measured by scripts/benchmark_fraud_latency.py.
+    """
     alice = make_customer()
     now = utcnow()
-    for minutes in range(1, 13):  # more than PRIOR_EVENTS_SCANNED rows, most not located
+    _login(db, alice, "10.0.0.7", now - timedelta(minutes=1))
+    _, few_queries, few_lookups = _scoring_cost(db, alice, now)
+    for minutes in range(2, 13):  # more than PRIOR_EVENTS_SCANNED rows, most not located
         _login(db, alice, "10.0.0.7", now - timedelta(minutes=minutes))
     _login(db, alice, LONDON_IP, now - timedelta(minutes=30))
 
-    latencies = []
-    for _ in range(40):
-        started = time.perf_counter()
-        result = _score(db, alice, now)
-        latencies.append((time.perf_counter() - started) * 1000)
+    result, queries, lookups = _scoring_cost(db, alice, now)
     assert result.features["location_unknown"] is True  # the 10 newest are private
-    latencies.sort()
-    assert latencies[int(len(latencies) * 0.95) - 1] < 100
+    assert few_lookups < lookups <= PRIOR_EVENTS_SCANNED  # capped, however long the history
+    assert queries == few_queries, "travel scoring queries grow with the sign-in history"
 
 
 @pytest.fixture

@@ -1,6 +1,5 @@
 """TASK-031/032: hybrid combiner, thresholds, fail-safe, overrides and SHAP reasons per scenario."""
 
-import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -126,13 +125,20 @@ def test_shap_reasons_are_top3_positive_exact_and_fast(trained: dict[str, object
     contrib = np.asarray(booster.predict(row[list(t.MODEL_FEATURES)], pred_contrib=True))[0]
     raw = np.asarray(booster.predict(row[list(t.MODEL_FEATURES)], raw_score=True))[0]
     assert contrib.sum() == pytest.approx(raw, abs=1e-9)  # exact TreeSHAP decomposition
-    timings = []
+    # Cost, not wall time (#317: CPU time sums OpenMP threads and ticks in 15.6 ms on Windows):
+    # one reason set is ONE native TreeSHAP call on ONE row, never a sampling explainer or a
+    # per-feature loop. Real latency is measured by scripts/benchmark_fraud_latency.py.
+    calls: list[tuple[int, dict[str, object]]] = []
+
+    class CountingBooster:
+        def predict(self, data: pd.DataFrame, **kwargs: object) -> object:
+            calls.append((len(data), kwargs))
+            return booster.predict(data, **kwargs)
+
     for i in range(min(100, len(fraud))):
-        started = time.process_time()  # CPU time: robust to other test workers
-        h.shap_reasons(booster, fraud.iloc[[i]])
-        timings.append((time.process_time() - started) * 1000)
-    timings.sort()
-    assert timings[int(len(timings) * 0.95) - 1] < 30
+        calls.clear()
+        h.shap_reasons(CountingBooster(), fraud.iloc[[i]])  # type: ignore[arg-type]  # spy
+        assert calls == [(1, {"pred_contrib": True})]
 
 
 @pytest.mark.parametrize("scenario", ["F1", "F2", "F3", "F4", "F5", "F6"])

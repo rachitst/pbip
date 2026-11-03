@@ -15,7 +15,7 @@ from pbip_ml.fraud import inference as inf
 from pbip_ml.fraud import training as t
 from pbip_ml.fraud.artifacts import AnomalyModel, load_anomaly_model
 from pbip_ml.fraud.features import PastTransfer
-from pbip_ml.fraud.train import load_export, run
+from pbip_ml.fraud.train import HYBRID_VERSION, load_export, run
 
 
 @pytest.fixture(scope="module")
@@ -31,7 +31,7 @@ def test_training_writes_a_manifest_that_load_verifies(artifacts: Path) -> None:
     assert set(manifest) == set(inf.ARTIFACTS) and all(len(v) == 64 for v in manifest.values())
     scorer = inf.load(artifacts)
     assert scorer.booster is not None and scorer.anomaly is not None
-    assert scorer.params.model_version == "hybrid-lgbm-iforest-1"
+    assert scorer.params.model_version == HYBRID_VERSION
 
 
 @pytest.mark.parametrize("damage", ["edit_params", "drop_manifest", "drop_model", "foreign_pickle"])

@@ -27,14 +27,14 @@ from pbip_datagen.generator import GeneratorConfig, customer_transactions, iter_
 CONFIG = GeneratorConfig(seed=7, customers=3000, months=6)
 # F8 needs more than 180 days of dormancy inside the data, so it only appears in longer runs.
 LONG_CONFIG = GeneratorConfig(seed=11, customers=500, months=12)
-# SHA-256 of every row and label except F7/F8 ones, recorded by ``_v2_1_digest`` on the output of
-# generator v2.1.0 (main at 2e65b87, before TASK-071). TASK-071 must be additive: if any F1-F6,
-# ordinary or legitimate first-time (L1-L3) row or label changes, these stop matching. The one
-# exception: an F8 customer's ordinary transfers dated after churn (a v2.0 defect, #276; a dormant
-# account has none) are skipped. CONFIG has no F8, so its digest has no exception at all.
+# SHA-256 of every row and label except F7/F8 ones and except transfers dated on or after the
+# customer's churn day, recorded by ``_v2_1_digest`` on the output of generator v2.1.0 (main at
+# 2e65b87, before TASK-071). TASK-071 (v2.2) is additive and #276 (v2.3) only REMOVES the ordinary
+# transfers a churned customer made after leaving (a v2.0 defect): if any other F1-F6, ordinary or
+# legitimate first-time (L1-L3) row or label changes, these stop matching.
 V2_1_DIGESTS = {
-    CONFIG: "dcdba4f908ae10108299272f257620aab538d6030430527fed8736c5af893d72",  # pragma: allowlist secret (a SHA-256 digest of data)
-    LONG_CONFIG: "f94e398fe0c08806ed4de080691c3e9ec39aa6abf245bb4cc3f7ceb7f9fdd696",  # pragma: allowlist secret (a SHA-256 digest of data)
+    CONFIG: "e4aa3ba3016d76ee1c260f15f5720dfed908214d66c970863cdd419538fd2b09",  # pragma: allowlist secret (a SHA-256 digest of data)
+    LONG_CONFIG: "c63c42175c4b6c0e91fefe34875d1f5713d5007957c8de176f81d6d77758ccaf",  # pragma: allowlist secret (a SHA-256 digest of data)
 }
 
 
@@ -55,12 +55,10 @@ def _row(record: Transfer | FraudLabel) -> bytes:
 
 def _v2_1_digest(data: LabelledTransfers, config: GeneratorConfig) -> str:
     new = {lb.transaction_id for lb in data.labels if lb.scenario in ("F7", "F8")}
-    customer_of = {t.id: t.customer_id for t in data.transfers}
-    f8 = {customer_of[lb.transaction_id] for lb in data.labels if lb.scenario == "F8"}
     churned = {c.id: at_ist(c.churned_on, 0) for c in iter_customers(config) if c.churned_on}
     digest = hashlib.sha256()
     for t in data.transfers:
-        if t.customer_id in f8 and t.occurred_at >= churned[t.customer_id]:
+        if t.customer_id in churned and t.occurred_at >= churned[t.customer_id]:
             continue
         if t.id not in new:
             digest.update(_row(t))
@@ -106,10 +104,38 @@ def test_a_customer_is_identical_whatever_the_run_size() -> None:
 
 
 def test_v2_1_rows_are_unchanged(data: LabelledTransfers, long_data: LabelledTransfers) -> None:
-    """TASK-071 adds F7/F8 without changing one byte of any v2.1 row or label for these seeds."""
+    """TASK-071 adds F7/F8 and #276 drops post-churn rows; no other v2.1 byte changes."""
     assert _v2_1_digest(data, CONFIG) == V2_1_DIGESTS[CONFIG]
     assert _v2_1_digest(long_data, LONG_CONFIG) == V2_1_DIGESTS[LONG_CONFIG]
     assert _incidents(long_data, "F7") and _incidents(long_data, "F8")  # the digest skipped them
+
+
+@pytest.mark.parametrize(
+    "config",
+    [CONFIG, LONG_CONFIG, GeneratorConfig(seed=3, customers=300, months=14)],  # #276's example
+    ids=["6-months", "12-months", "issue-276"],
+)
+def test_no_transfer_after_churn_except_a_dormant_account_takeover(
+    config: GeneratorConfig,
+) -> None:
+    """#276: a churned customer makes no ordinary or first-time transfer after the churn day.
+
+    Same rule as v1 (``test_churned_customers_go_silent_after_churn``). The only rows after it are
+    an F8 incident: fraud on the dormant account, by definition.
+    """
+    data = generate_labelled(config)
+    f8 = {lb.transaction_id for lb in data.labels if lb.scenario == "F8"}
+    silent_from = {
+        c.id: at_ist(c.churned_on + timedelta(days=1), 0)
+        for c in iter_customers(config)
+        if c.churned_on
+    }
+    assert silent_from
+    after = [
+        t for t in data.transfers
+        if t.customer_id in silent_from and t.occurred_at >= silent_from[t.customer_id]
+    ]  # fmt: skip
+    assert {t.id for t in after} <= f8
 
 
 def test_a_customer_has_at_most_one_incident(long_data: LabelledTransfers) -> None:
