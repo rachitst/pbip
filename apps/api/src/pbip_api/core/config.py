@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     field_encryption_key: SecretStr = SecretStr("")
     # DB-IP country Lite MMDB (ADR-0014); unset means no geographic fraud signal, never a guess.
     geoip_country_db_path: str | None = None
+    # DB-IP City Lite MMDB for IMPOSSIBLE_TRAVEL (ADR-0034); unset means the rule never scores.
+    geoip_city_db_path: str | None = None
+    # IMPOSSIBLE_TRAVEL fires when the implied speed between the customer's previous located event
+    # and this one exceeds the first AND the distance exceeds the second (ADR-0034 justifies both).
+    fraud_travel_max_speed_kmh: float = Field(default=900.0, gt=0, le=100_000)
+    fraud_travel_min_distance_km: float = Field(default=500.0, gt=0, le=20_000)
 
     jwt_issuer: str = "pbip"
     jwt_audience: str = "pbip-api"

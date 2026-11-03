@@ -506,7 +506,7 @@ def test_new_payee_plus_large_amount_is_held_with_human_readable_reasons(
     }
     assert detail["transaction_type"] == "TRANSFER" and detail["reference"] == "rent"
     assert (
-        detail["model_version"] == "baseline-rules-0.3"
+        detail["model_version"] == "baseline-rules-0.4"
         and detail["features"]["payee_age_minutes"] is not None
     )
     assert any("minutes ago" in r["message"] for r in detail["reasons"])
@@ -555,7 +555,7 @@ def test_every_scoring_decision_is_persisted_for_audit_and_retraining(
         ).one()
     assert (
         row.decision == "ALLOW"
-        and row.model_version == "baseline-rules-0.3"
+        and row.model_version == "baseline-rules-0.4"
         and row.latency_ms >= 0
     )
     _ = (Transaction, func, select)  # imported for type narrowing in other tests

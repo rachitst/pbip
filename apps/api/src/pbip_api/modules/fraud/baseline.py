@@ -26,10 +26,12 @@ from pbip_api.modules.auth.models import SecurityEvent, SecurityEventType
 from pbip_api.modules.customers.models import Customer, Device
 from pbip_api.modules.fraud.models import FraudEvent
 from pbip_api.modules.fraud.signals import device_uuid_from_hash
+from pbip_api.modules.fraud.travel import TravelPolicy, impossible_travel
 from pbip_api.modules.ledger.models import Transaction, TransactionStatus, TransactionType
 from pbip_api.modules.payees.models import Payee
 
-MODEL_VERSION = "baseline-rules-0.3"  # 0.2: NEW_COUNTRY (ADR-0014); 0.3: TASK-095 signals
+MODEL_VERSION = "baseline-rules-0.4"  # 0.2: NEW_COUNTRY (ADR-0014); 0.3: TASK-095 signals;
+# 0.4: IMPOSSIBLE_TRAVEL (ADR-0034)
 
 NEW_PAYEE_WINDOW = timedelta(hours=24)
 NEW_PAYEE_LARGE_MINOR = 2_500_000  # 25,000.00
@@ -64,9 +66,15 @@ def decide(score: int) -> FraudDecision:
 class BaselineRulesScorer:
     model_version = MODEL_VERSION
 
-    def __init__(self, session: Session, counters: VelocityCounters | None = None) -> None:
+    def __init__(
+        self,
+        session: Session,
+        counters: VelocityCounters | None = None,
+        travel: TravelPolicy | None = None,
+    ) -> None:
         self.session = session
         self.counters = counters  # Redis windows (TASK-034); None or unreachable -> PostgreSQL
+        self.travel = travel or TravelPolicy.disabled()  # no city database: rule never scores
 
     def score(self, context: TransactionContext) -> FraudScoreResult:
         started = time.perf_counter()
@@ -160,6 +168,11 @@ class BaselineRulesScorer:
             score += int(reason.contribution or 0)
             reasons.append(reason)
 
+        travel_reason, travel_features = impossible_travel(self.session, context, self.travel)
+        if travel_reason is not None:
+            score += int(travel_reason.contribution or 0)
+            reasons.append(travel_reason)
+
         score = min(score, 100)
         return FraudScoreResult(
             risk_score=score,
@@ -180,6 +193,9 @@ class BaselineRulesScorer:
                 "login_failures_24h": failures,
                 "new_device": new_device,
                 "new_network": new_network,
+                "geo_lat": context.geo_lat,
+                "geo_lon": context.geo_lon,
+                **travel_features,
             },
         )
 

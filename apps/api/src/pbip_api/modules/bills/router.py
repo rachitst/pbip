@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.db import get_session
-from pbip_api.core.geoip import CountryResolver
+from pbip_api.core.geoip import CountryResolver, LocationResolver
 from pbip_api.modules.auth.dependencies import (
     Principal,
     get_current_principal,
@@ -22,7 +22,11 @@ from pbip_api.modules.bills.schemas import BillerOut, BillPaymentOut, PayBillReq
 from pbip_api.modules.bills.service import BillPaymentResult, BillsService, PayBillCommand
 from pbip_api.modules.customers.dependencies import get_current_customer
 from pbip_api.modules.customers.models import Customer
-from pbip_api.modules.fraud.dependencies import get_country_resolver, get_fraud_scorer
+from pbip_api.modules.fraud.dependencies import (
+    get_country_resolver,
+    get_fraud_scorer,
+    get_location_resolver,
+)
 from pbip_api.modules.fraud.signals import device_uuid
 
 router = APIRouter(prefix="/api/v1/bills", tags=["bills"])
@@ -44,8 +48,9 @@ def get_bills_service(
     settings: Settings = Depends(get_settings),
     scorer: FraudScorer = Depends(get_fraud_scorer),
     countries: CountryResolver = Depends(get_country_resolver),
+    locations: LocationResolver = Depends(get_location_resolver),
 ) -> BillsService:
-    return BillsService(session, settings, scorer, countries)
+    return BillsService(session, settings, scorer, countries, locations)
 
 
 def _respond(result: BillPaymentResult) -> JSONResponse:

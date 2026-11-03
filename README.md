@@ -76,5 +76,6 @@ health-gated start, runs `scripts/smoke_test.sh` and rolls back automatically on
 ## Third-party data
 
 * [IP Geolocation by DB-IP](https://db-ip.com): the optional "IP to Country Lite" database used by the
-  NEW_COUNTRY fraud rule is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). It is
-  downloaded by `scripts/fetch_geoip.py`, not committed (ADR-0014).
+  NEW_COUNTRY fraud rule and the optional "IP to City Lite" database used by the IMPOSSIBLE_TRAVEL rule are
+  licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). They are downloaded by
+  `scripts/fetch_geoip.py`, not committed (ADR-0014, ADR-0034).
