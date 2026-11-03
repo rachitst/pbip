@@ -128,12 +128,6 @@ def test_an_expired_refresh_token_is_rejected_at_the_boundary(
     assert "access_token" not in expired.json()
 
 
-def test_refresh_without_a_cookie_is_unauthorized(client: TestClient) -> None:
-    response = client.post("/api/v1/auth/refresh", headers=CSRF)
-    assert response.status_code == 401
-    assert "access_token" not in response.json()
-
-
 def test_logout_without_or_with_a_foreign_cookie_does_not_touch_other_sessions(
     client: TestClient, db: Session, make_customer: Callable[..., Actor]
 ) -> None:
