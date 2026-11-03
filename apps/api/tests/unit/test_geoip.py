@@ -70,3 +70,23 @@ def test_real_dbip_database_places_well_known_addresses() -> None:
     assert resolver.country("8.8.8.8") == "US"
     assert resolver.country("81.2.69.142") == "GB"
     assert resolver.country("10.0.0.1") is None
+
+
+def test_a_missing_or_corrupt_country_file_switches_the_rule_off_instead_of_failing(
+    tmp_path: Path,
+) -> None:
+    """Issue #366: ADR-0014 promises that a bad file disables NEW_COUNTRY; before the fix the open
+    error escaped into the fraud dependency and every transfer returned 500."""
+    from pbip_api.core.config import Settings
+    from pbip_api.modules.fraud.dependencies import get_country_resolver
+
+    resolver_for.cache_clear()
+    corrupt = tmp_path / "corrupt.mmdb"
+    corrupt.write_bytes(b"not an mmdb" * 10)
+    try:
+        assert isinstance(resolver_for(str(tmp_path / "absent.mmdb")), NoCountryResolver)
+        assert isinstance(resolver_for(str(corrupt)), NoCountryResolver)
+        settings = Settings(geoip_country_db_path=str(tmp_path / "absent.mmdb"))
+        assert get_country_resolver(settings).country("49.36.0.1") is None
+    finally:
+        resolver_for.cache_clear()

@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.db import utcnow
 from pbip_api.core.geoip import MmdbLocationResolver
 from pbip_api.modules.auth.dependencies import get_request_meta
@@ -364,3 +365,41 @@ def test_bill_payment_fills_the_location_and_is_scored_for_travel(
     ).scalar_one()
     assert (event.features["geo_lat"], event.features["geo_lon"]) == MUMBAI
     assert [r["code"] for r in event.reasons] == ["IMPOSSIBLE_TRAVEL"]
+
+
+@pytest.mark.parametrize("city_path", [None, ""])
+def test_with_no_city_database_the_payment_path_is_unchanged(
+    app: FastAPI,
+    client: TestClient,
+    settings: Settings,
+    make_customer: Callable[..., Actor],
+    make_verified_payee: Callable[..., dict[str, Any]],
+    migrated_engine: Engine,
+    db: Session,
+    city_path: str | None,
+) -> None:
+    """Post-merge review of #365: with GEOIP_CITY_DB_PATH unset or empty, a transfer that WOULD be
+    impossible travel (London sign-in 2 h earlier, request from Mumbai; STEP_UP 35 when the city
+    file is configured, see the test above) is scored exactly as before the rule existed: no
+    lookup, no reason, no score, POSTED. The real ``get_location_resolver`` is used (not
+    overridden); ``model_copy`` skips validation, so ``""`` also exercises the resolver's own guard.
+    """
+    app.dependency_overrides[get_settings] = lambda: settings.model_copy(
+        update={"geoip_city_db_path": city_path}
+    )
+    app.dependency_overrides[get_request_meta] = lambda: RequestMeta(ip=MUMBAI_IP)
+    alice, bob = make_customer(funds=1_000_000), make_customer()
+    payee = make_verified_payee(alice, bob)
+    age_payee(migrated_engine, payee["id"], 48)
+    _login(db, alice, LONDON_IP, utcnow() - timedelta(hours=2))
+
+    transaction_id = _transfer(client, alice, payee)
+
+    event = db.execute(
+        select(FraudEvent).where(FraudEvent.transaction_id == transaction_id)
+    ).scalar_one()
+    assert event.decision == "ALLOW" and event.risk_score == 0 and event.reasons == []
+    assert event.features["location_unknown"] is True
+    assert event.features["geo_lat"] is None and event.features["geo_lon"] is None
+    assert event.features["ip_country"] is None  # no country file either: as before #365
+    assert not any(key.startswith("travel_") for key in event.features)

@@ -8,7 +8,7 @@ Rules enforced here (see AGENTS.md section 6):
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DEV_JWT_SECRET = "local-dev-only-change-me-local-dev-only-change-me"  # noqa: S105
@@ -140,6 +140,17 @@ class Settings(BaseSettings):
     def fraud_demo_lab_enabled(self) -> bool:
         """The staff fraud demo lab (TASK-081) moves money as demo customers: local/test only."""
         return self.app_env in ("local", "test")
+
+    @field_validator("geoip_country_db_path", "geoip_city_db_path", mode="before")
+    @classmethod
+    def _blank_geoip_path_means_unset(cls, value: object) -> object:
+        """``GEOIP_CITY_DB_PATH=`` (as in .env.example) must mean "no database", the same as unset.
+
+        Environment variables arrive as strings, so an empty assignment would otherwise be ``''``
+        rather than ``None`` (found on Windows, where ``dev.py`` exports the .env values)."""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @model_validator(mode="after")
     def _reject_unsafe_deployed_config(self) -> "Settings":
