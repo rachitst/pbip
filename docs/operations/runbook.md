@@ -143,7 +143,8 @@ Overview* (unchanged).
 **Alerts** (`infra/prometheus/alerts.yml`; state at http://localhost:9090/alerts). Page: `ApiHighErrorRate`,
 `CeleryNoWorker`, `ScrapeTargetDown`, `AvailabilityBelow99`, `HealthProbeFailing`. Ticket: `ApiSlowP95`,
 `ApiRouteSlowP95`, `FraudScoringSlow`, `FraudBlockRateHigh`, `LoginFailureSpike`, `CeleryBacklog`, `CeleryTaskFailures`,
-`UnhandledErrors`, `PostgresDeadlocks`, `PostgresConnectionsHigh`. **No notification channel is configured**: there is
+`UnhandledErrors`, `PostgresDeadlocks`, `PostgresConnectionsHigh`, `FeatureDriftWarning`, `FeatureDriftCritical` (fraud-input
+PSI, hourly; ADR-0038). **No notification channel is configured**: there is
 no Alertmanager, so alerts are visible in Prometheus and Grafana only. Choosing where pages go (email, chat) is an
 owner decision for the staging host (#198).
 

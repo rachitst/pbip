@@ -41,6 +41,21 @@ groups:
         for: 15m
         labels: { severity: ticket }
         annotations: { summary: "More than 20% of scored payments are blocked - attack or a mis-calibrated model" }
+      # ---- TASK-068 / ADR-0038: fraud-input drift (PSI recomputed hourly by the worker) ----
+      # The gauge changes once an hour, so `for:` counts hourly results: 150m = three results in a row
+      # in the warning band (moderate drift is a trend; do not flap on one noisy hour), 90m = two results
+      # in a row above 0.25 (act within about two hours, never on a single run). The bounds match
+      # pbip_ml.monitoring.psi.classify, so at most one of the two fires per feature.
+      - alert: FeatureDriftWarning
+        expr: pbip_feature_psi >= 0.1 and pbip_feature_psi <= 0.25
+        for: 150m
+        labels: { severity: ticket }
+        annotations: { summary: "PSI of fraud input {{ $labels.feature }} is {{ $value }} (warning band 0.1-0.25): the last 30 days drifted from the 30 before; review the model" }
+      - alert: FeatureDriftCritical
+        expr: pbip_feature_psi > 0.25
+        for: 90m
+        labels: { severity: ticket }
+        annotations: { summary: "PSI of fraud input {{ $labels.feature }} is {{ $value }} (critical, above 0.25): fraud scores may be mis-calibrated; retrain or recalibrate" }
       - alert: CeleryTaskFailures
         expr: sum by (name) (increase(celery_task_failed_total[15m])) > 0
         labels: { severity: ticket }
