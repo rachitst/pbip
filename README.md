@@ -31,7 +31,7 @@ make dev-api      # terminal 1 -> http://localhost:8000/docs
 make dev-web      # terminal 2 -> http://localhost:5173
 ```
 Or the whole stack in Docker: `make up` -> https://localhost:8443 (local dev CA in `infra/certs/`, so the browser warns once; http://localhost:8080 redirects) (add `make up-all` for Grafana :3000,
-Prometheus :9090, MLflow :5000). Demo logins: `alice@demo.pbip` / `bob@demo.pbip`; the password is `PBIP_DEMO_PASSWORD` if
+Prometheus :9090, MLflow :5000). Demo logins: `alice@demo.pbip` (has an authenticator for the step-up demo: `uv run python scripts/totp.py alice@demo.pbip`), `bob@demo.pbip`, `carol@demo.pbip` (the fraud demo lab's customer); the password is `PBIP_DEMO_PASSWORD` if
 you set it for `make seed`, otherwise (APP_ENV=local only) the `DEMO_PASSWORD` constant in `scripts/seed_dev.py` (never
 printed). Staff TOTP codes: `uv run python scripts/totp.py analyst@demo.pbip`
 (decrypts the MFA secret from the local database; no secrets file is written). Browser journeys: `make test-e2e`
@@ -42,7 +42,7 @@ printed). Staff TOTP codes: `uv run python scripts/totp.py analyst@demo.pbip`
 make check                                   # lint + types + boundaries + security + all tests (what CI runs)
 uv run python demo/demo_scenarios.py idempotency       # 10 identical requests -> 1 transfer
 uv run python demo/demo_scenarios.py fraud-new-payee   # large transfer to a new payee is held
-uv run python demo/demo_scenarios.py bola              # Bob cannot read Alice's account (404)
+uv run python demo/demo_scenarios.py bola              # Bob cannot read Carol's account (404)
 ```
 
 ## Daily workflow

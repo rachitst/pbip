@@ -84,7 +84,7 @@ FREE-AI "safety, resilience and sustainability"; EU AI Act Art. 15; SS1/23 princ
 | Control | Evidence |
 |---|---|
 | Rules-only fail-safe, never ALLOW-all (ADR-0019 decision 3) | `test_fails_safe_to_rules_only_never_allow_all`, `test_a_model_that_raises_also_falls_back` (`ml/tests/test_fraud_hybrid.py`); `test_any_model_problem_falls_back_to_the_rules_never_allow_all`, `test_load_engine_serves_rules_only_without_valid_artifacts`, `test_a_broken_model_stack_never_stops_the_api_from_starting` (`apps/api/tests/integration/test_fraud_hybrid.py`) |
-| Latency budget (50 ms, contract 100 ms) | `test_real_artifacts_load_once_and_score_within_the_latency_budget`; latency p95 24.7 ms served (`docs/ml/fraud-models.md` "Serving") |
+| Latency budget (50 ms, contract 100 ms) | `test_real_model_slower_than_the_budget_falls_back_to_the_rules` and `test_fraud_model_budget_is_bounded_by_the_scoring_contract` (the timeout path and the 5-100 ms setting, deterministic); real latency and fallback rate measured by `scripts/benchmark_fraud_latency.py` (#362), not by a test; latency p95 24.7 ms served (`docs/ml/fraud-models.md` "Serving") |
 | Behaviour-regression suite | `ml/tests/test_fraud_behaviour_regression.py`: `test_known_app_scam_scores_at_least_80`, `test_routine_grocery_payment_scores_at_most_25`, `test_no_change_lowers_a_known_fraud_score` |
 | Train/serve parity | `test_served_row_equals_the_training_row`, `test_loaded_scorer_scores_exactly_like_the_in_memory_one` (`ml/tests/test_fraud_inference.py`) |
 | Tampered artifacts | SHA-256 manifest check: `test_damaged_artifacts_are_refused`; threat model T34 (`docs/security/threat-model.md`) |

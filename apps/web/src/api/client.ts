@@ -49,6 +49,7 @@ export type DemoLabStatus = components["schemas"]["DemoLabStatus"];
 export type SpendingBreakdownResponse = components["schemas"]["SpendingBreakdownResponse"];
 export type CustomerInsightsListResponse = components["schemas"]["CustomerInsightsListResponse"];
 export type CustomerInsightItem = components["schemas"]["CustomerInsightItem"];
+export type InsightOrder = components["schemas"]["InsightOrder"];
 export type ChurnRiskLevel = components["schemas"]["ChurnRiskLevel"];
 export type CustomerInsightDetail = components["schemas"]["CustomerInsightDetail"];
 export type InteractionChannel = components["schemas"]["InteractionChannel"];
@@ -588,12 +589,14 @@ export const api = {
     segment?: string;
     min_churn_risk?: number;
     min_loan_propensity?: number;
+    order_by: InsightOrder;
     limit: number;
     offset: number;
   }) => {
     const params = new URLSearchParams({
       limit: String(filters.limit),
       offset: String(filters.offset),
+      order_by: filters.order_by,
     });
     if (filters.segment) params.set("segment", filters.segment);
     if (filters.min_churn_risk !== undefined)

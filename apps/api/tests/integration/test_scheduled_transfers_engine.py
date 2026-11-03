@@ -1064,3 +1064,101 @@ def test_a_payee_that_is_no_longer_verified_is_not_paid_and_the_order_pauses(
             select(OutboxEvent).where(OutboxEvent.event_type == "SCHEDULED_TRANSFER_PAUSED")
         ).scalars()
         assert len(list(paused)) == 1
+
+
+def _failure_audits(session: Session, inst_id: uuid.UUID) -> list[AuditLog]:
+    return list(
+        session.execute(
+            select(AuditLog)
+            .where(
+                AuditLog.action == "SCHEDULED_TRANSFER_EXECUTION_FAILED",
+                AuditLog.resource_id == str(inst_id),
+            )
+            .order_by(AuditLog.created_at)
+        )
+        .scalars()
+        .all()
+    )
+
+
+def test_identical_same_day_retries_write_one_audit_row_and_the_missed_row_counts_them(
+    migrated_engine: Engine,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+) -> None:
+    """#305: a failing order retried every beat tick must not add an audit row per tick."""
+    alice, _, payee = pair
+    day = date(2026, 11, 1)
+    with Session(migrated_engine) as session:
+        inst_id = _create_instruction(session, alice, payee, amount=200_000, next_run_date=day).id
+
+    for _ in range(5):
+        with Session(migrated_engine) as session:
+            outcome = execute_scheduled_instruction(session, inst_id, today_utc=day)
+        assert outcome == ScheduledExecutionOutcome.RETRYABLE_FAILURE
+
+    with Session(migrated_engine) as session:
+        rows = _failure_audits(session, inst_id)
+        assert len(rows) == 1
+        assert rows[0].details["reason"] == "insufficient_funds"
+        assert rows[0].details["failure_count"] == 1
+        inst_row = session.get(ScheduledTransfer, inst_id)
+        assert inst_row is not None
+        assert inst_row.failure_count == 5  # every attempt is still counted on the order
+
+    # The next day's recovery is the day's final outcome: it carries the attempts and the reason.
+    with Session(migrated_engine) as session:
+        outcome = execute_scheduled_instruction(session, inst_id, today_utc=date(2026, 11, 2))
+    assert outcome == ScheduledExecutionOutcome.RECOVERED
+    with Session(migrated_engine) as session:
+        missed = (
+            session.execute(
+                select(AuditLog).where(
+                    AuditLog.action == "SCHEDULED_TRANSFER_MISSED",
+                    AuditLog.resource_id == str(inst_id),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(missed) == 1
+        assert missed[0].details["missed_date"] == day.isoformat()
+        assert missed[0].details["failed_attempts"] == 5
+        assert missed[0].details["last_failure_reason"] == "insufficient_funds"
+
+
+def test_a_change_of_failure_reason_on_the_same_day_is_audited_again(
+    migrated_engine: Engine,
+    pair: tuple[Actor, Actor, dict[str, Any]],
+    settings: Settings,
+) -> None:
+    alice, _, payee = pair
+    day = date(2026, 11, 1)
+    with Session(migrated_engine) as session:
+        inst_id = _create_instruction(session, alice, payee, amount=200_000, next_run_date=day).id
+
+    with Session(migrated_engine) as session:
+        assert (
+            execute_scheduled_instruction(session, inst_id, today_utc=day)
+            == ScheduledExecutionOutcome.RETRYABLE_FAILURE
+        )
+    with Session(migrated_engine) as session:
+        ledger.deposit(session, alice.account_id, 400_000)
+        session.commit()
+    limited = settings.model_copy(update={"daily_transfer_limit_minor": 200_000 - 1})
+    for _ in range(3):
+        with Session(migrated_engine) as session:
+            outcome = execute_scheduled_instruction(
+                session,
+                inst_id,
+                today_utc=day,
+                payments_service=_service(session, FraudDecision.ALLOW, limited),
+            )
+        assert outcome == ScheduledExecutionOutcome.RETRYABLE_FAILURE
+
+    with Session(migrated_engine) as session:
+        reasons = [row.details["reason"] for row in _failure_audits(session, inst_id)]
+        assert reasons == ["insufficient_funds", "daily_limit_exceeded"]
+        failed = session.execute(
+            select(OutboxEvent).where(OutboxEvent.event_type == "SCHEDULED_TRANSFER_FAILED")
+        ).scalars()
+        assert len(list(failed)) == 1  # the customer is still told once a day

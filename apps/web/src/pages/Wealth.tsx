@@ -28,6 +28,7 @@ import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 import { StatusBadge } from "../ui/StatusBadge";
 import { CHART_COLORS, TOOLTIP_STYLE } from "./insightsChart";
 import { formatRate } from "./Loans";
+import "./LoanCard.css";
 
 /** Wait for typing to settle before asking the server for a maturity quote. */
 export const QUOTE_DEBOUNCE_MS = 300;

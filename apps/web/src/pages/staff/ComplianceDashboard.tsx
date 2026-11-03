@@ -102,13 +102,18 @@ export function Indicators({ data }: { data: ComplianceExceptionsOut }) {
           definition={`Every audit entry's hash re-computed just now: ${countOf(chain.checked, "entry", "entries")} verified${chain.valid ? "" : " before the break"}.`}
         />
       </dl>
+      {/* Title and service levels sit outside the scroll box: as a <caption> they were as wide
+          as the table and, centred, cut off at phone width (TASK-089 bug bash). */}
+      <p id="compliance-kinds-title" className="dashboard-table-title">
+        Exceptions by kind and status, last {period}
+      </p>
+      <p id="compliance-kinds-sla" className="dashboard-table-note">
+        Service levels are set by the bank: an exception should be acknowledged within{" "}
+        {hours(ind.acknowledge_sla_hours)}, a fraud review decided within{" "}
+        {hours(ind.review_sla_hours)}.
+      </p>
       <div className="entries">
-        <table>
-          <caption>
-            Exceptions by kind and status, last {period}. Service levels are set by the bank: an
-            exception should be acknowledged within {hours(ind.acknowledge_sla_hours)}, a fraud
-            review decided within {hours(ind.review_sla_hours)}.
-          </caption>
+        <table aria-labelledby="compliance-kinds-title" aria-describedby="compliance-kinds-sla">
           <thead>
             <tr>
               <th scope="col">Kind</th>

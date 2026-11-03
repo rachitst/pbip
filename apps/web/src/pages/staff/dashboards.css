@@ -10,3 +10,13 @@
   max-width: 100%;
   overflow-x: auto;
 }
+/* A table's title and notes stay outside its scroll box, so they wrap to the section width. */
+.dashboard-table-title {
+  margin: var(--space-4) 0 var(--space-1);
+  font-weight: var(--weight-medium);
+}
+.dashboard-table-note {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
