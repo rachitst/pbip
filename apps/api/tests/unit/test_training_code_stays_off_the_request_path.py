@@ -29,7 +29,15 @@ _HYBRID_DOTENV = "".join(
     f"{line}\n" for line in ("FRAUD_SCORER=hybrid", "FRAUD_MODEL_DIR=models/fraud")
 )
 # Modules that only training jobs may load, in any scorer mode.
-_TRAINING_ONLY = ("pbip_ml.segmentation.pipeline", "pbip_ml.fraud.train")
+# Training, evaluation and promotion code never serve a request (AGENTS.md section 2). Since #354 the
+# hybrid scorer loads its artifacts through ``pbip_ml.fraud.artifacts``, not ``fraud.training``.
+_TRAINING_ONLY = (
+    "pbip_ml.segmentation.pipeline",
+    "pbip_ml.fraud.train",
+    "pbip_ml.fraud.training",
+    "pbip_ml.fraud.evaluation",
+    "pbip_ml.fraud.promotion",
+)
 
 
 def _loaded_modules(cwd: Path, **settings: str) -> list[str]:
@@ -65,7 +73,7 @@ def test_importing_the_api_and_worker_does_not_load_sklearn_or_the_segmentation_
 
 def test_the_hybrid_scorer_still_never_loads_the_training_jobs(tmp_path: Path) -> None:
     """The hybrid scorer needs scikit-learn to unpickle its Isolation Forest (ADR-0019), but the
-    segmentation pipeline and the fraud training CLI stay off the request path."""
+    segmentation pipeline and the fraud training, evaluation and promotion code stay off it."""
     loaded = _loaded_modules(
         tmp_path, FRAUD_SCORER="hybrid", FRAUD_MODEL_DIR=str(tmp_path / "no-models")
     )
