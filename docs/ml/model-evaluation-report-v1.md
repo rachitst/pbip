@@ -420,3 +420,40 @@ measured:
 The registry had no earlier champion, so there was no champion comparison. The run is registered as `pbip-fraud`
 version 1 with the `champion` alias. Exporting it to `models/fraud` (`export-champion`) and loading it into the
 demo stack is a separate, operator step after this change merges.
+
+## 11. Feature contract 2 (#274, #275, ADR-0051): `hybrid-lgbm-iforest-4`
+
+**Changes.** Two new features, `near_threshold_72h` (F7) and `days_since_last_activity` (F8).
+`distinct_devices_7d` now counts debits only. The data is generator v2.4, which adds legitimate inbound transfers
+(L4). The recipe is unchanged (seed 42, 3,000 × 6; held-out seed 4242, 1,500 customers, 6 and 12 months). MLflow run
+`0930d6415eec4b7eaa6bf59c5689bd91`. `-3` is the served artifact from run `4d3a1ae903c4430d8745e9bb20fda674`. It
+is scored on the same v2.4 rows through this branch's serving code, which cuts the row to the booster's own 9
+columns. Numbers are for the hybrid alone (`scripts`-style `batch_risk`), without the API's baseline floor.
+
+| Criterion | Bar | `-3` test / held-out 6 m / held-out 12 m | `-4` test / held-out 6 m / held-out 12 m |
+|---|---|---|---|
+| Hybrid PR-AUC | - | 0.945 / 0.887 / 0.737 | 0.943 / **0.931** / **0.839** |
+| Recall at REVIEW | hybrid clearly above rules | 0.923 / 0.894 / 0.848 | **0.942 / 0.934 / 0.893** |
+| Rules-only recall at REVIEW | - | 0.202 / 0.270 / 0.292 | the same |
+| Legitimate new-payee transfers at REVIEW | ≤ 1% | 0.28% / 0.43% / 0.48% | 0.09% / 0.40% / 0.27% |
+| Legitimate new-payee transfers at STEP_UP or more | ≤ 10% | 7.62% / 8.02% / 8.54% | 7.62% / 8.02% / 8.54% |
+| All legitimate debits at REVIEW | ≤ 0.1% | 4 / 15 / 35 (0.040% / 0.059% / 0.070%) | 5 / 18 / 27 (0.050% / 0.071% / 0.054%) |
+| F8 recall at REVIEW (held-out 12 m, 17 rows) | - | 0.824 | 0.882 |
+
+Mean |SHAP| on the test period: `days_since_last_activity` 0.29 (third), `near_threshold_72h` 0.00.
+
+**Reading these numbers honestly.**
+- `near_threshold_72h` carries no weight. F7's labelled rows are deposits (credits), which the outgoing scorer
+  never trains on (#261). F7 is detected by the STRUCTURING rule (ADR-0046) and the deposit-side monitor, not by
+  this model. The feature is in the contract so the outgoing transfer of a structurer can be scored once labelled
+  examples exist.
+- Most of `days_since_last_activity`'s weight comes from gaps of 0 days. Multi-row scenarios (F2 bursts, F4 home
+  then abroad, F6 credits then pay-out) follow a movement minutes earlier. Ordinary synthetic customers move money
+  every few days (0-4 ordinary transfers a month plus about one credit). Real customers who transact daily are
+  common, so this part of the gain is a property of the synthetic data and may not transfer. The bars on
+  legitimate traffic still hold.
+- The 6-month training data holds no F8 (180 days of dormancy do not fit), so the F8 gain comes from the other
+  signals plus the feature's monotone shape, not from F8 examples. A 12-month training candidate (run
+  `539a586b96484ce882bad7eb99c9059b`, LightGBM PR-AUC 0.895 test / 0.882 held-out 12 m) is reported in the PR.
+- Promotion needs the TASK-038 gate (latency on an idle machine). Until it passes, `-3` stays served. This code
+  serves `-3` unchanged (`test_a_model_trained_before_the_new_features_still_scores`).
