@@ -486,3 +486,18 @@ def test_promotion_commands_default_to_the_trained_export_and_the_served_directo
         assert cmd[-3:] == ["export-champion", "--out", str(dev_mod.ROOT / "models" / "fraud")]
         dev_mod.cmd_promote_model(["--run-id", "abc", "--data", "d"])
         assert mock_run.call_args[0][0][-5:] == ["promote", "--run-id", "abc", "--data", "d"]
+
+
+def test_k6_load_suite_renews_tokens_before_the_access_ttl() -> None:
+    """Regression: setup() signed each user in once, so in a run longer than the access-token TTL
+    (15 min) every request after minute 15 was a 401 (16-minute local run: 3,698 of 33,132
+    requests). Each VU must sign in again before its token reaches the TTL."""
+    from pbip_api.core.config import Settings
+
+    script = (dev_mod.ROOT / "infra" / "k6" / "load.js").read_text(encoding="utf-8")
+    match = re.search(r"TOKEN_MAX_AGE_SECONDS \|\| (\d+)\)", script)
+    assert match is not None
+    ttl_seconds = Settings.model_fields["jwt_access_ttl_minutes"].default * 60
+    assert int(match.group(1)) < ttl_seconds
+    assert "const u = current(" in script  # every iteration goes through the renewal
+    assert "issuedAt" in script.split("export function setup()", 1)[1].split("\n}\n", 1)[0]
