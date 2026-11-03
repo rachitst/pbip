@@ -122,6 +122,13 @@ and the real-threads `test_concurrent_creates_with_one_key_make_exactly_one_stan
   customer's recourse is to cancel the instruction (and create a new one once the bank has cleared
   them), so a blocked standing order can never restart unattended. When it is added, resuming after
   clearance must follow the no-backlog rule (section 7).
+  *Follow-up implemented (issue #304):* `POST /api/v1/fraud/scheduled-transfers/{id}/clear`
+  (`analyst_gate`, required 3-500 character reason) sets `pause_reason = 'CUSTOMER'` and leaves the
+  order `PAUSED`; it never auto-resumes, the customer resumes it through the ordinary resume (which
+  applies the no-backlog roll-forward). It takes the owner's user lock, then the row lock; anything
+  but a `FRAUD_BLOCK` pause (including a second clear) is `409`, like deciding a resolved alert.
+  Audit `SCHEDULED_TRANSFER_FRAUD_BLOCK_CLEARED` (analyst, reason) and outbox
+  `SCHEDULED_TRANSFER_UNLOCKED` (amount only, no score or reason) are in the same transaction.
 * **Customer resume policy for CUSTOMER_ACTION_REQUIRED:** when an instruction was auto-paused due to a
   permanent failure (`pause_reason = 'CUSTOMER_ACTION_REQUIRED'`, e.g. source account frozen/closed or
   payee deleted/unverified), the customer may invoke `POST /scheduled/{id}/resume` only AFTER resolving
