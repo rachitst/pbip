@@ -702,6 +702,9 @@ class PaymentsService:
             .execution_options(populate_existing=True)
         ).scalar_one()
 
+        # A monitor alert (ADR-0051) is on a credit that was posted before it was flagged: the
+        # decision only labels it, and nobody is told the transfer "posted" a second time.
+        already_posted = transaction.status == TransactionStatus.POSTED
         if transaction.status == TransactionStatus.PENDING_REVIEW:
             if release:
                 ledger.capture_hold_and_post(self.session, transaction)
@@ -716,7 +719,7 @@ class PaymentsService:
         alert.resolved_at = utcnow()
 
         handled = settle_other is not None and settle_other(self.session, transaction)
-        if transaction.initiated_by_user_id is not None and not handled:
+        if transaction.initiated_by_user_id is not None and not handled and not already_posted:
             self._enqueue(
                 notifications.TRANSFER_POSTED
                 if transaction.status == TransactionStatus.POSTED

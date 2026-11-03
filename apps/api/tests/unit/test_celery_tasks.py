@@ -77,3 +77,14 @@ def test_beat_relays_the_outbox_every_ten_seconds_and_purges_it_daily() -> None:
     assert len(relay) == 1 and relay[0]["schedule"] == 10.0
     assert len(purge) == 1 and purge[0]["schedule"] == crontab(hour=4, minute=30)
     assert {"pbip.outbox.relay", "pbip.outbox.purge_processed"} <= set(celery_app.tasks)
+
+
+def test_beat_monitors_structured_deposits_hourly_through_a_registered_task() -> None:
+    """#274 / ADR-0051: one hourly entry at :35, away from the :05 payout and :20 drift runs."""
+    schedule = celery_app.conf.beat_schedule
+    entries = [
+        e for e in schedule.values() if e["task"] == "pbip.fraud.monitor_structuring_deposits"
+    ]
+    assert len(entries) == 1
+    assert entries[0]["schedule"] == crontab(minute=35)
+    assert "pbip.fraud.monitor_structuring_deposits" in celery_app.tasks
