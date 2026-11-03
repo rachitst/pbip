@@ -35,6 +35,7 @@ from pbip_api.modules.assistant.llm import (
     strict_schema,
     unavailable_from_http,
 )
+from pbip_api.modules.assistant.prompts import function_calling_prompt
 from pbip_api.modules.assistant.sanitize import redact_for_provider
 from pbip_api.modules.assistant.tools import REGISTRY
 
@@ -46,9 +47,6 @@ GROQ_MAX_COMPLETION_TOKENS = 512
 # Longest pause honoured from a 429 ``retry-after``; a bogus large value must not disable Groq
 # for hours.
 MAX_COOLDOWN_SECONDS = 60.0
-_GROQ_SUFFIX = (
-    "\nCall exactly one function. Call `none` for anything the other functions do not cover."
-)
 
 
 ToolChoice = Literal["required", "auto"]
@@ -160,11 +158,16 @@ class GroqChatModel:
         return f"GroqChatModel(model={self._model!r})"
 
     def request_body(self, system: str, user: str) -> dict[str, object]:
-        """The exact JSON sent: static prompt, function schemas and the REDACTED question."""
+        """The exact JSON sent: static prompt, function schemas and the REDACTED question.
+
+        ``system`` (the JSON-grammar prompt for Ollama) is replaced by the function-calling prompt
+        with the same security rules: the JSON-reply wording makes GPT-OSS call a function named
+        ``json`` (ADR-0036).
+        """
         return {
             "model": self._model,
             "messages": [
-                {"role": "system", "content": system + _GROQ_SUFFIX},
+                {"role": "system", "content": function_calling_prompt()},
                 {"role": "user", "content": redact_for_provider(user, self._private_terms)},
             ],
             "tools": tool_definitions(),
