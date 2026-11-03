@@ -630,6 +630,22 @@ tries `::1` first, but compose publishes Postgres and Redis on `127.0.0.1` only,
 **Fix:** `.env` is never overwritten, so edit it yourself: replace `localhost` with `127.0.0.1` in those three
 URLs (current `.env.example` already uses it), then restart `dev-api` / `dev-worker`.
 
+### Q: Transfers are scored "rules-only" with `model_error=TIMEOUT` on a slow demo machine
+**Cause:** with `FRAUD_SCORER=hybrid` the model step waits at most `FRAUD_MODEL_BUDGET_MS` (default 50 ms).
+Past it the API serves the rules' decision, marked `+rules-only` with a `MODEL_UNAVAILABLE` reason (fail-safe,
+never ALLOW-all). On a slow or busy laptop the model step alone can take longer than 50 ms, so some transfers
+show no model reasons.
+**Fix:** measure the machine first (no database needed; it reads `models/fraud`, never writes it):
+```bash
+uv run python scripts/benchmark_fraud_latency.py --model-dir models/fraud --calls 500 \
+    --budget-ms 50 --budget-ms 100
+```
+It prints p50/p95/p99 of the model step, the fallback rate at each budget and the load average. If the rate at
+50 ms is too high for the demo, set `FRAUD_MODEL_BUDGET_MS` in `.env` (allowed 5-100; the API refuses to start
+outside that range, because the scoring contract is p95 < 100 ms) and restart `dev-api` and `dev-worker`. Close
+other heavy programs first: the rate depends on the load at the time. Results from 3 Nov 2026 on the 2-CPU
+team laptop are in PR #362's description.
+
 ### Q: A port is already in use (`bind: address already in use`)
 PBIP uses 5432 (PostgreSQL), 6379 (Redis), 8000 (API), 5173 (Vite), 8080/8443 (web/nginx), 3000 (Grafana),
 9090 (Prometheus) and 5000 (MLflow). `make doctor` reports which ones are taken. Find the owner:

@@ -49,3 +49,19 @@ def test_production_rejects_unsafe_configuration(overrides: dict[str, object]) -
 def test_cors_origin_list_is_parsed_and_trimmed() -> None:
     settings = Settings(cors_origins=" http://a.test , http://b.test ,")
     assert settings.cors_origin_list == ["http://a.test", "http://b.test"]
+
+
+@pytest.mark.parametrize(
+    ("budget", "valid"), [(4, False), (5, True), (50, True), (100, True), (101, False)]
+)
+def test_fraud_model_budget_is_bounded_by_the_scoring_contract(budget: int, valid: bool) -> None:
+    """#362: the model step may wait at most 100 ms (p95 < 100 ms, AGENTS.md section 8)."""
+    if valid:
+        assert Settings(fraud_model_budget_ms=budget).fraud_model_budget_ms == budget
+        return
+    with pytest.raises(ValueError, match="fraud_model_budget_ms"):
+        Settings(fraud_model_budget_ms=budget)
+
+
+def test_fraud_model_budget_defaults_to_50_ms() -> None:
+    assert Settings.model_fields["fraud_model_budget_ms"].default == 50  # not a local .env value
