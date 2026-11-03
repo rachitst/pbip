@@ -8,6 +8,7 @@ artifacts load once from disk and score every transfer; and a real model slower 
 falls back to the rules. Real latency is measured by ``scripts/benchmark_fraud_latency.py`` (#362).
 """
 
+import json
 import threading
 import uuid
 from collections.abc import Callable, Iterator
@@ -27,6 +28,7 @@ from pbip_api.modules.fraud.models import FraudEvent
 from pbip_ml.fraud.contract import FraudReason, ReasonSource
 from pbip_ml.fraud.hybrid import HybridResult, decide
 from pbip_ml.fraud.rules import RuleContext
+from pbip_ml.fraud.train import HYBRID_VERSION
 from pbip_test_support import Actor, FakeClock, age_payee, totp_code
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -330,7 +332,11 @@ def test_real_artifacts_load_once_and_every_transfer_is_scored_by_the_model(
     purpose; ``test_config`` covers the bounds) means no call can time out on slow hardware. Real
     latency and the fallback rate are measured by ``scripts/benchmark_fraud_latency.py``."""
     engine = load_engine(settings.model_copy(update={"fraud_model_dir": str(model_dir)}))
-    assert engine is not None and engine.params.model_version == "hybrid-lgbm-iforest-2"
+    # The version the training code stamps, as written into the artifacts it produced: no literal,
+    # so a deliberate version bump needs no edit here, while a loader that served other files fails.
+    written = json.loads((model_dir / "hybrid_params.json").read_text(encoding="utf-8"))
+    assert written["model_version"] == HYBRID_VERSION
+    assert engine is not None and engine.params.model_version == HYBRID_VERSION
     use_engine(engine)
     generous = settings.model_copy(update={"fraud_model_budget_ms": 10_000})
     app.dependency_overrides[get_settings] = lambda: generous
@@ -338,11 +344,11 @@ def test_real_artifacts_load_once_and_every_transfer_is_scored_by_the_model(
     first = send(client, alice, payee, 1_000)  # #251: an ordinary transfer to a 2-day-old payee
     first_event = event_for(db, first.json()["id"])
     assert first.json()["status"] == "POSTED", first_event.features
-    assert first_event.risk_score < 30 and first_event.model_version == "hybrid-lgbm-iforest-2"
+    assert first_event.risk_score < 30 and first_event.model_version == HYBRID_VERSION
     for _ in range(24):
         response = send(client, alice, payee, 1_000)  # small: the daily limit never bites
         event = event_for(db, response.json()["id"])
-        assert event.model_version == "hybrid-lgbm-iforest-2", event.features.get("model_error")
+        assert event.model_version == HYBRID_VERSION, event.features.get("model_error")
         assert {"model_probability", "anomaly_score", "rule_points"} <= set(event.features)
         assert "MODEL_UNAVAILABLE" not in {r["code"] for r in event.reasons}
     assert counted_loads == [model_dir]  # loaded once, at start-up; no request reads a file
@@ -427,7 +433,6 @@ def test_champion_exported_from_the_registry_is_what_the_api_loads_at_startup(
 ) -> None:
     """TASK-038: training run -> measured gate -> MLflow 'champion' -> export-champion -> the API's
     unchanged startup loader (checksums verified) serves it. The API itself never calls MLflow."""
-    import json
 
     import mlflow
     from pbip_api.main import create_app
@@ -452,4 +457,4 @@ def test_champion_exported_from_the_registry_is_what_the_api_loads_at_startup(
         mlflow.set_tracking_uri(None)  # type: ignore[arg-type]  # None = unset (mlflow source)
     configured = settings.model_copy(update={"fraud_model_dir": str(served)})
     engine = create_app(configured).state.fraud_engine
-    assert engine is not None and engine.params.model_version == "hybrid-lgbm-iforest-2"
+    assert engine is not None and engine.params.model_version == HYBRID_VERSION

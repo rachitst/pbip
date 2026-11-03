@@ -2,10 +2,12 @@
 
 TASK-031 (combiner and thresholds) and TASK-032 (reason codes). Pure scoring: no I/O, no database.
 
-How a score is made (all parameters are fitted on the VALIDATION split and stored as JSON in
-:class:`HybridParams`, so the decision is reproducible and auditable):
+How a score is made (all parameters are fitted on the training and validation periods, never on
+test data, and stored as JSON in :class:`HybridParams`, so the decision is reproducible and
+auditable):
 
-1. ``p`` = LightGBM probability, **calibrated** with isotonic regression (a lookup table).
+1. ``p`` = LightGBM probability, **calibrated** with isotonic regression (a lookup table) fitted on
+   validation scores plus out-of-time scores from the training period (ADR-0047, #396).
 2. ``a`` = Isolation Forest anomaly score in 0-1.
 3. ``r`` = rule points from the TASK-025 registry (0-100).
 4. Stacked probability ``sigmoid(b0 + b1*p + b2*a + b3*r/100)`` - a logistic regression fitted on
@@ -40,6 +42,11 @@ from pbip_ml.fraud.rules import RuleContext, RuleRegistry, default_registry
 
 STEP_UP_AT, REVIEW_AT, BLOCK_AT = 30, 60, 85
 ANOMALY_REASON_AT = 0.5
+# Inverse L2 strength of the stacked logistic regression (ADR-0047). sklearn's default 1.0 shrank
+# the model weight with ~40-100 validation positives, so a fraud the model was sure of could not
+# reach BLOCK. 10 had the lowest forward-in-time log-loss (stack fitted on the first half of
+# validation, scored on the second half) for both the 1,500- and 3,000-customer recipes.
+STACK_C = 10.0
 TOP_SHAP = 3
 # Rule floors: these rules are bank policy, so a model trained on synthetic data can never score
 # them below their floor. VELOCITY_BURST joined in TASK-080: without it the stacked weights scored
@@ -226,18 +233,31 @@ def fit_params(
     anomaly: AnomalyModel,
     rules: RuleRegistry,
     model_version: str,
+    out_of_time: tuple[np.ndarray, np.ndarray] | None = None,
 ) -> HybridParams:
-    """Isotonic calibration + stacked logistic weights, both fitted on validation only."""
+    """Isotonic calibration + stacked logistic weights (ADR-0047, #396).
+
+    The calibration is fitted on the final model's validation scores PLUS ``out_of_time``
+    (``training.out_of_time_scores``: earlier-period scores from fold models that never saw those
+    rows), so it rests on several times more positives than validation alone. The stack is fitted
+    on validation only (the anomaly model was trained on the training period). Test and held-out
+    data are never used.
+    """
     from sklearn.isotonic import IsotonicRegression
     from sklearn.linear_model import LogisticRegression
 
     y = validation["label"].to_numpy()
     raw = np.asarray(booster.predict(validation[list(MODEL_FEATURES)]))
-    iso = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0).fit(raw, y)
+    cal_raw, cal_y = (
+        (raw, y)
+        if out_of_time is None
+        else (np.concatenate([out_of_time[0], raw]), np.concatenate([out_of_time[1], y]))
+    )
+    iso = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0).fit(cal_raw, cal_y)
     p = iso.predict(raw)
     a = anomaly.score(validation)
     r = np.array([rules.evaluate(rule_context(row)).score for _, row in validation.iterrows()])
-    stack = LogisticRegression(C=1.0, max_iter=1000).fit(np.column_stack([p, a, r / 100]), y)
+    stack = LogisticRegression(C=STACK_C, max_iter=1000).fit(np.column_stack([p, a, r / 100]), y)
     return HybridParams(
         model_version=model_version,
         calibration_x=[float(v) for v in iso.X_thresholds_],
