@@ -70,8 +70,12 @@ function email(i) {
   return `load${String(i).padStart(4, "0")}@perf.pbip`;
 }
 
+// Deterministic round-robin per VU and iteration: load-test data only, and reproducible across
+// runs (CodeQL js/insecure-randomness flagged Math.random here).
+let pickCounter = 0;
 function pick(values) {
-  return values[Math.floor(Math.random() * values.length)];
+  pickCounter += 1;
+  return values[(__VU * 7919 + __ITER * 104729 + pickCounter) % values.length];
 }
 
 // The web catalogue (TASK-112): each type with only the property keys and values it may carry.
