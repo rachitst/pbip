@@ -14,6 +14,7 @@ import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 import { DemographicsSection } from "./DemographicsSection";
 import { MfaEnrolment } from "./MfaEnrolment";
+import { PhoneSection } from "./PhoneSection";
 import { RiskProfileSection } from "./RiskProfileSection";
 
 export function Profile() {
@@ -21,6 +22,7 @@ export function Profile() {
     <div className="page">
       <PageHeader title="Profile & security" />
       <ProfileDetails />
+      <PhoneSection />
       <RiskProfileSection />
       <DemographicsSection />
       <MfaEnrolment />

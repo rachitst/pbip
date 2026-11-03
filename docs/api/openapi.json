@@ -5286,6 +5286,25 @@
         "title": "PayeeVerificationOut",
         "type": "object"
       },
+      "PhoneIn": {
+        "additionalProperties": false,
+        "description": "A mobile number in E.164 form (#398). Stored only encrypted; responses show it masked.",
+        "properties": {
+          "phone": {
+            "description": "E.164: a plus sign, the country code and the number, digits only (for example +919812345678)",
+            "maxLength": 16,
+            "minLength": 9,
+            "pattern": "^\\+[1-9][0-9]{7,14}$",
+            "title": "Phone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "phone"
+        ],
+        "title": "PhoneIn",
+        "type": "object"
+      },
       "PortfolioOut": {
         "properties": {
           "accrued_interest_minor": {
@@ -10180,6 +10199,69 @@
           }
         ],
         "summary": "Get my date of birth, derived age band and recommendations consent",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/api/v1/customers/me/phone": {
+      "delete": {
+        "operationId": "delete_my_phone_api_v1_customers_me_phone_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete my mobile number",
+        "tags": [
+          "customers"
+        ]
+      },
+      "put": {
+        "operationId": "put_my_phone_api_v1_customers_me_phone_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhoneIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set my mobile number (E.164); stored encrypted, returned masked",
         "tags": [
           "customers"
         ]

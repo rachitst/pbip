@@ -32,6 +32,8 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("get", "/api/v1/customers/me/demographics"),
         ("put", "/api/v1/customers/me/date-of-birth"),
         ("delete", "/api/v1/customers/me/date-of-birth"),
+        ("put", "/api/v1/customers/me/phone"),
+        ("delete", "/api/v1/customers/me/phone"),
         ("put", "/api/v1/customers/me/recommendations-consent"),
         ("get", "/api/v1/accounts"),
         ("get", "/api/v1/accounts/summary"),
@@ -190,6 +192,7 @@ def test_staff_have_no_customer_profile(
         client.delete("/api/v1/customers/me/date-of-birth", headers=analyst.headers).status_code
         == 403
     )
+    assert client.delete("/api/v1/customers/me/phone", headers=analyst.headers).status_code == 403
     assert client.get("/api/v1/accounts", headers=analyst.headers).status_code == 403
     assert client.get("/api/v1/accounts/summary", headers=analyst.headers).status_code == 403
     assert client.get("/api/v1/bills/payments", headers=analyst.headers).status_code == 403
@@ -758,7 +761,10 @@ def test_listings_only_contain_the_callers_own_objects(
         headers=alice.headers,
         json={"date_of_birth": "1970-05-05"},
     )
+    client.put("/api/v1/customers/me/phone", headers=alice.headers, json={"phone": "+919812345678"})
     as_alice = f"customer_id={alice.customer_id}"
+    bob_phone = client.get(f"/api/v1/customers/me?{as_alice}", headers=bob.headers)
+    assert bob_phone.status_code == 200 and bob_phone.json()["phone_masked"] is None
     bob_risk = client.get(f"/api/v1/customers/me/risk-profile?{as_alice}", headers=bob.headers)
     assert bob_risk.status_code == 200 and bob_risk.json()["band"] is None
     bob_demo = client.get(f"/api/v1/customers/me/demographics?{as_alice}", headers=bob.headers)

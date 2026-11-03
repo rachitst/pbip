@@ -327,6 +327,12 @@ export const api = {
     }),
   deleteDateOfBirth: () =>
     apiFetch<undefined>("/api/v1/customers/me/date-of-birth", { method: "DELETE" }),
+  setPhone: (phone: string) =>
+    apiFetch<CustomerProfileOut>("/api/v1/customers/me/phone", {
+      method: "PUT",
+      body: JSON.stringify({ phone }),
+    }),
+  deletePhone: () => apiFetch<undefined>("/api/v1/customers/me/phone", { method: "DELETE" }),
   setRecommendationsConsent: (granted: boolean) =>
     apiFetch<DemographicsOut>("/api/v1/customers/me/recommendations-consent", {
       method: "PUT",

@@ -100,6 +100,20 @@ class RiskProfileOut(BaseModel):
     assessed_at: datetime | None = Field(description="When the band was last assessed")
 
 
+class PhoneIn(BaseModel):
+    """A mobile number in E.164 form (#398). Stored only encrypted; responses show it masked."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    phone: str = Field(
+        min_length=9,
+        max_length=16,
+        pattern=r"^\+[1-9][0-9]{7,14}$",
+        description="E.164: a plus sign, the country code and the number, digits only "
+        "(for example +919812345678)",
+    )
+
+
 class DateOfBirthIn(BaseModel):
     """Self-declared date of birth (ADR-0015). The age must be 18 to 120 on the bank's date."""
 
