@@ -1750,7 +1750,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #78 | **Sprint:** 5 | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Fri 30 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** - (partially delivered in #222 on Sat 31 Oct: authenticated batch endpoint, monthly partitions with a daily job creating future months, strict validation; the insert is synchronous and committed before the 202, the < 15 ms target is not measured; 500 events/s load test deferred to #101, see #78) | **Status:** In Progress | **Risk:** Low
+- **Start:** Fri 30 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** - (partially delivered in #222 on Sat 31 Oct: authenticated batch endpoint, monthly partitions with a daily job creating future months, strict validation; the insert is synchronous and committed before the 202, the < 15 ms target is not measured; 500 events/s load test deferred to #101, see #78; #415 in batch #420, 4886dbb: the k6 scenario `infra/k6/events.js` (`make load-events`) with the load-only rate limit, not yet run on a stack) | **Status:** In Progress | **Risk:** Low
 - **Depends on:** none
 - **Mode:** Parallel: can start immediately
 - **Goal:** High-throughput clickstream event ingestion API writing to monthly partitioned PostgreSQL tables.

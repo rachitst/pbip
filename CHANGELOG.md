@@ -87,6 +87,8 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
 - Scheduled Schemathesis API fuzzing (#154, #159, #168), Playwright critical-journey suite (#319, #340, #351, #359),
   mutation testing of the ledger and payments at 96.7% (#297).
 - Faster health checks and ledger indexes (#137, #174).
+- k6 load test for 500 clickstream events/s through `POST /api/v1/events/batch` (`make load-events`, TASK-055,
+  #415).
 - Outbox relay with retries and exponential backoff, audited dead letters, a daily purge and exactly-once delivery
   (ADR-0040, #393, TASK-026); enum CHECK constraints, append-only `security_events` and FK indexes (#393, #315).
 - Celery worker counters and histograms exported through Redis and the API `/metrics` (ADR-0039, #380).
@@ -136,7 +138,7 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
 - Analytics: re-materialise the posting month of reversed transfers (#171); exclude transfers between a customer's
   own accounts from segmentation features (#192); month-end analytics tests (#207); audit follow-ups with one-pass
   segmentation features, exact shares and burn rate, and documented 404s (#394 via #397); the recommendation context
-  reads the health window once, 14 to 10 SQL statements (#395).
+  reads the health window once, 14 to 10 SQL statements (#395), then builds in 6 (#416).
 - Web and API: a refresh without a cookie returns 204 and a forecast for a too-new account returns
   `INSUFFICIENT_HISTORY`, so expected states log no console errors (ADR-0044, #406).
 - Fraud: a missing or unreadable GeoIP file disables NEW_COUNTRY instead of failing payments (#370); blank GeoIP
@@ -173,4 +175,4 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
 - User manual with customer, staff and compliance guides (#374).
 - 43 ADRs (0001-0044; the number 0026 is not used) and the team execution plan with batch status updates (#118, #119, #121, #122, #126, #139, #142,
   #146, #151, #153, #157, #163-#166, #190, #195, #197, #199, #203, #208, #225, #226, #230, #240, #270, #291, #294,
-  #298, #308, #320, #338, #355, #357, #361).
+  #298, #308, #320, #338, #355, #357, #361, #408).
