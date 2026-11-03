@@ -142,3 +142,39 @@ def test_no_panel_or_alert_drops_the_worker_series() -> None:
     rules = yaml.safe_load(ALERTS.read_text(encoding="utf-8"))
     exprs += [rule["expr"] for group in rules["groups"] for rule in group["rules"]]
     assert not [e for e in exprs if re.search(r"\bsource\s*(=|!=|=~|!~)", e)]
+
+
+def _keeps(job: dict[str, object], name: str, source: str) -> bool:
+    """Apply a job's metric_relabel_configs (keep/drop on name;source, regex fully anchored)."""
+    for rule in job.get("metric_relabel_configs", []):  # type: ignore[attr-defined]  # yaml dict
+        value = ";".join({"__name__": name, "source": source}[s] for s in rule["source_labels"])
+        matched = re.fullmatch(rule["regex"], value) is not None
+        if (rule["action"] == "drop" and matched) or (rule["action"] == "keep" and not matched):
+            return False
+    return True
+
+
+def test_every_api_replica_is_scraped_and_redis_backed_series_are_counted_once() -> None:
+    """ADR-0045: with several API replicas a static "api:8000" target scrapes a different process
+    each time, so counters jump. Every replica is discovered through Docker's DNS instead. The
+    worker totals (ADR-0039) and the PSI gauge (ADR-0038) come from Redis, so every replica serves
+    the same values: exactly one job keeps them, or sums would count them once per replica."""
+    jobs = {
+        j["job_name"]: j for j in yaml.safe_load(PROMETHEUS.read_text("utf-8"))["scrape_configs"]
+    }
+    api, shared = jobs["pbip-api"], jobs["pbip-api-shared"]
+    assert api["dns_sd_configs"] == [
+        {"names": ["api"], "type": "A", "port": 8000, "refresh_interval": "15s"}
+    ]
+    assert "static_configs" not in api
+    samples = {
+        ("http_requests_total", ""): "per replica",
+        ("fraud_decisions_total", ""): "per replica",
+        ("fraud_decisions_total", "worker"): "shared",
+        ("transfers_total", "worker"): "shared",
+        ("pbip_feature_psi", ""): "shared",
+    }
+    for (name, source), owner in samples.items():
+        kept_by = [job["job_name"] for job in (api, shared) if _keeps(job, name, source)]
+        expected = "pbip-api" if owner == "per replica" else "pbip-api-shared"
+        assert kept_by == [expected], (name, source)

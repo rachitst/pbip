@@ -28,12 +28,13 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
   a fraud-flagged bill payment is held for analyst review like a transfer (#258).
 - Payee edit with re-verification, payee and bill-payment screens (#301).
 - Scheduled and recurring transfers (#296) with a screen for them (#306); staff can clear a fraud block on a standing
-  order (#363).
+  order (#363); a same-day retry is audited once per state change (#387).
 - Transfer review and confirm with a source-account choice and a step-up modal; escalation after three wrong codes
   (#266).
 
 #### Loans and wealth
-- Loan catalogue, exact EMI schedule and explainable eligibility (#236); loan application, disbursal through the
+- Loan catalogue, exact EMI schedule and explainable eligibility (#236); eligibility counts as income only credits that
+  recur in 2 of the last 3 months (ADR-0043, #404); loan application, disbursal through the
   ledger, repayment schedule and loans screens (#309).
 - Wealth catalogue, fixed-deposit booking and closure through the ledger, portfolio page (#327), and automatic payout
   of fixed deposits at maturity (#341).
@@ -86,6 +87,12 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
 - Scheduled Schemathesis API fuzzing (#154, #159, #168), Playwright critical-journey suite (#319, #340, #351, #359),
   mutation testing of the ledger and payments at 96.7% (#297).
 - Faster health checks and ledger indexes (#137, #174).
+- k6 load test for 500 clickstream events/s through `POST /api/v1/events/batch` (`make load-events`, TASK-055,
+  #415).
+- Outbox relay with retries and exponential backoff, audited dead letters, a daily purge and exactly-once delivery
+  (ADR-0040, #393, TASK-026); enum CHECK constraints, append-only `security_events` and FK indexes (#393, #315).
+- Celery worker counters and histograms exported through Redis and the API `/metrics` (ADR-0039, #380).
+- nginx re-resolves the API container, so recreating the API alone no longer gives 502 (#411).
 
 ### Security
 - MFA (TOTP) for staff, Argon2id passwords, JWT algorithm allow-list, refresh-token rotation with reuse detection,
@@ -98,6 +105,8 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
 - Customer PII keys (full name, date of birth, phone) are redacted from logs (#148); demo MFA secrets and passwords
   stay out of files and logs (#124).
 - Pre-ship security audit, Spectre isolation headers and a nightly OWASP ZAP baseline (#290).
+- PII field-encryption policy: email, name and date of birth are not field-encrypted, with the baseline verified
+  (ADR-0042, #402).
 - CI hardening: SHA-pinned third-party actions, PR-title check, admin-only merges (#117, #123, #125).
 - Dependency advisories fixed: dnspython CVE-2026-114605 (#141), pyasn1 (#207), and Dependabot updates (#31, #34,
   #229, #234, #241, #269).
@@ -119,13 +128,19 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
 - Customer segmentation with K-Means and five personas (#161, #173, #192).
 - Circular transfer / mule ring detection spike with NetworkX (#267).
 - Training code kept off the request path, with an allow-listed artifact loader (#167, #354, #356).
+- Data generator v2.3 (churned customers stop transferring) and a retrained `hybrid-lgbm-iforest-2` with an Optuna
+  study and a SHAP summary (#392, #405). It is **not promoted**: the champion gate refused it on latency on a loaded
+  machine and must be re-run on an idle one.
 
 ### Fixes
 - Payments and transfers: a fraud block on a standing order's final run completes it without a pause reason (#313).
 - Loans: no instalment above the EMI when interest rounds a paisa over it (#242).
 - Analytics: re-materialise the posting month of reversed transfers (#171); exclude transfers between a customer's
   own accounts from segmentation features (#192); month-end analytics tests (#207); audit follow-ups with one-pass
-  segmentation features, exact shares and burn rate, and documented 404s (#394 via #397).
+  segmentation features, exact shares and burn rate, and documented 404s (#394 via #397); the recommendation context
+  reads the health window once, 14 to 10 SQL statements (#395), then builds in 6 (#416).
+- Web and API: a refresh without a cookie returns 204 and a forecast for a too-new account returns
+  `INSUFFICIENT_HISTORY`, so expected states log no console errors (ADR-0044, #406).
 - Fraud: a missing or unreadable GeoIP file disables NEW_COUNTRY instead of failing payments (#370); blank GeoIP
   paths mean no database, and reason times are in UTC (#372).
 - ML: the training test uses its temporary MLflow store even when a local server runs (#279); hybrid latency tests
@@ -134,9 +149,13 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
   (#310); readable relative times in fraud reasons (#311); fixed-deposit recommendation opens the booking dialog
   (#339).
 - Windows: runner defects (#132), backup passphrase privacy check (#334), unit tests on native Windows (#352), and
-  `deploy.sh` and the backup pipeline test under Git Bash (#375).
+  `deploy.sh` and the backup pipeline test under Git Bash (#375); test runs copy only connection keys from `.env`
+  and the benchmark load average is guarded on Windows (#409).
 - Demo: Alice has an authenticator, the fraud lab uses its own customer and reuses sessions, a fresh demo payee, and
   the forecast starts at the current balance (#388).
+- Tests: the backup pipeline test no longer races a closed pipe (#401); SHAP, regex, statement and travel tests check
+  behaviour and cost instead of wall-clock time, and Redis-down tests fail fast (#412); five auth edge-case tests
+  raise auth branch coverage to 95.83% (#410).
 - CI: perf and DAST workflows wait on readiness (#295); deterministic tests for the fraud queue clock, device header
   and fraud stats window (#272, #307, #348).
 
@@ -152,7 +171,8 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
   (#345).
 - Operations: deployment and operations runbook (#152), private-repo readiness checklist (#349).
 - Testing: local verification run (#191), test strategy and verification report (#373).
+- Demo: live demo script with verified amounts and a fallback plan (#377).
 - User manual with customer, staff and compliance guides (#374).
-- 38 ADRs (0001-0041; the numbers 0026, 0039 and 0040 are not used) and the team execution plan with batch status updates (#118, #119, #121, #122, #126, #139, #142,
+- 43 ADRs (0001-0044; the number 0026 is not used) and the team execution plan with batch status updates (#118, #119, #121, #122, #126, #139, #142,
   #146, #151, #153, #157, #163-#166, #190, #195, #197, #199, #203, #208, #225, #226, #230, #240, #270, #291, #294,
-  #298, #308, #320, #338, #355, #357, #361).
+  #298, #308, #320, #338, #355, #357, #361, #408).

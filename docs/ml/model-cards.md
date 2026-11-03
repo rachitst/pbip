@@ -5,9 +5,9 @@ short summary per model. All numbers, evidence and limitations are in the linked
 
 | Model | `model_version` | What it decides | Headline evaluation | Card |
 |---|---|---|---|---|
-| LightGBM fraud classifier | part of `hybrid-lgbm-iforest-2` | Fraud probability for an outgoing payment (input to the hybrid) | Test PR-AUC 0.977, held-out 0.965; TASK-084 tuning kept the current params (report §9) | [lightgbm-fraud.md](model-cards/lightgbm-fraud.md) |
-| Isolation Forest anomaly model | part of `hybrid-lgbm-iforest-2` | Anomaly score and the ANOMALY reason | Test PR-AUC 0.301 alone (report §3.2). Complementary signal only | [isolation-forest.md](model-cards/isolation-forest.md) |
-| Hybrid fraud combiner | `hybrid-lgbm-iforest-2` (demo still serves `-1`) | ALLOW / STEP_UP / REVIEW / BLOCK for transfers and bill payments | PR-AUC 0.922 test, 0.852 held-out; recall at REVIEW 0.865 vs 0.202 rules only (report §9) | [hybrid-fraud-combiner.md](model-cards/hybrid-fraud-combiner.md) |
+| LightGBM fraud classifier | part of `hybrid-lgbm-iforest-3` | Fraud probability for an outgoing payment (input to the hybrid) | Test PR-AUC 0.977, held-out 0.965; TASK-084 tuning kept the current params (report §9) | [lightgbm-fraud.md](model-cards/lightgbm-fraud.md) |
+| Isolation Forest anomaly model | part of `hybrid-lgbm-iforest-3` | Anomaly score and the ANOMALY reason | Test PR-AUC 0.301 alone (report §3.2). Complementary signal only | [isolation-forest.md](model-cards/isolation-forest.md) |
+| Hybrid fraud combiner | `hybrid-lgbm-iforest-3` (demo still serves `-1`) | ALLOW / STEP_UP / REVIEW / BLOCK for transfers and bill payments | PR-AUC 0.945 test, 0.887 held-out; recall at REVIEW 0.923 vs 0.202 rules only (report §10) | [hybrid-fraud-combiner.md](model-cards/hybrid-fraud-combiner.md) |
 | Balance forecast | `forecast-arima-1` | Nothing: shows a predicted balance with intervals | sMAPE mean 10.31%, 80% / 95% coverage 86.6% / 96.4% | [balance-forecast.md](model-cards/balance-forecast.md) |
 | K-Means segmentation | none | Nothing: an analytics persona and a recommendation input | No evaluation report on main | [kmeans-segmentation.md](model-cards/kmeans-segmentation.md) |
 | Product recommendation score | `rules-v1` | Nothing: orders eligible products | Not a trained model. No outcome labels to evaluate against | [recommendation-score.md](model-cards/recommendation-score.md) |

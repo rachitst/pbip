@@ -122,6 +122,9 @@ def test_training_is_deterministic(dataset: pd.DataFrame) -> None:
     assert np.array_equal(a.predict(x), b.predict(x))
 
 
+# Hang guard, not a speed bar (as #362): the full pipeline on 1,500 customers now also trains the
+# three out-of-time calibration folds (#396), well past 60 s on a busy 2-CPU laptop.
+@pytest.mark.timeout(300)
 def test_cli_run_writes_artifacts_and_logs_to_mlflow(
     exported: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -145,6 +148,8 @@ def test_cli_run_writes_artifacts_and_logs_to_mlflow(
     assert run_id and any((tmp_path / "mlruns").rglob("lightgbm.txt"))
     assert report["hybrid"]["params"]["model_version"] == train_cli.HYBRID_VERSION
     assert report["lightgbm"]["params"]["learning_rate"] == t.LGBM_PARAMS["learning_rate"]
+    calibration = report["hybrid"]["calibration"]  # #396: fitted on more than validation alone
+    assert calibration["positives"] > calibration["validation_positives"] > 0
     shap = report["lightgbm"]["shap_mean_abs_test"]  # TASK-084: SHAP summary in the logged report
     assert list(shap) == sorted(shap, key=lambda f: -shap[f]) and set(shap) == set(t.MODEL_FEATURES)
     assert all(v >= 0 for v in shap.values()) and max(shap.values()) > 0
@@ -153,9 +158,47 @@ def test_cli_run_writes_artifacts_and_logs_to_mlflow(
     assert any(k.startswith("shap_mean_abs_") for k in logged.data.metrics)
 
 
-def test_hybrid_version_is_not_the_one_of_the_v2_1_and_v2_2_models() -> None:
-    """TASK-084: both earlier models were served as ``-1``; a retrain must be told apart."""
-    assert train_cli.HYBRID_VERSION == "hybrid-lgbm-iforest-2"
+def test_hybrid_version_tells_the_recalibrated_model_apart() -> None:
+    """TASK-084: both earlier models were served as ``-1``; a retrain must be told apart. #396
+    changed how the calibration and the stack are fitted, so it is ``-3``, not the ``-2`` run."""
+    assert train_cli.HYBRID_VERSION == "hybrid-lgbm-iforest-3"
+
+
+def test_calibration_scores_come_from_models_that_never_saw_those_rows_or_later_ones(
+    dataset: pd.DataFrame, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#396: every out-of-time score is made by a fold model trained only on EARLIER training
+    rows; no validation or test row is used, and the scores carry more positives than validation."""
+    split = t.time_split(dataset)
+    folds: list[tuple[pd.Index, pd.Index]] = []
+    real_train = t.lgb.train
+
+    def spy(params: dict[str, object], train_set: t.lgb.Dataset, **kwargs: object) -> object:
+        seen = train_set.data.index  # before training: LightGBM frees the raw data after it
+        model = real_train(params, train_set, **kwargs)
+
+        class Recording:
+            def predict(self, x: pd.DataFrame) -> object:
+                folds.append((seen, x.index))
+                return model.predict(x)
+
+        assert kwargs["num_boost_round"] == 37  # the final model's number of trees
+        return Recording()
+
+    monkeypatch.setattr(t.lgb, "train", spy)
+    scores, labels = t.out_of_time_scores(split, rounds=37)
+    assert len(folds) == t.CALIBRATION_FOLDS - 1
+    when = split.train["occurred_at"]
+    for fitted_on, scored in folds:
+        assert when[fitted_on].max() < when[scored].min()  # fitted on the past only
+    scored_all = pd.Index(np.concatenate([s.to_numpy() for _, s in folds]))
+    assert scored_all.is_unique and set(scored_all) <= set(split.train.index)
+    assert set(scored_all).isdisjoint(split.validation.index) and set(scored_all).isdisjoint(
+        split.test.index
+    )
+    assert len(scores) == len(labels) == len(scored_all)
+    assert labels.tolist() == split.train.loc[scored_all, "label"].tolist()
+    assert labels.sum() > split.validation["label"].sum()  # the point: more positives
 
 
 def test_lightgbm_params_override_is_used_and_recorded(

@@ -20,7 +20,9 @@ from pbip_ml.recommendations import (
     HeldProductKind,
     generate_recommendations,
 )
-from pbip_ml.recommendations.engine import MODEL_VERSION
+from pbip_ml.recommendations.engine import MODEL_VERSION, SCORE_LABEL
+from pbip_ml.recommendations.propensity import SCORE_LABEL as SIMULATED_SCORE_LABEL
+from pbip_ml.recommendations.propensity import PropensityModel
 from sqlalchemy.orm import Session
 
 from pbip_api.core.calendar import bank_today
@@ -34,6 +36,7 @@ from pbip_api.modules.recommendations.schemas import (
     ProductRecommendationItem,
     RecommendationsResponse,
 )
+from pbip_api.modules.recommendations.scorer import active_propensity
 from pbip_api.modules.wealth import service as wealth_service
 
 NO_SEGMENT = "UNSEGMENTED"  # targeted by no product: segment matching simply does not apply
@@ -105,17 +108,29 @@ def _context(
     )
 
 
+_ACTIVE = object()  # sentinel: use the process-wide model (``scorer.active_propensity``)
+
+
 def get_customer_recommendations(
-    session: Session, customer_id: UUID, now: datetime | None = None, top_k: int = 3
+    session: Session,
+    customer_id: UUID,
+    now: datetime | None = None,
+    top_k: int = 3,
+    propensity: PropensityModel | object | None = _ACTIVE,
 ) -> RecommendationsResponse:
-    """Top ``top_k`` eligible products for the customer, ordered by the rule-based score.
+    """Top ``top_k`` eligible products for the customer, ordered by rules-v1, or by the promoted
+    simulated-uptake model when one is loaded (ADR-0049). The rules always decide eligibility.
 
     The customer route keeps the default of 3; the RM insights view (TASK-066) asks for every
     eligible product so it can find the best loan product even when it is not in the top 3.
     """
     eval_time = now or utcnow()
+    model = active_propensity() if propensity is _ACTIVE else propensity
+    model = model if isinstance(model, PropensityModel) else None
     ctx = _context(session, customer_id, eval_time)
-    recommendations = [] if ctx is None else generate_recommendations(ctx, top_k=top_k)
+    recommendations = (
+        [] if ctx is None else generate_recommendations(ctx, top_k=top_k, propensity=model)
+    )
     return RecommendationsResponse(
         customer_id=customer_id,
         recommendations=[
@@ -131,6 +146,8 @@ def get_customer_recommendations(
             )
             for rec in recommendations
         ],
-        model_version=MODEL_VERSION,
+        model_version=MODEL_VERSION if model is None else model.version,
+        score_version=SCORE_LABEL if model is None else SIMULATED_SCORE_LABEL,
+        score_from_simulated_data=model is not None,
         evaluated_at=eval_time,
     )
