@@ -151,6 +151,8 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
 - Windows: runner defects (#132), backup passphrase privacy check (#334), unit tests on native Windows (#352), and
   `deploy.sh` and the backup pipeline test under Git Bash (#375); test runs copy only connection keys from `.env`
   and the benchmark load average is guarded on Windows (#409).
+- Demo: the seed gives the demo customers a back-dated salary, and Alice a spending history, through guarded ledger
+  postings that are not fraud-scored (ADR-0048, #418).
 - Demo: Alice has an authenticator, the fraud lab uses its own customer and reuses sessions, a fresh demo payee, and
   the forecast starts at the current balance (#388).
 - Tests: the backup pipeline test no longer races a closed pipe (#401); SHAP, regex, statement and travel tests check
@@ -173,6 +175,6 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
 - Testing: local verification run (#191), test strategy and verification report (#373).
 - Demo: live demo script with verified amounts and a fallback plan (#377).
 - User manual with customer, staff and compliance guides (#374).
-- 43 ADRs (0001-0044; the number 0026 is not used) and the team execution plan with batch status updates (#118, #119, #121, #122, #126, #139, #142,
+- 44 ADRs (0001-0044 and 0048; the numbers 0026 and 0045-0047 are not on `main` yet) and the team execution plan with batch status updates (#118, #119, #121, #122, #126, #139, #142,
   #146, #151, #153, #157, #163-#166, #190, #195, #197, #199, #203, #208, #225, #226, #230, #240, #270, #291, #294,
   #298, #308, #320, #338, #355, #357, #361, #408).
