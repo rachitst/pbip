@@ -30,7 +30,7 @@ from pbip_ml.recommendations.engine import (
     PRODUCT_CATALOGUE,
     SAVINGS_ACCOUNT_ID,
 )
-from pbip_test_support import Actor, age_payee
+from pbip_test_support import Actor, age_payee, post_deposit_at
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
@@ -111,6 +111,13 @@ def _spend(
     assert resp.status_code == 201, resp.text
 
 
+def _paid_this_month_and_next(engine: Engine, actor: Actor, salary: int, month: datetime) -> None:
+    """A salary credited now and on the 1st of ``month`` (next month, when the engine is asked):
+    recurring income then (ADR-0041) without adding an earlier, spend-free month to the buffer."""
+    post_deposit_at(engine, actor.account_id, salary, "Salary", utcnow())
+    post_deposit_at(engine, actor.account_id, salary, "Salary", month.replace(day=1, hour=0))
+
+
 def _next_month() -> datetime:
     """Mid next month: this month's spending is then a closed month, which the buffer uses."""
     now = utcnow()
@@ -143,16 +150,19 @@ def test_a_held_deposit_is_suppressed_below_the_top_up_line_and_offered_above_it
     db: Session,
 ) -> None:
     bob = make_customer()
+    month = _next_month()
+    # 4 lakh opening deposit and a 3 lakh salary this month and next: 10 lakh paid in each.
     # Carol spends 2 lakh this month and keeps ~7 lakh: about 3.5 months of buffer, enough for a
     # deposit (2 months) but below the 6-month top-up line once she holds one.
-    carol = make_customer(funds=10_00_000_00)
+    carol = make_customer(funds=4_00_000_00)
+    _paid_this_month_and_next(migrated_engine, carol, 3_00_000_00, month)
     _spend(client, carol, bob, make_verified_payee, migrated_engine, 2_00_000_00)
     # Dave spends 50,000 and keeps ~8.5 lakh: about 17 months, above the top-up line.
-    dave = make_customer(funds=10_00_000_00)
+    dave = make_customer(funds=4_00_000_00)
+    _paid_this_month_and_next(migrated_engine, dave, 3_00_000_00, month)
     _spend(client, dave, bob, make_verified_payee, migrated_engine, 50_000_00)
 
     assert carol.customer_id is not None and dave.customer_id is not None
-    month = _next_month()
     every = len(PRODUCT_CATALOGUE)
     before = recommendations_service.get_customer_recommendations(
         db, carol.customer_id, month, every
@@ -191,7 +201,7 @@ def test_inputs_are_read_only_for_the_callers_own_customer(
     make_customer: Callable[..., Actor],
     engine_inputs: list[CustomerRecommendationContext],
 ) -> None:
-    alice = make_customer(funds=10_00_000_00)
+    alice = make_customer(salary=5_00_000_00)  # recurring income for the loan; 10 lakh balance
     bob = make_customer(funds=50_000_00)
     deposit = _book_deposit(client, alice, 1_00_000_00)
     loan = _take_loan(client, alice, 1_00_000_00)

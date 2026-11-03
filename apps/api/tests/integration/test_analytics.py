@@ -26,7 +26,7 @@ from pbip_api.modules.analytics import repository
 from pbip_api.modules.analytics.models import MonthlyCategorySpending
 from pbip_api.modules.analytics.service import materialize_monthly_spending
 from pbip_api.modules.ledger import service as ledger
-from pbip_test_support import Actor, FakeClock, age_payee
+from pbip_test_support import Actor, FakeClock, age_payee, month_start, post_deposit_at
 from sqlalchemy import Engine, func, select, text
 from sqlalchemy.orm import Session
 
@@ -492,7 +492,7 @@ def test_financial_health_score_moves_with_ledger_activity(
     clock: FakeClock,
 ) -> None:
     """AC3: nothing static. A fresh account scores on what is known, then every transfer moves it."""
-    alice = make_customer(funds=300_000)
+    alice = make_customer(salary=150_000)  # paid last month and this month: 300,000 of income
     bob = make_customer()
     payee = make_verified_payee(alice, bob)
     age_payee(migrated_engine, payee["id"], 48)
@@ -508,7 +508,7 @@ def test_financial_health_score_moves_with_ledger_activity(
 
     data = client.get(url, headers=alice.headers).json()
     comps = data["components"]
-    # income 300,000 (deposit), spend 130,000: savings rate 56.7% -> 30 points
+    # income 300,000 (two salary credits), spend 130,000: savings rate 56.7% -> 30 points
     assert (
         comps["savings_rate"]["score"] == 30 and comps["savings_rate"]["formatted_value"] == "56.7%"
     )
@@ -517,21 +517,30 @@ def test_financial_health_score_moves_with_ledger_activity(
     assert (
         comps["emi_to_income"]["score"] == 25 and comps["emi_to_income"]["assessment"] == "OPTIMAL"
     )
-    # spend sits in the running month: volatility and buffer are unknown until it closes
+    # spend sits in the running month and last month had none: volatility needs two closed
+    # months and the buffer a closed month with spending, so both are unknown until it closes
     assert comps["expense_volatility"]["assessment"] == "INSUFFICIENT_DATA"
     assert comps["buffer_months"]["assessment"] == "INSUFFICIENT_DATA"
     assert data["overall_score"] == 55 and data["rating"] == "FAIR"
-    assert data["months_observed"] == 1 and data["window_months"] == 12
+    assert data["months_observed"] == 2 and data["window_months"] == 12
     assert data["account_id"] == str(alice.account_id) and data["currency"] == "INR"
 
-    # Two months on: closed months [130,000, 0] -> volatile; buffer 170,000 / 65,000 = 2.6 months
+    # Two months on, with the salary still arriving each month: closed months
+    # [0, 130,000, 0] -> volatile; buffer 470,000 / 43,333 = 10.8 months -> full points;
+    # income 600,000, so savings and repayments keep their points.
     _advance_two_calendar_months(clock)
+    later_now = datetime.fromtimestamp(clock.now, tz=UTC)
+    for back in (1, 0):
+        when = month_start(later_now, back) + timedelta(days=4)
+        post_deposit_at(migrated_engine, alice.account_id, 150_000, "Salary", when)
     later = client.get(url, headers=alice.headers).json()
     comps = later["components"]
     assert comps["expense_volatility"]["assessment"] == "VOLATILE"
-    assert comps["buffer_months"]["assessment"] == "LOW" and comps["buffer_months"]["score"] == 14
-    assert later["overall_score"] == 69 and later["rating"] == "GOOD"
-    assert any("cash buffer covers 2.6 months" in tip for tip in later["recommendations"])
+    assert (
+        comps["buffer_months"]["assessment"] == "OPTIMAL" and comps["buffer_months"]["score"] == 20
+    )
+    assert comps["buffer_months"]["formatted_value"] == "10.8 months"
+    assert later["overall_score"] == 75 and later["rating"] == "GOOD"
 
     # Bob cannot read Alice's score (BOLA).
     assert client.get(url, headers=bob.headers).status_code == 404
@@ -594,7 +603,7 @@ def test_transfers_between_own_accounts_are_neither_income_nor_spend(
     db: Session,
 ) -> None:
     """Audit H3: moving money between pockets must not inflate one account's income or the other's spend."""
-    alice = make_customer(funds=300_000)
+    alice = make_customer(salary=150_000)  # 300,000 of recurring income on the first account
     opened = client.post(
         "/api/v1/accounts", headers=alice.headers, json={"account_type": "CURRENT"}
     )
@@ -615,7 +624,7 @@ def test_transfers_between_own_accounts_are_neither_income_nor_spend(
     assert owned == {alice.account_id, second}
     source = repository.get_financial_health_metrics(db, alice.account_id, owned, utcnow())
     target = repository.get_financial_health_metrics(db, second, owned, utcnow())
-    assert (source.income_minor, source.spend_minor) == (300_000, 0)  # the deposit only
+    assert (source.income_minor, source.spend_minor) == (300_000, 0)  # the salary only
     assert (target.income_minor, target.spend_minor) == (0, 0)
     for url in (
         f"/api/v1/analytics/health-score?account_id={alice.account_id}",

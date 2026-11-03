@@ -653,7 +653,7 @@ def test_a_deposit_is_neither_spending_nor_income_in_analytics(
 ) -> None:
     """Booking moves the customer's own money into their deposit (ADR-0025): counted as spend it
     would depress the health score of exactly the customers who save."""
-    alice = make_customer(funds=FUNDS)
+    alice = make_customer(salary=FUNDS // 2)  # recurring income of FUNDS, and a FUNDS balance
     deposit = _book(client, alice).json()
     clock.advance(3 * DAY)
     _close(client, alice, deposit["id"])  # principal back, no interest in the first week

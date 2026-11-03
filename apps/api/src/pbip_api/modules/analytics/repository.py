@@ -4,6 +4,8 @@ The ledger is read through its models only (no ledger internals are called) and 
 the only table this module writes is ``monthly_category_spending``.
 """
 
+import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
@@ -38,6 +40,18 @@ NOT_ACTIVITY_TYPES = (
     TransactionType.FD_BOOKING,
     TransactionType.FD_CLOSURE,
 )
+# Income is recurring inflow (ADR-0041): a source of credits (the paying account and the payment
+# reference without its dates and numbers) counts only when it paid in at least
+# INCOME_MIN_RECURRING_MONTHS distinct calendar months among the running month and the
+# INCOME_RECURRENCE_MONTHS - 1 before it. A one-off credit, such as an opening deposit, is not
+# income.
+INCOME_RECURRENCE_MONTHS = 3
+INCOME_MIN_RECURRING_MONTHS = 2
+_MONTH_WORDS = re.compile(
+    r"\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sept?(ember)?"
+    r"|oct(ober)?|nov(ember)?|dec(ember)?)\b"
+)
+_NON_LETTERS = re.compile(r"[^a-z]+")
 SCHEDULED_CHANNEL = "SCHEDULED"  # transactions.channel of the scheduled-transfer engine (ADR-0023)
 
 
@@ -49,7 +63,8 @@ class HealthMetrics:
     between pockets was not earned or consumed.
     """
 
-    income_minor: int  # CREDIT entries of POSTED deposits and transfers from other parties
+    income_minor: int  # CREDIT entries of POSTED deposits and transfers from other parties,
+    # from recurring sources only (``recurring_income_minor``; ADR-0041)
     spend_minor: int  # DEBIT entries of POSTED non-REVERSAL transactions to other parties
     closed_monthly_spend_minor: list[int]  # every closed calendar month since the first entry,
     # oldest first, zero-filled; the running month is excluded (it is partial)
@@ -72,6 +87,40 @@ def _closed_months(first: datetime, now: datetime) -> list[tuple[int, int]]:
         months.append((year, month))
         year, month = (year + 1, 1) if month == 12 else (year, month + 1)
     return months
+
+
+def income_source_key(
+    payer_account_id: UUID | None, reference: str | None
+) -> tuple[UUID | None, str]:
+    """Who paid and what for, with the month names and numbers that change every month removed,
+    so "Salary Oct 2026" and "Salary November 2026" from one payer are the same source."""
+    text = _MONTH_WORDS.sub(" ", (reference or "").lower())
+    return payer_account_id, " ".join(_NON_LETTERS.sub(" ", text).split())
+
+
+def recurring_income_minor(
+    credits: Iterable[tuple[tuple[UUID | None, str], datetime, int]], now: datetime
+) -> int:
+    """Sum of the income-candidate credits whose source recurs (see INCOME_RECURRENCE_MONTHS).
+
+    ``credits`` are ``(source key, created_at, amount)``. Every credit of a recurring source in
+    the window counts; a source seen in only one recent month (an opening deposit, a one-off gift)
+    counts for nothing, so loans, the savings rate and the assistant are not sized from it.
+    """
+    current = now.year * 12 + now.month - 1
+    recent: dict[tuple[UUID | None, str], set[int]] = {}
+    totals: dict[tuple[UUID | None, str], int] = {}
+    for key, created_at, amount in credits:
+        stamp = created_at.astimezone(UTC)
+        index = stamp.year * 12 + stamp.month - 1
+        totals[key] = totals.get(key, 0) + amount
+        if 0 <= current - index < INCOME_RECURRENCE_MONTHS:
+            recent.setdefault(key, set()).add(index)
+    return sum(
+        total
+        for key, total in totals.items()
+        if len(recent.get(key, ())) >= INCOME_MIN_RECURRING_MONTHS
+    )
 
 
 def owned_account_ids(session: Session, customer_id: UUID) -> set[UUID]:
@@ -105,7 +154,8 @@ def get_financial_health_metrics(
         )
         .order_by(TransactionEntry.created_at)
     )
-    income = spend = debt = 0
+    spend = debt = 0
+    credits: list[tuple[tuple[UUID | None, str], datetime, int]] = []
     by_month: dict[tuple[int, int], int] = {}
     first: datetime | None = None
     for amount, direction, created_at, tx_type, reference, debit_acc, credit_acc in session.execute(
@@ -114,7 +164,7 @@ def get_financial_health_metrics(
         first = first or created_at
         if direction == EntryDirection.CREDIT:
             if tx_type in INCOME_TYPES and debit_acc not in owned:
-                income += int(amount)
+                credits.append((income_source_key(debit_acc, reference), created_at, int(amount)))
             continue
         if credit_acc in owned:
             continue  # moved to another of the customer's own accounts
@@ -125,6 +175,7 @@ def get_financial_health_metrics(
         )
         if is_debt_repayment(reference):
             debt += int(amount)
+    income = recurring_income_minor(credits, now)
     if first is None:
         return HealthMetrics(income, spend, [], 0, debt, 0)
     begin = first.astimezone(UTC)

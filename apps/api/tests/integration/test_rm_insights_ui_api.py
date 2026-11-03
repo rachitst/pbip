@@ -78,7 +78,7 @@ def test_loan_propensity_is_reported_and_filtered_on_the_server(
     make_staff: Callable[..., Actor],
     assign_rm: Callable[..., None],
 ) -> None:
-    rich = make_customer(funds=200_000_00)  # one month of 2,00,000 income: a loan is eligible
+    rich = make_customer(salary=100_000_00)  # 1,00,000 salary a month: a loan is eligible
     poor_customer = make_customer(funds=100)  # too little income for any loan product
     rm = make_staff(RoleName.RELATIONSHIP_MANAGER)
     assign_rm(rm, rich, poor_customer)

@@ -1,7 +1,7 @@
 """Unit tests for analytics categorization and service logic."""
 
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from pbip_api.modules.analytics.categorization import categorize_transaction, is_debt_repayment
@@ -9,7 +9,13 @@ from pbip_api.modules.analytics.health import (
     calculate_volatility_component,
     compute_financial_health_score,
 )
-from pbip_api.modules.analytics.repository import HealthMetrics, _closed_months, window_start
+from pbip_api.modules.analytics.repository import (
+    HealthMetrics,
+    _closed_months,
+    income_source_key,
+    recurring_income_minor,
+    window_start,
+)
 from pbip_api.modules.analytics.schemas import (
     CategorySpendingItem,
     FinancialHealthScoreResponse,
@@ -174,7 +180,7 @@ def test_health_score_zero_income_burning_cash_is_zero_and_flagged() -> None:
     assert resp.components.expense_volatility.assessment == "INSUFFICIENT_DATA"
     assert resp.components.emi_to_income.assessment == "INSUFFICIENT_DATA"
     assert resp.components.buffer_months.assessment == "VULNERABLE"
-    assert any("No active credit inflows" in tip for tip in resp.recommendations)
+    assert any("No regular income recorded yet" in tip for tip in resp.recommendations)
 
 
 def test_health_score_high_overdraft_and_debt_burden() -> None:
@@ -291,3 +297,61 @@ def test_debt_repayment_detection_uses_word_boundaries(
 def test_window_start_covers_twelve_calendar_months() -> None:
     assert window_start(datetime(2026, 10, 29, tzinfo=UTC), 12) == datetime(2025, 11, 1, tzinfo=UTC)
     assert window_start(datetime(2026, 1, 5, tzinfo=UTC), 12) == datetime(2025, 2, 1, tzinfo=UTC)
+
+
+NOW = datetime(2026, 11, 3, 12, tzinfo=UTC)
+CLEARING = uuid4()
+
+
+def _credit(
+    reference: str, month: int, amount: int, year: int = 2026
+) -> tuple[tuple[UUID | None, str], datetime, int]:
+    return income_source_key(CLEARING, reference), datetime(year, month, 2, tzinfo=UTC), amount
+
+
+def test_a_one_off_opening_deposit_is_not_income() -> None:
+    """#381: an INR 1,00,000 opening deposit alone used to count as a month's salary."""
+    assert recurring_income_minor([_credit("Demo opening balance", 11, 1_00_000_00)], NOW) == 0
+    # two one-offs with different purposes in different months are still not a pattern
+    credits = [_credit("Demo opening balance", 10, 1_00_000_00), _credit("Gift", 11, 5_000_00)]
+    assert recurring_income_minor(credits, NOW) == 0
+
+
+def test_a_salary_in_two_of_the_last_three_months_is_income_and_one_offs_are_not() -> None:
+    credits = [
+        _credit("Demo opening balance", 9, 2_50_000_00),
+        _credit("Salary Sep 2026 ACME", 9, 60_000_00),
+        _credit("SALARY - October 2026 - ACME", 10, 60_000_00),
+    ]
+    assert recurring_income_minor(credits, NOW) == 1_20_000_00
+
+
+def test_a_salary_that_stopped_three_months_ago_is_no_longer_income() -> None:
+    old = [_credit("Salary", month, 60_000_00) for month in (5, 6, 7, 8)]
+    assert recurring_income_minor(old, NOW) == 0  # nothing in September, October or November
+    assert recurring_income_minor([*old, _credit("Salary", 10, 60_000_00)], NOW) == 0
+    assert recurring_income_minor([*old, *(_credit("Salary", m, 1) for m in (10, 11))], NOW) == (
+        4 * 60_000_00 + 2
+    )
+
+
+def test_the_recurrence_window_spans_the_year_boundary() -> None:
+    january = datetime(2027, 1, 10, tzinfo=UTC)
+    credits = [_credit("Salary", 11, 50_000_00), _credit("Salary Dec", 12, 50_000_00)]
+    assert recurring_income_minor(credits, january) == 1_00_000_00
+
+
+def test_the_same_reference_from_different_payers_are_different_sources() -> None:
+    other = uuid4()
+    credits = [
+        _credit("Salary", 10, 50_000_00),
+        (income_source_key(other, "Salary"), datetime(2026, 11, 1, tzinfo=UTC), 50_000_00),
+    ]
+    assert recurring_income_minor(credits, NOW) == 0
+
+
+def test_income_source_key_drops_dates_numbers_and_punctuation() -> None:
+    assert income_source_key(CLEARING, "Salary Oct 2026")[1] == "salary"
+    assert income_source_key(CLEARING, "SALARY-November/26 #4411")[1] == "salary"
+    assert income_source_key(CLEARING, "Rent from Ravi, 3rd floor")[1] == "rent from ravi rd floor"
+    assert income_source_key(CLEARING, None) == (CLEARING, "")

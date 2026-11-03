@@ -29,8 +29,9 @@ DEBT_POINTS = 25
 BUFFER_POINTS = 20
 TARGET_SAVINGS_RATE = 0.20
 NO_INCOME_TIP = (
-    f"No active credit inflows recorded in the last {HEALTH_WINDOW_MONTHS} months. "
-    "Set up direct deposits so income and savings can be measured."
+    "No regular income recorded yet: income is money from the same payer in at least 2 of the "
+    "last 3 months, so a one-off deposit does not count. Once a salary or other regular credit "
+    "arrives, income and savings can be measured."
 )
 
 

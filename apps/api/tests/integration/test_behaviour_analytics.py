@@ -76,7 +76,7 @@ def population(
     """A, B: HIGH_NET_WORTH; C: BUDGET_CONSCIOUS; D: never segmented."""
     app.dependency_overrides[get_fraud_scorer] = lambda: FixedDecisionScorer(FraudDecision.ALLOW)
     a = make_customer(funds=1_00_000_00)
-    b = make_customer(funds=1_00_000_00)
+    b = make_customer(salary=50_000_00)  # recurring income for the loan (ADR-0041); 1 lakh balance
     c, d = make_customer(), make_customer()
     assign_segment(migrated_engine, a, "HIGH_NET_WORTH", 30_000_00)
     assign_segment(migrated_engine, b, "HIGH_NET_WORTH", 50_000_00)

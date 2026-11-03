@@ -178,6 +178,12 @@ def post_spend_at(
         ledger.post_transaction(session, txn, ledger.transfer_legs(txn))
         session.commit()
         txn_id = txn.id
+    _redate_transaction(engine, txn_id, when)
+    return txn_id
+
+
+def _redate_transaction(engine: Engine, txn_id: UUID, when: datetime) -> None:
+    """Date one posted transaction and its entries ``when`` (test-only history fixtures)."""
     with engine.begin() as connection:
         connection.execute(
             text("ALTER TABLE transaction_entries DISABLE TRIGGER transaction_entries_immutable")
@@ -193,6 +199,22 @@ def post_spend_at(
         connection.execute(
             text("ALTER TABLE transaction_entries ENABLE TRIGGER transaction_entries_immutable")
         )
+
+
+def post_deposit_at(
+    engine: Engine, account_id: UUID, amount: int, reference: str, when: datetime
+) -> UUID:
+    """Credit the account through ``ledger.deposit``, then date it ``when`` (like ``post_spend_at``).
+
+    Income history needs credits in several calendar months (ADR-0041: income is recurring).
+    """
+    from pbip_api.modules.ledger import service as ledger
+    from sqlalchemy.orm import sessionmaker
+
+    with sessionmaker(bind=engine)() as session:
+        txn_id = ledger.deposit(session, account_id, amount, reference=reference).id
+        session.commit()
+    _redate_transaction(engine, txn_id, when)
     return txn_id
 
 

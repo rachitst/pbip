@@ -28,7 +28,7 @@ def test_recommendations_happy_path(
     make_customer: Callable[..., Actor],
 ) -> None:
     """Customer receives top-3 personalized product recommendations with reasons."""
-    alice = make_customer(funds=200_000_00)
+    alice = make_customer(salary=100_000_00)
 
     resp = client.get("/api/v1/recommendations", headers=alice.headers)
 
@@ -72,7 +72,7 @@ def test_recommendations_use_the_customers_real_figures_and_ignore_date_of_birth
     client: TestClient, make_customer: Callable[..., Actor], db: Session
 ) -> None:
     """Reasons quote the real balance; a date of birth without consent changes nothing (ADR-0015)."""
-    alice = make_customer(funds=200_000_00)
+    alice = make_customer(salary=100_000_00)
     before = client.get("/api/v1/recommendations", headers=alice.headers).json()
     reasons = [reason for item in before["recommendations"] for reason in item["reasons"]]
     assert reasons, before
