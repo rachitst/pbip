@@ -354,6 +354,8 @@ def get_customer_activity(
 
 FORECAST_HISTORY_DAYS = 180
 FORECAST_HISTORY_SHOWN_DAYS = 30
+FORECAST_MIN_HISTORY_DAYS = 2
+NOT_ENOUGH_FORECAST_HISTORY = "at least two days of account history are needed for a forecast"
 
 
 def _loan_obligations(
@@ -475,14 +477,28 @@ def get_balance_forecast(
     scheduled obligations with the model forecast of the rest (TASK-043). Predicted, not exact.
 
     Read-only: the assistant's tool calls this too. The forecast always reaches the month end,
-    even when ``horizon_days`` is shorter, so the month-end figure is always there.
+    even when ``horizon_days`` is shorter, so the month-end figure is always there. A new account
+    with too little history gets ``status="INSUFFICIENT_HISTORY"`` and no figures (#382): that is
+    an expected state, not an error, so it is a 200 rather than a 422.
     """
     from pbip_ml.forecasting.model import MODEL_VERSION  # lazy: numba
 
     account = verify_account_ownership(session, customer_id, account_id)
     history = repository.daily_balances(session, account.id, now, FORECAST_HISTORY_DAYS)
-    if len(history) < 2:
-        raise UnprocessableError("at least two days of account history are needed for a forecast")
+    if len(history) < FORECAST_MIN_HISTORY_DAYS:
+        return BalanceForecastResponse(
+            status="INSUFFICIENT_HISTORY",
+            account_id=account.id,
+            currency=account.currency,
+            method="none",
+            model_version=MODEL_VERSION,
+            history_days=len(history),
+            horizon_days=horizon_days,
+            points=[],
+            history=[],
+            obligations=[],
+            end_of_month=None,
+        )
     today = now.date()
     history_start = today - timedelta(days=len(history))
     eom = projection.month_end(today)
@@ -542,7 +558,7 @@ def get_balance_forecast_with_alert(
     """
     forecast = get_balance_forecast(session, customer_id, account_id, horizon_days, now)
     eom = forecast.end_of_month
-    if eom.low_balance:
+    if eom is not None and eom.low_balance:
         account = verify_account_ownership(session, customer_id, account_id)
         added = notifications_service.notify_projected_low_balance(
             session,

@@ -832,7 +832,15 @@
             "type": "string"
           },
           "end_of_month": {
-            "$ref": "#/components/schemas/EndOfMonthProjection"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EndOfMonthProjection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null only when status is INSUFFICIENT_HISTORY"
           },
           "history": {
             "description": "Actual end-of-day balances of the last 30 days before the first point",
@@ -859,7 +867,7 @@
             "type": "string"
           },
           "method": {
-            "description": "auto_arima, seasonal_naive or naive (by history length)",
+            "description": "auto_arima, seasonal_naive or naive (by history length); none when status is INSUFFICIENT_HISTORY",
             "title": "Method",
             "type": "string"
           },
@@ -882,6 +890,16 @@
             },
             "title": "Points",
             "type": "array"
+          },
+          "status": {
+            "default": "OK",
+            "description": "INSUFFICIENT_HISTORY: fewer than two days of balance history, so there is no forecast yet (points and history are empty, end_of_month is null). An expected state of a new account, not an error",
+            "enum": [
+              "OK",
+              "INSUFFICIENT_HISTORY"
+            ],
+            "title": "Status",
+            "type": "string"
           }
         },
         "required": [
@@ -9254,6 +9272,12 @@
               }
             },
             "description": "Successful Response"
+          },
+          "204": {
+            "description": "No refresh cookie was sent: signed out, nothing to restore (no token)"
+          },
+          "401": {
+            "description": "The refresh cookie is invalid, expired, revoked or reused"
           },
           "422": {
             "content": {

@@ -26,7 +26,7 @@ def test_forecast_is_labelled_with_intervals_from_the_account_history(
     resp = _forecast(client, alice, alice.account_id)
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["label"] == "Predicted, not exact"
+    assert body["label"] == "Predicted, not exact" and body["status"] == "OK"
     assert body["method"] == "seasonal_naive" and body["history_days"] >= 19
     assert len(body["points"]) == 30
     for p in body["points"]:
@@ -39,7 +39,14 @@ def test_forecast_needs_history_and_an_owned_account(
     client: TestClient, make_customer: Callable[..., Actor]
 ) -> None:
     alice, bob = make_customer(funds=10_000_00), make_customer(funds=10_000_00)
-    assert _forecast(client, alice, alice.account_id).status_code == 422
+    # #382: a new account is an expected state, not an error: 200 with no figures.
+    new = _forecast(client, alice, alice.account_id)
+    assert new.status_code == 200, new.text
+    body = new.json()
+    assert body["status"] == "INSUFFICIENT_HISTORY" and body["method"] == "none"
+    assert (body["points"], body["history"], body["obligations"]) == ([], [], [])
+    assert body["end_of_month"] is None and body["history_days"] == 0
+    assert body["account_id"] == str(alice.account_id) and body["horizon_days"] == 30
     assert _forecast(client, alice, bob.account_id).status_code == 404
     assert _forecast(client, alice, alice.account_id, 6).status_code == 422
     assert _forecast(client, alice, alice.account_id, 91).status_code == 422

@@ -262,6 +262,8 @@ def balance_forecast(ctx: ToolContext, raw: Mapping[str, object]) -> ToolReply:
     forecast = analytics_service.get_balance_forecast(
         ctx.session, ctx.customer_id, account.id, args.horizon_days, ctx.now
     )
+    if forecast.status == "INSUFFICIENT_HISTORY" or not forecast.points:
+        raise ToolInputError(analytics_service.NOT_ENOUGH_FORECAST_HISTORY)
     last = forecast.points[-1]
     money = forecast.currency
     low, high = format_minor(last.lower_80_minor, money), format_minor(last.upper_80_minor, money)

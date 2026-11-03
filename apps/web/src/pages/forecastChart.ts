@@ -1,6 +1,16 @@
 import type { BalanceForecastResponse, ForecastObligation } from "../api/client";
 import { formatMinor } from "../lib/money";
 
+/** A forecast with figures: the API sends ``INSUFFICIENT_HISTORY`` with no month-end projection
+ * for an account too new to forecast (#382), which the page shows as an empty state. */
+export type ProjectedForecast = BalanceForecastResponse & {
+  end_of_month: NonNullable<BalanceForecastResponse["end_of_month"]>;
+};
+
+export function isProjected(forecast: BalanceForecastResponse): forecast is ProjectedForecast {
+  return forecast.status !== "INSUFFICIENT_HISTORY" && forecast.end_of_month !== null;
+}
+
 /** One x position of the forecast chart: an actual past balance or a predicted day. */
 export interface ForecastRow {
   date: string;
@@ -72,7 +82,7 @@ export function shortDate(iso: string): string {
 }
 
 /** The text alternative of the chart: what it shows, in one sentence per fact. */
-export function forecastSummary(forecast: BalanceForecastResponse): string {
+export function forecastSummary(forecast: ProjectedForecast): string {
   const eom = forecast.end_of_month;
   const money = (minor: number) => formatMinor(minor, forecast.currency);
   const last = forecast.points[forecast.points.length - 1];
