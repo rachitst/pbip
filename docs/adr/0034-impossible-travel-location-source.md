@@ -1,5 +1,6 @@
 # ADR 0034: DB-IP City Lite as the location source for the IMPOSSIBLE_TRAVEL fraud rule
-- Status: Accepted (under owner's standing approval, 2026-11-03)
+- Status: Accepted (under owner's standing approval, 2026-11-03). Merged in #365 before review, under a WIP
+  commit title (see "Review after merge" below); reviewed after merge and completed in the follow-up PR.
 - Date: 2026-11-03
 - Deciders: Architecture Team
 
@@ -106,6 +107,42 @@ and adding one is a contract change for a later ADR once the generator emits coo
    request-path network call. 5. No invented figures: vendor facts are quoted with their date and meaning, the
    thresholds are stated as policy defaults, and no accuracy or detection rate is claimed. 6. In scope: Blueprint
    §8 F4 (MUST), FR-45 / UC-09.
+
+## Review after merge (2026-11-03)
+#365 reached `main` as `b0f47fb` with the commit title "wip impossible-travel rule". Its only real commit was the
+WIP commit the lead made when work was paused, and the squash merge reused that message. The code was complete
+and CI was green (14/14), but nobody had reviewed it. The lead reviewed it in full after the merge:
+
+* **Rule off when no city file is set.** With `GEOIP_CITY_DB_PATH` unset or empty,
+  `location_resolver_for` returns `NoLocationResolver`, so the payment and bill services fill no `geo_lat`/`geo_lon`
+  and `ip_country` is exactly what it was before. `impossible_travel()` returns at its first line without querying
+  the database, and the score, reasons and decision are unchanged. The only visible difference is three keys in
+  the staff-only snapshot (`geo_lat: null`, `geo_lon: null`, `location_unknown: true`) and the
+  `baseline-rules` version number.
+* **Existing payment tests.** In `test_transfers.py`, `test_bills.py` and `test_fraud_hybrid.py`, #365 changed only
+  the version string. No decision, score or status assertion was changed.
+* **Fixed in the follow-up PR:**
+  1. `GEOIP_CITY_DB_PATH=`, as written in `.env.example`, was read as `''`, not `None`. On Windows
+     `dev.py test-unit` exports the `.env` values, so `test_travel_defaults_and_policy_from_settings` failed. Blank
+     GeoIP paths, city and country, are now normalised to `None` in `Settings`. Before this fix the rule was
+     already off for `''`, because `location_resolver_for` treats any falsy path as unset.
+  2. The reason labelled times as UTC without converting them. They are now converted.
+
+  Both have regression tests that fail without the fix. A new API-level test covers the payment path with the
+  rule off: it runs a transfer that would be impossible travel, with no city file and with an empty path, and
+  checks it is scored as before.
+* **Hybrid bars, re-measured on `main` after #365, #367 and #370** (model v2.2, seed 42 test / 4242 held-out):
+
+  | Bar | Limit | Result |
+  |---|---|---|
+  | Legitimate new-payee transfers held for review | ≤ 1% | 0.09% / 0.30% |
+  | Legitimate new-payee transfers asked to verify (step-up) | ≤ 10% | 7.49% / 7.99% |
+  | All legitimate payments held for review | ≤ 0.1% | 0.020% / 0.039% |
+  | Fraud caught at review, hybrid vs rules only | — | 0.808 vs 0.202 (held-out hybrid 0.805) |
+
+  IMPOSSIBLE_TRAVEL cannot change these numbers offline. The synthetic transfers carry `ip_country` and `ip_city`
+  but no coordinates, so the rule always records `location_unknown` there. Its effect on live false positives
+  stays unmeasured, as stated above.
 
 ## Consequences
 * F4 is scored when the city file is deployed; without it nothing changes except `location_unknown: true` in
