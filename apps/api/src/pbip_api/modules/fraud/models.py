@@ -5,6 +5,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
+from pbip_ml.fraud.contract import FraudDecision
 from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -30,6 +31,7 @@ class FraudEvent(Base):
         Index("ix_fraud_events_decision_created_at", "decision", "created_at"),
         # Read on every scored payment (recent decisions) and by the monitoring API (TASK-079).
         Index("ix_fraud_events_customer_id_created_at", "customer_id", "created_at"),
+        in_check("decision", FraudDecision, "decision_valid"),
     )
 
     id: Mapped[UUID] = uuid_pk()
@@ -52,6 +54,7 @@ class FraudAlert(Base):
         Index("ix_fraud_alerts_status_created_at", "status", "created_at"),
         # FK, and the alert queue's transaction_id filter (the demo lab finds its own alert)
         Index("ix_fraud_alerts_transaction_id", "transaction_id"),
+        Index("ix_fraud_alerts_assigned_to_user_id", "assigned_to_user_id"),  # FK index (#315)
     )
 
     id: Mapped[UUID] = uuid_pk()
