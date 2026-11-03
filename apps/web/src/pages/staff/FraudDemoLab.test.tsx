@@ -246,13 +246,13 @@ describe("fraud demo lab (TASK-081)", () => {
     // Customer calls carry the customer's token and never the staff cookie.
     for (const c of customerCalls().slice(1)) {
       expect(c.credentials).toBe("omit");
-      expect(c.headers.get("Authorization")).toBe("Bearer token-alice@demo.pbip");
+      expect(c.headers.get("Authorization")).toBe("Bearer token-carol@demo.pbip");
     }
     // The analyst reads the alert for THIS transfer, with the staff session.
     const lookup = calls.find((c) => c.url.includes("/fraud/alerts?"));
     expect(lookup?.url).toContain("transaction_id=tx-1");
     expect(lookup?.credentials).toBe("include");
-    expect(lookup?.headers.get("Authorization")).not.toBe("Bearer token-alice@demo.pbip");
+    expect(lookup?.headers.get("Authorization")).not.toBe("Bearer token-carol@demo.pbip");
     const sent = calls.find((c) => c.url.endsWith("/api/v1/transfers"));
     expect(sent?.body).toMatchObject({ amount_minor: 3_000_000, from_account_id: "acc-alice" });
     expect(sent?.headers.get("Idempotency-Key")).toMatch(/^lab-[0-9a-f-]{36}$/);
@@ -295,6 +295,48 @@ describe("fraud demo lab (TASK-081)", () => {
       true,
     );
     expect(calls.some((c) => c.url.endsWith("/api/v1/payees") && c.method === "POST")).toBe(false);
+  });
+
+  it("signs each customer in once and reuses the session for later runs (sign-in rate limit)", async () => {
+    // Regression (TASK-089 bug bash): every run signed in afresh, so a pass through the
+    // scenarios plus the analyst's own sign-in used up the 10-a-minute sign-in limit (429).
+    renderLab();
+    const user = await enterPassword();
+    await user.click(screen.getByRole("button", { name: "Run F1 APP scam" }));
+    expect(await screen.findByRole("heading", { name: /F1 APP scam: finished/ })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Run F5 Amount anomaly" }));
+    expect(
+      await screen.findByRole("heading", { name: /F5 Amount anomaly: finished/ }),
+    ).toBeVisible();
+    expect(screen.getByText("Use the open session of carol@demo.pbip")).toBeInTheDocument();
+
+    const logins = calls.filter((c) => c.url.endsWith("/auth/login"));
+    expect(logins).toHaveLength(1);
+    const transfers = calls.filter((c) => c.url.endsWith("/api/v1/transfers"));
+    expect(transfers).toHaveLength(2);
+    for (const t of transfers) {
+      expect(t.headers.get("Authorization")).toBe("Bearer token-carol@demo.pbip");
+    }
+  });
+
+  it("signs in again after the API refuses a reused session", async () => {
+    let refuse = false;
+    handler = happyServer((call) =>
+      refuse && call.url.endsWith("/api/v1/accounts")
+        ? json(401, { code: "unauthorized", title: "Session expired" })
+        : undefined,
+    );
+    renderLab();
+    const user = await enterPassword();
+    await user.click(screen.getByRole("button", { name: "Run F1 APP scam" }));
+    expect(await screen.findByRole("heading", { name: /F1 APP scam: finished/ })).toBeVisible();
+    refuse = true;
+    await user.click(screen.getByRole("button", { name: "Run F1 APP scam" }));
+    expect(await screen.findByRole("heading", { name: /F1 APP scam: stopped/ })).toBeVisible();
+    refuse = false;
+    await user.click(screen.getByRole("button", { name: "Run F1 APP scam" }));
+    expect(await screen.findByRole("heading", { name: /F1 APP scam: finished/ })).toBeVisible();
+    expect(calls.filter((c) => c.url.endsWith("/auth/login"))).toHaveLength(2);
   });
 
   it("F3 fails three sign-ins, then pays from a device that differs from the usual one", async () => {
@@ -359,7 +401,7 @@ describe("fraud demo lab (TASK-081)", () => {
     const [inbound, forward] = calls.filter((c) => c.url.endsWith("/api/v1/transfers"));
     expect(inbound?.headers.get("Authorization")).toBe("Bearer token-bob@demo.pbip");
     expect(inbound?.body).toMatchObject({ amount_minor: 2_400_000, from_account_id: "acc-bob" });
-    expect(forward?.headers.get("Authorization")).toBe("Bearer token-alice@demo.pbip");
+    expect(forward?.headers.get("Authorization")).toBe("Bearer token-carol@demo.pbip");
     expect(forward?.body).toMatchObject({ amount_minor: 2_280_000 });
     const internal = calls.find(
       (c) =>

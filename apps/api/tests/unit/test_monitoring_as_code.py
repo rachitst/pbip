@@ -17,7 +17,9 @@ DASHBOARDS = sorted((ROOT / "infra" / "grafana" / "dashboards").glob("*.json"))
 ALERTS = ROOT / "infra" / "prometheus" / "alerts.yml"
 PROMETHEUS = ROOT / "infra" / "prometheus" / "prometheus.yml"
 # Families owned by this application; anything else in an expression comes from an exporter.
-OWN_PREFIXES = ("http_request", "fraud_", "transfers_", "idempotent_", "login_", "unhandled_")
+OWN_PREFIXES = (
+    "http_request", "fraud_", "transfers_", "idempotent_", "login_", "unhandled_", "pbip_feature_"
+)  # fmt: skip
 SUFFIXES = ("_bucket", "_count", "_sum", "_total", "_created")
 
 
@@ -99,3 +101,34 @@ def test_availability_alert_and_monthly_figure_exist() -> None:
     scrape = yaml.safe_load(PROMETHEUS.read_text(encoding="utf-8"))
     jobs = {job["job_name"] for job in scrape["scrape_configs"]}
     assert {"pbip-api", "blackbox", "celery", "postgres", "redis"} <= jobs
+
+
+def _alerts() -> dict[str, dict[str, object]]:
+    rules = yaml.safe_load(ALERTS.read_text(encoding="utf-8"))
+    return {r["alert"]: r for g in rules["groups"] for r in g["rules"] if "alert" in r}
+
+
+def test_feature_drift_alerts_use_the_psi_thresholds_with_hourly_for_durations() -> None:
+    """TASK-068 / ADR-0038: warning band [0.1, 0.25], critical above 0.25 (the same boundaries as
+    ``pbip_ml.monitoring.psi.classify``), each held for more than one hourly result."""
+    from pbip_ml.monitoring.psi import CRITICAL_THRESHOLD, WARNING_THRESHOLD
+
+    alerts = _alerts()
+    warning, critical = alerts["FeatureDriftWarning"], alerts["FeatureDriftCritical"]
+    assert warning["expr"] == (
+        f"pbip_feature_psi >= {WARNING_THRESHOLD} and pbip_feature_psi <= {CRITICAL_THRESHOLD}"
+    )
+    assert critical["expr"] == f"pbip_feature_psi > {CRITICAL_THRESHOLD}"
+    assert (warning["for"], critical["for"]) == ("150m", "90m")
+    for rule in (warning, critical):
+        assert "{{ $labels.feature }}" in str(rule["annotations"])
+
+
+def test_fraud_dashboard_plots_feature_psi_with_both_thresholds() -> None:
+    board = json.loads((ROOT / "infra/grafana/dashboards/pbip-fraud.json").read_text("utf-8"))
+    panel = next(p for p in board["panels"] if "pbip_feature_psi" in json.dumps(p.get("targets")))
+    steps = panel["fieldConfig"]["defaults"]["thresholds"]["steps"]
+    assert [s["value"] for s in steps] == [None, 0.1, 0.25]
+    assert panel["targets"][0]["legendFormat"] == "{{feature}}"
+    ids = [p["id"] for p in board["panels"]]
+    assert len(ids) == len(set(ids))

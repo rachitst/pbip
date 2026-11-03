@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import secrets
 import sys
 from dataclasses import replace
@@ -282,13 +283,25 @@ def test_tools_run_on_host_or_in_container_without_the_password_in_argv() -> Non
         backup.PgTools("db; rm -rf /")
 
 
+def _python(code: str) -> list[str]:
+    """A pipeline stage run by this interpreter: no POSIX printf/cat/false on a Windows PATH (#371)."""
+    return [sys.executable, "-c", code]
+
+
+_PRODUCE = _python("import sys; sys.stdout.buffer.write(b'abc')")
+_COPY = _python("import sys; sys.stdout.buffer.write(sys.stdin.buffer.read())")
+
+
 def test_run_pipeline_reports_both_exit_codes(tmp_path: Path) -> None:
+    # The full parent environment: Python on Windows needs SYSTEMROOT to start.
+    env = dict(os.environ)
     out = tmp_path / "out"
     with out.open("wb") as handle:
-        codes = backup.run_pipeline(["printf", "abc"], ["cat"], {"PATH": "/usr/bin:/bin"}, handle)
+        codes = backup.run_pipeline(_PRODUCE, _COPY, env, handle)
     assert codes == (0, 0)
     assert out.read_bytes() == b"abc"
-    assert backup.run_pipeline(["false"], ["cat"], {"PATH": "/usr/bin:/bin"}) == (1, 0)
+    assert backup.run_pipeline(_python("raise SystemExit(1)"), _COPY, env) == (1, 0)
+    assert backup.run_pipeline(_PRODUCE, _python("raise SystemExit(3)"), env) == (0, 3)
 
 
 def test_a_failing_pipeline_stage_fails_the_dump(tmp_path: Path) -> None:

@@ -796,8 +796,9 @@ def test_bola_rm_only_reaches_assigned_customers(
         }
         for name, response in attempts.items():
             assert response.status_code == 404, f"{name} {target}: got {response.status_code}"
-    listed = client.get("/api/v1/insights/customers", headers=h).json()
-    assert (listed["items"], listed["total"]) == ([], 0)
+    for order in ("CHURN_RISK", "PROPENSITY"):  # TASK-056: the propensity order is scoped too
+        listed = client.get(f"/api/v1/insights/customers?order_by={order}", headers=h).json()
+        assert (listed["items"], listed["total"]) == ([], 0), order
     steal = client.put(
         f"/api/v1/insights/customers/{victim.customer_id}/assignment",
         headers=h,

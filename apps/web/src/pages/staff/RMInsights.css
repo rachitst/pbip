@@ -1,0 +1,12 @@
+/* TASK-056: the product-match cell of the RM leads table. The reason wraps under the score and
+   stays narrow, so the table keeps its own horizontal scroll region on phones. */
+.rm-product {
+  min-width: 12rem;
+  max-width: 18rem;
+}
+.rm-product-reason {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  white-space: normal;
+}

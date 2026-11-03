@@ -356,6 +356,91 @@
           "legendFormat": "replays"
         }
       ]
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "Model input drift (PSI, TASK-068, ADR-0038)",
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Feature PSI: amount / velocity (warning > 0.1, critical > 0.25)",
+      "description": "Population Stability Index of the fraud scorer's inputs, last 30 days vs the 30 days before, recomputed hourly by the worker (pbip.fraud.evaluate_feature_drift). No line means no result: fewer than 100 payments in a window, or the job has not run for 3 hours. Alerts: FeatureDriftWarning, FeatureDriftCritical.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 3,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.1
+              },
+              {
+                "color": "red",
+                "value": 0.25
+              }
+            ]
+          },
+          "custom": {
+            "stacking": {
+              "mode": "none"
+            },
+            "fillOpacity": 0,
+            "thresholdsStyle": {
+              "mode": "line+area"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (feature) (pbip_feature_psi)",
+          "legendFormat": "{{feature}}"
+        }
+      ]
     }
   ]
 }

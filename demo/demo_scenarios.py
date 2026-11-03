@@ -5,6 +5,8 @@
     uv run python demo/demo_scenarios.py bola
 
 Prerequisite: `make seed` (demo users) and the API running (make dev-api / make up).
+The scenarios sign in as Carol and Bob, who have no authenticator (scripts/seed_dev.py): a
+password-only sign-in. Alice has one, for the step-up demo in the web app.
 """
 
 import json
@@ -83,9 +85,9 @@ def show(title: str) -> None:
 
 
 def idempotency() -> None:
-    alice, bob = login("alice@demo.pbip"), login("bob@demo.pbip")
-    src, dst = account(alice), account(bob)
-    payee = verified_payee(alice, dst["account_number"], "Bob Demo")
+    carol, bob = login("carol@demo.pbip"), login("bob@demo.pbip")
+    src, dst = account(carol), account(bob)
+    payee = verified_payee(carol, dst["account_number"], "Bob Demo")
     key = f"demo-{uuid.uuid4().hex}"
     body = {
         "from_account_id": src["id"],
@@ -93,47 +95,58 @@ def idempotency() -> None:
         "payee_id": payee,
         "reference": "idempotency demo",
     }
-    show(f"Alice balance before: {src['ledger_balance_minor']}")
+    show(f"Carol balance before: {src['ledger_balance_minor']}")
     show("Firing 10 IDENTICAL requests at once (same Idempotency-Key)")
     with ThreadPoolExecutor(max_workers=10) as pool:
         results = list(
             pool.map(
-                lambda _: call("POST", "/api/v1/transfers", alice, body, {"Idempotency-Key": key}),
+                lambda _: call("POST", "/api/v1/transfers", carol, body, {"Idempotency-Key": key}),
                 range(10),
             )
         )
     for status, headers, payload in results:
         replayed = headers.get("idempotent-replayed", "false")
         sys.stdout.write(f"  HTTP {status}  transfer={payload['id'][:8]}  replayed={replayed}\n")
-    after = account(alice)["ledger_balance_minor"]
+    after = account(carol)["ledger_balance_minor"]
     ids = {payload["id"] for _, _, payload in results}
     sys.stdout.write(
         f"\nDistinct transfers created: {len(ids)}   "
-        f"Alice balance after: {after} (moved {src['ledger_balance_minor'] - after})\n"
+        f"Carol balance after: {after} (moved {src['ledger_balance_minor'] - after})\n"
     )
     assert len(ids) == 1, "duplicate transfers were created!"
 
 
-def fraud_new_payee() -> None:
-    alice, bob = login("alice@demo.pbip"), login("bob@demo.pbip")
-    src, dst = account(alice), account(bob)
+def new_external_payee(token: str) -> str:
+    """A payee created NOW at another bank, so the fraud rules see a brand-new payee on every run.
+    Reusing "Bob Demo" stopped working once that payee was older than the rules' new-payee window
+    (TASK-089 bug bash): the transfer then posted instead of being held. Another bank's payee is
+    verified without a name check, so no second customer is needed."""
+    tag = uuid.uuid4().hex
     status, _, created = call(
         "POST",
         "/api/v1/payees",
-        alice,
-        {"name": "Bob Demo", "account_number": dst["account_number"]},
+        token,
+        {
+            "name": f"Demo new payee {tag[:6]}",
+            "account_number": str(int(tag[:12], 16))[-12:].rjust(12, "0"),
+            "bank_code": "EXTB0001",
+        },
     )
-    payee = (
-        created["id"]
-        if status == 201
-        else next(p["id"] for p in call("GET", "/api/v1/payees", alice)[2])
-    )
-    call("POST", f"/api/v1/payees/{payee}/verify", alice)
+    assert status == 201, created
+    payee_id = str(created["id"])
+    call("POST", f"/api/v1/payees/{payee_id}/verify", token)
+    return payee_id
+
+
+def fraud_new_payee() -> None:
+    carol = login("carol@demo.pbip")
+    src = account(carol)
+    payee = new_external_payee(carol)
     show("Large transfer to a brand-new payee (>= 25,000.00)")
     status, _, payload = call(
         "POST",
         "/api/v1/transfers",
-        alice,
+        carol,
         {"from_account_id": src["id"], "amount_minor": 3_000_000, "payee_id": payee},
         {"Idempotency-Key": f"demo-{uuid.uuid4().hex}"},
     )
@@ -144,10 +157,10 @@ def fraud_new_payee() -> None:
 
 
 def bola() -> None:
-    alice, bob = login("alice@demo.pbip"), login("bob@demo.pbip")
-    alice_account = account(alice)
-    show("Bob tries to read Alice's account by changing the id in the URL")
-    status, _, payload = call("GET", f"/api/v1/accounts/{alice_account['id']}", bob)
+    carol, bob = login("carol@demo.pbip"), login("bob@demo.pbip")
+    carol_account = account(carol)
+    show("Bob tries to read Carol's account by changing the id in the URL")
+    status, _, payload = call("GET", f"/api/v1/accounts/{carol_account['id']}", bob)
     sys.stdout.write(
         f"  HTTP {status}  {payload['title']!r}   (404 - indistinguishable from 'does not exist')\n"
     )

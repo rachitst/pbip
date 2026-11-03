@@ -22,7 +22,6 @@ from pbip_api.core.errors import NotFoundError, UnprocessableError
 from pbip_api.modules.accounts.service import mask_account_number
 from pbip_api.modules.analytics import behaviour, projection, repository, unusual
 from pbip_api.modules.analytics.health import compute_financial_health_score
-from pbip_api.modules.analytics.models import MonthlyCategorySpending
 from pbip_api.modules.analytics.policy import verify_account_ownership
 from pbip_api.modules.analytics.projection import ModelDay
 from pbip_api.modules.analytics.schemas import (
@@ -57,6 +56,48 @@ def percentage_change(current: int, previous: int) -> float | None:
     return round((current - previous) / previous * 100, 2)
 
 
+def percentage_shares(amounts: list[int]) -> list[float]:
+    """Each amount's share of the total in percent (2 decimals), summing to exactly 100.
+
+    Rounding each share on its own can total 99.99 or 100.01 (#175). Largest remainder: floor every
+    share in hundredths of a percent, then give the leftover hundredths to the largest remainders
+    (ties to the earlier item, so the result is deterministic).
+    """
+    total = sum(amounts)
+    if total <= 0:
+        return [0.0 for _ in amounts]
+    scaled = [amount * 10_000 for amount in amounts]
+    floors = [value // total for value in scaled]
+    leftover = 10_000 - sum(floors)
+    by_remainder = sorted(range(len(amounts)), key=lambda i: (-(scaled[i] % total), i))
+    for index in by_remainder[:leftover]:
+        floors[index] += 1
+    return [hundredths / 100 for hundredths in floors]
+
+
+def burn_rate_change(
+    current_total: int, current_days: int, previous_total: int, previous_days: int
+) -> float | None:
+    """Change of the exact daily spend rate in percent; None without a previous spend.
+
+    Computed from the totals, not from the integer-truncated ``daily_burn_rate_minor`` values, so
+    a small previous month (rate truncated to 0) still yields a number (#175).
+    """
+    if previous_total <= 0:
+        return None
+    change = (current_total * previous_days - previous_total * current_days) / (
+        previous_total * current_days
+    )
+    return round(change * 100, 2)
+
+
+def _days_counted(year: int, month: int, now: datetime) -> int:
+    """Days the burn rate divides by: elapsed days of the running month, else the whole month."""
+    if (year, month) == (now.year, now.month):
+        return max(now.day, 1)
+    return calendar.monthrange(year, month)[1]
+
+
 def is_closed_month(year: int, month: int, now: datetime) -> bool:
     return (year, month) < (now.year, now.month)
 
@@ -73,7 +114,7 @@ def previous_closed_months(now: datetime, count: int) -> list[tuple[int, int]]:
 
 def _monthly_aggregates(
     session: Session, account_id: UUID, year: int, month: int
-) -> list[MonthlyCategorySpending]:
+) -> list[repository.CategorySpend]:
     if is_closed_month(year, month, utcnow()):
         stored = repository.get_preaggregated_monthly_spending(session, account_id, year, month)
         if stored:
@@ -142,14 +183,15 @@ def get_spending_breakdown(
 
     records = _monthly_aggregates(session, account.id, target_year, target_month)
     total_spend = sum(r.total_amount_minor for r in records)
+    shares = percentage_shares([r.total_amount_minor for r in records])
     categories = [
         CategorySpendingItem(
             category=r.category,
             amount_minor=r.total_amount_minor,
-            percentage=round(r.total_amount_minor / total_spend * 100, 2) if total_spend else 0.0,
+            percentage=share,
             transaction_count=r.transaction_count,
         )
-        for r in records
+        for r, share in zip(records, shares, strict=True)
     ]
     return SpendingBreakdownResponse(
         account_id=account.id,
@@ -164,12 +206,11 @@ def get_spending_breakdown(
 
 
 def _summary(
-    records: list[MonthlyCategorySpending], year: int, month: int, now: datetime
+    records: list[repository.CategorySpend], year: int, month: int, now: datetime
 ) -> MonthlySpendingSummary:
     """Totals of a month; the burn rate divides by the days elapsed so far for the running month."""
     total = sum(r.total_amount_minor for r in records)
-    running = (year, month) == (now.year, now.month)
-    days = max(now.day, 1) if running else calendar.monthrange(year, month)[1]
+    days = _days_counted(year, month, now)
     return MonthlySpendingSummary(
         period=f"{year:04d}-{month:02d}",
         year=year,
@@ -228,8 +269,11 @@ def get_spending_trends(
             current.total_spend_minor, previous.total_spend_minor if previous else 0
         ),
         daily_burn_rate_minor=current.daily_burn_rate_minor,
-        burn_rate_change_percentage=percentage_change(
-            current.daily_burn_rate_minor, previous.daily_burn_rate_minor if previous else 0
+        burn_rate_change_percentage=burn_rate_change(
+            current.total_spend_minor,
+            _days_counted(curr_year, curr_month, now),
+            previous.total_spend_minor if previous else 0,
+            _days_counted(prev_year, prev_month, now),
         ),
         top_categories_increasing=increasing[:5],
         top_categories_decreasing=decreasing[:5],
@@ -450,6 +494,7 @@ def get_balance_forecast(
         repository.scheduled_debits_by_day(session, account.id, now, FORECAST_HISTORY_DAYS),
     )
     method, model_days = _model_days(discretionary, model_horizon, today)
+    model_days = projection.anchor(model_days, account.ledger_balance + paid_in_history)
     obligations = upcoming_obligations(session, customer_id, account.id, today, until)
     days = projection.project(model_days, today, paid_in_history, obligations)
     shown = history[-FORECAST_HISTORY_SHOWN_DAYS:]

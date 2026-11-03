@@ -150,6 +150,7 @@ def test_rows_carry_only_what_an_rm_needs(
         "churn_risk_level",
         "top_recommended_product",
         "top_product_score",
+        "top_product_reason",
         "loan_product",
         "loan_propensity_score",
         "high_value",

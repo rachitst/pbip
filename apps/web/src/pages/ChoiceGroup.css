@@ -1,0 +1,19 @@
+/* Radio choices (Statements format, risk-profile questionnaire). Component stylesheet: tokens only.
+   The global input rule makes every input a full-width, control-height text box; a radio then
+   renders as a large circle centred above its label (TASK-089 bug bash). Keep it its own size,
+   on the same line as the label. */
+.choice-group label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--text);
+}
+.choice-group input[type="radio"] {
+  display: inline-block;
+  flex: none;
+  width: auto;
+  min-height: auto;
+  margin: 0;
+  padding: 0;
+}
