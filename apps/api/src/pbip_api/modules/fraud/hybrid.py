@@ -90,11 +90,12 @@ class HybridFraudScorer:
         budget_ms: int,
         counters: VelocityCounters | None = None,
         travel: TravelPolicy | None = None,
+        settings: Settings | None = None,
     ) -> None:
         self.session = session
         self.engine = engine
         self.budget_seconds = budget_ms / 1000
-        self.baseline = BaselineRulesScorer(session, counters, travel)
+        self.baseline = BaselineRulesScorer(session, counters, travel, settings=settings)
 
     def score(self, context: TransactionContext) -> FraudScoreResult:
         started = time.perf_counter()
