@@ -163,7 +163,7 @@ class SecurityEvent(Base):
 
     __tablename__ = "security_events"
     __table_args__ = (
-        # Append-only is enforced by the ``security_events_immutable`` trigger (migration 0027).
+        # Append-only is enforced by the ``security_events_immutable`` trigger (migration 0028).
         in_check("event_type", SecurityEventType, "event_type_valid"),
         Index("ix_security_events_user_id_created_at", "user_id", "created_at"),
         Index("ix_security_events_event_type_created_at", "event_type", "created_at"),

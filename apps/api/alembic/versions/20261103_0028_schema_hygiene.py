@@ -1,7 +1,7 @@
 """Schema hygiene from the LLD (issue #315): enum CHECKs, append-only security_events, FK indexes.
 
-Revision ID: 0027
-Revises: 0026
+Revision ID: 0028
+Revises: 0027
 Create Date: 2026-11-03
 
 * CHECKs on the three enum-valued columns that had none: ``security_events.event_type``,
@@ -28,8 +28,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0027"
-down_revision: str | None = "0026"
+revision: str = "0028"
+down_revision: str | None = "0027"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -223,7 +223,7 @@ def _assert_existing_rows_satisfy_checks() -> None:
             violations.append(f"{table}: {count} row(s) violate {name}")
     if violations:
         raise RuntimeError(
-            "migration 0027 stopped, existing data would break new CHECK constraints; "
+            "migration 0028 stopped, existing data would break new CHECK constraints; "
             "fix or remove these rows deliberately, then rerun: " + "; ".join(violations)
         )
 

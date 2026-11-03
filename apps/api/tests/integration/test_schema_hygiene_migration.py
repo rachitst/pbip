@@ -1,4 +1,4 @@
-"""Issue #315 (migration 0027): enum CHECKs, append-only security_events, FK indexes, CHECK names.
+"""Issue #315 (migration 0028): enum CHECKs, append-only security_events, FK indexes, CHECK names.
 
 Each new constraint is proven to reject bad data with raw SQL (the ORM's own enum validation would
 hide the database's behaviour), and to accept every value the application writes. The migration's
@@ -192,20 +192,20 @@ def test_upgrade_stops_loudly_when_existing_rows_break_a_new_check(
     migrated_engine: Engine, make_customer: Callable[..., Actor], alembic_config: Config
 ) -> None:
     alice = make_customer()
-    command.downgrade(alembic_config, "0026")
+    command.downgrade(alembic_config, "0027")
     bad_id = _insert_security_event(migrated_engine, alice.user_id, "LEGACY_EVENT")
     try:
         with pytest.raises(RuntimeError, match=r"security_events: 1 row\(s\) violate"):
-            command.upgrade(alembic_config, "0027")
+            command.upgrade(alembic_config, "0028")
         with migrated_engine.connect() as conn:
             version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
             kept = conn.execute(
                 text("SELECT event_type FROM security_events WHERE id = :id"), {"id": bad_id}
             ).scalar_one()
-        assert version == "0026"  # nothing applied
+        assert version == "0027"  # nothing applied
         assert kept == "LEGACY_EVENT"  # and the data was not rewritten
     finally:
-        # At 0026 there is no trigger yet, so the deliberate fix is possible.
+        # At 0027 there is no trigger yet, so the deliberate fix is possible.
         with migrated_engine.begin() as conn:
             conn.execute(text("DELETE FROM security_events WHERE id = :id"), {"id": bad_id})
     command.upgrade(alembic_config, "head")
