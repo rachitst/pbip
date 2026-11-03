@@ -45,3 +45,14 @@ def test_every_static_location_includes_the_header_file() -> None:
     for location in ("location /assets/", "location / {\n        include"):
         assert location in template or location.split(" {")[0] in template
     assert template.count("include /etc/nginx/pbip-security-headers.conf;") == 2
+
+
+def test_the_api_upstream_is_re_resolved_after_the_api_container_is_recreated() -> None:
+    """Regression (TASK-089 bug bash): ``proxy_pass http://api:8000;`` resolved "api" once at
+    start-up, so after the api container was recreated (new address) every /api call returned 502
+    until web was restarted as well. A variable upstream with Docker's resolver re-resolves it."""
+    api = TEMPLATE.read_text(encoding="utf-8").split("location /api/ {", 1)[1].split("}", 1)[0]
+    assert re.search(r"^\s*resolver 127\.0\.0\.11 valid=\d+s ipv6=off;$", api, re.M)
+    assert re.search(r"^\s*set \$pbip_api_upstream http://api:8000;$", api, re.M)
+    assert re.search(r"^\s*proxy_pass \$pbip_api_upstream;$", api, re.M)
+    assert "proxy_pass http://api" not in api
