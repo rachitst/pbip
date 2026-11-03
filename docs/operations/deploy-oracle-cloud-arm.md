@@ -223,7 +223,8 @@ not pin anything here. Re-issue `tls.crt` before 397 days, the same way.
 `deploy.yml` (`package` job) builds `ghcr.io/rachitst/pbip/api` and `.../web` when a `vX.Y.Z` tag is pushed. Until
 the change in the companion PR **"ci(images): build linux/amd64 and linux/arm64 images"** (branch
 `ci/multi-arch-images`) is merged, it built **linux/amd64 only**, and an Arm VM fails with
-`no matching manifest for linux/arm64/v8`. After it is merged, tag a new release; check before deploying:
+`no matching manifest for linux/arm64/v8`. After it is merged, tag a new release; check before deploying (both
+lines must appear; the packages are private, so run the GHCR login below on the laptop too):
 
 ```bash
 laptop$ docker buildx imagetools inspect ghcr.io/rachitst/pbip/api:<vX.Y.Z> | grep -E 'Platform: +linux/(amd64|arm64)'
@@ -297,15 +298,15 @@ Option A: now run certbot (section 9.1, step 3). Then, from the laptop:
 ```bash
 laptop$ curl -sI http://<host>/ | grep -iE '^(HTTP|location)'          # option A: 301 to https
 laptop$ python3 scripts/smoke_test.py https://<host>                    # option B: prefix SSL_CERT_FILE=~/pbip-staging-ca/ca.crt
-laptop$ PBIP_SMOKE_EMAIL=<smoke-customer-email> PBIP_SMOKE_PASSWORD=<its-password> \
-          python3 scripts/staging_smoke.py https://<host> --check-http-redirect   # option B: --cacert ~/pbip-staging-ca/ca.crt, no redirect flag
+laptop$ export PBIP_SMOKE_EMAIL=<smoke-customer-email>; read -rs PBIP_SMOKE_PASSWORD && export PBIP_SMOKE_PASSWORD
+laptop$ python3 scripts/staging_smoke.py https://<host> --check-http-redirect   # option B: --cacert ~/pbip-staging-ca/ca.crt, no redirect flag
 ```
 
 `scripts/staging_smoke.py` verifies the TLS chain, host name, protocol (TLS 1.2+) and certificate lifetime, HSTS,
 liveness and readiness, then signs in as a customer, lists that customer's accounts (read-only) and signs out. Create
 the smoke-test customer once through the web app's registration page (an account without an authenticator) and keep
-its password in your password manager. Credentials are read from the environment only and never printed; to keep
-them out of your shell history, `read -rs PBIP_SMOKE_PASSWORD && export PBIP_SMOKE_PASSWORD` first.
+its password in your password manager. Credentials are read from the environment only and never printed; `read -rs`
+keeps the password out of your shell history.
 
 ## 13. Deploying through GitHub Actions (#198)
 
@@ -313,7 +314,8 @@ The `deploy` job connects with SSH from a GitHub-hosted runner. Those runners ha
 restricted to your IP (section 3) the job cannot connect. Choose, per release:
 
 * **Manual (default):** leave `DEPLOY_ENABLED` unset. A tag push still verifies the tag and publishes both images;
-  you deploy with section 12. This proves `deploy.sh`, not the workflow's SSH steps.
+  you deploy with section 12. This proves `deploy.sh`, not the workflow's SSH steps. (With `DEPLOY_ENABLED=true` and
+  port 22 closed, every tag push ends in a failed `deploy` job, and the dry run also needs `DEPLOY_ENABLED=true`.)
 * **Through the workflow:** for the duration of the run, change the security-list rule for TCP 22 to `0.0.0.0/0`,
   then set it back to `<your-ip>/32`. The job authenticates with the dedicated deploy key, verifies the host key
   (`StrictHostKeyChecking yes`) and uses batch mode; password login is off (section 6). For a permanently open port 22,
@@ -321,7 +323,7 @@ restricted to your IP (section 3) the job cannot connect. Choose, per release:
 
 One-time GitHub set-up (names only are checked by the workflow; values never appear in logs). Build the
 `known_hosts` line from the key the VM itself reports, over the SSH session you already trust, rather than trusting a
-first scan:
+first scan. The name in that line must be exactly the `DEPLOY_HOST` value (here the IP):
 
 ```bash
 laptop$ ssh -i ~/.ssh/pbip-oci-admin pbip@<vm-ip> 'cat /etc/ssh/ssh_host_ed25519_key.pub' | \
@@ -371,8 +373,9 @@ The backup procedure is runbook section 4.1 unchanged (`scripts/backup.py`, encr
 ```bash
 vm$ sudo apt-get install -y git gpg python3-venv
 vm$ curl -LsSf https://astral.sh/uv/0.11.7/install.sh | sh                 # same uv version as CI
+vm$ export PATH="$HOME/.local/bin:$PATH"     # uv's install directory; scripts/dev.py calls `uv` from PATH
 vm$ git clone https://github.com/rachitst/pbip.git ~/pbip-repo && cd ~/pbip-repo && git checkout <vX.Y.Z>
-vm$ ~/.local/bin/uv sync --all-packages --frozen
+vm$ uv sync --all-packages --frozen
 vm$ printf 'services:\n  db:\n    ports: ["127.0.0.1:5432:5432"]\n' > ~/pbip/docker-compose.prod.backup.yml
 vm$ sudo install -d -m 700 -o pbip -g pbip /var/backups/pbip
 vm$ python3 -c "import secrets; print(secrets.token_urlsafe(48))" > ~/.pbip-backup-passphrase && chmod 600 ~/.pbip-backup-passphrase
@@ -385,10 +388,11 @@ Each backup (daily, and before every migration or secret rotation):
 
 ```bash
 vm$ cd ~/pbip && docker compose -f docker-compose.prod.yml -f docker-compose.prod.backup.yml up -d db
+vm$ export PATH="$HOME/.local/bin:$PATH"
 vm$ cd ~/pbip-repo && set -a && . ~/pbip/.env && set +a
 vm$ export DATABASE_URL="postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
 vm$ DB=$(docker compose -f ~/pbip/docker-compose.prod.yml ps -q db)
-vm$ ~/.local/bin/uv run python scripts/backup.py --out-dir /var/backups/pbip \
+vm$ uv run python scripts/backup.py --out-dir /var/backups/pbip \
       --passphrase-file ~/.pbip-backup-passphrase --docker-container "$DB"
 vm$ cd ~/pbip && docker compose -f docker-compose.prod.yml up -d db       # unpublish 5432 again
 ```
@@ -405,8 +409,11 @@ section 4.2).
 
    ```text
    Allow dynamic-group pbip-staging-hosts to read buckets in compartment <compartment> where target.bucket.name = 'pbip-backups'
-   Allow dynamic-group pbip-staging-hosts to manage objects in compartment <compartment> where target.bucket.name = 'pbip-backups'
+   Allow dynamic-group pbip-staging-hosts to manage objects in compartment <compartment> where all {target.bucket.name = 'pbip-backups', any {request.permission = 'OBJECT_CREATE', request.permission = 'OBJECT_INSPECT'}}
    ```
+
+   The second statement is write-only (create and list, no read, overwrite or delete), so a compromised host can add
+   backups but cannot read, replace or delete earlier ones.
 
    (On tenancies with identity domains, the dynamic group is created inside the `Default` domain.)
 3. Install the OCI CLI for `pbip` in its own virtual environment and upload the newest dump and manifest:
@@ -478,7 +485,8 @@ vm$ systemctl list-timers pbip-uptime-probe.timer
 vm$ tail -3 /home/pbip/pbip/uptime/probe.log          # a line every 30 s: "... up 200 0.0xx"
 ```
 
-Note the installation time; reports should start there (`--since`), because the conservative figure counts the time
+Install the probe once the real certificate is in place (section 9): against the placeholder certificate every
+probe fails verification and is logged as down. Note the installation time; reports should start there (`--since`), because the conservative figure counts the time
 before the first probe as missing.
 
 **Weekly report** (and the TASK-103 "measured for at least one week" evidence):
@@ -551,19 +559,20 @@ its CPU use is small but it shares the VM, so note it with the results.
 ```bash
 laptop$ ssh -i ~/.ssh/pbip-oci-admin pbip@<vm-ip>
 vm$ git clone https://github.com/rachitst/pbip.git ~/pbip-perf && cd ~/pbip-perf && git checkout <vX.Y.Z-or-main>
-vm$ ~/.local/bin/uv sync --all-packages --frozen            # uv from section 15
+vm$ export PATH="$HOME/.local/bin:$PATH"       # uv, installed in section 15
+vm$ uv sync --all-packages --frozen
 vm$ python3 scripts/init_env.py                             # local-only .env with fresh secrets
-vm$ ~/.local/bin/uv run python scripts/dev_certs.py
-vm$ ~/.local/bin/uv run python scripts/dev.py fraud-model   # the hybrid scorer the suite measures
+vm$ uv run python scripts/dev_certs.py
+vm$ uv run python scripts/dev.py fraud-model   # the hybrid scorer the suite measures
 vm$ export API_REPLICAS=2                                    # production topology (ADR-0045, once merged)
 vm$ docker compose -f docker-compose.yml -f infra/k6/compose.load.yml up -d --build
 vm$ curl --fail --silent --retry 60 --retry-delay 2 --retry-all-errors --cacert infra/certs/ca.crt https://localhost:8443/api/health/ready
 vm$ mkdir -p perf-results
-vm$ ~/.local/bin/uv run python scripts/seed_load.py --users 100
-vm$ ~/.local/bin/uv run python scripts/load_invariants.py snapshot > perf-results/invariants-before.json
+vm$ uv run python scripts/seed_load.py --users 100
+vm$ uv run python scripts/load_invariants.py snapshot > perf-results/invariants-before.json
 vm$ { nproc; lscpu | grep -E 'Model name|Thread|Core'; free -h | head -2; uptime; docker compose ps -q api | wc -l; } | tee perf-results/environment.txt
 vm$ BASE_URL=https://localhost:8443 USERS=100 VUS=50 DURATION=2m python3 scripts/dev.py load --summary-export /results/k6-summary.json
-vm$ ~/.local/bin/uv run python scripts/load_invariants.py check perf-results/invariants-before.json | tee perf-results/invariants-after.json
+vm$ uv run python scripts/load_invariants.py check perf-results/invariants-before.json | tee perf-results/invariants-after.json
 laptop$ scp -r -i ~/.ssh/pbip-oci-admin pbip@<vm-ip>:pbip-perf/perf-results ./perf-results-oci-a1
 ```
 
