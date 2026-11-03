@@ -4,6 +4,7 @@ still hold, and the ledger refuses a date that would falsify a running balance o
 outside local/test."""
 
 import uuid
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -110,15 +111,18 @@ def test_history_in_time_order_is_accepted_and_keeps_running_balances_true(db: S
 
 
 @pytest.mark.parametrize(
-    ("label", "when"),
+    ("label", "make_when"),
     [
-        ("future", utcnow() + timedelta(minutes=5)),
-        ("naive", datetime(2026, 9, 1, 4, 30)),  # noqa: DTZ001 - the refused input
+        # Computed when the test runs, not at collection: a long suite would otherwise turn
+        # "5 minutes from now" into the past before this case executes.
+        ("future", lambda: utcnow() + timedelta(minutes=5)),
+        ("naive", lambda: datetime(2026, 9, 1, 4, 30)),  # noqa: DTZ001 - the refused input
     ],
 )
 def test_a_future_or_naive_date_is_refused_and_writes_nothing(
-    db: Session, label: str, when: datetime
+    db: Session, label: str, make_when: Callable[[], datetime]
 ) -> None:
+    when = make_when()
     account = _account(db)
     with pytest.raises(ledger.LedgerInvariantError):
         ledger.deposit(db, account.id, 1_000, posted_at=when)
