@@ -114,21 +114,32 @@ def idempotency() -> None:
     assert len(ids) == 1, "duplicate transfers were created!"
 
 
-def fraud_new_payee() -> None:
-    alice, bob = login("alice@demo.pbip"), login("bob@demo.pbip")
-    src, dst = account(alice), account(bob)
+def new_external_payee(token: str) -> str:
+    """A payee created NOW at another bank, so the fraud rules see a brand-new payee on every run.
+    Reusing "Bob Demo" stopped working once that payee was older than the rules' new-payee window
+    (TASK-089 bug bash): the transfer then posted instead of being held. Another bank's payee is
+    verified without a name check, so no second customer is needed."""
+    tag = uuid.uuid4().hex
     status, _, created = call(
         "POST",
         "/api/v1/payees",
-        alice,
-        {"name": "Bob Demo", "account_number": dst["account_number"]},
+        token,
+        {
+            "name": f"Demo new payee {tag[:6]}",
+            "account_number": str(int(tag[:12], 16))[-12:].rjust(12, "0"),
+            "bank_code": "EXTB0001",
+        },
     )
-    payee = (
-        created["id"]
-        if status == 201
-        else next(p["id"] for p in call("GET", "/api/v1/payees", alice)[2])
-    )
-    call("POST", f"/api/v1/payees/{payee}/verify", alice)
+    assert status == 201, created
+    payee_id = str(created["id"])
+    call("POST", f"/api/v1/payees/{payee_id}/verify", token)
+    return payee_id
+
+
+def fraud_new_payee() -> None:
+    alice = login("alice@demo.pbip")
+    src = account(alice)
+    payee = new_external_payee(alice)
     show("Large transfer to a brand-new payee (>= 25,000.00)")
     status, _, payload = call(
         "POST",

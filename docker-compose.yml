@@ -53,6 +53,9 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+    # Like api/worker/beat/web: after a reboot or a Docker restart the database must come back too,
+    # or the API restarts into a stack with no database (bug bash, TASK-089).
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
@@ -64,6 +67,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+    restart: unless-stopped
 
   migrate:
     build: *api-build
