@@ -32,7 +32,7 @@ x-api-env: &api-env
   FRAUD_MODEL_DIR: /models/fraud
   # Model step budget, 5-100 ms (#362): set it in .env for a slow demo machine (docs/SETUP_GUIDE.md section 12).
   FRAUD_MODEL_BUDGET_MS: ${FRAUD_MODEL_BUDGET_MS:-50}
-  # Tracing (ADR 0017, ADR-0049): off unless .env says so. With OTEL_EXPORTER=otlp, start the `otel`
+  # Tracing (ADR 0017, ADR-0050): off unless .env says so. With OTEL_EXPORTER=otlp, start the `otel`
   # profile; if the collector is not running, spans are dropped and requests are unaffected.
   OTEL_ENABLED: ${OTEL_ENABLED:-false}
   OTEL_EXPORTER: ${OTEL_EXPORTER:-none}
@@ -229,7 +229,7 @@ services:
       - ./infra/alloy/config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
-  # OpenTelemetry Collector (issue #209, ADR-0049): OTLP/HTTP in, spans printed to its log. Apache-2.0,
+  # OpenTelemetry Collector (issue #209, ADR-0050): OTLP/HTTP in, spans printed to its log. Apache-2.0,
   # the core distribution, pinned by digest. Enable with OTEL_ENABLED=true and OTEL_EXPORTER=otlp.
   otel-collector:
     profiles: [otel]

@@ -161,7 +161,7 @@ owner decision for the staging host (#198).
 fraction of 15-second readiness probes that succeeded (`web-ready` is the user path) over the last 30 days. It counts only time when the monitoring
 stack itself was running, so stop it only deliberately. Report it monthly from the *Availability* dashboard.
 
-**Tracing (optional, ADR 0017, ADR-0049).** Off by default. With `OTEL_ENABLED=true` and `OTEL_EXPORTER=otlp`
+**Tracing (optional, ADR 0017, ADR-0050).** Off by default. With `OTEL_ENABLED=true` and `OTEL_EXPORTER=otlp`
 the API, worker and beat send spans over OTLP/HTTP to `OTEL_EXPORTER_OTLP_ENDPOINT` (the `otel` compose profile runs
 a local collector that only logs them; the production compose has no collector). A collector that is down or hanging
 costs dropped spans only: spans wait in a queue of at most 2,048 and each export gives up after

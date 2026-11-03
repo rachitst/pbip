@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     # OpenTelemetry tracing (TASK-085 spike, ADR 0017). Off by default. "none" creates spans
     # (trace ids in logs) without exporting; "console" prints spans to stdout (development);
     # "memory" keeps every span in memory and is for tests only (refused when deployed);
-    # "otlp" sends batches over OTLP/HTTP to a collector (issue #209, ADR-0049).
+    # "otlp" sends batches over OTLP/HTTP to a collector (issue #209, ADR-0050).
     otel_enabled: bool = False
     otel_service_name: str = Field(default="pbip-api", min_length=1, max_length=64)
     otel_sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)

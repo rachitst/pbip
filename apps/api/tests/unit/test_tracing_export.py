@@ -1,4 +1,4 @@
-"""OTLP export, Celery and Redis tracing (issue #209, ADR-0049).
+"""OTLP export, Celery and Redis tracing (issue #209, ADR-0050).
 
 The exporter must only ever cost dropped spans: these tests run the real app against a collector
 that answers, one that accepts connections and never answers, and one that is not there.

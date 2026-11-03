@@ -240,7 +240,7 @@ def test_compose_passes_the_fraud_model_budget_to_the_api_and_worker() -> None:
 
 
 def test_the_otel_collector_is_optional_pinned_and_reached_through_the_shared_environment() -> None:
-    """Issue #209 (ADR-0049): the collector starts only with `--profile otel`, is pinned by version
+    """Issue #209 (ADR-0050): the collector starts only with `--profile otel`, is pinned by version
     and digest, and the api/worker/beat environment passes the tracing switches (off by default)."""
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
     collector = compose["services"]["otel-collector"]

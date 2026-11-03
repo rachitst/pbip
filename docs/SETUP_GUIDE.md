@@ -388,7 +388,7 @@ make up-all
 - Prometheus: **http://localhost:9090**
 - MLflow: **http://localhost:5000**
 
-### Tracing: optional OpenTelemetry Collector (`otel` profile, ADR-0049)
+### Tracing: optional OpenTelemetry Collector (`otel` profile, ADR-0050)
 Tracing is off by default. To see traces from the API, worker and beat:
 
 1. In `.env`: `OTEL_ENABLED=true`, `OTEL_EXPORTER=otlp` (optionally `OTEL_SAMPLE_RATE=0.1`, and

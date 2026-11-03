@@ -1,4 +1,4 @@
-# OpenTelemetry Collector for the optional `otel` compose profile (issue #209, ADR-0049).
+# OpenTelemetry Collector for the optional `otel` compose profile (issue #209, ADR-0050).
 # Receives OTLP/HTTP from the API, worker and beat and prints the spans to the collector's own log
 # (`docker compose logs otel-collector`). Nothing leaves the machine: there is no remote exporter.
 # For a trace UI, add a local Jaeger/Tempo exporter here; tail sampling of errors also goes here.

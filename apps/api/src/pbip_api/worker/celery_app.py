@@ -80,7 +80,7 @@ celery_app.conf.update(
 
 
 def _trace_worker_process(**_signal_kwargs: object) -> None:
-    """OpenTelemetry for each worker process, after the prefork fork (ADR-0049); no-op when off."""
+    """OpenTelemetry for each worker process, after the prefork fork (ADR-0050); no-op when off."""
     from pbip_api.core.tracing import setup_celery_tracing
 
     setup_celery_tracing("worker")

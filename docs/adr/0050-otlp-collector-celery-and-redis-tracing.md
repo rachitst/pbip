@@ -1,4 +1,4 @@
-# ADR 0049: OTLP export to an optional local collector, with Celery and Redis tracing
+# ADR 0050: OTLP export to an optional local collector, with Celery and Redis tracing
 - Status: Accepted (under owner's standing approval, 2026-11-04)
 - Date: 2026-11-04
 - Deciders: Architecture Team (issue #209, items 1-3; follows ADR 0017)
@@ -84,7 +84,7 @@ collector that accepts connections and never answers (`test_tracing_export.py`).
 - A pipeline that fails with an exception keeps the instrumentation's own `CMD ? ?` statement (its
   hook is not called on that path); it still contains no keys.
 - Spans still carry client IP, user agent and UUID paths (ADR 0017, T33): a real collector must be
-  access-controlled and must not forward to a third party without a new decision. Threat model T62.
+  access-controlled and must not forward to a third party without a new decision. Threat model T63.
 - Production overhead with a network exporter (issue #209 item 4) is still unmeasured; it needs
   staging (#198).
 

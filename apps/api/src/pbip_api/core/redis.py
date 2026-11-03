@@ -17,7 +17,7 @@ def get_redis() -> Redis:
         socket_timeout=2,
     )
     if settings.otel_enabled:
-        # Command names only, never keys (ADR-0049); imported lazily like core/db.get_engine.
+        # Command names only, never keys (ADR-0050); imported lazily like core/db.get_engine.
         from pbip_api.core.tracing import instrument_redis
 
         instrument_redis(client, settings)

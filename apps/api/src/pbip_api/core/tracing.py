@@ -4,7 +4,7 @@ Off unless ``OTEL_ENABLED=true``. When on, FastAPI requests become SERVER spans 
 statements on the shared engine become child CLIENT spans; ``core/logging.py`` adds the active
 ``trace_id``/``span_id`` to every log line. With ``OTEL_EXPORTER=otlp`` spans go to an
 OpenTelemetry Collector over OTLP/HTTP through a bounded queue and an export timeout, so a collector
-that is down or hanging costs dropped spans, never a slower or failed request (ADR-0049). Celery
+that is down or hanging costs dropped spans, never a slower or failed request (ADR-0050). Celery
 workers and beat (``setup_celery_tracing``) and the application's Redis client
 (``instrument_redis``) are traced too; Redis spans carry command names only, never keys.
 
@@ -57,7 +57,7 @@ _logger = structlog.get_logger(__name__)
 # (compose healthchecks, nginx) and /metrics is scraped by Prometheus: tracing them is noise.
 _EXCLUDED_URLS = r"^[a-z]+://[^/]+/api/health/,^[a-z]+://[^/]+/metrics$"
 
-# OTLP batching (ADR-0049). Finished spans wait in a queue of at most this many and are sent in
+# OTLP batching (ADR-0050). Finished spans wait in a queue of at most this many and are sent in
 # batches every few seconds by the processor's own thread; when the queue is full, new spans are
 # dropped (the SDK logs it), so memory stays bounded however long the collector is away.
 OTLP_MAX_QUEUE_SIZE = 2048
@@ -115,7 +115,7 @@ class _DropOrphanClientSpans(Sampler):
 
 
 def _otlp_processor(settings: Settings) -> BatchSpanProcessor:
-    """OTLP/HTTP export that can only ever cost dropped spans (ADR-0049).
+    """OTLP/HTTP export that can only ever cost dropped spans (ADR-0050).
 
     ``on_end`` (on the request thread) only appends to the bounded queue; the network call runs on
     the processor's own thread. The exporter's ``timeout`` is the bound on one export, retries
