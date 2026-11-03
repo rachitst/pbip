@@ -89,8 +89,8 @@ class Pass:
     budget_ms: int | None
     samples_ms: list[float]
     fallbacks: int
-    load_before: tuple[float, float, float]
-    load_after: tuple[float, float, float]
+    load_before: tuple[float, float, float] | None
+    load_after: tuple[float, float, float] | None
 
     def report(self) -> dict[str, Any]:
         calls = len(self.samples_ms)
@@ -101,9 +101,25 @@ class Pass:
             "fallbacks": self.fallbacks,
             "fallback_rate": round(self.fallbacks / calls, 4) if calls else 0.0,
             "wait_ms": summarise(self.samples_ms),
-            "load_avg_1_5_15_before": [round(x, 2) for x in self.load_before],
-            "load_avg_1_5_15_after": [round(x, 2) for x in self.load_after],
+            "load_avg_1_5_15_before": _rounded(self.load_before),
+            "load_avg_1_5_15_after": _rounded(self.load_after),
         }
+
+
+def load_average() -> tuple[float, float, float] | None:
+    """The 1/5/15-minute load average, or None where the OS has none (Windows: #371)."""
+    getloadavg = getattr(os, "getloadavg", None)
+    if getloadavg is None:
+        return None
+    try:
+        load: tuple[float, float, float] = getloadavg()
+    except OSError:  # the platform has the call but cannot read the load
+        return None
+    return load
+
+
+def _rounded(load: tuple[float, float, float] | None) -> list[float] | None:
+    return None if load is None else [round(x, 2) for x in load]
 
 
 def wait_until_model_pool_is_idle() -> None:
@@ -124,7 +140,7 @@ def run_pass(
     from pbip_api.modules.fraud.hybrid import score_within_budget
 
     budget = NO_BUDGET_SECONDS if budget_ms is None else budget_ms / 1000
-    load_before = os.getloadavg()
+    load_before = load_average()
     samples, fallbacks = [], 0
     for item in inputs:
         started = time.perf_counter()
@@ -137,7 +153,7 @@ def run_pass(
         samples.append((time.perf_counter() - started) * 1000)
         if isolated:
             wait_until_model_pool_is_idle()
-    return Pass(name, budget_ms, samples, fallbacks, load_before, os.getloadavg())
+    return Pass(name, budget_ms, samples, fallbacks, load_before, load_average())
 
 
 def anomaly_pass(engine: Any, inputs: list[Any]) -> Pass:
@@ -145,19 +161,20 @@ def anomaly_pass(engine: Any, inputs: list[Any]) -> Pass:
     from pbip_ml.fraud.inference import feature_row
 
     rows = [feature_row(item)[0] for item in inputs]
-    load_before = os.getloadavg()
+    load_before = load_average()
     samples = []
     for row in rows:
         started = time.perf_counter()
         engine.anomaly.score(row)
         samples.append((time.perf_counter() - started) * 1000)
-    return Pass("anomaly", None, samples, 0, load_before, os.getloadavg())
+    return Pass("anomaly", None, samples, 0, load_before, load_average())
 
 
 def format_line(report: dict[str, Any]) -> str:
     wait = report["wait_ms"]
     budget = "none" if report["budget_ms"] is None else f"{report['budget_ms']} ms"
-    load = " ".join(f"{x:.2f}" for x in report["load_avg_1_5_15_before"])
+    before = report["load_avg_1_5_15_before"]
+    load = "unavailable" if before is None else " ".join(f"{x:.2f}" for x in before)
     return (
         f"{report['pass']:<10} budget={budget:<7} n={report['calls']} "
         f"p50={wait['median_ms']} p95={wait['p95_ms']} p99={wait['p99_ms']} "
