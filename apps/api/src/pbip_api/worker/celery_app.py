@@ -48,6 +48,12 @@ celery_app.conf.update(
             "task": "pbip.ledger.purge_expired_idempotency_keys",
             "schedule": crontab(hour=4, minute=15),
         },
+        # TASK-068 follow-up #324 / ADR-0038: PSI drift of the fraud inputs, hourly at :20 (away
+        # from the :05 payout run); the API's /metrics exports the stored result.
+        "evaluate-feature-drift": {
+            "task": "pbip.fraud.evaluate_feature_drift",
+            "schedule": crontab(minute=20),
+        },
         # TASK-052 / ADR-0011: one nightly spending job (no second materialisation job).
         "materialize-monthly-spending": {
             "task": "pbip.analytics.materialize_monthly_spending",

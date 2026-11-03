@@ -589,3 +589,44 @@ def purge_expired_idempotency_keys(session: Session, now: datetime, limit: int) 
         delete(IdempotencyKey).where(IdempotencyKey.id.in_(expired)).returning(IdempotencyKey.id)
     )
     return len(result.all())
+
+
+# Customer-initiated outgoing payments: the population the fraud scorer sees (transfers, scheduled
+# transfers and bill payments). INITIATED never survives a commit, so every stored row was scored.
+SCORED_PAYMENT_TYPES = (TransactionType.TRANSFER, TransactionType.BILL_PAYMENT)
+
+
+@dataclass(frozen=True, slots=True)
+class PaymentObservation:
+    """One scored outgoing payment, reduced to what drift monitoring needs (no reference text)."""
+
+    amount: int
+    debit_account_id: UUID
+    created_at: datetime
+
+
+def scored_payments_between(
+    session: Session, start: datetime, end: datetime
+) -> list[PaymentObservation]:
+    """Read-only: every scored outgoing payment created in ``[start, end)``, oldest first.
+
+    Feeds the PSI drift job (ADR-0038). Every outcome counts (posted, declined, held, reversed):
+    the scorer saw all of them, so all of them are its input distribution. Plain columns, no ORM
+    entities hydrated; an hourly background read, never on a request.
+    """
+    stmt = (
+        select(Transaction.amount, Transaction.debit_account_id, Transaction.created_at)
+        .where(
+            Transaction.type.in_(SCORED_PAYMENT_TYPES),
+            Transaction.status != TransactionStatus.INITIATED,
+            Transaction.debit_account_id.is_not(None),
+            Transaction.created_at >= start,
+            Transaction.created_at < end,
+        )
+        .order_by(Transaction.created_at.asc(), Transaction.id.asc())
+    )
+    return [
+        PaymentObservation(int(amount), account_id, created_at)
+        for amount, account_id, created_at in session.execute(stmt).all()
+        if account_id is not None  # already filtered in SQL; narrows the type
+    ]

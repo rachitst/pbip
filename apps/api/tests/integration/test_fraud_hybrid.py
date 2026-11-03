@@ -3,11 +3,11 @@
 A stub engine pins the model's risk, so every transition of the transfer state machine is driven by
 the HYBRID path: ALLOW -> POSTED, STEP_UP -> PENDING_STEP_UP (TOTP), REVIEW -> held + alert,
 BLOCK -> declined + alert. Then: the rules are a floor the model cannot lower; every model problem
-falls back to the rules (never ALLOW-all); bill payments use the same score; and real trained
-artifacts load from disk and score within the latency budget.
+falls back to the rules (never ALLOW-all); bill payments use the same score; real trained
+artifacts load once from disk and score every transfer; and a real model slower than the budget
+falls back to the rules. Real latency is measured by ``scripts/benchmark_fraud_latency.py`` (#362).
 """
 
-import statistics
 import threading
 import uuid
 from collections.abc import Callable, Iterator
@@ -18,9 +18,10 @@ import pandas as pd
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from pbip_api.core.config import Settings
+from pbip_api.core.config import Settings, get_settings
 from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.auth.service import AuthService, RequestMeta
+from pbip_api.modules.fraud.baseline import MODEL_VERSION as BASELINE_VERSION
 from pbip_api.modules.fraud.hybrid import load_engine
 from pbip_api.modules.fraud.models import FraudEvent
 from pbip_ml.fraud.contract import FraudReason, ReasonSource
@@ -285,19 +286,55 @@ def model_dir(tmp_path_factory: pytest.TempPathFactory, fraud_data: Path) -> Pat
     return out
 
 
-def test_real_artifacts_load_once_and_score_within_the_latency_budget(
+class SlowEngine:
+    """The real trained engine behind a gate: a model slower than any budget, deterministically."""
+
+    def __init__(self, real: Any, gate: threading.Event) -> None:
+        self.real, self.gate, self.params = real, gate, real.params
+        self.reached = threading.Event()
+
+    def score(self, row: pd.DataFrame, context: RuleContext) -> HybridResult:
+        self.reached.set()
+        self.gate.wait(10)  # released by the test once the transfer has been answered
+        result: HybridResult = self.real.score(row, context)
+        return result
+
+
+@pytest.fixture
+def counted_loads(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
+    """Every artifact load from disk (``load_engine`` imports ``load`` when it is called)."""
+    from pbip_ml.fraud import inference
+
+    loads: list[Path] = []
+    real_load = inference.load
+
+    def counting_load(directory: Path) -> Any:
+        loads.append(directory)
+        return real_load(directory)
+
+    monkeypatch.setattr(inference, "load", counting_load)
+    return loads
+
+
+def test_real_artifacts_load_once_and_every_transfer_is_scored_by_the_model(
     client: TestClient,
+    app: FastAPI,
     use_engine: Callable[[object], None],
     pair: tuple[Actor, Actor, dict[str, Any]],
     settings: Settings,
     model_dir: Path,
+    counted_loads: list[Path],
     db: Session,
 ) -> None:
+    """#362: loading and model scoring, not speed. A 10 s budget (validation is bypassed on
+    purpose; ``test_config`` covers the bounds) means no call can time out on slow hardware. Real
+    latency and the fallback rate are measured by ``scripts/benchmark_fraud_latency.py``."""
     engine = load_engine(settings.model_copy(update={"fraud_model_dir": str(model_dir)}))
     assert engine is not None and engine.params.model_version == "hybrid-lgbm-iforest-2"
     use_engine(engine)
+    generous = settings.model_copy(update={"fraud_model_budget_ms": 10_000})
+    app.dependency_overrides[get_settings] = lambda: generous
     alice, _bob, payee = pair
-    latencies = []
     first = send(client, alice, payee, 1_000)  # #251: an ordinary transfer to a 2-day-old payee
     first_event = event_for(db, first.json()["id"])
     assert first.json()["status"] == "POSTED", first_event.features
@@ -307,9 +344,42 @@ def test_real_artifacts_load_once_and_score_within_the_latency_budget(
         event = event_for(db, response.json()["id"])
         assert event.model_version == "hybrid-lgbm-iforest-2", event.features.get("model_error")
         assert {"model_probability", "anomaly_score", "rule_points"} <= set(event.features)
-        latencies.append(event.latency_ms)
-    p95 = statistics.quantiles(latencies, n=20)[-1]
-    assert p95 < 100, latencies  # contract: p95 < 100 ms, DB look-ups included
+        assert "MODEL_UNAVAILABLE" not in {r["code"] for r in event.reasons}
+    assert counted_loads == [model_dir]  # loaded once, at start-up; no request reads a file
+
+
+def test_real_model_slower_than_the_budget_falls_back_to_the_rules(
+    client: TestClient,
+    use_engine: Callable[[object], None],
+    make_customer: Callable[..., Actor],
+    make_verified_payee: Callable[..., dict[str, Any]],
+    settings: Settings,
+    model_dir: Path,
+    db: Session,
+) -> None:
+    """#362: the timeout path with the real artifacts, at the default budget, with no sleep: the
+    model is held until the transfer has been answered, so the budget always runs out first."""
+    real = load_engine(settings.model_copy(update={"fraud_model_dir": str(model_dir)}))
+    assert real is not None
+    gate = threading.Event()
+    slow = SlowEngine(real, gate)
+    use_engine(slow)
+    alice, bob = make_customer(funds=10_000_000), make_customer()
+    payee = make_verified_payee(alice, bob)  # minutes old: NEW_PAYEE_LARGE_AMOUNT (45 points)
+    try:
+        response = send(client, alice, payee, 3_000_000)
+    finally:
+        gate.set()  # release the slow call's worker thread
+    assert slow.reached.is_set()  # the model was called, and was too slow (not missing)
+    assert response.json()["status"] == "PENDING_REVIEW"  # never ALLOW-all: the rules held it
+    event = event_for(db, response.json()["id"])
+    assert event.model_version == f"{BASELINE_VERSION}+rules-only"
+    assert event.features["model_error"] == "TIMEOUT"
+    codes = {r["code"] for r in event.reasons}
+    assert {"MODEL_UNAVAILABLE", "NEW_PAYEE_LARGE_AMOUNT"} <= codes  # scored by the rules
+    assert event.risk_score == 45 and event.decision != "ALLOW"
+    assert "model_probability" not in event.features  # no model output leaked into the result
+    assert event.latency_ms < settings.fraud_model_budget_ms + 1_000  # did not wait for the gate
 
 
 def test_load_engine_serves_rules_only_without_valid_artifacts(

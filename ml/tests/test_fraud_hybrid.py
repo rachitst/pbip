@@ -52,6 +52,10 @@ def test_risk_maps_to_actions_at_the_documented_thresholds(risk: int, decision: 
     assert h.decide(risk) is FraudDecision(decision)
 
 
+# #362: scoring ~1,700 rows one by one (plus training, the first test to use the fixture) takes
+# about 45 s on an idle 2-CPU laptop, near the 60 s default hang guard, so a busy full run timed
+# out. The gate is about behaviour, not speed; this limit only guards against a hang.
+@pytest.mark.timeout(300)
 def test_hybrid_flags_fraud_and_passes_normal_traffic(trained: dict[str, object]) -> None:
     split, scorer = trained["split"], trained["scorer"]
     assert isinstance(split, t.Split) and isinstance(scorer, h.HybridScorer)

@@ -185,7 +185,7 @@ Protections in code:
 - the behaviour-regression suite (`ml/tests/test_fraud_behaviour_regression.py`);
 - the metric gate in `test_fraud_hybrid.py`;
 - the API test that a legitimate transfer to a 2-day-old payee is ALLOWed by the real models
-  (`test_real_artifacts_load_once_and_score_within_the_latency_budget`).
+  (`test_real_artifacts_load_once_and_every_transfer_is_scored_by_the_model`).
 
 ## 8. Generator v2.2 (TASK-071): F7/F8, and training on outgoing transfers only
 

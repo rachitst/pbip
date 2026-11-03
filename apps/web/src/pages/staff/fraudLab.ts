@@ -155,6 +155,60 @@ export interface RunInput {
   /** F6 only: the customer who sends the money in. */
   sender: Credentials;
   onProgress: (steps: LabStep[]) => void;
+  /** Customer sessions kept between runs on this page (see ``LabSessions``). */
+  sessions: LabSessions;
+}
+
+/** Without ``expires_in`` a session is reused for this long at most. */
+const DEFAULT_SESSION_MS = 5 * 60_000;
+/** A session is dropped this long before its access token expires, so no step races the expiry. */
+const EXPIRY_MARGIN_MS = 60_000;
+
+/** One customer session per demo customer for as long as the lab page is open.
+ *
+ * Signing in afresh for every scenario spent the shared sign-in rate limit (10 a minute per
+ * address, login and MFA verify together): a pass through F1-F6 plus the analyst's own sign-in
+ * reached it and the next run got 429 (TASK-089 bug bash). The limit stays as it is; the lab signs
+ * in only when it has no live session for that customer and password, and when a scenario itself
+ * is about signing in (F3's attacker). Tokens stay in memory on this page only. */
+export class LabSessions {
+  private readonly live = new Map<string, { token: string; until: number }>();
+
+  constructor(private readonly now: () => number = Date.now) {}
+
+  private key(who: Credentials): string {
+    return `${who.email.trim().toLowerCase()}\u0000${who.password}`;
+  }
+
+  has(who: Credentials): boolean {
+    const entry = this.live.get(this.key(who));
+    return entry !== undefined && entry.until > this.now();
+  }
+
+  /** The live session for ``who``, signing in only when there is none. */
+  async token(who: Credentials): Promise<string> {
+    const entry = this.live.get(this.key(who));
+    if (entry && entry.until > this.now()) return entry.token;
+    return this.signInFresh(who);
+  }
+
+  /** Always signs in (a scenario step that is about signing in) and keeps the new session. */
+  async signInFresh(who: Credentials): Promise<string> {
+    const { token, expiresIn } = await signIn(who);
+    const lifetime = expiresIn ? expiresIn * 1000 - EXPIRY_MARGIN_MS : DEFAULT_SESSION_MS;
+    this.live.set(this.key(who), { token, until: this.now() + Math.max(lifetime, 0) });
+    return token;
+  }
+
+  /** Forget every session, e.g. after the API refused one (revoked or expired early). */
+  clear(): void {
+    this.live.clear();
+  }
+}
+
+function signInLabel(sessions: LabSessions, who: Credentials, role = ""): string {
+  const name = role ? `${role} ${who.email}` : who.email;
+  return sessions.has(who) ? `Use the open session of ${name}` : `Sign in as ${name}`;
 }
 
 /** A failure the lab explains itself (as opposed to an API error). */
@@ -213,7 +267,7 @@ function post(body?: unknown, headers?: Record<string, string>): RequestInit {
   };
 }
 
-async function signIn(who: Credentials): Promise<string> {
+async function signIn(who: Credentials): Promise<{ token: string; expiresIn: number | null }> {
   const body = await apiFetchAs<TokenResponse>(
     null,
     "/api/v1/auth/login",
@@ -224,7 +278,7 @@ async function signIn(who: Credentials): Promise<string> {
       `${who.email} has an authenticator enrolled; the lab signs in demo customers without MFA only.`,
     );
   }
-  return body.access_token;
+  return { token: body.access_token, expiresIn: body.expires_in ?? null };
 }
 
 /** A sign-in with a wrong password. Only the expected 401 counts; a lockout or rate limit stops.
@@ -342,8 +396,10 @@ async function sendAndInspect(
   return { label, transfer: sent, alert };
 }
 
-const appScam: Runner = async ({ customer }, progress) => {
-  const token = await progress.step(`Sign in as ${customer.email}`, () => signIn(customer));
+const appScam: Runner = async ({ customer, sessions }, progress) => {
+  const token = await progress.step(signInLabel(sessions, customer), () =>
+    sessions.token(customer),
+  );
   const from = await progress.step("Load the customer's account", () => primaryAccount(token));
   const payee = await progress.step("Add and verify a brand-new external payee", () =>
     addPayee(token, "Urgent Investments", randomAccountNumber("SCAM"), EXTERNAL_BANK),
@@ -355,8 +411,10 @@ const appScam: Runner = async ({ customer }, progress) => {
   ];
 };
 
-const velocityBurst: Runner = async ({ customer }, progress) => {
-  const token = await progress.step(`Sign in as ${customer.email}`, () => signIn(customer));
+const velocityBurst: Runner = async ({ customer, sessions }, progress) => {
+  const token = await progress.step(signInLabel(sessions, customer), () =>
+    sessions.token(customer),
+  );
   const from = await progress.step("Load the customer's account", () => primaryAccount(token));
   const payee = await progress.step(`Find or add the "${LAB_PAYEE_NAME}" payee`, () =>
     payeeFor(token, LAB_PAYEE_NAME, LAB_PAYEE_ACCOUNT, EXTERNAL_BANK),
@@ -372,9 +430,9 @@ const velocityBurst: Runner = async ({ customer }, progress) => {
   return results;
 };
 
-const accountTakeover: Runner = async ({ customer }, progress) => {
-  const owner = await progress.step(`Sign in as ${customer.email} (the real customer)`, () =>
-    signIn(customer),
+const accountTakeover: Runner = async ({ customer, sessions }, progress) => {
+  const owner = await progress.step(`${signInLabel(sessions, customer)} (the real customer)`, () =>
+    sessions.token(customer),
   );
   await progress.step("Register the customer's usual device", () =>
     apiFetchAs(
@@ -388,8 +446,9 @@ const accountTakeover: Runner = async ({ customer }, progress) => {
       failedSignIn(customer.email),
     );
   }
+  // A real, fresh sign-in: the takeover is the point of F3, so this one never reuses a session.
   const attacker = await progress.step("Attacker signs in with the stolen password", () =>
-    signIn(customer),
+    sessions.signInFresh(customer),
   );
   const from = await progress.step("Load the customer's account", () => primaryAccount(attacker));
   const payee = await progress.step(`Find or add the "${LAB_PAYEE_NAME}" payee`, () =>
@@ -403,8 +462,10 @@ const accountTakeover: Runner = async ({ customer }, progress) => {
   ];
 };
 
-const amountAnomaly: Runner = async ({ customer }, progress) => {
-  const token = await progress.step(`Sign in as ${customer.email}`, () => signIn(customer));
+const amountAnomaly: Runner = async ({ customer, sessions }, progress) => {
+  const token = await progress.step(signInLabel(sessions, customer), () =>
+    sessions.token(customer),
+  );
   const from = await progress.step("Load the customer's account", () => primaryAccount(token));
   const payee = await progress.step(`Find or add the "${LAB_PAYEE_NAME}" payee`, () =>
     payeeFor(token, LAB_PAYEE_NAME, LAB_PAYEE_ACCOUNT, EXTERNAL_BANK),
@@ -416,15 +477,15 @@ const amountAnomaly: Runner = async ({ customer }, progress) => {
   ];
 };
 
-const mulePassThrough: Runner = async ({ customer, sender }, progress) => {
+const mulePassThrough: Runner = async ({ customer, sender, sessions }, progress) => {
   if (sender.email.trim().toLowerCase() === customer.email.trim().toLowerCase()) {
     throw new LabError("The sender and the mule must be different customers.");
   }
-  const senderToken = await progress.step(`Sign in as the sender ${sender.email}`, () =>
-    signIn(sender),
+  const senderToken = await progress.step(signInLabel(sessions, sender, "the sender"), () =>
+    sessions.token(sender),
   );
-  const muleToken = await progress.step(`Sign in as the mule ${customer.email}`, () =>
-    signIn(customer),
+  const muleToken = await progress.step(signInLabel(sessions, customer, "the mule"), () =>
+    sessions.token(customer),
   );
   const muleAccount = await progress.step("Load the mule's account", () =>
     primaryAccount(muleToken),
@@ -470,6 +531,12 @@ export function isRunnable(code: ScenarioCode): boolean {
 export async function runScenario(input: RunInput): Promise<LabRun> {
   const runner = RUNNERS[input.code];
   if (!runner) throw new LabError(`${input.code} cannot be run from the browser.`);
-  const transfers = await runner(input, new Progress(input.onProgress));
-  return { code: input.code, transfers };
+  try {
+    const transfers = await runner(input, new Progress(input.onProgress));
+    return { code: input.code, transfers };
+  } catch (error) {
+    // A refused session (revoked, expired early) must not be reused by the next run.
+    if (error instanceof ApiError && error.status === 401) input.sessions.clear();
+    throw error;
+  }
 }
