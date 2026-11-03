@@ -25,6 +25,8 @@ x-api-env: &api-env
   # Fraud scoring (ADR-0019): the demo uses the hybrid; ./models/fraud comes from `make fraud-model`.
   FRAUD_SCORER: ${FRAUD_SCORER:-hybrid}
   FRAUD_MODEL_DIR: /models/fraud
+  # Model step budget, 5-100 ms (#362): set it in .env for a slow demo machine (docs/SETUP_GUIDE.md section 12).
+  FRAUD_MODEL_BUDGET_MS: ${FRAUD_MODEL_BUDGET_MS:-50}
 
 x-dev-ca: &dev-ca ./infra/certs/ca.crt:/etc/pbip-ca/ca.crt:ro
 

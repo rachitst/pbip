@@ -223,3 +223,14 @@ def test_env_example_uses_the_address_compose_publishes_on() -> None:
     ):
         assert f'"127.0.0.1:{port}:{port}"' in compose
         assert urlparse(example[key]).hostname == "127.0.0.1", key
+
+
+def test_compose_passes_the_fraud_model_budget_to_the_api_and_worker() -> None:
+    """Regression (#362): the stack's shared api/worker environment did not pass
+    FRAUD_MODEL_BUDGET_MS, so setting it in .env had no effect on the demo stack."""
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    shared = compose.split("x-api-env: &api-env", 1)[1].split("\n\n", 1)[0]
+    assert "FRAUD_MODEL_BUDGET_MS: ${FRAUD_MODEL_BUDGET_MS:-50}" in shared
+    for service in ("api", "worker"):
+        block = compose.split(f"\n  {service}:\n", 1)[1].split("\n\n", 1)[0]
+        assert "environment: *api-env" in block, service
