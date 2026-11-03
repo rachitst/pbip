@@ -141,7 +141,7 @@ No detection or false-positive rate is claimed for real traffic.
   by the same rules and are not special-cased.
 * Evasion: amounts under 90% of the threshold, gaps longer than 72 hours, splitting across accounts, structuring
   without paying out (no deposit-side monitor); keeping a dormant account active for more than 7 days before the large
-  transfer. Recorded in the threat model (T60, T61, section 7.1).
+  transfer. Recorded in the threat model (T61, T62, section 7.1).
 * Two more reads per scored transfer (three if any near-threshold movement matched). No schema change.
 * Standing-approval conditions: (1) no security, auth, MFA, RBAC, BOLA or audit control is weakened: the rules can only
   raise a decision and reasons stay staff-only; (2) no money moves: read-only scoring, ledger untouched, lock order
