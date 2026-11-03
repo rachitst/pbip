@@ -159,13 +159,17 @@ test("an administrator creates a staff user and clears their sign-in lockout", a
   await lockout.getByLabel("User id", { exact: true }).fill(userId);
   await lockout.getByRole("button", { name: "Inspect", exact: true }).click();
   await expect(lockout.getByText("Locked", { exact: true })).toBeVisible();
-  await expect(
-    lockout.locator(".details__row").filter({ hasText: "Failed sign-ins" }),
-  ).toContainText("5");
+  // The closed confirm dialog in the same panel has the same rows, hence the visible filter.
+  const failures = lockout
+    .locator(".details__row")
+    .filter({ visible: true })
+    .filter({ has: page.getByText("Failed sign-ins", { exact: true }) });
+  await expect(failures).toHaveText("Failed sign-ins5");
 
   await lockout.getByRole("button", { name: "Clear lockout", exact: true }).click();
   const confirm = page.getByRole("dialog", { name: "Clear this lockout?" });
   await expect(confirm).toContainText(userId);
+  await expect(confirm).toContainText("Failed sign-ins5");
   await confirm.getByRole("button", { name: "Clear lockout", exact: true }).click();
   await expect(confirm).toBeHidden();
   await expect(lockout.getByRole("status")).toContainText(
