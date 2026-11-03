@@ -1,8 +1,12 @@
 """TASK-031/032: hybrid combiner, thresholds, fail-safe, overrides and SHAP reasons per scenario."""
 
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
+from uuid import UUID
 
+import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import pytest
@@ -10,7 +14,10 @@ from pbip_datagen.__main__ import _export_fraud
 from pbip_datagen.generator import GeneratorConfig
 from pbip_ml.fraud import hybrid as h
 from pbip_ml.fraud import training as t
+from pbip_ml.fraud.artifacts import ANOMALY_FEATURES
 from pbip_ml.fraud.contract import FraudDecision, ReasonSource
+from pbip_ml.fraud.features import PastTransfer
+from pbip_ml.fraud.inference import TransferInputs, score_transfer
 from pbip_ml.fraud.train import load_export
 
 
@@ -28,13 +35,16 @@ def trained(tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]:
     booster, _ = t.train_lightgbm(split)
     anomaly = t.train_isolation_forest(split)
     rules = h.default_registry()
-    params = h.fit_params(split.validation, booster, anomaly, rules, "hybrid-test")
+    out_of_time = t.out_of_time_scores(split, booster.best_iteration)
+    params = h.fit_params(split.validation, booster, anomaly, rules, "hybrid-test", out_of_time)
     return {
         "split": split,
         "data": data,
         "scorer": h.HybridScorer(params, booster, anomaly, rules),
         "params": params,
         "booster": booster,
+        "anomaly": anomaly,
+        "out_of_time": out_of_time,
     }
 
 
@@ -138,7 +148,7 @@ def test_shap_reasons_are_top3_positive_exact_and_fast(trained: dict[str, object
     for i in range(min(100, len(fraud))):
         calls.clear()
         h.shap_reasons(CountingBooster(), fraud.iloc[[i]])  # type: ignore[arg-type]  # spy
-        assert calls == [(1, {"pred_contrib": True})]
+        assert calls == [(1, {"pred_contrib": True, "num_threads": 1})]  # #379: no OpenMP pool
 
 
 @pytest.mark.parametrize("scenario", ["F1", "F2", "F3", "F4", "F5", "F6"])
@@ -180,8 +190,6 @@ def test_artifacts_load_from_disk(trained: dict[str, object], tmp_path: Path) ->
     booster, params = trained["booster"], trained["params"]
     assert isinstance(params, h.HybridParams)
     booster.save_model(str(tmp_path / "m.txt"))
-    import lightgbm as lgb
-
     loaded = lgb.Booster(model_file=str(tmp_path / "m.txt"))
     split = trained["split"]
     assert isinstance(split, t.Split)
@@ -196,3 +204,118 @@ def test_batch_risk_matches_row_scoring(trained: dict[str, object]) -> None:
     for candidate in (scorer, replace(scorer, booster=None, anomaly=None)):
         rows = [r.risk_score for r in h.score_frame(candidate, sample)]
         assert h.batch_risk(candidate, sample).tolist() == rows
+
+
+def _app_scam() -> TransferInputs:
+    """The canonical APP scam of ``test_fraud_behaviour_regression``: a settled customer pays
+    INR 45,000 (22x the usual) to a payee added 15 minutes earlier, from the usual phone."""
+    now = datetime(2026, 6, 15, 13, 0, tzinfo=UTC)
+    phone = UUID("00000000-0000-4000-8000-000000000001")
+    history = tuple(
+        PastTransfer(now - timedelta(days=i, minutes=3), "DEBIT", 2_000_00, phone)
+        for i in range(1, 21)
+    )
+    return TransferInputs(
+        45_000_00, "INR", now, now - timedelta(minutes=15), phone, False, 0, history
+    )
+
+
+def test_half_size_model_still_holds_the_known_app_scam(trained: dict[str, object]) -> None:
+    """#396 regression. Calibrated on its 42 validation positives alone, this 1,500-customer model
+    mapped the scam's raw 0.90 onto a 0.40 isotonic step: risk 30, STEP_UP. Calibrated on the
+    out-of-time training scores as well (ADR-0047), it is held for review at least."""
+    scorer = trained["scorer"]
+    assert isinstance(scorer, h.HybridScorer)
+    assert score_transfer(scorer, _app_scam()).risk_score >= h.REVIEW_AT
+
+
+def test_calibration_rests_on_more_positives_and_is_finer(trained: dict[str, object]) -> None:
+    """#396: the out-of-time scores add positives, so the isotonic table has more steps than the
+    validation-only fit, and it never maps a higher raw score to a lower probability."""
+    split, booster, anomaly = trained["split"], trained["booster"], trained["anomaly"]
+    params, out_of_time = trained["params"], trained["out_of_time"]
+    assert isinstance(split, t.Split) and isinstance(params, h.HybridParams)
+    assert isinstance(anomaly, t.AnomalyModel) and isinstance(booster, lgb.Booster)
+    assert isinstance(out_of_time, tuple)
+    validation_only = h.fit_params(split.validation, booster, anomaly, h.default_registry(), "v")
+    assert out_of_time[1].sum() > split.validation["label"].sum()
+    assert len(params.calibration_x) > len(validation_only.calibration_x)
+    assert params.calibration_y == sorted(params.calibration_y)
+
+
+# #379: the LightGBM step was made cheaper (one float64 matrix shared by predict and TreeSHAP, one
+# thread). Neither may change a decision, so these tests demand exact equality with the previous
+# arithmetic (DataFrame predict), not closeness.
+def _reference(
+    scorer: h.HybridScorer, frame: pd.DataFrame, i: int
+) -> tuple[int, float, float, list[float]]:
+    """The scoring arithmetic as it was before #379: DataFrame predict and ``score_samples``."""
+    assert scorer.booster is not None and scorer.anomaly is not None
+    row, outcome = frame.iloc[[i]], scorer.rules.evaluate(h.rule_context(frame.iloc[i]))
+    raw = float(np.asarray(scorer.booster.predict(row[list(t.MODEL_FEATURES)]))[0])
+    p = float(scorer.params.calibrate(np.array([raw]))[0])
+    model = scorer.anomaly
+    forest_raw = -model.forest.score_samples(row[list(ANOMALY_FEATURES)].to_numpy(dtype=float))
+    a = float(np.clip((forest_raw - model.low) / (model.high - model.low), 0.0, 1.0)[0])
+    z = (
+        scorer.params.intercept
+        + scorer.params.w_model * p
+        + scorer.params.w_anomaly * a
+        + scorer.params.w_rules * outcome.score / 100
+    )
+    risk = round(100 * h._sigmoid(z))
+    for hit in outcome.triggered:
+        risk = max(risk, h.OVERRIDES.get(hit.code, 0))
+    contrib = np.asarray(scorer.booster.predict(row[list(t.MODEL_FEATURES)], pred_contrib=True))
+    return min(max(risk, 0), 100), p, a, [float(v) for v in contrib[0]]
+
+
+@pytest.mark.timeout(300)
+def test_cheaper_scoring_gives_exactly_the_previous_scores_and_reasons(
+    trained: dict[str, object],
+) -> None:
+    split, scorer = trained["split"], trained["scorer"]
+    assert isinstance(split, t.Split) and isinstance(scorer, h.HybridScorer)
+    assert scorer.booster is not None
+    sample = pd.concat(
+        [split.test[split.test["label"] == 1],
+         split.test[split.test["label"] == 0].sample(300, random_state=11)]
+    )  # fmt: skip
+    for i in range(len(sample)):
+        result = _score(scorer, sample, i)
+        risk, p, a, contrib = _reference(scorer, sample, i)
+        assert result.risk_score == risk  # exact: the same integer, so the same decision
+        assert result.features["model_probability"] == round(p, 4)
+        assert result.features["anomaly_score"] == round(a, 4)
+        model_reasons = [r for r in result.reasons if r.source is ReasonSource.MODEL]
+        values = np.asarray(contrib[:-1])
+        expected = [
+            (f"MODEL_{t.MODEL_FEATURES[j].upper()}", round(float(values[j]), 4))
+            for j in np.argsort(-values)[: h.TOP_SHAP]
+            if values[j] > 0
+        ]
+        assert [(r.code, r.contribution) for r in model_reasons] == expected
+
+
+def test_one_score_is_one_single_threaded_predict_and_one_treeshap_call(
+    trained: dict[str, object],
+) -> None:
+    split, scorer = trained["split"], trained["scorer"]
+    assert isinstance(split, t.Split) and isinstance(scorer, h.HybridScorer)
+    assert scorer.booster is not None
+    booster: lgb.Booster = scorer.booster
+    calls: list[tuple[type, tuple[int, ...], dict[str, Any]]] = []
+
+    class CountingBooster:
+        def predict(self, data: np.ndarray, **kwargs: Any) -> object:
+            calls.append((type(data), data.shape, kwargs))
+            return booster.predict(data, **kwargs)
+
+    spied = replace(scorer, booster=CountingBooster())  # type: ignore[arg-type]  # spy
+    result = _score(spied, split.test[split.test["label"] == 1])
+    assert result.model_version == "hybrid-test"
+    shape = (1, len(t.MODEL_FEATURES))
+    assert calls == [
+        (np.ndarray, shape, {"num_threads": 1}),
+        (np.ndarray, shape, {"pred_contrib": True, "num_threads": 1}),
+    ]

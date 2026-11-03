@@ -12,6 +12,9 @@ v2.0) used run `79157b22dc9a46d0b2dcfbb0ccde5cd9`; its headline numbers are kept
 >
 > **Update for generator v2.3 (#276) and TASK-084: see §9.** It covers the `hybrid-lgbm-iforest-2` retrain, the
 > tuning run (the current params are kept) and the promotion gate result. Its numbers supersede §8.
+>
+> **Update for #396 (ADR-0047): see §10.** `hybrid-lgbm-iforest-3` calibrates on out-of-time folds. Its numbers
+> supersede §9.
 
 > **All data in this report is synthetic.** It comes from the seeded generator (`pbip_datagen`, TASK-023),
 > which plants six fraud scenarios (F1-F6) and, since v2.1, three kinds of legitimate first-time behaviour.
@@ -352,3 +355,68 @@ matches no export from current code (10,274 test rows versus 10,258 for a v2.2 e
 `-1` vs `-2` comparison above uses the gate's own served scorer on the same rows. The model has to be re-gated
 on an idle machine before it is exported. **Nothing was exported to `models/fraud` and nothing was loaded into
 the demo stack.**
+
+## 10. Out-of-time calibration (#396, ADR-0047): `hybrid-lgbm-iforest-3`
+
+**Date:** 4 Nov 2026. **Scorer:** `hybrid-lgbm-iforest-3`, MLflow run `4d3a1ae903c4430d8745e9bb20fda674`
+(registry `pbip-fraud`, local SQLite store). **Data:** the same generator v2.3 exports as §9 (seed 42, 3,000 × 6;
+held-out seed 4242, 1,500 × 6). The LightGBM booster and the Isolation Forest are trained exactly as in §9 (same params, seed
+and data; LightGBM best iteration 81 and PR-AUC 0.977, as in §9). Only the calibration and the stack changed.
+
+**What changed.** The isotonic calibration is fitted on the validation scores plus out-of-time scores from 4
+chronological folds of the training period: each fold model trains on the earlier blocks and scores the next one.
+It rests on 317 positives (32,972 rows) instead of 106, and the table has 36 points instead of 14. The stack's L2
+strength is `C = 10` instead of 1. Test and held-out rows were used for neither the fit nor the choice. The choice
+evidence (calibration Brier and forward-in-time hybrid log-loss on the second half of validation, both recipes) is
+in ADR-0047.
+
+**The four bars (test / held-out),** measured with `scripts/fraud_eval_report.py` on the served artifacts:
+
+| Criterion | Bar | `-2` (§9) | `-3` |
+|---|---|---|---|
+| Legitimate new-payee transfers held for REVIEW | ≤ 1% | 0.28% / 0.37% | 0.28% / 0.43% (pass) |
+| Legitimate new-payee transfers asked for STEP_UP | ≤ 10% | 7.61% / 8.02% | 7.61% / 8.02% (pass) |
+| All legitimate debits held at REVIEW | ≤ 0.1% | 0.040% / 0.050% | 0.040% / 0.059% (pass) |
+| Recall at REVIEW, hybrid vs rules alone (test) | hybrid clearly better | 0.865 vs 0.202 | **0.923 vs 0.202** (pass) |
+
+| Measure (test / held-out) | `-2` | `-3` |
+|---|---|---|
+| Hybrid PR-AUC | 0.922 / 0.852 | **0.945 / 0.887** |
+| Recall at REVIEW | 0.865 / 0.845 | **0.923 / 0.894** |
+| Precision at REVIEW | 0.957 / 0.936 | 0.960 / 0.931 |
+| Confusion at REVIEW (TN / FP / FN / TP), test | 10,038 / 4 / 14 / 90 | 10,038 / 4 / 8 / 96 |
+| Confusion at REVIEW (TN / FP / FN / TP), held-out | 25,363 / 13 / 35 / 191 | 25,361 / 15 / 24 / 202 |
+
+On the test split the false holds are unchanged (4) and 6 more frauds are held. On the held-out seed 11 more
+frauds are held for 2 more false holds (0.051% to 0.059% of legitimate debits). STEP_UP (test): precision 0.539,
+recall 0.942, FPR 0.84%. BLOCK (test): precision 0.957, recall 0.846, FPR 0.040%.
+
+**Recall at REVIEW by scenario (test / held-out):** F1 0.86 / 0.82, F2 0.97 / 0.98, F3 1.00 / 1.00, F4 0.63 / 0.77,
+F5 0.83 / 0.50, F6 outbound 1.00 / 0.90. The gain is mostly F2 (velocity bursts: 0.88 / 0.90 in §9).
+
+**Behaviour suite (TASK-080), production recipe:** APP scam 95 (BLOCK; §9: 93), velocity burst 30 (STEP_UP),
+takeover 60 (REVIEW), routine grocery 0 (ALLOW). The baseline file now records the APP scam at 95.
+
+**#396 on the 1,500-customer recipe** (seed 42, 42 validation positives, 115 more from the folds): the APP scam
+goes from **30 (STEP_UP) to 64 (REVIEW)**; velocity burst 30, takeover 60, grocery 0. 64 is still below the suite's
+80 bar, which applies to the production recipe; `test_half_size_model_still_holds_the_known_app_scam` pins REVIEW or
+higher. Its hybrid PR-AUC is 0.876 / 0.831 and recall at REVIEW 0.855 / 0.779 (test / held-out). It holds 5 of 4,982
+legitimate test debits (0.100%, at the 0.1% bar; it was 4 with `-2`'s method) and 0.05% on held-out. It is a test
+fixture, not a served model, and its test split is half the size, so one row moves the rate by 0.02 points.
+
+**Limitations.** The calibration is still a step function, now with finer steps on three times the positives. The
+fold models see less data than the final model, so their scores are not exactly the final model's. All numbers are
+on synthetic data (§7).
+
+**Promotion gate (TASK-038), 4 Nov 2026 01:36 IST, passed:** `python -m pbip_ml.fraud.promotion promote --run-id
+4d3a1ae903c4430d8745e9bb20fda674` against the team's local SQLite registry, on the 2-CPU laptop with the other jobs
+paused (load average 2.06 / 5.28 / 6.71 just before, 1.84 / 4.97 / 6.57 just after; normal priority). The gate
+measured:
+- served PR-AUC 0.945 test and 0.887 held-out (gate ≥ 0.80: pass);
+- recall at REVIEW 0.923, FPR at REVIEW 0.040% (10,146 test rows);
+- **single-request p95 latency 20.2 ms** against the 50 ms gate (pass). §9's 112 ms was the CPU-starved machine,
+  not the model.
+
+The registry had no earlier champion, so there was no champion comparison. The run is registered as `pbip-fraud`
+version 1 with the `champion` alias. Exporting it to `models/fraud` (`export-champion`) and loading it into the
+demo stack is a separate, operator step after this change merges.
