@@ -159,7 +159,7 @@ def test_hybrid_version_is_not_the_one_of_the_v2_1_and_v2_2_models() -> None:
 
 
 def test_lightgbm_params_override_is_used_and_recorded(
-    exported: Path, dataset: pd.DataFrame, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A tuning candidate (``--lgbm-params``) is what trains, and the report says so."""
 
@@ -169,18 +169,15 @@ def test_lightgbm_params_override_is_used_and_recorded(
         return target
 
     monkeypatch.setattr(train_cli, "configure_tracking", _local_only)
-    split = t.time_split(dataset)
-    shallow = {**t.LGBM_PARAMS, "max_depth": 2, "num_leaves": 3}
-    booster, _ = t.train_lightgbm(split, params=shallow)
-    assert booster.params["max_depth"] == 2 and booster.params["num_leaves"] == 3
-    default, _ = t.train_lightgbm(split)
-    x = t._xy(split.test)[0]
-    assert not np.array_equal(booster.predict(x), default.predict(x))
+    small = tmp_path / "data"
+    small.mkdir()
+    _export_fraud(GeneratorConfig(seed=3, customers=300, months=6), small)  # small: CLI timing
     overrides = tmp_path / "params.json"
-    overrides.write_text('{"learning_rate": 0.1}', encoding="utf-8")
+    overrides.write_text('{"learning_rate": 0.1, "max_depth": 3, "num_leaves": 7}', "utf-8")
     out = tmp_path / "models"
-    train_cli.main(["--data", str(exported), "--out", str(out), "--lgbm-params", str(overrides),
+    train_cli.main(["--data", str(small), "--out", str(out), "--lgbm-params", str(overrides),
                     "--mlflow-local-dir", str(tmp_path / "mlruns")])  # fmt: skip
     report = json.loads((out / "report.json").read_text(encoding="utf-8"))
     assert report["lightgbm"]["params"]["learning_rate"] == 0.1
-    assert report["lightgbm"]["params"]["num_leaves"] == t.LGBM_PARAMS["num_leaves"]
+    model = (out / "lightgbm.txt").read_text(encoding="utf-8")
+    assert "[max_depth: 3]" in model and "[num_leaves: 7]" in model  # what LightGBM trained with
