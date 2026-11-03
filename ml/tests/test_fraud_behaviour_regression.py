@@ -81,7 +81,12 @@ KNOWN_FRAUD = ("app_scam", "velocity_burst", "account_takeover")
 @pytest.fixture(scope="module")
 def scorer(tmp_path_factory: pytest.TempPathFactory) -> h.HybridScorer:
     out = tmp_path_factory.mktemp("regression")
-    _export_fraud(GeneratorConfig(seed=42, customers=1500, months=6), out)
+    # The production recipe (``scripts/dev.py fraud-model``: seed 42, 3,000 customers, 6 months).
+    # It was 1,500 customers: with generator v2.3 (#276, ~1% fewer legitimate rows) that model put
+    # the APP scam at raw 0.90, which its isotonic calibration (42 validation positives) maps to a
+    # 0.40 step, so it scored 30. That is a property of the half-size model, not of the served one
+    # (3,000 customers: 93, BLOCK); calibration robustness is tracked separately.
+    _export_fraud(GeneratorConfig(seed=42, customers=3000, months=6), out)
     split = t.time_split(load_export(out))
     booster, _ = t.train_lightgbm(split)
     anomaly = t.train_isolation_forest(split)
