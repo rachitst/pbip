@@ -189,8 +189,11 @@ off.
 The lab really moves money as a demo customer (through the normal customer API), so the alerts it creates
 appear in the queue like any other.
 
-1. Open **Fraud demo lab**. Enter the demo **Customer email** and **Customer password** (the seeded demo
-   password, see the [README](../../README.md)). Customers with an authenticator are refused.
+1. Open **Fraud demo lab**. **Customer email** starts as `carol@demo.pbip` and **Sender email (F6)** as
+   `bob@demo.pbip`, the seeded customers without an authenticator. Enter the **Customer password** (the
+   seeded demo password, see the [README](../../README.md)). Customers with an authenticator, such as
+   Alice, are refused. Each customer signs in once; later runs reuse that session while the page stays
+   open, so a series of scenarios does not use up the sign-in rate limit.
 2. Choose **Run scenario** on a card:
 
    | Scenario | What it does | Rules it should trigger |
@@ -217,9 +220,14 @@ everyone.
 
 ![Customer insights](images/60-rm-insights.png)
 
-1. Filter by **Segment**, **Churn risk** (any, medium or high, high only) and **Loan propensity**.
-2. The list is sorted by churn risk, highest first, 20 per page. Each row shows the segment, balance,
-   churn risk (Low, Medium, High and a 0-100 score), last activity and loan propensity.
+1. Choose the **Order**: **Best product match first** (the default for a relationship manager) or
+   **Highest churn risk first** (the default for an administrator). Filter by **Segment**, **Churn risk**
+   (any, medium or high, high only) and **Loan propensity**. The order and filters apply to all your
+   customers before paging, 20 per page.
+2. Each row shows the segment, balance, **Product match (rule-based)** (the best product's 0-100 score, its
+   name and first reason, or "No eligible product"), churn risk (Low, Medium, High and a 0-100 score), last
+   activity and loan propensity. The product match is a rule-based score, not a trained model or a
+   probability.
 3. Choose **Open** for the customer's details.
 
 ![Customer details](images/61-rm-customer-flyout.png)
