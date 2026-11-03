@@ -1779,7 +1779,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #79 | **Sprint:** 5 | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Sat 31 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** - (partially delivered in #223 on Sat 31 Oct: churn signals from the ledger, RM/admin with MFA, one set-based query and paginated; the list is ordered by churn risk, not product propensity, see #79; #347, 494e285, merged Tue 03 Nov: RM-to-customer assignment (ADR-0032), an RM sees only the customers an ADMIN assigned to them and every other customer is a 404, unassigned customers are ADMIN-only) | **Status:** In Progress (criterion 1 is still not met: the list is prioritised by churn risk, not by product propensity; #347 is a requested follow-up that scopes the list and does not change its ordering) | **Risk:** Low
+- **Start:** Sat 31 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** Tue 03 Nov (#223 on Sat 31 Oct: churn signals from the ledger, RM/admin with MFA, one set-based query, paginated; #347, 494e285: RM-to-customer assignment, ADR-0032; #391 merged in batch #397, bae2580: `order_by=PROPENSITY` ranks the RM's customers by the rule-based product score `rules-v1`, ADR-0041) | **Status:** Done (criterion 1 is met by `order_by=PROPENSITY`, the default for an RM: `test_propensity_order_ranks_by_product_score_within_the_rm_scope`, `test_propensity_order_combines_with_the_loan_filter`; criteria 2 and 3 unchanged since #223, `test_bola_rm_only_reaches_assigned_customers` covers both orders. The score is rule-based, not a trained propensity model: TASK-054's model is excluded by the owner) | **Risk:** Low
 - **Depends on:** TASK-054 (#77, Krishna), TASK-055 (#78, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-054, TASK-055
 - **Goal:** Staff endpoints aggregating customer churn risk, high-value transfer trends, and loan interest.
@@ -1791,7 +1791,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Protected by require_roles([RELATIONSHIP_MANAGER, ADMIN], mfa=True)
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #79`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] GET /api/v1/insights/customers returns prioritized list of high-propensity customers
+  - [x] GET /api/v1/insights/customers returns prioritized list of high-propensity customers
   - [x] Calculates churn signals based on balance decline rate and inactivity days
   - [x] Protected by require_roles([RELATIONSHIP_MANAGER, ADMIN], mfa=True)
 - **Definition of done (evidence):** Integration tests verify RM authorization and calculation accuracy.
@@ -2129,7 +2129,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #91 | **Sprint:** 5 | **Priority:** could | **Size:** M (1.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Pranay (`pranaysanap`)
-- **Start:** Sun 01 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (#336, 5503032, merged Tue 03 Nov; criteria not all met) | **Status:** In Progress (criteria 1 and 2 are met by `pbip_ml/monitoring/psi.py`: PSI for amount and per-entity daily velocity over 30-day windows, stable/warning/critical at 0.1 and 0.25, `ml/tests/test_monitoring_psi.py`; criterion 3 is not: the `pbip_feature_psi` gauge exists in `core/metrics.py` but nothing sets it outside tests, and there is no Grafana panel or alert rule. The scheduled evaluation that feeds it is #324) | **Risk:** Low (1.8 days of slack)
+- **Start:** Sun 01 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** Tue 03 Nov (#336, 5503032: PSI maths and the `pbip_feature_psi` gauge; #376, b68e9d4: hourly beat job `pbip.fraud.evaluate_feature_drift`, export through the API's `/metrics`, Grafana "Model input drift" row and `FeatureDriftWarning`/`FeatureDriftCritical` alerts, ADR-0038, threat T57) | **Status:** Done (criteria 1 and 2: `pbip_ml/monitoring/psi.py`, `ml/tests/test_monitoring_psi.py`; criterion 3: `test_feature_drift.py`, `test_feature_drift_job.py` (a seeded drifted population gives CRITICAL amount PSI, exported via `/metrics`), `test_monitoring_as_code.py` (alert thresholds 0.1 and 0.25, dashboard panel); DoD: the drift scenario and the threshold alerts, plus a `promtool test rules` run recorded on #376) | **Risk:** Low
 - **Depends on:** TASK-024 (#47, Rachit), TASK-029 (#52, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-024, TASK-029
 - **Goal:** Background monitoring script calculating feature drift and PSI metrics against baseline distributions.
@@ -2141,9 +2141,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Logs drift metrics to Prometheus / Grafana exporter
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #91`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Computes PSI for transaction amounts and velocities across 30-day windows
-  - [ ] Flags warning when PSI > 0.1 and critical alert when PSI > 0.25
-  - [ ] Logs drift metrics to Prometheus / Grafana exporter
+  - [x] Computes PSI for transaction amounts and velocities across 30-day windows
+  - [x] Flags warning when PSI > 0.1 and critical alert when PSI > 0.25
+  - [x] Logs drift metrics to Prometheus / Grafana exporter
 - **Definition of done (evidence):** Script runs on synthetic drift scenarios, verifies PSI threshold alerts.
 - **Required checks:**
   - Automated: pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable
@@ -2665,7 +2665,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #110 | **Sprint:** 6 | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Mon 02 Nov | **Target deadline:** Tue 03 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Medium (0.8 days of slack before downstream work is delayed)
+- **Start:** Mon 02 Nov | **Target deadline:** Tue 03 Nov | **Actual completion:** - (#373, 10a26fe, merged Tue 03 Nov: `docs/testing/test-strategy-and-report.md`; criterion 2 not met) | **Status:** In Progress (criteria 1 and 3 are met: test distribution from CI run 41600683787, and the lock-order argument with real-thread tests and 0 deadlocks in 8 CI k6 runs; criterion 2 is not: ledger branch coverage 98.08%, but **auth branch coverage is 89.58% (86/96), below 90%**) | **Risk:** Medium
 - **Depends on:** TASK-077 (#100, Rachit), TASK-078 (#101, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-077, TASK-078
 - **Goal:** Formal verification report summarizing test pyramid counts, coverage, and concurrency results.
@@ -2721,7 +2721,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #112 | **Sprint:** 7 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Tue 03 Nov | **Target deadline:** Tue 03 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
+- **Start:** Tue 03 Nov | **Target deadline:** Tue 03 Nov | **Actual completion:** - (fixes merging: #386 web layout in batch #397, bae2580; #388, 2c6230d: demo fixes for #383 and the forecast starting at the balance) | **Status:** In Progress | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
 - **Depends on:** TASK-077 (#100, Rachit), TASK-081 (#104, Abbas). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-077, TASK-081
 - **Goal:** Full team defect hunting session identifying and resolving edge-case bugs and UI glitches.
@@ -2778,7 +2778,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #114 | **Sprint:** 7 | **Priority:** must | **Size:** S (0.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Tue 03 Nov | **Target deadline:** Tue 03 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
+- **Start:** Tue 03 Nov | **Target deadline:** Tue 03 Nov | **Actual completion:** - (release notes `docs/release/v1.0.0.md` and `CHANGELOG.md` in batch docs 5; the `v1.0.0` tag is left for the final review by the owner) | **Status:** In Progress (criteria 1 and 2 are checked by CI on every merge: one Alembic head with `alembic check`, and the OpenAPI/TypeScript drift check; criterion 3, the annotated `v1.0.0` tag, is not created) | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
 - **Depends on:** TASK-089 (#112, Rachit), TASK-090 (#113, Abbas). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-089, TASK-090
 - **Goal:** Final production release tagging with verified migration head and locked dependencies.
@@ -2805,7 +2805,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #115 | **Sprint:** 7 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Mon 02 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Medium (1.1 days of slack before downstream work is delayed)
+- **Start:** Mon 02 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** Tue 03 Nov (#374, 3438096: `docs/user-manual/` index plus customer, staff and compliance guides with 49 screenshots and a payment-decision diagram) | **Status:** Done (all three criteria are met: `customer-guide.md` sections 1, 2, 5 and 15; `staff-guide.md` sections 3-5; `compliance-guide.md` sections 4-6. The DoD names `docs/user-manual.md`; the manual is split into `docs/user-manual/README.md` and three guides instead. The plan's manual check, a teammate following the manual end to end, was not done) | **Risk:** Low
 - **Depends on:** TASK-019 (#42, Kalpak), TASK-036 (#59, Kalpak), TASK-061 (#84, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-019, TASK-036, TASK-061
 - **Goal:** End-user and operations documentation with step-by-step instructions and UI walkthroughs.
@@ -2817,9 +2817,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Compliance Guide: verifying hash-chained audit logs and generating statements
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #115`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Customer Banking Guide: registration, MFA enrollment, account transfers, and assistant chat
-  - [ ] Staff Operations Guide: managing fraud alert queues, reviewing SHAP reasons, releasing holds
-  - [ ] Compliance Guide: verifying hash-chained audit logs and generating statements
+  - [x] Customer Banking Guide: registration, MFA enrollment, account transfers, and assistant chat
+  - [x] Staff Operations Guide: managing fraud alert queues, reviewing SHAP reasons, releasing holds
+  - [x] Compliance Guide: verifying hash-chained audit logs and generating statements
 - **Definition of done (evidence):** Committed to docs/user-manual.md with screenshots and diagrams.
 - **Required checks:**
   - Automated: document builds/renders, links valid, content matches the code and backlog
@@ -2832,7 +2832,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #116 | **Sprint:** 7 | **Priority:** must | **Size:** S (0.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Tue 03 Nov | **Target deadline:** Tue 03 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** High (0.1 day(s) of slack; a slip here moves Nov 3 work)
+- **Start:** Tue 03 Nov | **Target deadline:** Tue 03 Nov | **Actual completion:** - (#377 open) | **Status:** In Progress | **Risk:** High (0.1 day(s) of slack; a slip here moves Nov 3 work)
 - **Depends on:** TASK-081 (#104, Abbas), TASK-092 (#115, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-081, TASK-092
 - **Goal:** Rehearsed 18-minute presentation script with deterministic demo data and fallback video.
