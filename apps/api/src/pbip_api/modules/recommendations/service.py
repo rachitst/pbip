@@ -26,7 +26,6 @@ from sqlalchemy.orm import Session
 from pbip_api.core.calendar import bank_today
 from pbip_api.core.db import utcnow
 from pbip_api.core.errors import NotFoundError
-from pbip_api.modules.accounts import service as accounts_service
 from pbip_api.modules.accounts.models import Account, AccountStatus, AccountType
 from pbip_api.modules.analytics import service as analytics_service
 from pbip_api.modules.customers import service as customers_service
@@ -82,11 +81,11 @@ def _held_products(
 def _context(
     session: Session, customer_id: UUID, now: datetime
 ) -> CustomerRecommendationContext | None:
-    accounts = accounts_service.list_accounts(session, customer_id)
-    if not accounts:
+    # #343: the accounts, the health score and the cash flow come from two queries in total.
+    profile = analytics_service.get_customer_financial_profile(session, customer_id, now)
+    if profile is None:
         return None
-    primary = accounts[0]
-    health, cash = analytics_service.get_health_and_cash_flow(session, customer_id, primary.id, now)
+    accounts, health, cash = profile.accounts, profile.health, profile.cash_flow
     return CustomerRecommendationContext(
         customer_id=customer_id,
         segment=_segment(session, customer_id),
