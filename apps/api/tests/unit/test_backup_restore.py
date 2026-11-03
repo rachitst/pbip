@@ -301,7 +301,10 @@ def test_run_pipeline_reports_both_exit_codes(tmp_path: Path) -> None:
     assert codes == (0, 0)
     assert out.read_bytes() == b"abc"
     assert backup.run_pipeline(_python("raise SystemExit(1)"), _COPY, env) == (1, 0)
-    assert backup.run_pipeline(_PRODUCE, _python("raise SystemExit(3)"), env) == (0, 3)
+    # The failing consumer reads its input first: exiting unread would race the producer's write
+    # into a closed pipe (exit 120 instead of 0 on some runs) and make the result timing-dependent.
+    failing_consumer = _python("import sys; sys.stdin.buffer.read(); raise SystemExit(3)")
+    assert backup.run_pipeline(_PRODUCE, failing_consumer, env) == (0, 3)
 
 
 def test_a_failing_pipeline_stage_fails_the_dump(tmp_path: Path) -> None:
