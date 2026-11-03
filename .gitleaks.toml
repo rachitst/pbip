@@ -1,0 +1,25 @@
+# gitleaks configuration: the default rule set plus an allow-list for test-only dummies.
+# Every entry states WHY it is not a secret. Triage of the full-history scan (2026-11-03, gitleaks v8.21.2,
+# `git --log-opts=--all`) is in docs/operations/private-repo-checklist.md. Never add a real credential here:
+# rotate it instead.
+title = "PBIP gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test-only dummies and the detect-secrets baseline (reasons inline)"
+paths = [
+  # The detect-secrets baseline stores SHA-1 hashes of already-audited dummy values ("hashed_secret"), not
+  # secrets; generic-api-key matches the hash strings.
+  '''(^|/)\.secrets\.baseline$''',
+]
+regexes = [
+  # scripts/smoke_test.py and scripts/smoke_test.sh: a deliberately WRONG password sent to /auth/login to
+  # prove bad credentials return 401. It never matched any account.
+  '''definitely-wrong-123''',
+  # apps/api/tests/unit/test_logging_redaction.py: a hand-made JWT-shaped string ({"alg":"HS256"},
+  # {"sub":"1234"}, signature "signature123") that proves the log redactor scrubs bearer tokens. It was never
+  # signed by any key.
+  '''eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiIxMjM0In0\.c2lnbmF0dXJlMTIz''',
+]
