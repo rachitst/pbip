@@ -543,6 +543,7 @@ def _begin_idempotent(
 ) -> tuple[UUID, WealthResult | None]:
     """Claim the key. A concurrent duplicate is already serialised by the user lock; it then sees
     the committed row and replays its response."""
+    ledger.discard_expired_idempotency_key(session, user_id, key)
     inserted = session.execute(
         pg_insert(IdempotencyKey)
         .values(

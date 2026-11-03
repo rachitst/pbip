@@ -24,6 +24,7 @@ from pbip_api.modules.insights.policy import RmScope
 from pbip_api.modules.insights.schemas import (
     CustomerInsightDetail,
     CustomerInsightsListResponse,
+    InsightOrder,
     InteractionCreate,
     InteractionListResponse,
     InteractionOut,
@@ -58,7 +59,7 @@ def _now(clock: Callable[[], float]) -> datetime:
     "/customers",
     response_model=CustomerInsightsListResponse,
     status_code=status.HTTP_200_OK,
-    summary="Customers in the caller's scope (an RM: assigned only) ordered by churn risk",
+    summary="Customers in the caller's scope (an RM: assigned only) by churn risk or propensity",
 )
 def get_prioritized_customer_insights(
     min_churn_risk: float | None = Query(
@@ -71,13 +72,20 @@ def get_prioritized_customer_insights(
         le=1.0,
         description="Minimum loan propensity (rule-based relevance of the best loan product)",
     ),
+    order_by: InsightOrder = Query(
+        InsightOrder.CHURN_RISK,
+        description=(
+            "CHURN_RISK (default): highest churn risk first. PROPENSITY: highest rule-based "
+            "product score first (rules-v1, not a trained model); scores every customer in scope"
+        ),
+    ),
     # Each row on the page runs the recommendation rules, so pages are small.
     limit: int = Query(20, ge=1, le=25, description="Page size"),
     offset: int = Query(0, ge=0, le=100_000, description="Page offset"),
     principal: Principal = Depends(rm_gate),
     session: Session = Depends(get_session),
 ) -> CustomerInsightsListResponse:
-    """One page of customers ordered by churn risk (RM: their assigned customers; admin: all)."""
+    """One page of customers in the requested order (RM: their assigned customers; admin: all)."""
     return service.get_customer_insights(
         session=session,
         scope=_scope(principal),
@@ -86,6 +94,7 @@ def get_prioritized_customer_insights(
         limit=limit,
         offset=offset,
         min_loan_propensity=min_loan_propensity,
+        order=order_by,
     )
 
 

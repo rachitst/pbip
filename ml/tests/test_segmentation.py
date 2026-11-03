@@ -208,7 +208,7 @@ def test_clustering_edge_case_identical_samples() -> None:
 
 def test_each_persona_blob_is_named_after_its_dominant_feature() -> None:
     """The five synthetic personas from the job script land in the five segments, one each."""
-    from scripts.run_segmentation import synthetic_customers
+    from pbip_ml.segmentation.synthetic import synthetic_customers
 
     assignments, report = cluster_customers(synthetic_customers(125), n_clusters=5)
     assert report.cluster_distribution == {name.value: 25 for name in CustomerSegmentName}
@@ -226,7 +226,7 @@ def test_each_persona_blob_is_named_after_its_dominant_feature() -> None:
 
 def test_only_five_clusters_can_carry_the_five_persona_names() -> None:
     """Audit H2: with k < 5 the ranking-based naming labelled grocery spenders HIGH_NET_WORTH."""
-    from scripts.run_segmentation import synthetic_customers
+    from pbip_ml.segmentation.synthetic import synthetic_customers
 
     for k in (1, 2, 4, 6):
         with pytest.raises(ValueError, match="n_clusters must be 5"):
@@ -237,7 +237,7 @@ def test_only_five_clusters_can_carry_the_five_persona_names() -> None:
 
 def test_an_extreme_outlier_still_gets_a_finite_confidence() -> None:
     """Audit M8: exp(-distance) underflowed to 0 for every centroid and the confidence became NaN."""
-    from scripts.run_segmentation import synthetic_customers
+    from pbip_ml.segmentation.synthetic import synthetic_customers
 
     customers = synthetic_customers(25)
     outlier = customers[0].model_copy(
@@ -250,7 +250,7 @@ def test_an_extreme_outlier_still_gets_a_finite_confidence() -> None:
 
 
 def test_quality_metrics_are_undefined_when_every_customer_is_its_own_cluster() -> None:
-    from scripts.run_segmentation import synthetic_customers
+    from pbip_ml.segmentation.synthetic import synthetic_customers
 
     _assignments, report = cluster_customers(synthetic_customers(5), n_clusters=5)
     assert report.n_clusters == 5 and report.n_samples == 5
@@ -259,7 +259,7 @@ def test_quality_metrics_are_undefined_when_every_customer_is_its_own_cluster() 
 
 def test_explanations_state_measured_facts_relative_to_the_population() -> None:
     """Audit M7: templates claimed 'high frequency' or 'channels' regardless of the customer's data."""
-    from scripts.run_segmentation import synthetic_customers
+    from pbip_ml.segmentation.synthetic import synthetic_customers
 
     assignments, _report = cluster_customers(synthetic_customers(125), n_clusters=5)
     by_segment = {a.segment: a.explanation for a in assignments}

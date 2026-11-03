@@ -40,7 +40,7 @@ from pbip_api.modules.ledger.models import Transaction
 from pbip_api.modules.payees.models import Payee
 
 if TYPE_CHECKING:  # the model stack (LightGBM, scikit-learn) loads only when the flag is on
-    from pbip_ml.fraud.hybrid import HybridScorer
+    from pbip_ml.fraud.hybrid import HybridResult, HybridScorer
     from pbip_ml.fraud.inference import TransferInputs
 
 _logger = structlog.get_logger(__name__)
@@ -82,6 +82,20 @@ def load_engine(settings: Settings) -> "HybridScorer | None":
     return engine
 
 
+def score_within_budget(
+    engine: "HybridScorer", inputs: "TransferInputs", budget_seconds: float
+) -> "HybridResult":
+    """The model step alone: score in the worker pool, wait at most the budget.
+
+    Raises ``concurrent.futures.TimeoutError`` past the budget; the call then finishes in the
+    background. Shared with ``scripts/benchmark_fraud_latency.py`` so the benchmark measures the
+    fallback rate of exactly this code path.
+    """
+    from pbip_ml.fraud.inference import score_transfer  # loaded already by load_engine
+
+    return _POOL.submit(score_transfer, engine, inputs).result(timeout=budget_seconds)
+
+
 class HybridFraudScorer:
     def __init__(
         self,
@@ -102,13 +116,9 @@ class HybridFraudScorer:
         base = self.baseline.score(context)
         if self.engine is None:
             return _rules_only(base, "NOT_LOADED", started)
-        from pbip_ml.fraud.inference import score_transfer  # loaded already by load_engine
-
         inputs = self._inputs(context, new_device=bool(base.features.get("new_device")))
         try:
-            hybrid = _POOL.submit(score_transfer, self.engine, inputs).result(
-                timeout=self.budget_seconds
-            )
+            hybrid = score_within_budget(self.engine, inputs, self.budget_seconds)
         except FutureTimeout:
             return _rules_only(base, "TIMEOUT", started)
         except Exception as exc:  # any model failure: fail safe to the rules, never ALLOW-all

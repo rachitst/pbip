@@ -557,7 +557,7 @@ def test_the_analysts_decision_settles_the_held_bill_payment(
     alert = client.get("/api/v1/fraud/alerts", headers=analyst.headers).json()[0]
     decided = client.post(
         f"/api/v1/fraud/alerts/{alert['id']}/decision",
-        headers=analyst.headers,
+        headers={**analyst.headers, "Idempotency-Key": f"decide-{alert['id']}"},
         json={"action": action, "note": "checked with the customer"},
     )
     assert decided.status_code == 204, decided.text

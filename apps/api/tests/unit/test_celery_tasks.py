@@ -42,6 +42,21 @@ def test_beat_pays_out_matured_deposits_hourly_through_a_registered_task() -> No
     assert "pbip.wealth.pay_out_matured_deposits" in celery_app.tasks
 
 
+def test_beat_expires_stale_step_ups_every_minute_and_purges_keys_daily() -> None:
+    """Issue #314 / ADR-0036: two entries on the existing beat, each pointing at a real task."""
+    schedule = celery_app.conf.beat_schedule
+    expiry = [e for e in schedule.values() if e["task"] == "pbip.transfers.expire_stale_step_ups"]
+    purge = [
+        e for e in schedule.values() if e["task"] == "pbip.ledger.purge_expired_idempotency_keys"
+    ]
+    assert len(expiry) == 1 and expiry[0]["schedule"] == 60.0
+    assert len(purge) == 1 and purge[0]["schedule"] == crontab(hour=4, minute=15)
+    assert {
+        "pbip.transfers.expire_stale_step_ups",
+        "pbip.ledger.purge_expired_idempotency_keys",
+    } <= (set(celery_app.tasks))
+
+
 def test_beat_evaluates_feature_drift_hourly_through_a_registered_task() -> None:
     """#324 / ADR-0038: one hourly PSI entry on the existing beat, inside the 3-hour result TTL."""
     from pbip_api.modules.fraud.drift import RESULT_TTL

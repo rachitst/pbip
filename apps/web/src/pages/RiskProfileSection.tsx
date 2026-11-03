@@ -8,6 +8,7 @@ import { formatDate } from "../lib/format";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
+import "./ChoiceGroup.css";
 
 type QuestionKey = keyof RiskQuestionnaire;
 type Answers = { [K in QuestionKey]?: RiskQuestionnaire[K] };

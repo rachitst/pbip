@@ -22,9 +22,16 @@ x-api-env: &api-env
   OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-4}
   OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-24h}
   ASSISTANT_LLM_ENABLED: ${ASSISTANT_LLM_ENABLED:-true}
+  # Optional hosted router for unclear assistant questions (ADR-0037); default ollama sends nothing out.
+  LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+  GROQ_API_KEY: ${GROQ_API_KEY:-}
+  GROQ_MODEL: ${GROQ_MODEL:-}
+  GROQ_REASONING_EFFORT: ${GROQ_REASONING_EFFORT:-}
   # Fraud scoring (ADR-0019): the demo uses the hybrid; ./models/fraud comes from `make fraud-model`.
   FRAUD_SCORER: ${FRAUD_SCORER:-hybrid}
   FRAUD_MODEL_DIR: /models/fraud
+  # Model step budget, 5-100 ms (#362): set it in .env for a slow demo machine (docs/SETUP_GUIDE.md section 12).
+  FRAUD_MODEL_BUDGET_MS: ${FRAUD_MODEL_BUDGET_MS:-50}
 
 x-dev-ca: &dev-ca ./infra/certs/ca.crt:/etc/pbip-ca/ca.crt:ro
 
@@ -53,6 +60,9 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+    # Like api/worker/beat/web: after a reboot or a Docker restart the database must come back too,
+    # or the API restarts into a stack with no database (bug bash, TASK-089).
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
@@ -64,6 +74,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+    restart: unless-stopped
 
   migrate:
     build: *api-build

@@ -126,10 +126,15 @@ describe("SendMoney", () => {
     await user.type(within(modal).getByLabelText("Authenticator code"), "222222");
     await user.click(within(modal).getByRole("button", { name: "Confirm transfer" }));
     expect(await screen.findByText(/Sent INR 300.00/)).toBeInTheDocument();
-    expect(calls.filter((c) => c.url.endsWith("/step-up")).map((c) => c.body)).toEqual([
-      { code: "111111" },
-      { code: "222222" },
-    ]);
+    const stepUps = calls.filter((c) => c.url.endsWith("/step-up"));
+    expect(stepUps.map((c) => c.body)).toEqual([{ code: "111111" }, { code: "222222" }]);
+    // One key for the prompt (issue #314): a wrong code does not use it up, so the retry keeps it,
+    // and it is not the transfer's own key.
+    const keys = stepUps.map((c) => c.headers.get("Idempotency-Key"));
+    expect(keys[0]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(keys[1]).toBe(keys[0]);
+    const created = calls.find((c) => c.url.endsWith("/api/v1/transfers"));
+    expect(created?.headers.get("Idempotency-Key")).not.toBe(keys[0]);
   });
 
   it("closes the modal and says the transfer is under review when the server escalates", async () => {
