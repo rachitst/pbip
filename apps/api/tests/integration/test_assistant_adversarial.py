@@ -46,7 +46,7 @@ class RecordingModel:
 
 
 class GroqRecordingModel(RecordingModel):
-    """The REAL Groq adapter (ADR-0034) over a fake HTTP transport: the scripted ``reply`` comes
+    """The REAL Groq adapter (ADR-0036) over a fake HTTP transport: the scripted ``reply`` comes
     back as a Groq function call, and every request body that would have left the stack is kept."""
 
     def __init__(self, reply: str) -> None:
@@ -78,7 +78,7 @@ _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
 @pytest.fixture(params=["local", "groq"])
 def model(app: FastAPI, request: pytest.FixtureRequest) -> Iterator[RecordingModel]:
-    """Every probe runs against the local model and against the Groq adapter (ADR-0034)."""
+    """Every probe runs against the local model and against the Groq adapter (ADR-0036)."""
     reply = '{"tool": "get_account_summary", "arguments": {}}'
     fake = GroqRecordingModel(reply) if request.param == "groq" else RecordingModel(reply)
     app.dependency_overrides[get_chat_model] = lambda: fake

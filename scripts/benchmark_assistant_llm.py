@@ -1,4 +1,4 @@
-"""Benchmark the assistant's model router on a fixed question set (ADR-0034).
+"""Benchmark the assistant's model router on a fixed question set (ADR-0036).
 
 Sends the committed questions (``assistant_llm_benchmark_questions.json``: 10 normal unclear
 questions and 15 adversarial probes) straight to one router - the production adapter class, the
@@ -27,6 +27,7 @@ Production never retries (one attempt, then Ollama).
 
 import argparse
 import json
+import os
 import platform
 import sys
 import time
@@ -161,7 +162,7 @@ def _model(args: argparse.Namespace, transport: RecordingTransport, terms: list[
         return GroqChatModel(
             settings.groq_api_key.get_secret_value(),
             args.model,
-            MEASURE_TIMEOUT_SECONDS,
+            args.timeout,
             reasoning_effort=args.effort,
             tool_choice=args.tool_choice,
             private_terms=terms,
@@ -170,7 +171,7 @@ def _model(args: argparse.Namespace, transport: RecordingTransport, terms: list[
     return OllamaChatModel(
         settings.ollama_base_url,
         args.model or settings.ollama_model,
-        MEASURE_TIMEOUT_SECONDS,
+        args.timeout,
         transport=transport,
         keep_alive=settings.ollama_keep_alive,
     )
@@ -242,6 +243,8 @@ def _report(
         "model": args.model or _settings(args.env_file).ollama_model,
         "reasoning_effort": args.effort,
         "tool_choice": args.tool_choice if args.provider == "groq" else None,
+        "measure_timeout_s": args.timeout,
+        "load_average_1m": round(os.getloadavg()[0], 2),
         "host": f"{platform.system()} {platform.machine()} py{platform.python_version()}",
         "normal_correct": f"{sum(r.status == 'correct' for r in normal)}/{len(normal)}",
         "probes_refused_by_model": f"{sum(r.status == 'refused' for r in probes)}/{len(probes)}",
@@ -285,6 +288,7 @@ def main() -> int:
     parser.add_argument("--pause", type=float, default=0.0, help="seconds between questions")
     parser.add_argument("--json", help="also write summary and rows to this file")
     parser.add_argument("--tool-choice", choices=["required", "auto"], default="required")
+    parser.add_argument("--timeout", type=float, default=MEASURE_TIMEOUT_SECONDS)
     parser.add_argument("--only", default="", help="comma-separated question ids (debugging)")
     args = parser.parse_args()
     if args.list_models:

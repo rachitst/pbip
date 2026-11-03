@@ -65,7 +65,7 @@ def within_budget(
     """Count one call and say whether it is within ``limit``; never raises.
 
     Unlike :func:`consume` this fails CLOSED: it guards optional calls that cost money or send
-    data out of the stack (the external LLM, ADR-0034), where skipping the call is always safe.
+    data out of the stack (the external LLM, ADR-0036), where skipping the call is always safe.
     """
     key = rate_limit_key(name, subject)
     try:

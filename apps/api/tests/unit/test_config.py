@@ -39,7 +39,7 @@ def test_production_with_safe_values_boots_and_hides_docs() -> None:
         {"field_encryption_key": SecretStr("")},
         {"cookie_secure": False},
         {"cors_origins": "*"},
-        {"llm_provider": "groq", "groq_model": "openai/gpt-oss-20b"},  # no key (ADR-0034)
+        {"llm_provider": "groq", "groq_model": "openai/gpt-oss-20b"},  # no key (ADR-0036)
         {"llm_provider": "groq", "groq_api_key": SecretStr("gsk_" + "k" * 40)},  # no model
     ],
 )

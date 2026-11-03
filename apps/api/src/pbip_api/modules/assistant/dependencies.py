@@ -36,7 +36,7 @@ def get_chat_model(
 ) -> ChatModel | None:
     """``None`` when the LLM is switched off: the deterministic rules answer every message.
 
-    Otherwise a chain: Groq first when ``LLM_PROVIDER=groq`` (ADR-0034), then Ollama.
+    Otherwise a chain: Groq first when ``LLM_PROVIDER=groq`` (ADR-0036), then Ollama.
     """
     if not settings.assistant_llm_enabled:
         return None

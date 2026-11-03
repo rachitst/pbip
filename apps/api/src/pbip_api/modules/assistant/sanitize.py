@@ -8,7 +8,7 @@
   quoted data, stripped of control characters and quotes, and capped.
 * Every reply and every stored message passes :func:`redact_output`, which masks long digit runs
   (account and card numbers) to the last four digits, and replaces JWTs and email addresses.
-* A message sent to an EXTERNAL model provider (Groq, ADR-0034) first passes
+* A message sent to an EXTERNAL model provider (Groq, ADR-0036) first passes
   :func:`redact_for_provider`: everything :func:`redact_output` removes, plus UUIDs (customer,
   user and account ids), Indian mobile numbers, and the signed-in customer's own name and email.
   The model only routes, so none of these change the tool it should choose.

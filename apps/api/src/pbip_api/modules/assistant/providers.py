@@ -1,4 +1,4 @@
-"""External LLM provider (Groq, ADR-0034) and the provider fallback chain.
+"""External LLM provider (Groq, ADR-0036) and the provider fallback chain.
 
 Groq is an optional, hosted router for UNCLEAR assistant questions only. It has the same single
 job as Ollama (ADR-0018): pick one approved tool and its arguments. Here that is OpenAI-style

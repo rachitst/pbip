@@ -82,12 +82,12 @@ class Settings(BaseSettings):
     # How long Ollama keeps the model in memory after a question (Ollama duration syntax).
     ollama_keep_alive: str = Field(default="24h", pattern=r"^-?[0-9]{1,5}[smh]?$")
     assistant_llm_enabled: bool = True
-    # Which model routes unclear assistant questions (ADR-0034). "groq" sends the redacted routing
+    # Which model routes unclear assistant questions (ADR-0036). "groq" sends the redacted routing
     # question to Groq's hosted API first, then falls back to Ollama, then to the rules. The Groq
     # base URL is a constant in code (SSRF); only the key, model and limits are configuration.
     llm_provider: Literal["ollama", "groq"] = "ollama"
     groq_api_key: SecretStr = SecretStr("")
-    # Empty = not chosen. Set from Groq's current model list after the benchmark (ADR-0034).
+    # Empty = not chosen. Set from Groq's current model list after the benchmark (ADR-0036).
     groq_model: str = Field(default="", pattern=r"^[A-Za-z0-9._:/-]{0,100}$")
     groq_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
     # None = the model's default (sent as nothing). GPT-OSS accepts low|medium|high only.

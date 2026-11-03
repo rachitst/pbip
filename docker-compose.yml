@@ -22,7 +22,7 @@ x-api-env: &api-env
   OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-4}
   OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-24h}
   ASSISTANT_LLM_ENABLED: ${ASSISTANT_LLM_ENABLED:-true}
-  # Optional hosted router for unclear assistant questions (ADR-0034); default ollama sends nothing out.
+  # Optional hosted router for unclear assistant questions (ADR-0036); default ollama sends nothing out.
   LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
   GROQ_API_KEY: ${GROQ_API_KEY:-}
   GROQ_MODEL: ${GROQ_MODEL:-}

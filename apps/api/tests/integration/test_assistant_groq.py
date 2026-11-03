@@ -1,4 +1,4 @@
-"""ADR-0034: LLM_PROVIDER=groq end to end through the real wiring (``get_chat_model``), with both
+"""ADR-0036: LLM_PROVIDER=groq end to end through the real wiring (``get_chat_model``), with both
 providers on fake HTTP transports. No request leaves the test process."""
 
 import json
