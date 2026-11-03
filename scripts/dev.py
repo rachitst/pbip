@@ -729,22 +729,66 @@ def derive_test_database_url(
     return f"postgresql+psycopg://{encoded_user}:{encoded_password}@{host}:{port}/{target_db}"
 
 
+# The only .env keys a test run takes from the developer's file: how to reach the local
+# PostgreSQL and Redis. Behaviour flags (FRAUD_SCORER=hybrid, LLM_PROVIDER=groq, GeoIP paths...)
+# stay out, or the suite's expectations would depend on the developer's demo setup (#317, #371).
+TEST_ENV_FILE_KEYS = frozenset(
+    {
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD",
+        "POSTGRES_DB",
+        "DATABASE_URL",
+        "TEST_DATABASE_URL",
+        "DATABASE_CONNECT_TIMEOUT_SECONDS",
+        "REDIS_URL",
+        "COMPOSE_PROJECT_NAME",
+    }
+)
+
+# Forced on every test run, whatever .env or the shell says. Settings also reads .env itself
+# (env_file), and a process variable wins over it, so these pin the code defaults. A test that
+# needs another value sets it explicitly (Settings(...) or monkeypatch).
+TEST_ENV_SAFE_OVERRIDES: dict[str, str] = {
+    "FRAUD_SCORER": "rules",
+    "FRAUD_MODEL_DIR": "",
+    "FRAUD_MODEL_BUDGET_MS": "50",
+    "FRAUD_TRAVEL_MAX_SPEED_KMH": "900",
+    "FRAUD_TRAVEL_MIN_DISTANCE_KM": "500",
+    "FRAUD_MULE_WINDOW_MINUTES": "60",
+    "FRAUD_MULE_MIN_INBOUND_MINOR": "1000000",
+    "FRAUD_MULE_MIN_RATIO_PERCENT": "80",
+    "FRAUD_MULE_REPEAT_EPISODES": "2",
+    "GEOIP_COUNTRY_DB_PATH": "",
+    "GEOIP_CITY_DB_PATH": "",
+    "LLM_PROVIDER": "ollama",
+    "ASSISTANT_LLM_ENABLED": "true",
+    "GROQ_API_KEY": "",
+    "GROQ_MODEL": "",
+    "GROQ_REASONING_EFFORT": "",
+    "OTEL_ENABLED": "false",
+    "OTEL_EXPORTER": "none",
+}
+
+
 def build_test_env(
     env_path: Path = ROOT / ".env",
     explicit_env: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Build the environment dictionary for running tests.
 
-    Loads the project's .env file, respects explicitly supplied variables,
-    and derives TEST_DATABASE_URL targeting 127.0.0.1:5432/${POSTGRES_DB}_test
-    if absent (the address compose publishes on; "localhost" tries ::1 first on Windows).
+    Takes from the project's .env file only the keys needed to reach the local services
+    (TEST_ENV_FILE_KEYS), respects explicitly supplied variables, forces the safe behaviour
+    defaults (TEST_ENV_SAFE_OVERRIDES) so tests never depend on the developer's demo flags,
+    and derives TEST_DATABASE_URL targeting 127.0.0.1:5432/${POSTGRES_DB}_test if absent (the
+    address compose publishes on; "localhost" tries ::1 first on Windows).
     Never prints credentials or secrets.
     """
     current_env = os.environ if explicit_env is None else explicit_env
     file_env = parse_env_file(env_path)
 
-    test_env: dict[str, str] = dict(file_env)
+    test_env: dict[str, str] = {k: v for k, v in file_env.items() if k in TEST_ENV_FILE_KEYS}
     test_env.update(current_env)
+    test_env.update(TEST_ENV_SAFE_OVERRIDES)
 
     if not test_env.get("TEST_DATABASE_URL"):
         user = test_env.get("POSTGRES_USER", "pbip")

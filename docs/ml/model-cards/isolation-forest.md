@@ -4,7 +4,7 @@
 |---|---|
 | Code | `ml/src/pbip_ml/fraud/training.py` (`train_isolation_forest`), `ml/src/pbip_ml/fraud/artifacts.py` (`AnomalyModel`, allow-listed load), `ml/src/pbip_ml/fraud/inference.py` (load) |
 | Artifact | `models/fraud/isolation_forest.joblib`, checksummed in `manifest.json`; a joblib pickle of `pbip_ml.fraud.artifacts.AnomalyModel`, read only by the allow-listed unpickler (ADR-0033). Artifacts trained before ADR-0033 name `pbip_ml.fraud.training.AnomalyModel` and still load: that one path is mapped, never imported |
-| `model_version` | not served alone; part of the hybrid `hybrid-lgbm-iforest-1` |
+| `model_version` | not served alone; part of the hybrid `hybrid-lgbm-iforest-2` (`-1` = the v2.1/v2.2 models) |
 | Owner | `rachitst` (`.github/CODEOWNERS`, rule `*`) |
 | Tasks | TASK-030, TASK-031, TASK-039 |
 

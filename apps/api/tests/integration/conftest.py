@@ -3,6 +3,7 @@
 import os
 import uuid
 from collections.abc import Callable, Iterator
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +16,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.crypto import FieldCipher
-from pbip_api.core.db import get_engine
+from pbip_api.core.db import get_engine, utcnow
 from pbip_api.core.redis import get_redis
 from pbip_api.core.security import PasswordService
 from pbip_api.main import create_app
@@ -25,7 +26,15 @@ from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.auth.service import AuthService, RequestMeta
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.ledger import service as ledger
-from pbip_test_support import PASSWORD, Actor, FakeClock, login_json, totp_code
+from pbip_test_support import (
+    PASSWORD,
+    Actor,
+    FakeClock,
+    login_json,
+    month_start,
+    post_deposit_at,
+    totp_code,
+)
 from pydantic import SecretStr
 from sqlalchemy import Engine, select, text
 from sqlalchemy.orm import Session, sessionmaker
@@ -138,7 +147,10 @@ def auth_service_factory(
 
 @pytest.fixture
 def make_customer(client: TestClient, migrated_engine: Engine) -> Callable[..., Actor]:
-    def factory(email: str | None = None, funds: int = 0) -> Actor:
+    def factory(email: str | None = None, funds: int = 0, salary: int = 0) -> Actor:
+        """``funds`` is a one-off deposit (not income, ADR-0043). ``salary`` is a recurring credit
+        paid last month and this month, so monthly income is ``salary`` and the balance gains
+        twice it."""
         email = email or f"user-{uuid.uuid4().hex[:8]}@example.com"
         response = client.post(
             "/api/v1/auth/register",
@@ -155,14 +167,20 @@ def make_customer(client: TestClient, migrated_engine: Engine) -> Callable[..., 
             if funds:
                 ledger.deposit(session, account.id, funds)
                 session.commit()
-            return Actor(
-                email=email,
-                user_id=user_id,
-                access_token=token,
-                customer_id=customer.id,
-                account_id=account.id,
-                account_number=account.account_number,
-            )
+            if salary:
+                ledger.deposit(session, account.id, salary, reference="Salary")
+                session.commit()
+        if salary:
+            last_month = month_start(utcnow(), 1) + timedelta(days=4)
+            post_deposit_at(migrated_engine, account.id, salary, "Salary", last_month)
+        return Actor(
+            email=email,
+            user_id=user_id,
+            access_token=token,
+            customer_id=customer.id,
+            account_id=account.id,
+            account_number=account.account_number,
+        )
 
     return factory
 

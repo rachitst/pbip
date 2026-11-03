@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Code | `ml/src/pbip_ml/fraud/hybrid.py` (combiner), `ml/src/pbip_ml/fraud/train.py` (fit, writes `hybrid_params.json`), `apps/api/src/pbip_api/modules/fraud/hybrid.py` (serving) |
-| `model_version` | `hybrid-lgbm-iforest-1` (`HYBRID_VERSION`, `train.py`). When the models fail or exceed the budget, the API serves the baseline rules marked `<baseline version>+rules-only` (e.g. `baseline-rules-0.5+rules-only`) with a `MODEL_UNAVAILABLE` reason |
+| `model_version` | `hybrid-lgbm-iforest-2` (`HYBRID_VERSION`, `train.py`; generator v2.3, TASK-084). The v2.1 and v2.2 models were both `hybrid-lgbm-iforest-1`, and the demo stack still serves that `-1` model until a `-2` model passes the gate and is exported. When the models fail or exceed the budget, the API serves the baseline rules marked `<baseline version>+rules-only` (e.g. `baseline-rules-0.5+rules-only`) with a `MODEL_UNAVAILABLE` reason |
 | Owner | `rachitst` (`.github/CODEOWNERS`, rule `*`) |
 | Tasks | TASK-031, TASK-032, TASK-033, TASK-038, TASK-039, TASK-080; ADR-0019 |
 
@@ -42,8 +42,27 @@ through the same online feature code as training, checked by `test_served_row_eq
 
 ## Evaluation (copied from existing reports)
 
-**Current model, generator v2.2, outgoing transfers only** (`model-evaluation-report-v1.md` §8, MLflow run
-`394b64764f694164b3a1e0d356f4cf1d`):
+**Current recipe, `hybrid-lgbm-iforest-2`, generator v2.3** (`model-evaluation-report-v1.md` §9, MLflow run
+`7b43ecc3827f4e8ebef35699f9a8f1ab`, test / held-out seed 4242):
+
+| Measure | Test | Held-out seed 4242 |
+|---|---|---|
+| Hybrid PR-AUC | 0.922 | 0.852 |
+| Recall at REVIEW | 0.865 | 0.845 |
+| Precision at REVIEW | 0.957 | 0.936 |
+| TN / FP / FN / TP at REVIEW | 10,038 / 4 / 14 / 90 | 25,363 / 13 / 35 / 191 |
+| Rules only, recall at REVIEW | 0.202 | - |
+
+Acceptance bars (§9, test / held-out): legitimate new-payee transfers held for REVIEW 0.28% / 0.37% (bar <= 1%);
+asked for STEP_UP 7.61% / 8.02% (bar <= 10%); all legitimate debits held at REVIEW 0.040% / 0.050% (bar <= 0.1%);
+recall at REVIEW 0.865 vs 0.202 for the rules alone. All pass. TASK-084 tuning kept the current LightGBM
+parameters: the tuned candidate was worse on every measure and failed the 0.1% bar on held-out data (§9).
+**Promotion:** the TASK-038 gate did not promote this model, because p95 latency was 112 ms against the 50 ms gate
+on a CPU-starved shared laptop. It must be re-gated on an idle machine before it is exported (§9).
+
+**Previous model, `-1`, generator v2.2, outgoing transfers only** (`model-evaluation-report-v1.md` §8, MLflow run
+`394b64764f694164b3a1e0d356f4cf1d`). It is still the model in the demo stack. On v2.3 rows it scores PR-AUC
+0.852 / 0.826 (§9). Numbers on v2.2 rows:
 
 | Measure | Test | Held-out seed 4242 |
 |---|---|---|
@@ -114,5 +133,6 @@ restart the API. If MLflow is down, promotion and export refuse to run and the A
 champion; the API never needs MLflow (`fraud-models.md` "Model registry and promotion";
 `ml/src/pbip_ml/fraud/promotion.py`). Details: [lightgbm-fraud.md](lightgbm-fraud.md#retraining-and-promotion).
 
-`model_version` naming: `hybrid-lgbm-iforest-<n>` is a constant in `train.py`; the registry version number
+`model_version` naming: `hybrid-lgbm-iforest-<n>` is a constant in `train.py`. Bump it with every retrain on
+changed data or features (`-2`: generator v2.3). The registry version number
 (MLflow) and `champion.json` (version, run, manifest hash) identify the exact trained artifacts.

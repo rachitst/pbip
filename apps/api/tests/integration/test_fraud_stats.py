@@ -13,8 +13,7 @@ from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.fraud.dependencies import get_fraud_scorer
 from pbip_ml.fraud.contract import FraudDecision
 from pbip_ml.fraud.testing import FixedDecisionScorer
-from pbip_test_support import Actor, age_payee
-from redis import Redis
+from pbip_test_support import Actor, age_payee, unreachable_redis
 from sqlalchemy import Engine, text
 
 pytestmark = pytest.mark.integration
@@ -129,7 +128,7 @@ def test_stats_are_cached_for_60_seconds_and_survive_redis_down(
     alice = make_customer(funds=1_000_000)
     send(client, alice, make_verified_payee(alice, make_customer()), 1_000)  # one more event
     assert client.get("/api/v1/fraud/stats", headers=analyst.headers).json() == first  # cached
-    down = Redis(host="127.0.0.1", port=9, socket_connect_timeout=0.2, decode_responses=True)
+    down = unreachable_redis()
     app.dependency_overrides[get_redis] = lambda: down
     fresh = client.get("/api/v1/fraud/stats", headers=analyst.headers)
     assert fresh.status_code == 200 and fresh.json()["scored"] == first["scored"] + 1

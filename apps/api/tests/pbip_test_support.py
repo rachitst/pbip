@@ -2,6 +2,8 @@
 
 import importlib.util
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -9,6 +11,7 @@ from types import ModuleType
 from typing import Any
 from uuid import UUID, uuid4
 
+import fakeredis
 import pyotp
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -19,7 +22,7 @@ from pbip_api.main import create_app
 from pbip_api.modules.wealth import deposit_math
 from pbip_api.modules.wealth.schemas import WealthProductOut
 from redis.exceptions import ConnectionError as RedisConnectionError
-from sqlalchemy import Engine, text
+from sqlalchemy import Engine, event, text
 
 PASSWORD = "Correct-Horse-9!"
 
@@ -69,6 +72,44 @@ class FakeRedis:
         if not self.healthy:
             raise RedisConnectionError("redis down")
         return None
+
+    def hgetall(self, _key: str) -> dict[str, str]:
+        """Empty store: ``/metrics`` reads the worker's stored metric totals (ADR-0039)."""
+        if not self.healthy:
+            raise RedisConnectionError("redis down")
+        return {}
+
+
+def unreachable_redis() -> fakeredis.FakeRedis:
+    """A Redis client whose every command raises ``redis.ConnectionError`` at once.
+
+    It stands in for "Redis is down" without dialling a dead port: a real client pointed at
+    127.0.0.1:9 waits out its connect timeout and retries, which took 14-74 s per test on Windows
+    (#317). The error type is the one a real outage raises, so the fallback paths are the same.
+    """
+    server = fakeredis.FakeServer()
+    server.connected = False
+    return fakeredis.FakeRedis(server=server, decode_responses=True)
+
+
+@contextmanager
+def count_statements(engine: Engine) -> Iterator[list[str]]:
+    """Collect every SQL statement ``engine`` sends while the block runs.
+
+    Cost checks assert on this count instead of wall-clock time (#317): a query count is the same on
+    every machine and under any load, and an N+1 regression changes it, whereas a timing bound fails
+    on a busy CI runner and passes a slow query on a fast laptop.
+    """
+    sent: list[str] = []
+
+    def record(*args: Any) -> None:
+        sent.append(str(args[2]))  # (conn, cursor, statement, parameters, context, executemany)
+
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        yield sent
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
 
 
 def build_app(db_ok: bool = True, redis_ok: bool = True, **overrides: Any) -> FastAPI:
@@ -178,6 +219,12 @@ def post_spend_at(
         ledger.post_transaction(session, txn, ledger.transfer_legs(txn))
         session.commit()
         txn_id = txn.id
+    _redate_transaction(engine, txn_id, when)
+    return txn_id
+
+
+def _redate_transaction(engine: Engine, txn_id: UUID, when: datetime) -> None:
+    """Date one posted transaction and its entries ``when`` (test-only history fixtures)."""
     with engine.begin() as connection:
         connection.execute(
             text("ALTER TABLE transaction_entries DISABLE TRIGGER transaction_entries_immutable")
@@ -193,6 +240,22 @@ def post_spend_at(
         connection.execute(
             text("ALTER TABLE transaction_entries ENABLE TRIGGER transaction_entries_immutable")
         )
+
+
+def post_deposit_at(
+    engine: Engine, account_id: UUID, amount: int, reference: str, when: datetime
+) -> UUID:
+    """Credit the account through ``ledger.deposit``, then date it ``when`` (like ``post_spend_at``).
+
+    Income history needs credits in several calendar months (ADR-0043: income is recurring).
+    """
+    from pbip_api.modules.ledger import service as ledger
+    from sqlalchemy.orm import sessionmaker
+
+    with sessionmaker(bind=engine)() as session:
+        txn_id = ledger.deposit(session, account_id, amount, reference=reference).id
+        session.commit()
+    _redate_transaction(engine, txn_id, when)
     return txn_id
 
 

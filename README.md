@@ -44,6 +44,7 @@ uv run python demo/demo_scenarios.py idempotency       # 10 identical requests -
 uv run python demo/demo_scenarios.py fraud-new-payee   # large transfer to a new payee is held
 uv run python demo/demo_scenarios.py bola              # Bob cannot read Carol's account (404)
 ```
+Live demo: accounts, minute-by-minute script and fallback plan in [`demo/demo-script.md`](demo/demo-script.md).
 
 ## Daily workflow
 `git switch -c feat/short-name` -> code + tests -> `make check` -> `git commit -m "feat(scope): ..."` ->

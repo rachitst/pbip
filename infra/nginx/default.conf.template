@@ -50,8 +50,14 @@ server {
     ssl_session_tickets off;
 
     # API: proxied untouched; the API sets its own security headers (and HSTS when COOKIE_SECURE).
+    # The upstream is a variable so nginx re-resolves "api" through Docker's DNS (127.0.0.11)
+    # instead of once at start-up: with a literal host, recreating the api container gave it a new
+    # address and every /api call returned 502 until web was restarted too (TASK-089 bug bash).
+    # A variable with no URI part passes the request URI unchanged, like the literal did.
     location /api/ {
-        proxy_pass http://api:8000;
+        resolver 127.0.0.11 valid=10s ipv6=off;
+        set $pbip_api_upstream http://api:8000;
+        proxy_pass $pbip_api_upstream;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

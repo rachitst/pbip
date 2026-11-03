@@ -2,13 +2,15 @@
 
 import uuid
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from pbip_api.core.db import utcnow
 from pbip_api.modules.auth.models import RoleName, SecurityEvent, SecurityEventType
 from pbip_api.modules.loans.catalogue import PRODUCTS, LoanType
-from pbip_test_support import Actor, age_payee
+from pbip_test_support import Actor, age_payee, month_start, post_deposit_at
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
@@ -52,7 +54,7 @@ def test_catalogue_and_emi_schedule(
 def test_eligible_with_explained_figures(
     client: TestClient, make_customer: Callable[..., Actor]
 ) -> None:
-    alice = make_customer(funds=1_00_000_00)  # INR 1,00,000 of income this month
+    alice = make_customer(salary=1_00_000_00)  # INR 1,00,000 of salary a month
     body = _check(client, alice, 5_00_000_00).json()
     assert body["status"] == "ELIGIBLE", body
     assert body["monthly_income_minor"] == 1_00_000_00 and body["existing_emi_minor"] == 0
@@ -64,7 +66,7 @@ def test_eligible_with_explained_figures(
 def test_rejected_when_dti_would_exceed_half_of_income(
     client: TestClient, make_customer: Callable[..., Actor]
 ) -> None:
-    alice = make_customer(funds=50_000_00)  # INR 50,000 income
+    alice = make_customer(salary=50_000_00)  # INR 50,000 income
     body = _check(client, alice, 15_00_000_00, 12).json()  # EMI ~ INR 1.3 lakh
     assert body["status"] == "NOT_ELIGIBLE"
     assert body["dti_with_loan"] > 0.5
@@ -78,7 +80,8 @@ def test_rejected_when_existing_repayments_already_exceed_half(
     make_verified_payee: Callable[..., dict[str, Any]],
     migrated_engine: Engine,
 ) -> None:
-    alice, lender = make_customer(funds=1_00_000_00), make_customer()
+    # INR 50,000 salary a month for two months; the EMI is 60% of that window's income.
+    alice, lender = make_customer(funds=1_00_000_00, salary=50_000_00), make_customer()
     payee = make_verified_payee(alice, lender)
     age_payee(migrated_engine, payee["id"], 48)
     resp = client.post(
@@ -97,6 +100,34 @@ def test_rejected_when_existing_repayments_already_exceed_half(
     assert body["dti_existing"] > 0.5
     assert "already take" in body["reasons"][0]
     assert body["tenor_options"] == []  # no budget left
+
+
+def test_a_one_off_opening_deposit_is_not_income_so_no_loan_is_offered(
+    client: TestClient, make_customer: Callable[..., Actor]
+) -> None:
+    """#381: a single INR 1,00,000 opening deposit used to count as INR 1,00,000 a month."""
+    alice = make_customer(funds=1_00_000_00)
+    body = _check(client, alice, 1_00_000_00).json()
+    assert body["status"] == "NOT_ELIGIBLE"
+    assert body["monthly_income_minor"] == 0
+    assert body["reasons"] == ["We could not find regular income in your account history."]
+    assert body["max_eligible_amount_minor"] == 0 and body["tenor_options"] == []
+
+
+def test_a_salary_paid_in_two_months_is_income_even_with_month_named_references(
+    client: TestClient, make_customer: Callable[..., Actor], migrated_engine: Engine
+) -> None:
+    alice = make_customer(funds=5_00_000_00)  # the one-off opening deposit adds nothing
+    now = utcnow()
+    for back in (2, 1):
+        when = month_start(now, back) + timedelta(days=1)
+        post_deposit_at(
+            migrated_engine, alice.account_id, 60_000_00, f"Salary {when:%b %Y} ACME", when
+        )
+    body = _check(client, alice, 1_00_000_00, 12).json()
+    # INR 1,20,000 of salary over the three calendar months since the first credit.
+    assert body["monthly_income_minor"] == 40_000_00
+    assert body["status"] == "ELIGIBLE", body
 
 
 def test_rejected_after_a_recent_lockout(

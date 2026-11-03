@@ -9,7 +9,7 @@ import pytest
 from fakeredis import FakeRedis, FakeServer
 from pbip_api.core.velocity import VelocityCounters
 from pbip_api.modules.fraud.signals import device_uuid, device_uuid_from_hash, ip_network
-from redis import Redis
+from pbip_test_support import unreachable_redis
 
 pytestmark = pytest.mark.unit
 
@@ -52,7 +52,7 @@ def test_login_failures_per_ip_expire_after_24_hours(counters: VelocityCounters)
 
 
 def test_unreachable_redis_fails_open_with_none_so_the_caller_uses_the_database() -> None:
-    down = VelocityCounters(Redis(host="127.0.0.1", port=9, socket_connect_timeout=0.2))
+    down = VelocityCounters(unreachable_redis())
     account = uuid4()
     assert down.record_transfer(account, uuid4(), 1_00, T0) is False
     assert down.transfers_in_window(account, T0, exclude=uuid4()) is None

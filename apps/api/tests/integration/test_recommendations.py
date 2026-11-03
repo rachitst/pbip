@@ -8,17 +8,22 @@ Verifies:
 - ADR-0015 / TASK-107: the engine gets only an age band, and only with consent
 """
 
+import uuid
 from collections.abc import Callable
 from datetime import date
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from pbip_api.core.db import utcnow
+from pbip_api.modules.analytics import service as analytics_service
 from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.recommendations import service as recommendations_service
 from pbip_ml.recommendations import CustomerRecommendationContext, Recommendation
-from pbip_test_support import Actor
-from sqlalchemy.orm import Session
+from pbip_test_support import Actor, age_payee
+from sqlalchemy import Engine, event
+from sqlalchemy.orm import Session, sessionmaker
 
 pytestmark = [pytest.mark.integration, pytest.mark.security]
 
@@ -28,7 +33,7 @@ def test_recommendations_happy_path(
     make_customer: Callable[..., Actor],
 ) -> None:
     """Customer receives top-3 personalized product recommendations with reasons."""
-    alice = make_customer(funds=200_000_00)
+    alice = make_customer(salary=100_000_00)
 
     resp = client.get("/api/v1/recommendations", headers=alice.headers)
 
@@ -72,7 +77,7 @@ def test_recommendations_use_the_customers_real_figures_and_ignore_date_of_birth
     client: TestClient, make_customer: Callable[..., Actor], db: Session
 ) -> None:
     """Reasons quote the real balance; a date of birth without consent changes nothing (ADR-0015)."""
-    alice = make_customer(funds=200_000_00)
+    alice = make_customer(salary=100_000_00)
     before = client.get("/api/v1/recommendations", headers=alice.headers).json()
     reasons = [reason for item in before["recommendations"] for reason in item["reasons"]]
     assert reasons, before
@@ -158,3 +163,77 @@ def test_recommendations_are_scoped_to_the_authenticated_customer(
         f"/api/v1/recommendations?customer_id={bob.customer_id}", headers=alice.headers
     ).json()
     assert c["customer_id"] == str(alice.customer_id)
+
+
+def _statements(engine: Engine, call: Callable[[], object]) -> int:
+    count = 0
+
+    def counter(*_args: object) -> None:
+        nonlocal count
+        count += 1
+
+    event.listen(engine, "before_cursor_execute", counter)
+    try:
+        call()
+    finally:
+        event.remove(engine, "before_cursor_execute", counter)
+    return count
+
+
+def test_context_reads_the_health_window_once(
+    make_customer: Callable[..., Actor],
+    migrated_engine: Engine,
+) -> None:
+    """#343: the health score and the cash-flow profile share one ownership check, one read of the
+    account ids and one pass over the entries. It was 14 statements (each read twice); now 10:
+    accounts, ownership, account ids, health entries, lifestyle entries, segment, age band, loans,
+    loan instalments, fixed deposits. A new query here is a latency budget decision."""
+    alice = make_customer(funds=200_000_00)
+    with sessionmaker(bind=migrated_engine)() as session:
+        assert alice.customer_id is not None
+        recommendations_service.get_customer_recommendations(session, alice.customer_id)
+        session.rollback()
+        count = _statements(
+            migrated_engine,
+            lambda: recommendations_service.get_customer_recommendations(
+                session, alice.customer_id
+            ),
+        )
+    assert count == 10
+
+
+def test_shared_health_and_cash_flow_equal_the_separate_calls(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_verified_payee: Callable[..., dict[str, Any]],
+    migrated_engine: Engine,
+    db: Session,
+) -> None:
+    """The combined read is the same computation, not an approximation."""
+    alice = make_customer(funds=200_000_00)
+    bob = make_customer()
+    payee = make_verified_payee(alice, bob)
+    age_payee(migrated_engine, payee["id"], 48)
+    resp = client.post(
+        "/api/v1/transfers",
+        headers={**alice.headers, "Idempotency-Key": uuid.uuid4().hex},
+        json={
+            "from_account_id": str(alice.account_id),
+            "amount_minor": 12_345_00,
+            "payee_id": payee["id"],
+            "reference": "Dinner at a restaurant",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    assert alice.customer_id is not None and alice.account_id is not None
+    now = utcnow()
+    health, cash = analytics_service.get_health_and_cash_flow(
+        db, alice.customer_id, alice.account_id, now
+    )
+    assert health == analytics_service.get_financial_health_score(
+        db, alice.customer_id, alice.account_id, now
+    )
+    assert cash == analytics_service.get_cash_flow_profile(
+        db, alice.customer_id, alice.account_id, now
+    )
+    assert cash.monthly_spend_minor > 0
