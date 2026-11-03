@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 import pytest
+import yaml
 
 from scripts.dev import (
     ROOT,
@@ -223,3 +224,14 @@ def test_env_example_uses_the_address_compose_publishes_on() -> None:
     ):
         assert f'"127.0.0.1:{port}:{port}"' in compose
         assert urlparse(example[key]).hostname == "127.0.0.1", key
+
+
+def test_long_running_compose_services_restart_after_a_reboot() -> None:
+    """Regression (TASK-089 bug bash): db and redis had no restart policy, so after a reboot
+    api/worker/beat/web came back (unless-stopped) into a stack with no database or broker.
+    Every long-running service the API needs must have the same policy; one-shot jobs
+    (migrate) are the only exception."""
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    services = compose["services"]
+    for name in ("db", "redis", "api", "worker", "beat", "web"):
+        assert services[name].get("restart") == "unless-stopped", name
