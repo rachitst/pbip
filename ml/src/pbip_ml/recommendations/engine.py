@@ -10,10 +10,14 @@
    stays "unknown" until consented date of birth exists (TASK-107).
 5. ADR-0030 (TASK-111): a product the customer already holds is not offered again, unless a
    top-up rule allows it, and then the first reason says it is a top-up and why.
+6. ADR-0049: when the API has loaded the promoted ``sim-propensity-v1`` model, it re-orders the
+   products steps 1 and 5 allowed, by a probability of uptake learned from a SIMULATION. It never
+   adds a product and never changes a reason. Without it, rules-v1 orders them as before.
 """
 
 import math
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from pbip_ml.recommendations.contract import (
@@ -25,7 +29,11 @@ from pbip_ml.recommendations.contract import (
     Recommendation,
 )
 
+if TYPE_CHECKING:
+    from pbip_ml.recommendations.propensity import PropensityModel
+
 MODEL_VERSION = "rules-v1"
+SCORE_LABEL = "rules-v1 (hand-weighted rules, not a trained model or a probability)"
 
 SAVINGS_ACCOUNT_ID = UUID("00000000-0000-4000-a000-000000000001")
 FIXED_DEPOSIT_ID = UUID("00000000-0000-4000-a000-000000000002")
@@ -293,11 +301,14 @@ def generate_recommendations(
     catalogue: tuple[BankingProduct, ...] = PRODUCT_CATALOGUE,
     top_k: int = 3,
     model_version: str = MODEL_VERSION,
+    propensity: "PropensityModel | None" = None,
 ) -> list[Recommendation]:
     """Eligible products only, ordered by relevance, each with reasons from the customer's data.
 
     Held products are dropped unless a top-up rule allows them; the top-up reason comes first so
-    the customer always sees why a product they hold is offered again (ADR-0030).
+    the customer always sees why a product they hold is offered again (ADR-0030). With
+    ``propensity`` (ADR-0049) the same offers are ordered by the model's simulated probability and
+    labelled with its version; the eligibility and held-product rules above still decide which.
     """
     offers: list[tuple[BankingProduct, list[str]]] = []
     for product in catalogue:
@@ -306,12 +317,22 @@ def generate_recommendations(
         offer, top_up_reason = held_product_rule(product, ctx)
         if offer:
             offers.append((product, [top_up_reason] if top_up_reason else []))
-    ranked = sorted(offers, key=lambda pair: relevance_score(pair[0], ctx), reverse=True)
+    scores = {
+        product.product_id: (
+            relevance_score(product, ctx)
+            if propensity is None
+            else round(propensity.score(product.product_id, ctx), 4)
+        )
+        for product, _ in offers
+    }
+    if propensity is not None:
+        model_version = propensity.version
+    ranked = sorted(offers, key=lambda pair: scores[pair[0].product_id], reverse=True)
     return [
         Recommendation(
             product_id=product.product_id,
             product_type=product.product_type,
-            score=relevance_score(product, ctx),
+            score=scores[product.product_id],
             reasons=[*held_reasons, *_REASONS[product.product_id](ctx)[:3]],
             model_version=model_version,
             title=product.title,

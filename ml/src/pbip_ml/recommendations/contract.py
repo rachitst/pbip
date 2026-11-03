@@ -50,7 +50,13 @@ class Recommendation(BaseModel):
     product_id: UUID
     product_type: ProductType
     score: float = Field(
-        ge=0, le=1, description="Rule-based relevance, for ordering only; not a probability"
+        ge=0,
+        le=1,
+        description=(
+            "Ordering score. rules-v1: rule-based relevance, not a probability. "
+            "sim-propensity-v1: probability of uptake next month under a SIMULATION, not "
+            "real customer behaviour (ADR-0049)"
+        ),
     )
     reasons: list[str] = Field(min_length=1)
     model_version: str
