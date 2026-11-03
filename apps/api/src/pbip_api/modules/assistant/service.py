@@ -16,7 +16,7 @@ Pipeline, in order:
 6. In one writable transaction: the redacted exchange is stored (``assistant_messages``) and one
    audit row is written (tool or refusal reason, outcome, engine - never the message or result),
    plus one ``assistant.llm_call`` row per model provider tried (provider, outcome, latency;
-   ADR-0036).
+   ADR-0037).
 
 :meth:`AssistantService.run` yields the steps as events, so the JSON endpoint and the SSE stream
 (TASK-060) share one implementation.

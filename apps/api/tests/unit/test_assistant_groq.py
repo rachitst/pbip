@@ -1,4 +1,4 @@
-"""ADR-0036: the Groq adapter, the provider chain and the provider redactor. No real network:
+"""ADR-0037: the Groq adapter, the provider chain and the provider redactor. No real network:
 every request goes to an ``httpx.MockTransport``."""
 
 import json

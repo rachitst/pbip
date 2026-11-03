@@ -17,7 +17,7 @@ service.run()
   2. guard.check (+ base64 payloads)  money movement · other customers · SQL · privilege/credentials · instruction override
         └─ refusal ──────────────────────────────────────────────────────────────┐
   3. router: llm.llm_route (Ollama, JSON-schema grammar, temperature 0, fixed URL, 4 s timeout)
-        │   optional, LLM_PROVIDER=groq (ADR-0036): Groq function calling FIRST, redacted question only,
+        │   optional, LLM_PROVIDER=groq (ADR-0037): Groq function calling FIRST, redacted question only,
         │   5 s timeout, then Ollama (§6)
         └─ any failure / invalid output ─► fallback.route (deterministic keyword rules)
   4. tools.invoke in a PostgreSQL READ ONLY transaction, ToolContext(customer_id from token)
@@ -140,7 +140,7 @@ Invented arguments are the main LLM-path risk on the smaller model. `_grounded` 
 - The unusual-expense rule (TASK-110) is a fixed threshold on the customer's own 3-month baseline (1.5x a category's average month, 3x the category's median payment, both at least INR 1,000 more). It does not know seasonality or one-off planned purchases, needs two months of history, and compares a running month with full months (so it only flags what has already gone past the usual level).
 - The adversarial suite proves the cases it lists. It is not exhaustive.
 
-## 6. Optional hosted router: Groq (ADR-0036)
+## 6. Optional hosted router: Groq (ADR-0037)
 
 Off by default (`LLM_PROVIDER=ollama`). With `LLM_PROVIDER=groq`, an unclear question goes to Groq first, then
 Ollama, then the keyword rules (`providers.ModelChain`). Everything above still holds; this section lists what
@@ -157,4 +157,4 @@ changes when data leaves the stack.
 
 Residual risks: the customer can type a third party's name, which is not recognised and may be sent; Groq may keep
 inputs up to 30 days for abuse monitoring unless Zero Data Retention is enabled on the organisation; retained data is
-in the US (ADR-0036 lists the provider terms as read on 2026-11-03). Measured accuracy and latency are in ADR-0036.
+in the US (ADR-0037 lists the provider terms as read on 2026-11-03). Measured accuracy and latency are in ADR-0037.

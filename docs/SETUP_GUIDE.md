@@ -412,14 +412,14 @@ curl -s http://localhost:11434/api/tags            # the model is listed
   `ollama run qwen2.5:1.5b-instruct ""`.
 * Try it: `POST /api/v1/assistant/chat` with `{"message": "what's my balance?"}` in Swagger (`/docs`).
 
-### AI assistant: optional Groq router (demo only, ADR-0036)
+### AI assistant: optional Groq router (demo only, ADR-0037)
 On slow hardware the local model rarely answers within its timeout. For a demo the owner can route
 **unclear** questions through Groq's hosted API instead (clear questions and refusals still never call
 any model). Off by default; it sends the redacted question (no ids, account numbers, emails, phone
 numbers or your name) to a US-hosted provider, so use it only where the owner approved that.
 
 * In `.env`: `LLM_PROVIDER=groq`, `GROQ_API_KEY=<from console.groq.com/keys>` (never commit or paste it
-  anywhere), `GROQ_MODEL` and `GROQ_REASONING_EFFORT` as chosen in ADR-0036. Then restart the API
+  anywhere), `GROQ_MODEL` and `GROQ_REASONING_EFFORT` as chosen in ADR-0037. Then restart the API
   (`docker compose up -d api` or `make dev-api`).
 * Order: Groq, then Ollama, then the keyword rules; a timeout (5 s), 429 or bad answer from Groq just
   moves to the next step. Each customer gets `RATE_LIMIT_GROQ_PER_MINUTE` (default 5) Groq calls a minute.

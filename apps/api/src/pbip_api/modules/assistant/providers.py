@@ -1,4 +1,4 @@
-"""External LLM provider (Groq, ADR-0036) and the provider fallback chain.
+"""External LLM provider (Groq, ADR-0037) and the provider fallback chain.
 
 Groq is an optional, hosted router for UNCLEAR assistant questions only. It has the same single
 job as Ollama (ADR-0018): pick one approved tool and its arguments. Here that is OpenAI-style
@@ -162,7 +162,7 @@ class GroqChatModel:
 
         ``system`` (the JSON-grammar prompt for Ollama) is replaced by the function-calling prompt
         with the same security rules: the JSON-reply wording makes GPT-OSS call a function named
-        ``json`` (ADR-0036).
+        ``json`` (ADR-0037).
         """
         return {
             "model": self._model,

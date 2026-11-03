@@ -1,4 +1,4 @@
-"""Benchmark the assistant's model router on a fixed question set (ADR-0036).
+"""Benchmark the assistant's model router on a fixed question set (ADR-0037).
 
 Sends the committed questions (``assistant_llm_benchmark_questions.json``: 10 normal unclear
 questions and 15 adversarial probes) straight to one router - the production adapter class, the

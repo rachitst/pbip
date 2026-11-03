@@ -8,9 +8,10 @@
   quoted data, stripped of control characters and quotes, and capped.
 * Every reply and every stored message passes :func:`redact_output`, which masks long digit runs
   (account and card numbers) to the last four digits, and replaces JWTs and email addresses.
-* A message sent to an EXTERNAL model provider (Groq, ADR-0036) first passes
+* A message sent to an EXTERNAL model provider (Groq, ADR-0037) first passes
   :func:`redact_for_provider`: everything :func:`redact_output` removes, plus UUIDs (customer,
-  user and account ids), Indian mobile numbers, and the signed-in customer's own name and email.
+  user and account ids), Indian mobile numbers, and the signed-in customer's own name (any email
+  address, the customer's own included, is already removed by :func:`redact_output`).
   The model only routes, so none of these change the tool it should choose.
 """
 
@@ -72,7 +73,7 @@ def redact_output(value: str) -> str:
 def redact_for_provider(value: str, private_terms: Iterable[str] = ()) -> str:
     """Minimise what leaves the stack: the routing question without identifiers or PII.
 
-    ``private_terms`` are the signed-in customer's own name parts and email, supplied by the
+    ``private_terms`` are the signed-in customer's own name and name parts, supplied by the
     server from the authenticated principal; each is replaced case-insensitively, whole words only.
     """
     value = _UUID.sub("[id removed]", value)

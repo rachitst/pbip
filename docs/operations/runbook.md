@@ -293,14 +293,14 @@ every row with `scripts/rotate_field_key.py`, then drop the old key.
 **Rollback.** Before step 6, simply restore `FIELD_ENCRYPTION_KEY=<old>,<new>` order or `<old>` alone only if step 5
 was not run; after step 5, rows are under the new key, so the new key must remain in the list.
 
-### 3.3 `GROQ_API_KEY` (optional hosted assistant router, ADR-0036)
+### 3.3 `GROQ_API_KEY` (optional hosted assistant router, ADR-0037)
 
 **Effect.** Only used when `LLM_PROVIDER=groq`. The key authorises calls to Groq's API, billed to the organisation
 that owns it; it reads nothing from PBIP. Without a valid key every unclear assistant question falls back to Ollama
 and then the keyword rules (audit `assistant.llm_call` outcome `error`), so a bad or revoked key degrades routing,
 never availability. The deployed compose (`infra/deploy/docker-compose.prod.yml`) does not pass `LLM_PROVIDER` or any
 `GROQ_*` variable: enabling Groq on a deployed host is a reviewed change to that file plus the product owner's sign-off
-(data leaves the stack, ADR-0036), and the API then refuses to boot without `GROQ_API_KEY` and `GROQ_MODEL`.
+(data leaves the stack, ADR-0037), and the API then refuses to boot without `GROQ_API_KEY` and `GROQ_MODEL`.
 
 **Handling.**
 - Create the key in the Groq console (API Keys) under an organisation with **Zero Data Retention** enabled in Data

@@ -47,6 +47,6 @@ def test_within_budget_counts_per_subject_and_fails_closed() -> None:
     ]
     assert within_budget(redis, "assistant_groq", "customer:b", 2, 60) is True  # own window
     assert 0 < int(redis.ttl("rl:assistant_groq:customer:a")) <= 60
-    # Redis down: the optional external call is skipped (ADR-0036), unlike consume() which
+    # Redis down: the optional external call is skipped (ADR-0037), unlike consume() which
     # fails open to keep sign-in available.
     assert within_budget(_IncrDown(), "assistant_groq", "customer:a", 2, 60) is False

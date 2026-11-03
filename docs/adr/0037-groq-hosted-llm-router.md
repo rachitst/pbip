@@ -1,4 +1,4 @@
-# ADR 0036: Groq as an optional hosted router for unclear assistant questions
+# ADR 0037: Groq as an optional hosted router for unclear assistant questions
 - Status: Accepted by product owner, 2026-11-03
 - Date: 2026-11-03
 - Deciders: Product owner, Architecture Team
@@ -129,6 +129,13 @@ against 30 RPM / 8K TPM for `gpt-oss-20b` (https://console.groq.com/docs/rate-li
 production status. Cost at the measured mean of 1027 input + 34 output tokens: about $0.000087 per routed question
 at on-demand prices (1027 x $0.075/1M + 34 x $0.30/1M).
 
+**Owner decision (2026-11-03): the documented exception to the tie-break rule.** The selection rule was
+"best tool-calling accuracy with zero leaks; ties by latency", and by that rule `gpt-oss-safeguard-20b` would win.
+The product owner confirmed `openai/gpt-oss-20b` instead, for two reasons. Groq says Preview models are not for
+production use. And the free tier's 3 requests/minute for the Preview model would break a live demo, where
+several questions are asked within a minute. This is the only exception. If the Preview model reaches production
+status with comparable limits, re-run the benchmark and apply the rule as written.
+
 ### Ollama baseline (the current local path)
 Same harness and questions, `qwen2.5:3b-instruct` (the model in the owner's `.env`) on the laptop's CPU (Celeron
 N4500, 2 cores), measured 2026-11-03 07:52-08:24 UTC with a 120 s ceiling instead of the production 4 s, so slow
@@ -164,5 +171,6 @@ earlier run the same morning under heavier load (load average 4-7.5) timed out o
   real deployment would need a legal review (cross-border transfer, outsourcing rules) and ZDR enabled.
 - Free-tier org limits (8K tokens/min) cap throughput at a few routed questions per minute for the whole
   deployment; beyond that the cooldown and Ollama take over. A paid tier is needed for real traffic.
-- New operational secret (`GROQ_API_KEY`) with a rotation procedure (runbook). Threat model T55.
-- Audit volume: one extra row per model attempt (at most two per unclear question).
+- New operational secret (`GROQ_API_KEY`) with a rotation procedure (runbook). Threat model T56.
+- Audit volume: one extra row per model attempt (at most two per unclear question). This also applies with the
+  default `LLM_PROVIDER=ollama`: the single Ollama attempt is now audited as `assistant.llm_call` too.
