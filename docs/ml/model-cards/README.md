@@ -15,7 +15,7 @@ evaluation report exists, the card says so instead of giving a number.
 
 Not covered by a card:
 
-- The baseline fraud rules (`apps/api/src/pbip_api/modules/fraud/baseline.py`, `baseline-rules-0.3`) are a
+- The baseline fraud rules (`apps/api/src/pbip_api/modules/fraud/baseline.py`, `baseline-rules-0.4`) are a
   hand-written rule set, not a model. They appear in the hybrid card as the floor and the fail-safe.
 - The circular-transfer analysis (`docs/ml/circular-transfer-spike.md`, TASK-072) is a spike, not a served model.
 
