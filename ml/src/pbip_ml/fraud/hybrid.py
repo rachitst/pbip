@@ -36,6 +36,7 @@ import numpy as np
 import pandas as pd
 
 from pbip_ml.fraud.artifacts import MODEL_FEATURES, AnomalyModel
+from pbip_ml.fraud.compiled_forest import CompiledForest
 from pbip_ml.fraud.contract import FraudDecision, FraudReason, ReasonSource
 from pbip_ml.fraud.features import FraudFeatures
 from pbip_ml.fraud.rules import RuleContext, RuleRegistry, default_registry
@@ -154,6 +155,8 @@ class HybridScorer:
     booster: lgb.Booster | None
     anomaly: AnomalyModel | None
     rules: RuleRegistry = field(default_factory=default_registry)
+    # The anomaly forest compiled for one-row scoring (``compiled_forest``); None = scikit-learn's.
+    compiled_anomaly: CompiledForest | None = None
 
     def score(self, row: pd.DataFrame, context: RuleContext) -> HybridResult:
         outcome = self.rules.evaluate(context)
@@ -167,7 +170,7 @@ class HybridScorer:
                 raise RuntimeError("model unavailable")
             raw = float(np.asarray(self.booster.predict(row[list(MODEL_FEATURES)]))[0])
             p = float(self.params.calibrate(np.array([raw]))[0])
-            a = float(self.anomaly.score(row)[0])
+            a = float(self.anomaly.score(row, self.compiled_anomaly)[0])
         except Exception as exc:  # fail safe: rules only, never ALLOW-all
             reasons.append(
                 FraudReason(
