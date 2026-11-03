@@ -913,6 +913,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fraud/scheduled-transfers/{scheduled_transfer_id}/clear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Clear a FRAUD_BLOCK pause on a standing order; the customer must still resume it */
+        post: operations["clear_scheduled_transfer_fraud_block_api_v1_fraud_scheduled_transfers__scheduled_transfer_id__clear_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fraud/stats": {
         parameters: {
             query?: never;
@@ -4532,6 +4549,32 @@ export interface components {
          * @enum {string}
          */
         ScheduleFrequency: "DAILY" | "WEEKLY" | "MONTHLY";
+        /** ScheduledClearOut */
+        ScheduledClearOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Pause Reason
+             * @description CUSTOMER once the fraud lock is cleared
+             */
+            pause_reason: string | null;
+            /**
+             * Status
+             * @description Still PAUSED: the customer resumes the order themselves
+             */
+            status: string;
+        };
+        /**
+         * ScheduledClearRequest
+         * @description Why the analyst lifts the lock; kept in the audit log, never shown to the customer.
+         */
+        ScheduledClearRequest: {
+            /** Reason */
+            reason: string;
+        };
         /** ScheduledTransferCreate */
         ScheduledTransferCreate: {
             /**
@@ -6878,6 +6921,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SecurityMonitoring"];
+                };
+            };
+        };
+    };
+    clear_scheduled_transfer_fraud_block_api_v1_fraud_scheduled_transfers__scheduled_transfer_id__clear_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scheduled_transfer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScheduledClearRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledClearOut"];
+                };
+            };
+            /** @description No such standing order */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not fraud-paused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

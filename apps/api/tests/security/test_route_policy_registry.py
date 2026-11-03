@@ -81,9 +81,12 @@ def test_every_fraud_route_is_behind_the_mfa_analyst_gate() -> None:
     uses a weaker gate (or only authentication) fails here.
     """
     fraud_routes = [r for r in _all_api_routes() if r.path.startswith("/api/v1/fraud/")]
-    assert {"/api/v1/fraud/stats", "/api/v1/fraud/monitoring", "/api/v1/fraud/demo-lab"} <= {
-        r.path for r in fraud_routes
-    }
+    assert {
+        "/api/v1/fraud/stats",
+        "/api/v1/fraud/monitoring",
+        "/api/v1/fraud/demo-lab",
+        "/api/v1/fraud/scheduled-transfers/{scheduled_transfer_id}/clear",  # #304
+    } <= {r.path for r in fraud_routes}
     offenders = [
         f"{sorted(route.methods)} {route.path}"
         for route in fraud_routes
