@@ -54,13 +54,15 @@ class FaqFacts:
     max_scheduled_transfers: int
 
     @classmethod
-    def from_settings(cls, settings: Settings) -> "FaqFacts":
+    def from_settings(cls, limits: Settings) -> "FaqFacts":
+        """``limits`` must be the effective settings (``runtime_config.effective_settings``), so the
+        FAQ quotes the limits the services enforce, including an ADMIN's overrides (ADR-0031)."""
         return cls(
-            max_transfer_minor=settings.max_transfer_minor,
-            daily_transfer_limit_minor=settings.daily_transfer_limit_minor,
-            login_max_failures=settings.login_max_failures,
-            login_lock_base_seconds=settings.login_lock_base_seconds,
-            max_scheduled_transfers=settings.max_active_scheduled_transfers_per_customer,
+            max_transfer_minor=limits.max_transfer_minor,
+            daily_transfer_limit_minor=limits.daily_transfer_limit_minor,
+            login_max_failures=limits.login_max_failures,
+            login_lock_base_seconds=limits.login_lock_base_seconds,
+            max_scheduled_transfers=limits.max_active_scheduled_transfers_per_customer,
         )
 
 

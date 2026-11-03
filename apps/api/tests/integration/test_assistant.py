@@ -16,7 +16,7 @@ from pbip_api.core.money import format_minor
 from pbip_api.modules.assistant import tools
 from pbip_api.modules.assistant.dependencies import get_chat_model
 from pbip_api.modules.assistant.llm import LLMUnavailableError, OllamaChatModel
-from pbip_api.modules.auth.models import SecurityEvent, SecurityEventType
+from pbip_api.modules.auth.models import RoleName, SecurityEvent, SecurityEventType
 from pbip_api.modules.compliance.models import AuditLog
 from pbip_api.modules.ledger.models import Transaction
 from pbip_api.modules.loans import emi as emi_math
@@ -578,6 +578,29 @@ DISCLAIMER = (
     "These come from fixed rules applied to your own account figures and your questionnaire "
     "answers. They are not personalised financial advice."
 )
+
+
+def test_the_faq_quotes_the_limits_an_admin_set_at_runtime(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_staff: Callable[..., Actor],
+    use_model: Callable[[object], None],
+    settings: Settings,
+) -> None:
+    """The FAQ quotes the limit the payments service enforces now, not the environment default."""
+    alice = make_customer(funds=5_000_00)
+    use_model(FakeModel('{"tool": "get_account_summary", "arguments": {}}'))
+    admin = make_staff(RoleName.ADMIN)
+    lowered = settings.max_transfer_minor // 2
+    changed = client.put(
+        "/api/v1/admin/settings/max_transfer_minor",
+        headers=admin.headers,
+        json={"value": lowered, "reason": "Lowered for the FAQ test"},
+    )
+    assert changed.status_code == 200, changed.text
+    reply = _chat(client, alice, "What's the daily transfer limit?")["reply"]
+    assert f"can be up to {format_minor(lowered)}," in reply
+    assert format_minor(settings.max_transfer_minor) not in reply
 
 
 def test_help_questions_are_answered_from_the_curated_faq_by_the_rules_route(

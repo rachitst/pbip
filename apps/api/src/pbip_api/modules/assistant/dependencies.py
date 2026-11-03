@@ -12,6 +12,7 @@ from pbip_api.modules.assistant.faq import FaqFacts
 from pbip_api.modules.assistant.llm import ChatModel, OllamaChatModel
 from pbip_api.modules.assistant.service import AssistantService
 from pbip_api.modules.auth.dependencies import Principal, get_current_principal
+from pbip_api.modules.runtime_config import service as runtime_config
 
 _WINDOW_SECONDS = 60
 
@@ -28,9 +29,12 @@ def get_chat_model(settings: Settings = Depends(get_settings)) -> ChatModel | No
     )
 
 
-def get_faq_facts(settings: Settings = Depends(get_settings)) -> FaqFacts:
-    """The configured limits the FAQ quotes (TASK-105): the same settings the services enforce."""
-    return FaqFacts.from_settings(settings)
+def get_faq_facts(
+    session: Session = Depends(get_session), settings: Settings = Depends(get_settings)
+) -> FaqFacts:
+    """The limits the FAQ quotes (TASK-105): the values the services enforce right now, including
+    an ADMIN's runtime overrides (ADR-0031), not the environment defaults."""
+    return FaqFacts.from_settings(runtime_config.effective_settings(session, settings))
 
 
 def get_assistant_service(
