@@ -17,6 +17,18 @@ Demo customers and what each is for:
                    signs in with a password only, so it refuses a customer with an authenticator.
 Re-running on an existing database adds what is missing (Carol, Alice's authenticator) and leaves
 everything else alone, so it is also how an older demo database gets them.
+
+Salary history (ADR-0043: income is a credit source recurring in 2 of the last 3 calendar months;
+ADR-0048): each demo customer is credited a monthly salary (``SALARIES``; Alice INR 1,25,000) on
+the 1st of the running month and the two before it at 10:00 IST, reference "Salary <Month YYYY>",
+through ``ledger.deposit(posted_at=...)``. A new customer's opening deposit is dated 09:00 IST on
+the 1st of the oldest of those months, so the history is in time order and the monthly income is
+exactly the salary. A salary already credited is skipped: a re-run in the same month adds nothing
+and a re-run in a later month adds that month's salary. The ledger never back-dates before an
+account's latest entry (every running balance stays true), so a customer created by an older
+seed who has since transacted is skipped with a message: a database seeded from scratch is needed
+to give them a salary history.
+
 Neither the demo password nor any MFA secret is printed or written to a file.
 
 The password for every seeded user comes from ``PBIP_DEMO_PASSWORD``. Only APP_ENV=local may fall
@@ -29,12 +41,14 @@ import os
 import sys
 import time
 from collections.abc import Mapping
+from datetime import datetime
 from uuid import UUID
 
 import pyotp
+from pbip_api.core.calendar import BANK_TZ
 from pbip_api.core.config import get_settings
 from pbip_api.core.crypto import FieldCipher
-from pbip_api.core.db import get_engine
+from pbip_api.core.db import get_engine, utcnow
 from pbip_api.core.security import PasswordService
 from pbip_api.modules.accounts.service import list_accounts
 from pbip_api.modules.auth.models import RoleName, User
@@ -42,6 +56,7 @@ from pbip_api.modules.auth.service import AuthService, RequestMeta
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.insights import service as insights_service
 from pbip_api.modules.ledger import service as ledger
+from pbip_api.modules.ledger.models import EntryDirection
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -53,6 +68,17 @@ CUSTOMERS = [
     ("bob@demo.pbip", "Bob Demo", 5_000_000),
     ("carol@demo.pbip", "Carol Demo", 25_000_000),  # the fraud demo lab's customer
 ]
+# Monthly salary (minor units) credited on the 1st of the running month and the two before it, so
+# each demo customer has recurring income (ADR-0043) and the loan and assistant demos have
+# something to size an offer from. Alice's INR 1,25,000 makes a 5 lakh car loan affordable.
+SALARIES = {
+    "alice@demo.pbip": 12_500_000,  # 1,25,000.00
+    "bob@demo.pbip": 6_000_000,  # 60,000.00
+    "carol@demo.pbip": 9_000_000,  # 90,000.00
+}
+SALARY_MONTHS = 3
+# A new customer's opening deposit at 09:00 IST and each salary at 10:00 IST on the 1st.
+OPENING_HOUR, SALARY_HOUR = 9, 10
 # Customers with an authenticator: step-up on a large transfer to a new payee can be answered,
 # instead of every such transfer going to review. Never Bob or Carol (the lab needs them without).
 MFA_CUSTOMERS = ("alice@demo.pbip",)
@@ -117,6 +143,79 @@ def _enrol_demo_customers(session: Session, service: AuthService, meta: RequestM
     return enrolled
 
 
+def _month_at(now: datetime, months_back: int, hour: int) -> datetime:
+    """``hour`` o'clock IST on the 1st of the calendar month ``months_back`` before ``now``'s."""
+    local = now.astimezone(BANK_TZ)
+    index = local.year * 12 + local.month - 1 - months_back
+    return datetime(index // 12, index % 12 + 1, 1, hour, tzinfo=BANK_TZ)
+
+
+def _salary_reference(month: datetime) -> str:
+    return f"Salary {month:%B %Y}"
+
+
+def _has_credit(session: Session, account_id: UUID, reference: str) -> bool:
+    filters = ledger.EntryFilters(direction=EntryDirection.CREDIT, text=reference)
+    return bool(ledger.list_account_entries(session, account_id, 1, None, filters=filters))
+
+
+def _latest_entry_at(session: Session, account_id: UUID) -> datetime | None:
+    newest = ledger.list_account_entries(session, account_id, 1, None)
+    return newest[0][0].created_at if newest else None
+
+
+def _salary_plan(
+    session: Session, account_id: UUID, now: datetime
+) -> list[tuple[str, datetime | None]] | None:
+    """The missing salaries as ``(reference, posted_at)``, oldest first; ``posted_at`` None means
+    "now" (the running month's 1st 10:00 is still ahead or already behind the latest entry).
+
+    None when a past month's salary is missing but its date precedes the account's latest entry:
+    the ledger only back-dates after an account's history (ADR-0048), so that history cannot be
+    built on this database and nothing is posted for the customer.
+    """
+    latest = _latest_entry_at(session, account_id)
+    plan: list[tuple[str, datetime | None]] = []
+    for months_back in range(SALARY_MONTHS - 1, -1, -1):
+        when = _month_at(now, months_back, SALARY_HOUR)
+        reference = _salary_reference(when)
+        if _has_credit(session, account_id, reference):
+            continue
+        too_early = latest is not None and when < latest
+        if months_back == 0:
+            plan.append((reference, None if too_early or when > now else when))
+        elif too_early:
+            return None
+        else:
+            plan.append((reference, when))
+    return plan
+
+
+def _seed_salaries(session: Session, now: datetime) -> None:
+    """Credit each of ``SALARIES`` its missing monthly salaries through ``ledger.deposit``, one
+    database transaction per customer. A salary already credited (same reference) is skipped, so
+    a re-run adds nothing in the same month and only the new month's salary later."""
+    for email, amount in SALARIES.items():
+        customer_id = session.execute(
+            select(Customer.id).join(User, User.id == Customer.user_id).where(User.email == email)
+        ).scalar_one_or_none()
+        if customer_id is None:
+            continue
+        account_id = list_accounts(session, customer_id)[0].id
+        plan = _salary_plan(session, account_id, now)
+        if plan is None:
+            sys.stdout.write(
+                f"salary   {email}  skipped: the account has entries after the salary dates;"
+                " a salary history needs a database seeded from scratch\n"
+            )
+            continue
+        for reference, posted_at in plan:
+            ledger.deposit(session, account_id, amount, reference=reference, posted_at=posted_at)
+        session.commit()
+        if plan:
+            sys.stdout.write(f"salary   {email}  {len(plan)} monthly credit(s)\n")
+
+
 def _assign_demo_portfolio(session: Session) -> None:
     """Assign ``RM_PORTFOLIO`` to the demo RM through the audited service; a customer who already
     has an RM (from an earlier run or an admin's change) is left alone."""
@@ -160,6 +259,8 @@ def main(environ: Mapping[str, str] | None = None) -> int:
         def exists(email: str) -> bool:
             return session.execute(select(User.id).where(User.email == email)).first() is not None
 
+        now = utcnow()
+        opened = _month_at(now, SALARY_MONTHS - 1, OPENING_HOUR)  # before the first salary
         for email, name, funds in CUSTOMERS:
             if exists(email):
                 continue
@@ -168,7 +269,9 @@ def main(environ: Mapping[str, str] | None = None) -> int:
                 select(Customer).where(Customer.user_id == user.id)
             ).scalar_one()
             account = list_accounts(session, customer.id)[0]
-            ledger.deposit(session, account.id, funds, reference="Demo opening balance")
+            ledger.deposit(
+                session, account.id, funds, reference="Demo opening balance", posted_at=opened
+            )
             session.commit()
             sys.stdout.write(f"customer {email}  account {account.account_number}\n")
 
@@ -182,6 +285,7 @@ def main(environ: Mapping[str, str] | None = None) -> int:
         if _enrol_demo_customers(session, service, meta):
             sys.stdout.write("demo customers in MFA_CUSTOMERS: authenticator enrolled\n")
         _assign_demo_portfolio(session)
+        _seed_salaries(session, now)
 
     sys.stdout.write(
         "\nDemo password (all new users): PBIP_DEMO_PASSWORD if set, else (APP_ENV=local only)\n"

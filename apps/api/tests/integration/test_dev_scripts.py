@@ -9,16 +9,28 @@ from uuid import UUID
 
 import pyotp
 import pytest
+from pbip_api.core.calendar import BANK_TZ
 from pbip_api.core.config import Settings
 from pbip_api.core.crypto import FieldCipher
+from pbip_api.core.db import utcnow
 from pbip_api.core.security import PasswordService
 from pbip_api.modules.accounts.models import Account
 from pbip_api.modules.accounts.service import list_accounts
+from pbip_api.modules.analytics import service as analytics_service
+from pbip_api.modules.assistant import fallback, tools
+from pbip_api.modules.assistant.faq import FaqFacts
+from pbip_api.modules.assistant.tools import ToolContext, ToolName
 from pbip_api.modules.auth.models import RoleName, User
 from pbip_api.modules.auth.service import AuthService, RequestMeta
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.insights import service as insights_service
-from pbip_api.modules.ledger.models import Transaction, TransactionType
+from pbip_api.modules.ledger import service as ledger
+from pbip_api.modules.ledger.models import (
+    EntryDirection,
+    Transaction,
+    TransactionEntry,
+    TransactionType,
+)
 from pbip_test_support import PASSWORD, FakeClock, generated_password, totp_code
 from sqlalchemy import func, select, text, update
 from sqlalchemy.engine import Engine
@@ -331,3 +343,128 @@ def test_seed_gives_alice_an_authenticator_and_keeps_the_lab_customers_without(
     again = db.scalar(select(User.mfa_secret_enc).where(User.email == "alice@demo.pbip"))
     assert again == alice_secret  # not re-enrolled: the presenter's codes keep working
     assert "authenticator enrolled" not in capsys.readouterr().out
+
+
+def _customer(db: Session, email: str) -> tuple[UUID, UUID, UUID]:
+    """(customer id, user id, primary account id) of a seeded customer."""
+    customer_id, user_id = db.execute(
+        select(Customer.id, User.id)
+        .join(User, User.id == Customer.user_id)
+        .where(User.email == email)
+    ).one()
+    return customer_id, user_id, list_accounts(db, customer_id)[0].id
+
+
+def _salary_credits(db: Session, account_id: UUID) -> list[Transaction]:
+    return list(
+        db.scalars(
+            select(Transaction)
+            .where(
+                Transaction.credit_account_id == account_id,
+                Transaction.reference.like("Salary %"),
+            )
+            .order_by(Transaction.created_at)
+        ).all()
+    )
+
+
+def test_seed_gives_each_demo_customer_a_salary_history_that_is_income(
+    migrated_engine: Engine, db: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0043 counts a credit as income only when its source recurs in 2 of the last 3 calendar
+    months, so a single opening deposit left the demo customers with no income and no loan offer.
+    The seed credits a monthly salary through ``ledger.deposit(posted_at=...)`` (ADR-0048)."""
+    environ = {"PBIP_DEMO_PASSWORD": ENV_PASSWORD}
+    assert _seed_with(settings, migrated_engine, monkeypatch, environ) == 0
+    now = utcnow()
+
+    for email, salary in seed_dev.SALARIES.items():
+        customer_id, _, account_id = _customer(db, email)
+        credits = _salary_credits(db, account_id)
+        months = {
+            (c.created_at.astimezone(BANK_TZ).year, c.created_at.astimezone(BANK_TZ).month)
+            for c in credits
+        }
+        assert len(credits) == seed_dev.SALARY_MONTHS == len(months), email
+        assert all(
+            c.type == TransactionType.DEPOSIT
+            and c.debit_account_id == ledger.SYSTEM_CLEARING_ID
+            and c.amount == salary
+            and c.reference == f"Salary {c.created_at.astimezone(BANK_TZ):%B %Y}"
+            for c in credits
+        )
+        profile = analytics_service.get_cash_flow_profile(db, customer_id, account_id, now)
+        assert profile.monthly_income_minor == salary, email  # exactly the salary, every month
+        account = db.get(Account, account_id)
+        assert account is not None
+        assert account.ledger_balance == ledger.entry_balance(db, account_id)
+        # In time order the running balances are true (statements and forecasts read them so).
+        balances = db.execute(
+            select(
+                TransactionEntry.direction, TransactionEntry.amount, TransactionEntry.balance_after
+            )
+            .where(TransactionEntry.account_id == account_id)
+            .order_by(TransactionEntry.created_at, TransactionEntry.seq)
+        ).all()
+        running = 0
+        for direction, amount, balance_after in balances:
+            running += int(amount) if direction == EntryDirection.CREDIT else -int(amount)
+            assert int(balance_after) == running, email
+
+    # The demo question gets an eligible answer, through the assistant's own routing and tool.
+    customer_id, user_id, _ = _customer(db, "alice@demo.pbip")
+    question = fallback.route("can I afford a 5 lakh car loan over 5 years?")
+    assert question.tool == ToolName.LOAN_AFFORDABILITY
+    ctx = ToolContext(db, customer_id, user_id, now, FaqFacts.from_settings(settings))
+    reply = tools.loan_affordability(ctx, question.arguments).text
+    assert reply.startswith("For a car loan of INR 5,00,000.00 over 60 months you are likely to")
+    assert "of your income of INR 1,25,000.00, within the 50% limit" in reply
+
+    entries = db.scalar(select(func.count()).select_from(TransactionEntry))
+    assert _seed_with(settings, migrated_engine, monkeypatch, environ) == 0  # again: no-op
+    assert db.scalar(select(func.count()).select_from(TransactionEntry)) == entries
+
+
+def test_seed_skips_the_salary_history_of_a_customer_who_transacted_since(
+    migrated_engine: Engine,
+    db: Session,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An older demo database: Alice transacted after the salary dates. The ledger never back-dates
+    before an account's latest entry, so the seed posts nothing for her and says why; Bob, whose
+    only entry is his opening deposit, still gets his history."""
+    environ = {"PBIP_DEMO_PASSWORD": ENV_PASSWORD}
+    monkeypatch.setattr(seed_dev, "SALARIES", {})  # an older seed: no salaries
+    assert _seed_with(settings, migrated_engine, monkeypatch, environ) == 0
+    monkeypatch.undo()
+    _, _, alice_account = _customer(db, "alice@demo.pbip")
+    ledger.deposit(db, alice_account, 1_000, reference="Cash")  # now: after every salary date
+    db.commit()
+    capsys.readouterr()
+
+    assert _seed_with(settings, migrated_engine, monkeypatch, environ) == 0
+
+    out = capsys.readouterr().out
+    assert "salary   alice@demo.pbip  skipped" in out
+    assert _salary_credits(db, alice_account) == []
+    _, _, bob_account = _customer(db, "bob@demo.pbip")
+    assert len(_salary_credits(db, bob_account)) == seed_dev.SALARY_MONTHS
+
+
+def test_the_seed_writes_money_only_through_the_ledger_service() -> None:
+    """AGENTS.md section 4: no entry, balance or trigger is touched outside ledger/service.py."""
+    source = (Path(seed_dev.__file__)).read_text(encoding="utf-8")
+    for forbidden in (
+        "TransactionEntry",
+        "ledger_balance",
+        "held_amount",
+        "TRIGGER",
+        "INSERT",
+        "UPDATE ",
+        "_redate",
+        "text(",
+    ):
+        assert forbidden not in source, forbidden
+    assert "ledger.deposit(" in source

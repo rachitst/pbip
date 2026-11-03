@@ -20,6 +20,7 @@ from uuid import UUID
 from sqlalchemy import case, delete, func, select
 from sqlalchemy.orm import Session
 
+from pbip_api.core.config import get_settings
 from pbip_api.core.db import utcnow
 from pbip_api.core.errors import ConflictError, NotFoundError, UnprocessableError
 from pbip_api.modules.accounts.models import Account, AccountStatus, AccountType
@@ -132,6 +133,7 @@ def create_transaction(
     reference: str | None = None,
     channel: str = "WEB",
     reversal_of_id: UUID | None = None,
+    at: datetime | None = None,
 ) -> Transaction:
     # Lock BOTH accounts (sorted) before inserting the header. The header's foreign keys take
     # KEY SHARE locks on the accounts; acquiring FOR UPDATE afterwards would deadlock with a
@@ -150,6 +152,8 @@ def create_transaction(
         channel=channel,
         reversal_of_id=reversal_of_id,
     )
+    if at is not None:  # a back-dated deposit (``deposit(posted_at=...)``); else the DB's now()
+        transaction.created_at = at
     session.add(transaction)
     session.flush()
     return transaction
@@ -205,8 +209,14 @@ def capture_hold_and_post(session: Session, transaction: Transaction) -> None:
     post_transaction(session, transaction, transfer_legs(transaction))
 
 
-def post_transaction(session: Session, transaction: Transaction, legs: list[Leg]) -> None:
-    """Write balanced, immutable entries and update running balances atomically."""
+def post_transaction(
+    session: Session, transaction: Transaction, legs: list[Leg], *, at: datetime | None = None
+) -> None:
+    """Write balanced, immutable entries and update running balances atomically.
+
+    ``at`` dates the entries and ``posted_at`` (only ``deposit(posted_at=...)`` passes it, after
+    its checks); without it the entries take the database's now() and ``posted_at`` the clock.
+    """
     if not legs:
         raise LedgerInvariantError("a transaction needs at least one leg")
     if any(leg.amount <= 0 for leg in legs):
@@ -228,18 +238,19 @@ def post_transaction(session: Session, transaction: Transaction, legs: list[Leg]
             account.ledger_balance -= leg.amount
         else:
             account.ledger_balance += leg.amount
-        session.add(
-            TransactionEntry(
-                transaction_id=transaction.id,
-                account_id=account.id,
-                direction=leg.direction,
-                amount=leg.amount,
-                currency=transaction.currency,
-                balance_after=account.ledger_balance,
-            )
+        entry = TransactionEntry(
+            transaction_id=transaction.id,
+            account_id=account.id,
+            direction=leg.direction,
+            amount=leg.amount,
+            currency=transaction.currency,
+            balance_after=account.ledger_balance,
         )
+        if at is not None:
+            entry.created_at = at
+        session.add(entry)
     transaction.status = TransactionStatus.POSTED
-    transaction.posted_at = utcnow()
+    transaction.posted_at = at or utcnow()
     session.flush()
 
 
@@ -249,8 +260,19 @@ def deposit(
     amount: int,
     currency: str = "INR",
     reference: str = "Deposit",
+    *,
+    posted_at: datetime | None = None,
 ) -> Transaction:
-    """Fund an account from the internal clearing account (used by seeding and tests)."""
+    """Fund an account from the internal clearing account (used by seeding and tests).
+
+    ``posted_at`` back-dates the deposit (header and both entries) so the demo seed can build a
+    salary history (ADR-0048). It is refused in staging/production, in the future, and before
+    the account's latest entry: every ``balance_after`` must stay the running balance in time
+    order, which statements and daily balances rely on.
+    """
+    if posted_at is not None:
+        lock_accounts(session, [SYSTEM_CLEARING_ID, account_id])  # sorted, before the header
+        _check_backdate(session, account_id, posted_at)
     transaction = create_transaction(
         session,
         type_=TransactionType.DEPOSIT,
@@ -259,9 +281,32 @@ def deposit(
         debit_account_id=SYSTEM_CLEARING_ID,
         credit_account_id=account_id,
         reference=reference,
+        at=posted_at,
     )
-    post_transaction(session, transaction, transfer_legs(transaction))
+    post_transaction(session, transaction, transfer_legs(transaction), at=posted_at)
     return transaction
+
+
+def _check_backdate(session: Session, account_id: UUID, posted_at: datetime) -> None:
+    """Refuse a back-dated deposit that would not be a faithful history (ADR-0048).
+
+    The account is already locked, so no entry can be added between this check and the posting.
+    The clearing account is not checked: it is a system account whose running balance is never
+    shown by date.
+    """
+    if get_settings().is_deployed:
+        raise LedgerInvariantError("back-dated deposits are refused in staging/production")
+    if posted_at.tzinfo is None:
+        raise LedgerInvariantError("posted_at must be timezone-aware")
+    if posted_at > utcnow():
+        raise LedgerInvariantError("posted_at must not be in the future")
+    latest = session.execute(
+        select(func.max(TransactionEntry.created_at)).where(
+            TransactionEntry.account_id == account_id
+        )
+    ).scalar_one()
+    if latest is not None and posted_at < latest:
+        raise LedgerInvariantError("posted_at must not precede the account's latest entry")
 
 
 def disburse_loan(
