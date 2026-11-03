@@ -237,7 +237,7 @@ consistently on GitHub-hosted runners**, so this needs a follow-up issue.
 | CodeQL (Python, JavaScript/TypeScript) | both analyses succeeded; 0 open code-scanning alerts (API query, 3 Nov 2026) | **[CI]** run 41600683862 |
 | Bandit (`-ll`, medium+ severity) | no findings, step passed | **[CI]** run 41600683787, Security job |
 | pip-audit | "No known vulnerabilities found" | **[CI]** run 41600683787, Security job |
-| npm audit (`--audit-level=high`) | passed with **13 moderate** advisories: `minimatch` ReDoS (GHSA-g3hv-75wg-m249), pulled in by ESLint / `@typescript-eslint` and `openapi-typescript` (build tooling, not shipped). 0 high or critical. | **[CI]** run 41600683787, Security job |
+| npm audit (`--audit-level=high`) | passed with **13 moderate** advisories: `minimatch` ReDoS (GHSA-g3hv-75wg-m249), pulled in by ESLint / `@typescript-eslint` and `openapi-typescript` (build tooling, not shipped). 0 high or critical. The same advisory is open as Dependabot alert #3 (`apps/web/package-lock.json`, moderate). | **[CI]** run 41600683787, Security job; Dependabot |
 | detect-secrets against the baseline | passed | **[CI]** run 41600683787, Security job |
 | API fuzzing (Schemathesis, TASK-070) | 59 operations, 562 cases in positive and negative mode, **0 unhandled 5xx, 0 schema violations** | **[CI]** run 41415493200 (2 Nov 2026), [`fuzzing.md`](fuzzing.md) |
 | OWASP ZAP baseline (DAST) | latest run succeeded | **[CI]** run 41421122439 (2 Nov 2026), [`../security/zap-2026-11-01`](../security/zap-2026-11-01) |
