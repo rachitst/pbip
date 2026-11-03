@@ -153,5 +153,5 @@ champion; the API never needs MLflow (`fraud-models.md` "Model registry and prom
 `ml/src/pbip_ml/fraud/promotion.py`). Details: [lightgbm-fraud.md](lightgbm-fraud.md#retraining-and-promotion).
 
 `model_version` naming: `hybrid-lgbm-iforest-<n>` is a constant in `train.py`. Bump it with every retrain on
-changed data or features (`-2`: generator v2.3; `-3`: out-of-time calibration, ADR-0047; `-4`: feature contract 2 and generator v2.4, ADR-0051, served only after the TASK-038 gate). The registry version number
+changed data or features (`-2`: generator v2.3; `-3`: out-of-time calibration, ADR-0047; `-4`: feature contract 2 and generator v2.4, ADR-0051, failed the TASK-038 gate on test PR-AUC, not served). The registry version number
 (MLflow) and `champion.json` (version, run, manifest hash) identify the exact trained artifacts.

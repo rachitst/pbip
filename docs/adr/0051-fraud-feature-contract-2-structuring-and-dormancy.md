@@ -61,7 +61,9 @@ Limits, stated plainly:
 - Most of `days_since_last_activity`'s weight is the 0-day gap of multi-row synthetic scenarios. That gap may not
   carry over to real traffic.
 
-So `-4` scores better on synthetic data, but it is served only if it passes the TASK-038 gate.
+`-4` is better on the held-out sets, but it **failed the TASK-038 gate**: on the same test rows its PR-AUC was 0.9433
+against the champion's 0.9446. So `-3` stays served, and this code serves it unchanged. The contract stays in place,
+so a future retrain with real or richer labelled data can use the new features.
 
 ## Consequences
 - The API runs one more short query per scored transfer (credits in 30 days) and, for an account with no

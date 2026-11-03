@@ -455,5 +455,9 @@ Mean |SHAP| on the test period: `days_since_last_activity` 0.29 (third), `near_t
 - The 6-month training data holds no F8 (180 days of dormancy do not fit), so the F8 gain comes from the other
   signals plus the feature's monotone shape, not from F8 examples. A 12-month training candidate (run
   `539a586b96484ce882bad7eb99c9059b`, LightGBM PR-AUC 0.895 test / 0.882 held-out 12 m) is reported in the PR.
-- Promotion needs the TASK-038 gate (latency on an idle machine). Until it passes, `-3` stays served. This code
-  serves `-3` unchanged (`test_a_model_trained_before_the_new_features_still_scores`).
+- The 12-month candidate is worse on the held-out sets (hybrid recall at REVIEW 0.739 / 0.736; F8 0.471) and
+  was not proposed.
+- **TASK-038 gate (04:54:59-04:55:24 IST, 2-CPU Celeron laptop, idle window, load 1.94 before and 1.70 after):
+  not promoted.** The registry holds `-4` as `pbip-fraud` v2. The champion stays v1 (`-3`), because on the same
+  v2.4 test rows `-4`'s PR-AUC was 0.9433 against `-3`'s 0.9446. Latency p95 was 6.05 ms against 4.75 ms (limit
+  50 ms). `-3` stays served. This code serves `-3` unchanged (`test_legacy_artifacts_on_disk_load_and_are_served_by_the_model`).
