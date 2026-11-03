@@ -5,18 +5,21 @@ data, never SQL or internals, never a state change, and never a crash.
 """
 
 import base64
+import json
 import re
 import uuid
 from collections.abc import Callable, Iterator, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pbip_api.core.money import format_minor
 from pbip_api.modules.assistant import tools
 from pbip_api.modules.assistant.dependencies import get_chat_model
+from pbip_api.modules.assistant.providers import GroqChatModel
 from pbip_api.modules.compliance.models import AuditLog
 from pbip_api.modules.ledger import service as ledger
 from pbip_api.modules.ledger.models import Transaction
@@ -42,12 +45,50 @@ class RecordingModel:
         return self.reply
 
 
-@pytest.fixture
-def model(app: FastAPI) -> Iterator[RecordingModel]:
-    fake = RecordingModel('{"tool": "get_account_summary", "arguments": {}}')
+class GroqRecordingModel(RecordingModel):
+    """The REAL Groq adapter (ADR-0034) over a fake HTTP transport: the scripted ``reply`` comes
+    back as a Groq function call, and every request body that would have left the stack is kept."""
+
+    def __init__(self, reply: str) -> None:
+        super().__init__(reply)
+        self.bodies: list[str] = []
+        self._adapter = GroqChatModel(
+            "gsk_" + "x" * 48, "openai/gpt-oss-20b", 5.0, transport=httpx.MockTransport(self._serve)
+        )
+
+    def _serve(self, request: httpx.Request) -> httpx.Response:
+        self.bodies.append(request.content.decode())
+        choice = json.loads(self.reply)
+        call = {
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": choice["tool"], "arguments": json.dumps(choice["arguments"])},
+        }
+        message = {"role": "assistant", "content": None, "tool_calls": [call]}
+        return httpx.Response(200, json={"choices": [{"index": 0, "message": message}]})
+
+    def complete_json(self, system: str, user: str, schema: Mapping[str, object]) -> str:
+        self.seen.append(system + "\n" + user)
+        return self._adapter.complete_json(system, user, schema)
+
+
+_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
+_EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+
+
+@pytest.fixture(params=["local", "groq"])
+def model(app: FastAPI, request: pytest.FixtureRequest) -> Iterator[RecordingModel]:
+    """Every probe runs against the local model and against the Groq adapter (ADR-0034)."""
+    reply = '{"tool": "get_account_summary", "arguments": {}}'
+    fake = GroqRecordingModel(reply) if request.param == "groq" else RecordingModel(reply)
     app.dependency_overrides[get_chat_model] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_chat_model, None)
+    if isinstance(fake, GroqRecordingModel):  # nothing identifying ever left the stack
+        for body in fake.bodies:
+            question = json.loads(body)["messages"][1]["content"]
+            assert not re.search(r"\d{12}", question), question
+            assert not _UUID.search(question) and not _EMAIL.search(question), question
 
 
 def _ask(client: TestClient, actor: Actor, message: str) -> Any:

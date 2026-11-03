@@ -8,7 +8,7 @@ Rules enforced here (see AGENTS.md section 6):
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DEV_JWT_SECRET = "local-dev-only-change-me-local-dev-only-change-me"  # noqa: S105
@@ -115,6 +115,12 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:5173,http://localhost:8080"
     cookie_secure: bool = False
+
+    @field_validator("groq_reasoning_effort", mode="before")
+    @classmethod
+    def _empty_effort_is_default(cls, value: object) -> object:
+        """``GROQ_REASONING_EFFORT=`` (as in .env.example and compose) means the model default."""
+        return None if value == "" else value
 
     @property
     def cors_origin_list(self) -> list[str]:
