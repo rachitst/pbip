@@ -221,8 +221,8 @@ not pin anything here. Re-issue `tls.crt` before 397 days, the same way.
 ## 10. Images for arm64, and pulling them from GHCR
 
 `deploy.yml` (`package` job) builds `ghcr.io/rachitst/pbip/api` and `.../web` when a `vX.Y.Z` tag is pushed. Until
-the change in the companion PR **"ci(images): build linux/amd64 and linux/arm64 images"** (branch
-`ci/multi-arch-images`) is merged, it built **linux/amd64 only**, and an Arm VM fails with
+GitHub PR #432 ("ci(images): build linux/amd64 and linux/arm64 images for the Arm staging host") is
+merged, it built **linux/amd64 only**, and an Arm VM fails with
 `no matching manifest for linux/arm64/v8`. After it is merged, tag a new release; check before deploying (both
 lines must appear; the packages are private, so run the GHCR login below on the laptop too):
 
