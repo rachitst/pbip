@@ -2,7 +2,9 @@
 
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
+import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import pytest
@@ -10,6 +12,7 @@ from pbip_datagen.__main__ import _export_fraud
 from pbip_datagen.generator import GeneratorConfig
 from pbip_ml.fraud import hybrid as h
 from pbip_ml.fraud import training as t
+from pbip_ml.fraud.artifacts import ANOMALY_FEATURES
 from pbip_ml.fraud.contract import FraudDecision, ReasonSource
 from pbip_ml.fraud.train import load_export
 
@@ -138,7 +141,7 @@ def test_shap_reasons_are_top3_positive_exact_and_fast(trained: dict[str, object
     for i in range(min(100, len(fraud))):
         calls.clear()
         h.shap_reasons(CountingBooster(), fraud.iloc[[i]])  # type: ignore[arg-type]  # spy
-        assert calls == [(1, {"pred_contrib": True})]
+        assert calls == [(1, {"pred_contrib": True, "num_threads": 1})]  # #379: no OpenMP pool
 
 
 @pytest.mark.parametrize("scenario", ["F1", "F2", "F3", "F4", "F5", "F6"])
@@ -196,3 +199,81 @@ def test_batch_risk_matches_row_scoring(trained: dict[str, object]) -> None:
     for candidate in (scorer, replace(scorer, booster=None, anomaly=None)):
         rows = [r.risk_score for r in h.score_frame(candidate, sample)]
         assert h.batch_risk(candidate, sample).tolist() == rows
+
+
+# #379: the LightGBM step was made cheaper (one float64 matrix shared by predict and TreeSHAP, one
+# thread). Neither may change a decision, so these tests demand exact equality with the previous
+# arithmetic (DataFrame predict), not closeness.
+def _reference(
+    scorer: h.HybridScorer, frame: pd.DataFrame, i: int
+) -> tuple[int, float, float, list[float]]:
+    """The scoring arithmetic as it was before #379: DataFrame predict and ``score_samples``."""
+    assert scorer.booster is not None and scorer.anomaly is not None
+    row, outcome = frame.iloc[[i]], scorer.rules.evaluate(h.rule_context(frame.iloc[i]))
+    raw = float(np.asarray(scorer.booster.predict(row[list(t.MODEL_FEATURES)]))[0])
+    p = float(scorer.params.calibrate(np.array([raw]))[0])
+    model = scorer.anomaly
+    forest_raw = -model.forest.score_samples(row[list(ANOMALY_FEATURES)].to_numpy(dtype=float))
+    a = float(np.clip((forest_raw - model.low) / (model.high - model.low), 0.0, 1.0)[0])
+    z = (
+        scorer.params.intercept
+        + scorer.params.w_model * p
+        + scorer.params.w_anomaly * a
+        + scorer.params.w_rules * outcome.score / 100
+    )
+    risk = round(100 * h._sigmoid(z))
+    for hit in outcome.triggered:
+        risk = max(risk, h.OVERRIDES.get(hit.code, 0))
+    contrib = np.asarray(scorer.booster.predict(row[list(t.MODEL_FEATURES)], pred_contrib=True))
+    return min(max(risk, 0), 100), p, a, [float(v) for v in contrib[0]]
+
+
+@pytest.mark.timeout(300)
+def test_cheaper_scoring_gives_exactly_the_previous_scores_and_reasons(
+    trained: dict[str, object],
+) -> None:
+    split, scorer = trained["split"], trained["scorer"]
+    assert isinstance(split, t.Split) and isinstance(scorer, h.HybridScorer)
+    assert scorer.booster is not None
+    sample = pd.concat(
+        [split.test[split.test["label"] == 1],
+         split.test[split.test["label"] == 0].sample(300, random_state=11)]
+    )  # fmt: skip
+    for i in range(len(sample)):
+        result = _score(scorer, sample, i)
+        risk, p, a, contrib = _reference(scorer, sample, i)
+        assert result.risk_score == risk  # exact: the same integer, so the same decision
+        assert result.features["model_probability"] == round(p, 4)
+        assert result.features["anomaly_score"] == round(a, 4)
+        model_reasons = [r for r in result.reasons if r.source is ReasonSource.MODEL]
+        values = np.asarray(contrib[:-1])
+        expected = [
+            (f"MODEL_{t.MODEL_FEATURES[j].upper()}", round(float(values[j]), 4))
+            for j in np.argsort(-values)[: h.TOP_SHAP]
+            if values[j] > 0
+        ]
+        assert [(r.code, r.contribution) for r in model_reasons] == expected
+
+
+def test_one_score_is_one_single_threaded_predict_and_one_treeshap_call(
+    trained: dict[str, object],
+) -> None:
+    split, scorer = trained["split"], trained["scorer"]
+    assert isinstance(split, t.Split) and isinstance(scorer, h.HybridScorer)
+    assert scorer.booster is not None
+    booster: lgb.Booster = scorer.booster
+    calls: list[tuple[type, tuple[int, ...], dict[str, Any]]] = []
+
+    class CountingBooster:
+        def predict(self, data: np.ndarray, **kwargs: Any) -> object:
+            calls.append((type(data), data.shape, kwargs))
+            return booster.predict(data, **kwargs)
+
+    spied = replace(scorer, booster=CountingBooster())  # type: ignore[arg-type]  # spy
+    result = _score(spied, split.test[split.test["label"] == 1])
+    assert result.model_version == "hybrid-test"
+    shape = (1, len(t.MODEL_FEATURES))
+    assert calls == [
+        (np.ndarray, shape, {"num_threads": 1}),
+        (np.ndarray, shape, {"pred_contrib": True, "num_threads": 1}),
+    ]
