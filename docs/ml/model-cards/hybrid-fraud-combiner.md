@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Code | `ml/src/pbip_ml/fraud/hybrid.py` (combiner), `ml/src/pbip_ml/fraud/train.py` (fit, writes `hybrid_params.json`), `apps/api/src/pbip_api/modules/fraud/hybrid.py` (serving) |
-| `model_version` | `hybrid-lgbm-iforest-2` (`HYBRID_VERSION`, `train.py`; generator v2.3, TASK-084). The v2.1 and v2.2 models were both `hybrid-lgbm-iforest-1`, and the demo stack still serves that `-1` model until a `-2` model passes the gate and is exported. When the models fail or exceed the budget, the API serves the baseline rules marked `<baseline version>+rules-only` (e.g. `baseline-rules-0.5+rules-only`) with a `MODEL_UNAVAILABLE` reason |
+| `model_version` | `hybrid-lgbm-iforest-3` (`HYBRID_VERSION`, `train.py`; generator v2.3, out-of-time calibration, ADR-0047). `-2` was the first v2.3 retrain (TASK-084), never promoted. The v2.1 and v2.2 models were both `hybrid-lgbm-iforest-1`, and the demo stack still serves that `-1` model until a newer model passes the gate and is exported. When the models fail or exceed the budget, the API serves the baseline rules marked `<baseline version>+rules-only` (e.g. `baseline-rules-0.5+rules-only`) with a `MODEL_UNAVAILABLE` reason |
 | Owner | `rachitst` (`.github/CODEOWNERS`, rule `*`) |
 | Tasks | TASK-031, TASK-032, TASK-033, TASK-038, TASK-039, TASK-080; ADR-0019 |
 
@@ -14,9 +14,10 @@ ALLOW < 30 <= STEP_UP < 60 <= REVIEW < 85 <= BLOCK, with RULE / MODEL / ANOMALY 
 
 How it combines (`docs/ml/fraud-models.md` "Hybrid decision" and "Serving"):
 
-1. LightGBM probability, calibrated by isotonic regression fitted on validation.
-2. A logistic regression stacks the calibrated probability, the Isolation Forest score and the rule points
-   (weights fitted on validation).
+1. LightGBM probability, calibrated by isotonic regression fitted on validation plus out-of-time scores from
+   4 chronological folds of the training period (ADR-0047).
+2. A logistic regression (`C = 10`) stacks the calibrated probability, the Isolation Forest score and the rule
+   points (weights fitted on validation).
 3. Hard-rule floors: RAPID_ATO_TRANSFER at least REVIEW; NEW_PAYEE_LARGE_AMOUNT and VELOCITY_BURST at
    least STEP_UP.
 4. Serving: `risk = max(baseline rules, hybrid)`, so the model can raise a decision but never lower it.
@@ -30,8 +31,9 @@ transfer state machine; use of the bands on real traffic before the weights are 
 ## Training data
 
 Same run as the components: synthetic `pbip_datagen` export seed 42 (3,000 customers, 6 months), held-out
-seed 4242 (1,500 customers), split by time (`docs/ml/model-evaluation-report-v1.md` §1-§2). Calibration and
-stacking are fitted on the validation period only.
+seed 4242 (1,500 customers), split by time (`docs/ml/model-evaluation-report-v1.md` §1-§2). Stacking is fitted on
+the validation period; calibration on validation plus out-of-time training-period scores (ADR-0047). Test and
+held-out data are never used for fitting.
 
 ## Features
 
@@ -42,7 +44,24 @@ through the same online feature code as training, checked by `test_served_row_eq
 
 ## Evaluation (copied from existing reports)
 
-**Current recipe, `hybrid-lgbm-iforest-2`, generator v2.3** (`model-evaluation-report-v1.md` §9, MLflow run
+**Current recipe, `hybrid-lgbm-iforest-3`, generator v2.3, out-of-time calibration** (`model-evaluation-report-v1.md`
+§10, ADR-0047, MLflow run `4d3a1ae903c4430d8745e9bb20fda674`, test / held-out seed 4242):
+
+| Measure | Test | Held-out seed 4242 |
+|---|---|---|
+| Hybrid PR-AUC | 0.945 | 0.887 |
+| Recall at REVIEW | 0.923 | 0.894 |
+| Precision at REVIEW | 0.960 | 0.931 |
+| TN / FP / FN / TP at REVIEW | 10,038 / 4 / 8 / 96 | 25,361 / 15 / 24 / 202 |
+| Rules only, recall at REVIEW | 0.202 | - |
+
+Acceptance bars (§10, test / held-out): legitimate new-payee transfers held for REVIEW 0.28% / 0.43% (bar <= 1%);
+asked for STEP_UP 7.61% / 8.02% (bar <= 10%); all legitimate debits held at REVIEW 0.040% / 0.059% (bar <= 0.1%);
+recall at REVIEW 0.923 vs 0.202 for the rules alone. All pass. Behaviour cases (TASK-080): APP scam 95 (BLOCK),
+velocity burst 30, takeover 60, routine grocery 0. **Promotion:** the TASK-038 gate passed on an idle machine
+(p95 latency 20.2 ms against 50 ms; PR-AUC 0.945 / 0.887 against 0.80) and made it the registry `champion` (§10).
+
+**Previous retrain, `hybrid-lgbm-iforest-2`, generator v2.3, never promoted** (`model-evaluation-report-v1.md` §9, MLflow run
 `7b43ecc3827f4e8ebef35699f9a8f1ab`, test / held-out seed 4242):
 
 | Measure | Test | Held-out seed 4242 |
@@ -134,5 +153,5 @@ champion; the API never needs MLflow (`fraud-models.md` "Model registry and prom
 `ml/src/pbip_ml/fraud/promotion.py`). Details: [lightgbm-fraud.md](lightgbm-fraud.md#retraining-and-promotion).
 
 `model_version` naming: `hybrid-lgbm-iforest-<n>` is a constant in `train.py`. Bump it with every retrain on
-changed data or features (`-2`: generator v2.3). The registry version number
+changed data or features (`-2`: generator v2.3; `-3`: out-of-time calibration, ADR-0047). The registry version number
 (MLflow) and `champion.json` (version, run, manifest hash) identify the exact trained artifacts.

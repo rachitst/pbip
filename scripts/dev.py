@@ -440,6 +440,20 @@ def cmd_fraud_champion(args: list[str]) -> int:
     return _run(["uv", "run", "python", "-m", "pbip_ml.fraud.promotion", "export-champion", *rest])
 
 
+def cmd_recommendation_model(args: list[str]) -> int:
+    """Train the simulated-uptake propensity model into ``models/recommendations`` (ADR-0049).
+
+    Seed 42, 3,000 simulated customers x 24 months; a few seconds of CPU. The model files are
+    written only if it beats rules-v1 on the simulated test months; ``report.json`` always is.
+    The API uses it when ``RECOMMENDATION_MODEL_DIR`` points there (docker-compose does), and
+    serves rules-v1 otherwise. Extra arguments go to the training CLI.
+    """
+    out = ROOT / "models" / "recommendations"
+    return _run(
+        ["uv", "run", "python", "-m", "pbip_ml.recommendations.train", "--out", str(out), *args]
+    )
+
+
 def cmd_notebooks(args: list[str]) -> int:
     """Execute ml/notebooks/*.ipynb head-to-tail and save outputs (``--check`` to only verify)."""
     return _run(["uv", "run", "python", "scripts/run_notebooks.py", *args])
@@ -473,7 +487,7 @@ def build_k6_command(
         return ["k6", "run", f"infra/k6/{script}", *extra], {"BASE_URL": url}
     url = base_url or ("http://localhost:8000" if linux else "http://host.docker.internal:8000")
     cmd = ["docker", "run", "--rm", "-i", "-e", f"BASE_URL={url}"]
-    for name in ("VUS", "DURATION", "THINK_SECONDS", "USERS"):
+    for name in ("VUS", "DURATION", "THINK_SECONDS", "USERS", "EVENTS_PER_SECOND", "BATCH_SIZE"):
         if os.environ.get(name):
             cmd += ["-e", f"{name}={os.environ[name]}"]
     if linux:
@@ -495,11 +509,11 @@ PERF_RESULTS = ROOT / "perf-results"
 
 
 def build_load_command(
-    base_url: str | None, has_native_k6: bool, extra: list[str]
+    base_url: str | None, has_native_k6: bool, extra: list[str], script: str = "load.js"
 ) -> tuple[list[str], dict[str, str]]:
-    """k6 load suite (infra/k6/load.js): like ``perf``, plus a writable /results mount for
-    ``--summary-export /results/...`` and trust in the local dev CA for ``https://localhost``."""
-    cmd, env = build_k6_command("load.js", base_url, has_native_k6, extra)
+    """k6 load script (default infra/k6/load.js): like ``perf``, plus a writable /results mount
+    for ``--summary-export /results/...`` and trust in the local dev CA for ``https://localhost``."""
+    cmd, env = build_k6_command(script, base_url, has_native_k6, extra)
     url = base_url or ""
     local_tls = url.startswith(("https://localhost", "https://127.0.0.1")) and DEV_CA.exists()
     if has_native_k6:
@@ -525,6 +539,14 @@ def build_load_command(
 def cmd_load(args: list[str]) -> int:
     """Run the k6 load suite (infra/k6/load.js, TASK-078) against a running, seeded stack."""
     cmd, env = build_load_command(os.environ.get("BASE_URL"), _find_tool("k6") is not None, args)
+    return _run(cmd, env=env)
+
+
+def cmd_load_events(args: list[str]) -> int:
+    """Run the clickstream ingestion load test (infra/k6/events.js, TASK-055): >= 500 events/s."""
+    cmd, env = build_load_command(
+        os.environ.get("BASE_URL"), _find_tool("k6") is not None, args, script="events.js"
+    )
     return _run(cmd, env=env)
 
 
@@ -758,6 +780,13 @@ TEST_ENV_SAFE_OVERRIDES: dict[str, str] = {
     "FRAUD_MULE_MIN_INBOUND_MINOR": "1000000",
     "FRAUD_MULE_MIN_RATIO_PERCENT": "80",
     "FRAUD_MULE_REPEAT_EPISODES": "2",
+    "FRAUD_STRUCTURING_THRESHOLD_MINOR": "10000000",
+    "FRAUD_STRUCTURING_BAND_PERCENT": "10",
+    "FRAUD_STRUCTURING_WINDOW_HOURS": "72",
+    "FRAUD_STRUCTURING_MIN_COUNT": "3",
+    "FRAUD_DORMANCY_DAYS": "180",
+    "FRAUD_DORMANT_REACTIVATION_DAYS": "7",
+    "FRAUD_DORMANT_MIN_AMOUNT_MINOR": "2500000",
     "GEOIP_COUNTRY_DB_PATH": "",
     "GEOIP_CITY_DB_PATH": "",
     "LLM_PROVIDER": "ollama",
@@ -908,6 +937,7 @@ COMMANDS = {
     "notebooks": "Execute the EDA notebooks head-to-tail (--check: verify only)",
     "datagen": "Generate + COPY-load the synthetic ML dataset (seed 42, 1,000 customers)",
     "fraud-model": "Train the fraud models into models/fraud (needed for FRAUD_SCORER=hybrid)",
+    "recommendation-model": "Train the simulated-uptake recommendation model (used if it wins)",
     "promote-model": "Measure the newest fraud run; promote it to MLflow 'champion' if it passes",
     "fraud-champion": "Export the MLflow 'champion' fraud model into models/fraud (for the API)",
     "dev-api": "Run FastAPI backend on :8000 with auto-reload",
@@ -927,6 +957,7 @@ COMMANDS = {
     "test-e2e": "Run Playwright end-to-end tests",
     "perf": "k6 baseline: health endpoints at 50 VUs, p95 < 50 ms (needs a running API)",
     "load": "k6 load suite (TASK-078): banking mix with NFR thresholds (seeded stack)",
+    "load-events": "k6 clickstream ingestion (TASK-055): 500 events/s, p95 < 500 ms (seeded stack)",
     "smoke": "Run smoke test against https://localhost:8443 or custom URL",
     "fuzz": "Run property-based API fuzzing with Schemathesis",
     "check": "Run full CI verification suite locally",

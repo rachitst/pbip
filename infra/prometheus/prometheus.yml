@@ -8,9 +8,24 @@ rule_files:
 scrape_configs:
   - job_name: prometheus
     static_configs: [{ targets: ["localhost:9090"] }]
+  # Every API replica (ADR-0045): "api" resolves to one address per replica, each scraped as its
+  # own instance, so request and fraud counters stay exact when summed. The worker totals
+  # (source="worker", ADR-0039) and the PSI gauge (ADR-0038) are read from Redis and every replica
+  # serves the same values, so they are dropped here and scraped once by pbip-api-shared.
   - job_name: pbip-api
     metrics_path: /metrics
+    dns_sd_configs: [{ names: ["api"], type: A, port: 8000, refresh_interval: 15s }]
+    metric_relabel_configs:
+      - source_labels: [__name__, source]
+        regex: "pbip_feature_psi;.*|.+;worker"
+        action: drop
+  - job_name: pbip-api-shared
+    metrics_path: /metrics
     static_configs: [{ targets: ["api:8000"] }]
+    metric_relabel_configs:
+      - source_labels: [__name__, source]
+        regex: "pbip_feature_psi;.*|.+;worker"
+        action: keep
   - job_name: redis
     static_configs: [{ targets: ["redis-exporter:9121"] }]
   - job_name: postgres

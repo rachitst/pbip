@@ -3,8 +3,8 @@
 # On Windows, use dev.ps1 or dev.cmd instead of make.
 .DEFAULT_GOAL := help
 .PHONY: help doctor setup env infra-up infra-down up up-all down logs migrate seed \
-	datagen fraud-model promote-model fraud-champion notebooks ml-up mlflow-smoke dev-api dev-worker dev-web lint fmt typecheck imports security openapi \
-	test test-unit test-int test-web test-e2e smoke perf load fuzz check clean
+	datagen fraud-model recommendation-model promote-model fraud-champion notebooks ml-up mlflow-smoke dev-api dev-worker dev-web lint fmt typecheck imports security openapi \
+	test test-unit test-int test-web test-e2e smoke perf load load-events fuzz check clean
 
 PYTHON ?= python3
 
@@ -49,6 +49,9 @@ datagen: ## Generate + COPY-load the synthetic ML dataset (seed 42, 1,000 custom
 
 fraud-model: ## Train the fraud models into models/fraud (needed for FRAUD_SCORER=hybrid)
 	@$(PYTHON) scripts/dev.py fraud-model
+
+recommendation-model: ## Train the simulated-uptake recommendation model into models/recommendations (used only if it beats rules-v1)
+	@$(PYTHON) scripts/dev.py recommendation-model
 
 promote-model: ## Measure the newest fraud run on data/fraud; promote to MLflow 'champion' if it passes
 	@$(PYTHON) scripts/dev.py promote-model
@@ -112,6 +115,9 @@ smoke: ## Post-deploy smoke test
 
 load: ## k6 load suite: 70% reads, 20% transfers, 10% auth with NFR thresholds (seeded stack)
 	@$(PYTHON) scripts/dev.py load
+
+load-events: ## k6 clickstream ingestion: 500 events/s to /events/batch, p95 < 500 ms (seeded stack)
+	@$(PYTHON) scripts/dev.py load-events
 
 perf: ## k6 baseline on health endpoints (50 VUs, p95 < 50 ms); needs a running API
 	@$(PYTHON) scripts/dev.py perf

@@ -142,7 +142,7 @@ def test_pass_through_is_flagged_with_its_evidence(
         "sending INR 45,000.00 (90%)"
     )
     assert e.risk_score == 45 and e.decision == FraudDecision.STEP_UP
-    assert e.model_version == "baseline-rules-0.5"
+    assert e.model_version == "baseline-rules-0.6"
     assert e.features["mule_pass_through"] is True
     assert e.features["mule_inbound_total_minor"] == RECEIVED
     assert e.features["mule_inbound_count"] == 1 and e.features["mule_window_minutes"] == 60

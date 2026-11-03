@@ -63,3 +63,8 @@ export function productTypeLabel(productType: string): string {
   const lower = productType.toLowerCase().replace(/_/g, " ");
   return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
+
+/** ADR-0049: shown under the cards when the API says a model trained on SIMULATED uptake ordered
+ * them (``score_from_simulated_data``). The wording is fixed here, never built from the API. */
+export const SIMULATED_ORDER_NOTE =
+  "The order of these suggestions comes from a model trained on simulated product take-up, not on real customers' choices. Every product shown meets our eligibility rules.";

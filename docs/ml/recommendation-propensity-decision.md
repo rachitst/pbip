@@ -1,5 +1,12 @@
 # Decision: no trained propensity model for product recommendations yet (TASK-054)
 
+> **Update 2026-11-04 (ADR-0049).** On the owner's direction a propensity model was trained on a documented,
+> clearly labelled simulation of uptake and compared with `rules-v1` on the same simulated data. It did not pass
+> its promotion gate, so `rules-v1` is still served. See
+> [ADR-0049](../adr/0049-simulated-uptake-propensity-model-behind-the-rules.md) and the
+> [model card](model-cards/recommendation-propensity.md). The reasoning below about simulated labels still
+> applies, and is why every result is labelled as simulated.
+
 | | |
 |---|---|
 | Status | Decided: keep `rules-v1`; do not train a propensity model on synthetic data |

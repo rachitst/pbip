@@ -21,6 +21,7 @@ import pandas as pd
 from joblib.numpy_pickle import NumpyUnpickler
 from sklearn.ensemble import IsolationForest
 
+from pbip_ml.fraud.compiled_forest import CompiledForest
 from pbip_ml.fraud.features import FEATURE_NAMES
 
 MODEL_FEATURES = (
@@ -43,10 +44,13 @@ class AnomalyModel:
     medians: dict[str, float]
     spreads: dict[str, float]
 
-    def score(self, frame: pd.DataFrame) -> np.ndarray:
-        raw = -self.forest.score_samples(
-            frame[list(ANOMALY_FEATURES)].to_numpy(dtype=float)
-        )  # higher = more anomalous
+    def score(self, frame: pd.DataFrame, compiled: CompiledForest | None = None) -> np.ndarray:
+        """0-1 anomaly per row. ``compiled``: the same forest, same scores, fast for one row."""
+        x = frame[list(ANOMALY_FEATURES)].to_numpy(dtype=float)
+        # NaN takes scikit-learn's missing-value branch, which the compiled walk does not model.
+        fast = compiled is not None and bool(np.isfinite(x).all())
+        forest = compiled if fast and compiled is not None else self.forest
+        raw = -forest.score_samples(x)  # higher = more anomalous
         clipped: np.ndarray = np.clip((raw - self.low) / (self.high - self.low), 0.0, 1.0)
         return clipped
 

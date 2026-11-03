@@ -8,7 +8,7 @@ import type {
   RecommendationsResponse,
   WealthProductOut,
 } from "../api/client";
-import { NOT_AVAILABLE_NOTE, productTypeLabel } from "../lib/recommendations";
+import { NOT_AVAILABLE_NOTE, SIMULATED_ORDER_NOTE, productTypeLabel } from "../lib/recommendations";
 import { account, customerMe, json, renderApp, urlOf } from "../test-utils";
 import { ProductRecommendations } from "./ProductRecommendations";
 
@@ -88,7 +88,19 @@ function response(items: ProductRecommendationItem[]): RecommendationsResponse {
     customer_id: "cust-1",
     recommendations: items,
     model_version: "rules-v1",
+    score_version: "rules-v1 (hand-weighted rules, not a trained model or a probability)",
+    score_from_simulated_data: false,
     evaluated_at: "2026-11-02T09:00:00Z",
+  };
+}
+
+/** ADR-0049: the same cards, ordered by the model trained on simulated uptake. */
+function simulatedResponse(items: ProductRecommendationItem[]): RecommendationsResponse {
+  return {
+    ...response(items.map((item) => ({ ...item, model_version: "sim-propensity-v1" }))),
+    model_version: "sim-propensity-v1",
+    score_version: "sim-propensity-v1 (trained on simulated uptake, not real customer behaviour)",
+    score_from_simulated_data: true,
   };
 }
 
@@ -164,6 +176,22 @@ describe("product recommendations on the accounts page", () => {
     expect(titles).toEqual(["Savings account", "Fixed deposit", "Personal credit line"]);
     expect(region.getByText(fixedDeposit.description)).toBeInTheDocument();
     expect(region.getByText("Credit")).toBeInTheDocument();
+  });
+
+  it("says when the order came from a model trained on simulated uptake (ADR-0049)", async () => {
+    recommendations = () =>
+      Promise.resolve(json(200, simulatedResponse([savingsAccount, fixedDeposit])));
+    renderApp();
+    const region = await section();
+    await region.findByRole("heading", { name: "Savings account" });
+    expect(region.getByText(SIMULATED_ORDER_NOTE)).toBeInTheDocument();
+  });
+
+  it("shows no simulation note for the rule-based order", async () => {
+    renderApp();
+    const region = await section();
+    await region.findByRole("heading", { name: "Savings account" });
+    expect(region.queryByText(SIMULATED_ORDER_NOTE)).not.toBeInTheDocument();
   });
 
   it("reveals the API's reasons from a keyboard-operable disclosure", async () => {
