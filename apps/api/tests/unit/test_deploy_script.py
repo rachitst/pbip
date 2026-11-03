@@ -9,7 +9,8 @@ import os
 import shutil
 import stat
 import subprocess
-from pathlib import Path
+from collections.abc import Callable, Mapping
+from pathlib import Path, PureWindowsPath
 
 import pytest
 from cryptography import x509
@@ -20,7 +21,48 @@ ROOT = Path(__file__).resolve().parents[4]
 SCRIPT = ROOT / "infra" / "deploy" / "deploy.sh"
 PREFIX = "ghcr.io/example/pbip"
 
-needs_bash = pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash (Linux/macOS)")
+
+def find_bash(
+    *,
+    windows: bool,
+    which: Callable[[str], str | None],
+    is_file: Callable[[str], bool],
+    env: Mapping[str, str],
+) -> str | None:
+    """The bash that can run deploy.sh here, or None.
+
+    #371: on Windows `which("bash")` finds System32's WSL launcher first, and WSL cannot open the Windows
+    temp path (exit 127). `Git/bin/bash.exe` is no good either: it is a launcher that prepends
+    /mingw64/bin, whose real openssl then shadows the test's fake one. So on Windows only Git for
+    Windows' own `<Git>/usr/bin/bash.exe` qualifies, found from git on PATH (`Git/cmd/git.exe`,
+    `Git/bin/git.exe` or `Git/mingw64/bin/git.exe`) or the default install folders. There is no
+    fallback to `which("bash")` there: no Git Bash means the tests skip rather than run under WSL.
+    """
+    if not windows:
+        return which("bash")
+    candidates: list[PureWindowsPath] = []
+    git = which("git")
+    if git is not None:
+        candidates += [
+            folder / "usr" / "bin" / "bash.exe" for folder in PureWindowsPath(git).parents
+        ]
+    for variable, below in (
+        ("ProgramW6432", ("Git",)),
+        ("ProgramFiles", ("Git",)),
+        ("ProgramFiles(x86)", ("Git",)),
+        ("LOCALAPPDATA", ("Programs", "Git")),
+    ):
+        if env.get(variable):
+            candidates.append(PureWindowsPath(env[variable], *below, "usr", "bin", "bash.exe"))
+    return next((str(path) for path in candidates if is_file(str(path))), None)
+
+
+BASH = find_bash(
+    windows=os.name == "nt", which=shutil.which, is_file=os.path.isfile, env=os.environ
+)
+needs_bash = pytest.mark.skipif(
+    BASH is None, reason="needs bash (Linux/macOS) or Git for Windows' usr/bin/bash.exe (never WSL)"
+)
 
 _FAKE_DOCKER = """#!/usr/bin/env bash
 # Records "<args> tag=$IMAGE_TAG" and fails `up` when FAKE_DOCKER_FAIL_UP=1.
@@ -49,18 +91,20 @@ def host(tmp_path: Path) -> Path:
 def _run(
     host: Path, *args: str, fail_up: bool = False, extra_env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
+    assert BASH is not None
+    # The fakes in host/bin come first, then the shell's own tools (on Windows `<Git>/usr/bin`, which
+    # holds the coreutils deploy.sh calls and is not on a plain PowerShell PATH), then the caller's PATH.
+    path = os.pathsep.join([str(host / "bin"), os.path.dirname(BASH), os.environ.get("PATH", "")])
     env = {
         **os.environ,
-        "PATH": f"{host / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}",
+        "PATH": path,
         "FAKE_DOCKER_LOG": str(host / "docker.log"),
         "FAKE_DOCKER_FAIL_UP": "1" if fail_up else "0",
         "DEPLOY_WAIT_TIMEOUT": "7",
         **(extra_env or {}),
     }
-    bash = shutil.which("bash")
-    assert bash is not None
     return subprocess.run(  # noqa: S603 - runs our own script with test-controlled arguments
-        [bash, str(host / "deploy.sh"), *args], env=env, capture_output=True, text=True, check=False
+        [BASH, str(host / "deploy.sh"), *args], env=env, capture_output=True, text=True, check=False
     )
 
 
@@ -215,3 +259,71 @@ def test_certificate_subjects_are_shielded_from_git_bash_path_conversion(host: P
     assert all(call.startswith("MSYS_NO_PATHCONV=1 req ") for call in calls)
     assert " -subj /CN=db " in calls[0]
     assert " -subj /CN=staging.example.test " in calls[1]
+
+
+# --------------------------------------------------------------------------- bash selection (#371)
+
+_WSL = r"C:\Windows\System32\bash.exe"
+_GIT_BASH = r"C:\Program Files\Git\usr\bin\bash.exe"
+
+
+def _which(**found: str) -> Callable[[str], str | None]:
+    return lambda name: found.get(name)
+
+
+def _files(*present: str) -> Callable[[str], bool]:
+    return lambda path: path in present
+
+
+def test_off_windows_the_bash_on_path_is_used() -> None:
+    bash = find_bash(windows=False, which=_which(bash="/usr/bin/bash"), is_file=_files(), env={})
+    assert bash == "/usr/bin/bash"
+
+
+@pytest.mark.parametrize(
+    "git",
+    [
+        r"C:\Program Files\Git\cmd\git.exe",  # the default installer's PATH entry
+        r"C:\Program Files\Git\bin\git.exe",
+        r"C:\Program Files\Git\mingw64\bin\git.exe",
+    ],
+)
+def test_on_windows_git_bash_is_found_next_to_git_and_wsl_is_ignored(git: str) -> None:
+    bash = find_bash(
+        windows=True,
+        which=_which(bash=_WSL, git=git),
+        is_file=_files(_WSL, _GIT_BASH, r"C:\Program Files\Git\bin\bash.exe"),
+        env={},
+    )
+    assert bash == _GIT_BASH
+
+
+def test_on_windows_git_bash_is_found_in_program_files_when_git_is_not_on_path() -> None:
+    bash = find_bash(
+        windows=True,
+        which=_which(bash=_WSL),
+        is_file=_files(_WSL, _GIT_BASH),
+        env={"ProgramFiles": r"C:\Program Files"},
+    )
+    assert bash == _GIT_BASH
+
+
+def test_on_windows_a_per_user_git_install_is_found() -> None:
+    user_bash = r"C:\Users\dev\AppData\Local\Programs\Git\usr\bin\bash.exe"
+    bash = find_bash(
+        windows=True,
+        which=_which(bash=_WSL),
+        is_file=_files(_WSL, user_bash),
+        env={"ProgramFiles": r"C:\Program Files", "LOCALAPPDATA": r"C:\Users\dev\AppData\Local"},
+    )
+    assert bash == user_bash
+
+
+def test_on_windows_without_git_bash_the_tests_skip_instead_of_using_wsl() -> None:
+    bash = find_bash(
+        windows=True,
+        which=_which(bash=_WSL, git=r"D:\tools\git\cmd\git.exe"),
+        is_file=_files(_WSL),
+        env={"ProgramFiles": r"C:\Program Files", "LOCALAPPDATA": r"C:\Users\dev\AppData\Local"},
+    )
+    assert bash is None

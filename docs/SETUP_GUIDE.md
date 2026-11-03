@@ -232,6 +232,17 @@ still over 15 s on this 2-core laptop (GitHub issue #135, not part of these task
 **Copy-paste checklist (Windows 10/11, PowerShell; Docker Desktop running).** Paste the output of steps 0-8 into
 GitHub issues #12 (TASK-001), #23 (TASK-012) and #24 (TASK-013).
 
+**Second checkout on the same machine (GitHub issue #371).** `docker-compose.yml` names the project `pbip`, so every
+checkout shares the `pbip_pgdata` volume, which keeps the `POSTGRES_PASSWORD` of the checkout that created it. A fresh
+clone's newly generated `.env` password is then rejected and step 4's `migrate` fails with `password authentication
+failed for user "pbip"`. Give the second clone its own project, and so its own volumes, by adding one line to **its**
+`.env` after step 2: `COMPOSE_PROJECT_NAME=pbip-wincheck`. Compose reads `COMPOSE_PROJECT_NAME` from the `.env` next to
+`docker-compose.yml` and it takes precedence over the file's `name:` (only `-p` ranks higher); check it with
+`docker compose config | Select-String "name: pbip"`, which must list `pbip-wincheck_pgdata` (it only prints the
+resolved configuration and starts nothing). The ports are fixed (5432, 6379, ...), so stop the first checkout's stack before step 4
+(`.\dev.ps1 infra-down` there; this keeps its data). Do not `docker compose down -v` to "make room": that deletes the
+first checkout's database. Leave `name: pbip` in the file as it is: changing it would orphan existing volumes.
+
 ```powershell
 # 0. Environment (record it)
 [System.Environment]::OSVersion.VersionString; python --version; uv --version; node --version; git --version
