@@ -10,6 +10,7 @@ Verifies:
 - Explicit environment variables take precedence over .env file entries.
 """
 
+import secrets
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -246,3 +247,58 @@ def test_long_running_compose_services_restart_after_a_reboot() -> None:
     services = compose["services"]
     for name in ("db", "redis", "api", "worker", "beat", "web"):
         assert services[name].get("restart") == "unless-stopped", name
+
+
+def test_build_test_env_ignores_behaviour_flags_from_the_developers_env(tmp_path: Path) -> None:
+    """#317/#371: a demo .env (hybrid scorer, Groq, GeoIP) must not change what the tests expect."""
+    groq_key = "gsk_" + secrets.token_hex(10)  # generated per run, never a real key
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "POSTGRES_USER=pbip\n"
+        "FRAUD_SCORER=hybrid\n"
+        "FRAUD_MODEL_DIR=/opt/m\n"
+        "LLM_PROVIDER=groq\n"
+        f"GROQ_API_KEY={groq_key}\n"  # pragma: allowlist secret
+        "GEOIP_CITY_DB_PATH=/x\n"
+        "GEOIP_COUNTRY_DB_PATH=/y\n"
+        "JWT_SECRET=not-for-tests\n",  # pragma: allowlist secret
+        encoding="utf-8",
+    )
+    result = build_test_env(env_path=env_file, explicit_env={})
+    assert result["FRAUD_SCORER"] == "rules"
+    assert result["FRAUD_MODEL_DIR"] == ""
+    assert result["LLM_PROVIDER"] == "ollama"
+    assert result["GROQ_API_KEY"] == ""
+    assert result["GEOIP_CITY_DB_PATH"] == "" and result["GEOIP_COUNTRY_DB_PATH"] == ""
+    assert "JWT_SECRET" not in result  # not a service-reaching key: never copied from the file
+    assert result["POSTGRES_USER"] == "pbip"
+    assert all(groq_key not in value for value in result.values())
+
+
+def test_build_test_env_safe_overrides_beat_the_shell_too(tmp_path: Path) -> None:
+    result = build_test_env(
+        env_path=tmp_path / "missing.env",
+        explicit_env={"FRAUD_SCORER": "hybrid", "LLM_PROVIDER": "groq", "PATH": "/usr/bin"},
+    )
+    assert (result["FRAUD_SCORER"], result["LLM_PROVIDER"]) == ("rules", "ollama")
+    assert result["PATH"] == "/usr/bin"
+
+
+def test_safe_overrides_are_the_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The forced values parse to exactly what the code uses with no .env at all."""
+    from pbip_api.core.config import Settings
+
+    from scripts.dev import TEST_ENV_SAFE_OVERRIDES
+
+    for key in TEST_ENV_SAFE_OVERRIDES:
+        monkeypatch.delenv(key, raising=False)
+    defaults = Settings(_env_file=None)
+    for key, value in TEST_ENV_SAFE_OVERRIDES.items():
+        monkeypatch.setenv(key, value)
+    forced = Settings(_env_file=None)
+    for key in TEST_ENV_SAFE_OVERRIDES:
+        field = key.lower()
+        if key == "FRAUD_MODEL_DIR":  # a str field: blank is "not set" (load_engine's check)
+            assert not forced.fraud_model_dir and defaults.fraud_model_dir is None
+            continue
+        assert getattr(forced, field) == getattr(defaults, field), key

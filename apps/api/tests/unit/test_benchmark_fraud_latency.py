@@ -1,6 +1,7 @@
 """The fraud latency benchmark (#362): seeded inputs, fallback counting, the API's budget bounds."""
 
 import logging
+import os
 import threading
 from types import SimpleNamespace
 from typing import Any
@@ -68,3 +69,14 @@ def test_report_line_names_the_budget_rate_and_load() -> None:
     line = bench.format_line(report.report())
     assert line.startswith("budget     budget=50 ms   n=3 p50=20.0 p95=60.0 p99=60.0 max=60.0 ms")
     assert line.endswith("fallbacks=1 (33.33%) load=1.00 0.50 0.25")
+
+
+def test_load_is_reported_as_unavailable_without_getloadavg(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Windows has no os.getloadavg (#371): the benchmark still runs and says so."""
+    monkeypatch.delattr(os, "getloadavg", raising=False)
+    assert bench.load_average() is None
+    result = bench.run_pass(FakeEngine(), bench.transfer_inputs(2, seed=1), "budget", 100).report()
+    assert result["load_avg_1_5_15_before"] is None and result["load_avg_1_5_15_after"] is None
+    assert bench.format_line(result).endswith("load=unavailable")
