@@ -256,6 +256,7 @@ LEGACY_FEATURES = [
 ]
 
 
+@pytest.mark.timeout(300)  # may pay for the module's training fixture (#362)
 def test_a_model_trained_before_the_new_features_still_scores(trained: dict[str, object]) -> None:
     """ADR-0051: the -3 artifacts (9 features) are served by code whose row has 11 columns.
 
@@ -283,6 +284,40 @@ def test_a_model_trained_before_the_new_features_still_scores(trained: dict[str,
         assert all(r.code.removeprefix("MODEL_").lower() in LEGACY_FEATURES
                    for r in result.reasons if r.source is ReasonSource.MODEL)  # fmt: skip
     assert len(h.batch_risk(scorer, frame)) == len(frame)
+
+
+@pytest.mark.timeout(300)  # may pay for the module's training fixture (#362)
+def test_legacy_artifacts_on_disk_load_and_are_served_by_the_model(
+    trained: dict[str, object], tmp_path: Path
+) -> None:
+    """ADR-0051, the deploy order: the API loads the -3 artifacts (9 features) with this code.
+
+    The artifacts are written exactly as ``train.py`` writes them (LightGBM text model, joblib
+    forest, params JSON, manifest) and read through ``inference.load``, the API's loader. The
+    served row then has 11 columns; the score must come from the model, never "+rules-only".
+    """
+    import joblib
+    from pbip_ml.fraud.inference import load, write_manifest
+
+    split, params, anomaly = trained["split"], trained["params"], trained["anomaly"]
+    assert isinstance(split, t.Split) and isinstance(params, h.HybridParams)
+    legacy = lgb.train(
+        t.LGBM_PARAMS, lgb.Dataset(split.train[LEGACY_FEATURES], split.train["label"]), 20
+    )
+    legacy.save_model(str(tmp_path / "lightgbm.txt"))
+    joblib.dump(anomaly, tmp_path / "isolation_forest.joblib")
+    old = replace(params, model_version="hybrid-lgbm-iforest-3")
+    (tmp_path / "hybrid_params.json").write_text(old.to_json(), encoding="utf-8")
+    write_manifest(tmp_path)
+    served = load(tmp_path)
+    assert h.model_columns(served.booster) == LEGACY_FEATURES  # type: ignore[arg-type]  # loaded
+    now = datetime(2026, 3, 2, 12, tzinfo=UTC)
+    history = [PastTransfer(now - timedelta(days=i), "DEBIT", 2_000_00, None) for i in range(1, 9)]
+    inputs = TransferInputs(9_00_000_00 // 10, "INR", now, now - timedelta(minutes=5), None, True,
+                            0, history)  # fmt: skip
+    result = score_transfer(served, inputs)
+    assert result.model_version == "hybrid-lgbm-iforest-3"  # the model scored, not the rules alone
+    assert "model_probability" in result.features and "model_error" not in result.features
 
 
 # #379: the LightGBM step was made cheaper (one float64 matrix shared by predict and TreeSHAP, one
