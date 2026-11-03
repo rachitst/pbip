@@ -60,6 +60,7 @@ class BillPayment(Base):
         CheckConstraint("amount > 0", name="amount_positive"),
         Index("ix_bill_payments_customer_id_created_at", "customer_id", "created_at"),
         Index("ix_bill_payments_biller_id", "biller_id"),
+        Index("ix_bill_payments_account_id", "account_id"),  # FK index (#315)
     )
 
     id: Mapped[UUID] = uuid_pk()

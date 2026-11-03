@@ -3,7 +3,7 @@
 from pbip_api.core.db import session_scope
 from pbip_api.modules.analytics.service import materialize_monthly_spending
 from pbip_api.modules.events.partitions import ensure_monthly_partitions
-from pbip_api.modules.notifications.service import relay_outbox
+from pbip_api.modules.notifications.service import RetryPolicy, relay_outbox
 from pbip_api.worker.celery_app import celery_app
 
 
@@ -15,9 +15,23 @@ def ping() -> str:
 
 @celery_app.task(name="pbip.outbox.relay")
 def relay_outbox_task() -> int:
-    """Turn committed outbox events into notifications (runs every 10 seconds via beat)."""
+    """Turn committed outbox events into notifications (runs every 10 seconds via beat).
+
+    Failed deliveries are retried with backoff and dead-lettered after the last attempt (ADR-0040).
+    """
+    from pbip_api.core.config import get_settings
+
     with session_scope() as session:
-        return relay_outbox(session)
+        return relay_outbox(session, policy=RetryPolicy.from_settings(get_settings()))
+
+
+@celery_app.task(name="pbip.outbox.purge_processed")
+def purge_processed_outbox_events_task() -> int:
+    """Delete processed outbox events past the retention period (daily beat; ADR-0040).
+    Idempotent: a re-run finds fewer."""
+    from pbip_api.modules.notifications.outbox_purge import purge_processed_events
+
+    return purge_processed_events()
 
 
 @celery_app.task(name="pbip.analytics.materialize_monthly_spending")
