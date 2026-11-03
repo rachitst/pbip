@@ -91,7 +91,7 @@ access.*
 `test_only_admins_with_mfa_may_use_admin_routes`; web `apps/web/src/pages/staff/Administration.test.tsx`
 ("inspects a lockout and clears it after confirmation"), `routing.test.tsx`.
 
-**Tasks:** TASK-007 (Done); TASK-108 (In Progress: #346 merged; the E2E test its DoD asks for is missing).
+**Tasks:** TASK-007 (Done); TASK-108 (Done: #346, E2E journey #359).
 
 ## UC-02 View banking dashboard
 
@@ -941,7 +941,7 @@ redeployment and without exposing secrets or security settings.*
 `integration/test_rbac_bola.py::test_only_admins_with_mfa_may_use_admin_routes`; web
 `apps/web/src/pages/staff/Administration.test.tsx`, `routing.test.tsx`.
 
-**Tasks:** TASK-108 (In Progress: #346 merged; the E2E test its DoD asks for is missing).
+**Tasks:** TASK-108 (Done: #346, E2E journey #359).
 
 ---
 
