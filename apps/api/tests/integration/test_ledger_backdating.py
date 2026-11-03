@@ -1,6 +1,7 @@
-"""``ledger.deposit(posted_at=...)`` (ADR-0048): a back-dated deposit for the demo seed's salary
-history. The header and both entries carry the date, the ledger invariants still hold, and the
-ledger refuses a date that would falsify a running balance or that is used outside local/test."""
+"""``ledger.deposit(posted_at=...)`` and ``ledger.seed_payment`` (ADR-0048): back-dated postings
+for the demo seed's history. The header and both entries carry the date, the ledger invariants
+still hold, and the ledger refuses a date that would falsify a running balance or that is used
+outside local/test."""
 
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -19,6 +20,7 @@ from pbip_api.modules.ledger.models import (
     Transaction,
     TransactionEntry,
     TransactionStatus,
+    TransactionType,
 )
 from sqlalchemy import Engine, func, select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -181,3 +183,65 @@ def test_concurrent_backdated_deposits_neither_deadlock_nor_lose_money(
         .order_by(TransactionEntry.seq)
     ).all()
     assert [int(b) for b in balances] == [100, 200, 300, 400, 500, 600]
+
+
+def test_a_seed_payment_is_a_dated_balanced_transfer_to_the_clearing_account(db: Session) -> None:
+    account = _account(db)
+    funded = utcnow() - timedelta(days=30)
+    ledger.deposit(db, account.id, 10_000, posted_at=funded)
+    when = funded + timedelta(days=1)
+
+    txn = ledger.seed_payment(
+        db, account.id, 2_500, reference="BigBasket groceries", posted_at=when
+    )
+    db.commit()
+    db.expire_all()
+
+    header = db.get(Transaction, txn.id)
+    assert header is not None and header.status == TransactionStatus.POSTED
+    assert header.type == TransactionType.TRANSFER
+    assert (header.debit_account_id, header.credit_account_id) == (
+        account.id,
+        ledger.SYSTEM_CLEARING_ID,
+    )
+    assert header.created_at == when and header.posted_at == when
+    assert {e.created_at for e in _entries(db, txn.id)} == {when}
+    refreshed = db.get(Account, account.id)
+    assert refreshed is not None and refreshed.ledger_balance == 7_500
+    assert ledger.entry_balance(db, account.id) == 7_500
+
+
+def _debits(session: Session, account_id: uuid.UUID) -> int:
+    stmt = select(func.count()).where(Transaction.debit_account_id == account_id)
+    return int(session.execute(stmt).scalar_one())
+
+
+def test_a_seed_payment_the_account_cannot_afford_is_refused_and_writes_nothing(
+    db: Session,
+) -> None:
+    account = _account(db)
+    ledger.deposit(db, account.id, 1_000, posted_at=utcnow() - timedelta(days=3))
+    db.commit()
+    with pytest.raises(ledger.InsufficientFundsError):
+        ledger.seed_payment(
+            db, account.id, 1_001, reference="Rent", posted_at=utcnow() - timedelta(days=1)
+        )
+    db.rollback()
+    assert _debits(db, account.id) == 0
+
+
+def test_a_seed_payment_has_the_same_date_guards_as_a_backdated_deposit(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    account = _account(db)
+    ledger.deposit(db, account.id, 5_000)  # now
+    db.commit()
+    for when in (utcnow() - timedelta(days=1), utcnow() + timedelta(minutes=5)):
+        with pytest.raises(ledger.LedgerInvariantError):
+            ledger.seed_payment(db, account.id, 100, reference="Rent", posted_at=when)
+        db.rollback()
+    monkeypatch.setattr(ledger, "get_settings", lambda: SimpleNamespace(is_deployed=True))
+    with pytest.raises(ledger.LedgerInvariantError, match="staging/production"):
+        ledger.seed_payment(db, account.id, 100, reference="Rent", posted_at=utcnow())
+    db.rollback()
+    assert _debits(db, account.id) == 0

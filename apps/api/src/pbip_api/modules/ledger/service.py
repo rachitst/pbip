@@ -287,15 +287,54 @@ def deposit(
     return transaction
 
 
+def seed_payment(
+    session: Session,
+    account_id: UUID,
+    amount: int,
+    *,
+    reference: str,
+    posted_at: datetime,
+    payee_id: UUID | None = None,
+    initiated_by_user_id: UUID | None = None,
+    currency: str = "INR",
+) -> Transaction:
+    """A posted payment from a customer account to an external payee, dated ``posted_at``: the
+    demo seed's spending history (ADR-0048). Only ``scripts/seed_dev.py`` calls it.
+
+    The external rail is simulated through the clearing account, exactly as a live transfer to
+    another bank's payee is. The same guards as ``deposit(posted_at=...)`` apply, and the usual
+    balance check: a payment the account cannot afford is refused. It is history, not a live
+    instruction, so it is not fraud-scored and has no ``fraud_events`` row (scoring is a
+    decision about a payment being made now; ``payments/service.py`` remains the only path for
+    those). Later live transfers do read it as the account's history.
+    """
+    lock_accounts(session, [SYSTEM_CLEARING_ID, account_id])  # sorted, before the header
+    _check_backdate(session, account_id, posted_at)
+    transaction = create_transaction(
+        session,
+        type_=TransactionType.TRANSFER,
+        amount=amount,
+        currency=currency,
+        debit_account_id=account_id,
+        credit_account_id=SYSTEM_CLEARING_ID,
+        initiated_by_user_id=initiated_by_user_id,
+        payee_id=payee_id,
+        reference=reference,
+        at=posted_at,
+    )
+    post_transaction(session, transaction, transfer_legs(transaction), at=posted_at)
+    return transaction
+
+
 def _check_backdate(session: Session, account_id: UUID, posted_at: datetime) -> None:
-    """Refuse a back-dated deposit that would not be a faithful history (ADR-0048).
+    """Refuse a back-dated posting that would not be a faithful history (ADR-0048).
 
     The account is already locked, so no entry can be added between this check and the posting.
     The clearing account is not checked: it is a system account whose running balance is never
     shown by date.
     """
     if get_settings().is_deployed:
-        raise LedgerInvariantError("back-dated deposits are refused in staging/production")
+        raise LedgerInvariantError("back-dated postings are refused in staging/production")
     if posted_at.tzinfo is None:
         raise LedgerInvariantError("posted_at must be timezone-aware")
     if posted_at > utcnow():
