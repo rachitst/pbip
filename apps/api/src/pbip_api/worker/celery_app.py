@@ -38,6 +38,16 @@ celery_app.conf.update(
             "task": "pbip.wealth.pay_out_matured_deposits",
             "schedule": crontab(minute=5),
         },
+        # Issue #314 / ADR-0036: decline step-ups left unanswered past STEP_UP_EXPIRY_MINUTES.
+        "expire-stale-step-ups": {
+            "task": "pbip.transfers.expire_stale_step_ups",
+            "schedule": 60.0,
+        },
+        # Issue #314 / ADR-0036: delete idempotency keys past their TTL (already ignored on use).
+        "purge-expired-idempotency-keys": {
+            "task": "pbip.ledger.purge_expired_idempotency_keys",
+            "schedule": crontab(hour=4, minute=15),
+        },
         # TASK-068 follow-up #324 / ADR-0038: PSI drift of the fraud inputs, hourly at :20 (away
         # from the :05 payout run); the API's /metrics exports the stored result.
         "evaluate-feature-drift": {
