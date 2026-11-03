@@ -129,10 +129,14 @@ def test_churn_signals_are_exact_on_known_ledger_data(
 
 
 def test_rows_carry_only_what_an_rm_needs(
-    client: TestClient, make_customer: Callable[..., Actor], make_staff: Callable[..., Actor]
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_staff: Callable[..., Actor],
+    assign_rm: Callable[..., None],
 ) -> None:
-    make_customer(funds=150_000_00)
+    customer = make_customer(funds=150_000_00)
     rm = make_staff(RoleName.RELATIONSHIP_MANAGER, mfa=True)
+    assign_rm(rm, customer)
     body = client.get("/api/v1/insights/customers", headers=rm.headers).json()
     assert body["items"]
     assert set(body["items"][0]) == {
@@ -157,7 +161,9 @@ def test_cost_does_not_grow_with_customers_outside_the_page(
     make_customer: Callable[..., Actor],
     make_staff: Callable[..., Actor],
     migrated_engine: Engine,
+    assign_rm: Callable[..., None],
 ) -> None:
+    """Also with the RM scope (ADR-0032): one portfolio query, whatever the portfolio size."""
     rm = make_staff(RoleName.RELATIONSHIP_MANAGER, mfa=True)
 
     def statements_for_one_row() -> int:
@@ -176,21 +182,22 @@ def test_cost_does_not_grow_with_customers_outside_the_page(
         assert len(resp.json()["items"]) == 1
         return count
 
-    for _ in range(2):
-        make_customer(funds=10_000_00)
+    assign_rm(rm, *(make_customer(funds=10_000_00) for _ in range(2)))
     few = statements_for_one_row()
-    for _ in range(4):
-        make_customer(funds=10_000_00)
+    assign_rm(rm, *(make_customer(funds=10_000_00) for _ in range(4)))
     many = statements_for_one_row()
     assert many == few
 
 
 def test_pagination_and_filters(
-    client: TestClient, make_customer: Callable[..., Actor], make_staff: Callable[..., Actor]
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_staff: Callable[..., Actor],
+    assign_rm: Callable[..., None],
 ) -> None:
-    for _ in range(3):
-        make_customer(funds=10_000_00)
+    customers = [make_customer(funds=10_000_00) for _ in range(3)]
     rm = make_staff(RoleName.RELATIONSHIP_MANAGER, mfa=True)
+    assign_rm(rm, *customers)
     first = client.get("/api/v1/insights/customers?limit=2", headers=rm.headers).json()
     second = client.get("/api/v1/insights/customers?limit=2&offset=2", headers=rm.headers).json()
     assert first["total"] == second["total"] == 3

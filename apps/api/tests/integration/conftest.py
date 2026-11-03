@@ -201,6 +201,25 @@ def make_staff(
 
 
 @pytest.fixture
+def assign_rm(client: TestClient, make_staff: Callable[..., Actor]) -> Callable[..., None]:
+    """Assign customers to an RM through the ADMIN API (ADR-0032): an RM sees only these."""
+    admins: list[Actor] = []
+
+    def assign(rm: Actor, *customers: Actor) -> None:
+        if not admins:
+            admins.append(make_staff(RoleName.ADMIN))
+        for customer in customers:
+            response = client.put(
+                f"/api/v1/insights/customers/{customer.customer_id}/assignment",
+                headers=admins[0].headers,
+                json={"rm_user_id": str(rm.user_id)},
+            )
+            assert response.status_code == 200, response.text
+
+    return assign
+
+
+@pytest.fixture
 def make_verified_payee(
     client: TestClient, migrated_engine: Engine
 ) -> Callable[..., dict[str, Any]]:

@@ -263,6 +263,7 @@ def test_staff_responses_never_contain_the_date_of_birth(
     make_staff: Callable[..., Actor],
     make_verified_payee: Callable[..., dict[str, Any]],
     at_now: FakeClock,
+    assign_rm: Callable[..., None],
 ) -> None:
     """RM insights, the fraud alert view and the audit trail show the band at most (ADR-0015)."""
     alice, bob = make_customer(funds=10_000_000), make_customer()
@@ -281,6 +282,7 @@ def test_staff_responses_never_contain_the_date_of_birth(
     assert held.status_code == 202, held.text  # new payee + large amount -> fraud alert
 
     rm = make_staff(RoleName.RELATIONSHIP_MANAGER)
+    assign_rm(rm, alice)  # an RM sees only assigned customers (ADR-0032)
     analyst = make_staff(RoleName.FRAUD_ANALYST)
     officer = make_staff(RoleName.COMPLIANCE_OFFICER)
     alerts = client.get("/api/v1/fraud/alerts", headers=analyst.headers).json()

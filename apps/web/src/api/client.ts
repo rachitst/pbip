@@ -56,6 +56,10 @@ export type InteractionOutcome = components["schemas"]["InteractionOutcome"];
 export type InteractionCreate = components["schemas"]["InteractionCreate"];
 export type InteractionOut = components["schemas"]["InteractionOut"];
 export type InteractionListResponse = components["schemas"]["InteractionListResponse"];
+export type AssignedRm = components["schemas"]["AssignedRm"];
+export type RmAssignmentOut = components["schemas"]["RmAssignmentOut"];
+export type RelationshipManagerListResponse =
+  components["schemas"]["RelationshipManagerListResponse"];
 export type CategorySpendingItem = components["schemas"]["CategorySpendingItem"];
 export type SpendingTrendsResponse = components["schemas"]["SpendingTrendsResponse"];
 export type MonthlySpendingSummary = components["schemas"]["MonthlySpendingSummary"];
@@ -594,6 +598,18 @@ export const api = {
       `/api/v1/insights/customers/${encodeURIComponent(customerId)}/interactions`,
       { method: "POST", body: JSON.stringify(body) },
     ),
+  /** ADR-0032: ADMIN with MFA only. */
+  relationshipManagers: () =>
+    apiFetch<RelationshipManagerListResponse>("/api/v1/insights/relationship-managers"),
+  assignRelationshipManager: (customerId: string, rmUserId: string) =>
+    apiFetch<RmAssignmentOut>(
+      `/api/v1/insights/customers/${encodeURIComponent(customerId)}/assignment`,
+      { method: "PUT", body: JSON.stringify({ rm_user_id: rmUserId }) },
+    ),
+  unassignRelationshipManager: (customerId: string) =>
+    apiFetch<undefined>(`/api/v1/insights/customers/${encodeURIComponent(customerId)}/assignment`, {
+      method: "DELETE",
+    }),
   assistantHistory: (limit = 50) =>
     apiFetch<AssistantHistory>(`/api/v1/assistant/messages?limit=${String(limit)}`),
   /** Clickstream batch (TASK-112). ``keepalive`` lets it finish while the page unloads; no

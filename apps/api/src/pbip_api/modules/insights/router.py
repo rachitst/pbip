@@ -1,4 +1,5 @@
-"""FastAPI router for Relationship Manager behavioral insights (TASK-056, TASK-066)."""
+"""FastAPI router for Relationship Manager behavioral insights (TASK-056, TASK-066) and the
+RM-to-customer assignment (ADR-0032)."""
 
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -18,13 +19,17 @@ from pbip_api.modules.auth.dependencies import (
 )
 from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.auth.service import RequestMeta
-from pbip_api.modules.insights import service
+from pbip_api.modules.insights import policy, service
+from pbip_api.modules.insights.policy import RmScope
 from pbip_api.modules.insights.schemas import (
     CustomerInsightDetail,
     CustomerInsightsListResponse,
     InteractionCreate,
     InteractionListResponse,
     InteractionOut,
+    RelationshipManagerListResponse,
+    RmAssignmentOut,
+    RmAssignmentRequest,
 )
 
 router = APIRouter(prefix="/api/v1/insights", tags=["insights"])
@@ -36,12 +41,24 @@ rm_gate = require_roles(
     mfa=True,
 )
 
+# Public so the route-policy registry test can prove assignment routes are ADMIN-only (ADR-0032).
+assignment_gate = require_roles(RoleName.ADMIN, mfa=True)
+
+
+def _scope(principal: Principal) -> RmScope:
+    """ADMIN sees every customer, an RM only their assigned ones (decided by ``policy``)."""
+    return policy.scope_for(principal.user_id, principal.roles)
+
+
+def _now(clock: Callable[[], float]) -> datetime:
+    return datetime.fromtimestamp(clock(), tz=UTC)
+
 
 @router.get(
     "/customers",
     response_model=CustomerInsightsListResponse,
     status_code=status.HTTP_200_OK,
-    summary="Customers ordered by churn risk, with churn signals and the top eligible product",
+    summary="Customers in the caller's scope (an RM: assigned only) ordered by churn risk",
 )
 def get_prioritized_customer_insights(
     min_churn_risk: float | None = Query(
@@ -60,9 +77,10 @@ def get_prioritized_customer_insights(
     principal: Principal = Depends(rm_gate),
     session: Session = Depends(get_session),
 ) -> CustomerInsightsListResponse:
-    """One page of customers ordered by churn risk (RM or admin with an MFA-verified session)."""
+    """One page of customers ordered by churn risk (RM: their assigned customers; admin: all)."""
     return service.get_customer_insights(
         session=session,
+        scope=_scope(principal),
         min_churn_risk=min_churn_risk,
         segment=segment,
         limit=limit,
@@ -93,30 +111,30 @@ def get_behaviour_analytics(
     "/customers/{customer_id}",
     response_model=CustomerInsightDetail,
     summary="One customer's churn signals, health score, 30-day volume and eligible products",
-    responses={404: {"description": "No such customer"}},
+    responses={404: {"description": "No such customer, or not assigned to the calling RM"}},
 )
 def get_customer_insight_detail(
     customer_id: UUID,
-    _principal: Principal = Depends(rm_gate),
+    principal: Principal = Depends(rm_gate),
     session: Session = Depends(get_session),
 ) -> CustomerInsightDetail:
-    """Detail behind the RM flyout (RM or admin with an MFA-verified session)."""
-    return service.get_customer_insight_detail(session, customer_id)
+    """Detail behind the RM flyout (RM: assigned customers only; admin: any)."""
+    return service.get_customer_insight_detail(session, _scope(principal), customer_id)
 
 
 @router.get(
     "/customers/{customer_id}/interactions",
     response_model=InteractionListResponse,
     summary="Calls, meetings, emails and notes logged for a customer, newest first",
-    responses={404: {"description": "No such customer"}},
+    responses={404: {"description": "No such customer, or not assigned to the calling RM"}},
 )
 def list_customer_interactions(
     customer_id: UUID,
     limit: int = Query(20, ge=1, le=service.MAX_INTERACTIONS_PAGE, description="How many"),
-    _principal: Principal = Depends(rm_gate),
+    principal: Principal = Depends(rm_gate),
     session: Session = Depends(get_session),
 ) -> InteractionListResponse:
-    return service.list_interactions(session, customer_id, limit)
+    return service.list_interactions(session, _scope(principal), customer_id, limit)
 
 
 @router.post(
@@ -124,7 +142,7 @@ def list_customer_interactions(
     response_model=InteractionOut,
     status_code=status.HTTP_201_CREATED,
     summary="Log a call, meeting, email or note about a customer (audited)",
-    responses={404: {"description": "No such customer"}},
+    responses={404: {"description": "No such customer, or not assigned to the calling RM"}},
 )
 def log_customer_interaction(
     customer_id: UUID,
@@ -135,9 +153,72 @@ def log_customer_interaction(
 ) -> InteractionOut:
     return service.log_interaction(
         session,
+        _scope(principal),
         customer_id,
-        principal.user_id,
         body,
+        ip=meta.ip,
+        request_id=meta.request_id,
+    )
+
+
+@router.get(
+    "/relationship-managers",
+    response_model=RelationshipManagerListResponse,
+    summary="Active relationship managers, for assigning customers (ADMIN with MFA)",
+)
+def list_relationship_managers(
+    _admin: Principal = Depends(assignment_gate),
+    session: Session = Depends(get_session),
+) -> RelationshipManagerListResponse:
+    return service.list_relationship_managers(session)
+
+
+@router.put(
+    "/customers/{customer_id}/assignment",
+    response_model=RmAssignmentOut,
+    summary="Assign or reassign a customer to a relationship manager (ADMIN with MFA, audited)",
+    responses={
+        404: {"description": "No such customer"},
+        422: {"description": "rm_user_id is not an active relationship manager"},
+    },
+)
+def assign_relationship_manager(
+    customer_id: UUID,
+    body: RmAssignmentRequest,
+    admin: Principal = Depends(assignment_gate),
+    session: Session = Depends(get_session),
+    meta: RequestMeta = Depends(get_request_meta),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> RmAssignmentOut:
+    return service.assign_rm(
+        session,
+        customer_id,
+        body.rm_user_id,
+        admin.user_id,
+        now=_now(clock),
+        ip=meta.ip,
+        request_id=meta.request_id,
+    )
+
+
+@router.delete(
+    "/customers/{customer_id}/assignment",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="End a customer's relationship-manager assignment (ADMIN with MFA, audited)",
+    responses={404: {"description": "No such customer"}},
+)
+def unassign_relationship_manager(
+    customer_id: UUID,
+    admin: Principal = Depends(assignment_gate),
+    session: Session = Depends(get_session),
+    meta: RequestMeta = Depends(get_request_meta),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> None:
+    service.unassign_rm(
+        session,
+        customer_id,
+        admin.user_id,
+        now=_now(clock),
         ip=meta.ip,
         request_id=meta.request_id,
     )
