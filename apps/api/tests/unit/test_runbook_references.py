@@ -1,6 +1,8 @@
 """The operations runbook must only cite things that exist: files, scripts, make targets, API paths,
 compose services and environment variables. A runbook that names a renamed script or endpoint fails
-exactly when it is needed, so this keeps `docs/operations/runbook.md` honest as the code moves."""
+exactly when it is needed, so this keeps `docs/operations/runbook.md` honest as the code moves. The
+staging host guide (`docs/operations/deploy-oracle-cloud-arm.md`) is held to the same file, script,
+make-target and API-path checks."""
 
 import json
 import re
@@ -12,6 +14,7 @@ pytestmark = pytest.mark.unit
 
 ROOT = Path(__file__).resolve().parents[4]
 RUNBOOK = ROOT / "docs" / "operations" / "runbook.md"
+STAGING_GUIDE = ROOT / "docs" / "operations" / "deploy-oracle-cloud-arm.md"
 
 _PATH_REF = re.compile(
     r"`((?:apps|docs|infra|scripts|\.github)/[A-Za-z0-9_./-]+\.(?:py|sh|md|yml|yaml|json|conf|alloy))`"
@@ -31,8 +34,13 @@ def _text() -> str:
     return RUNBOOK.read_text(encoding="utf-8")
 
 
+def _docs_text() -> str:
+    """Runbook and staging guide: the checks that apply to any operations procedure."""
+    return _text() + "\n" + STAGING_GUIDE.read_text(encoding="utf-8")
+
+
 def test_cited_repository_files_exist() -> None:
-    missing = sorted({p for p in _PATH_REF.findall(_text()) if not (ROOT / p).exists()})
+    missing = sorted({p for p in _PATH_REF.findall(_docs_text()) if not (ROOT / p).exists()})
     assert not missing, f"runbook cites missing files: {missing}"
 
 
@@ -40,7 +48,7 @@ def test_cited_module_files_exist() -> None:
     missing = sorted(
         {
             p
-            for p in _MODULE_REF.findall(_text())
+            for p in _MODULE_REF.findall(_docs_text())
             if not ((_API / p).is_file() or (_API / "modules" / p).is_file())
         }
     )
@@ -48,13 +56,13 @@ def test_cited_module_files_exist() -> None:
 
 
 def test_invoked_scripts_exist() -> None:
-    missing = sorted({p for p in _SCRIPT_CALL.findall(_text()) if not (ROOT / p).is_file()})
+    missing = sorted({p for p in _SCRIPT_CALL.findall(_docs_text()) if not (ROOT / p).is_file()})
     assert not missing, f"runbook invokes missing scripts: {missing}"
 
 
 def test_cited_make_targets_exist() -> None:
     targets = set(re.findall(r"^([a-z-]+):", (ROOT / "Makefile").read_text(encoding="utf-8"), re.M))
-    missing = sorted(set(_MAKE_REF.findall(_text())) - targets)
+    missing = sorted(set(_MAKE_REF.findall(_docs_text())) - targets)
     assert not missing, f"runbook cites missing make targets: {missing}"
 
 
@@ -65,7 +73,7 @@ def test_cited_api_paths_exist_in_the_openapi_contract() -> None:
         return re.sub(r"\{[^}]+\}", "{}", path)
 
     known = {normalise(p) for p in spec["paths"]} | {"/api/health/live", "/api/health/ready"}
-    cited = {normalise(p) for p in _API_REF.findall(_text())}
+    cited = {normalise(p) for p in _API_REF.findall(_docs_text())}
     assert cited, "expected the runbook to cite API paths"
     missing = sorted(cited - known)
     assert not missing, f"runbook cites API paths not in the contract: {missing}"
