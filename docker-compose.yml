@@ -91,7 +91,12 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
-    ports: ["127.0.0.1:8000:8000"]
+    # One uvicorn process per container (Dockerfile), so CPU-bound work scales with replicas
+    # (ADR-0045). nginx and Prometheus find every replica through Docker's DNS name "api". Each
+    # replica takes the next free host port from the range: the first one gets 8000.
+    deploy:
+      replicas: ${API_REPLICAS:-1}
+    ports: ["127.0.0.1:8000-8003:8000"]
     extra_hosts: ["host.docker.internal:host-gateway"]  # Linux; Docker Desktop provides it already
     # Read-only: the API must never be able to rewrite the models it loads (threat model T34).
     volumes: ["./models/fraud:/models/fraud:ro", *dev-ca]

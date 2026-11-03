@@ -26,6 +26,10 @@ from pbip_ml.fraud.features import PastTransfer
 from pbip_ml.fraud.inference import TransferInputs, score_transfer
 from pbip_ml.fraud.train import load_export
 
+# Hang guard, not a speed bar (as #362): the module fixture exports and trains the 3,000-customer
+# recipe plus its out-of-time calibration folds (#396), near 60 s even on an idle 2-CPU laptop.
+pytestmark = pytest.mark.timeout(300)
+
 BASELINE = Path(__file__).parent / "data" / "fraud_behaviour_baseline.json"
 TOLERANCE = 2
 ORDER = [FraudDecision.ALLOW, FraudDecision.STEP_UP, FraudDecision.REVIEW, FraudDecision.BLOCK]
@@ -84,15 +88,16 @@ def scorer(tmp_path_factory: pytest.TempPathFactory) -> h.HybridScorer:
     # The production recipe (``scripts/dev.py fraud-model``: seed 42, 3,000 customers, 6 months).
     # It was 1,500 customers: with generator v2.3 (#276, ~1% fewer legitimate rows) that model put
     # the APP scam at raw 0.90, which its isotonic calibration (42 validation positives) maps to a
-    # 0.40 step, so it scored 30. That is a property of the half-size model, not of the served one
-    # (3,000 customers: 93, BLOCK); calibration robustness is tracked separately.
+    # 0.40 step, so it scored 30. #396 (ADR-0047) calibrates on out-of-time training scores too;
+    # ``test_fraud_hybrid`` keeps the 1,500-customer model's APP scam at REVIEW or higher.
     _export_fraud(GeneratorConfig(seed=42, customers=3000, months=6), out)
     split = t.time_split(load_export(out))
     booster, _ = t.train_lightgbm(split)
     anomaly = t.train_isolation_forest(split)
     rules = h.default_registry()
+    out_of_time = t.out_of_time_scores(split, booster.best_iteration)
     return h.HybridScorer(
-        h.fit_params(split.validation, booster, anomaly, rules, "regression"),
+        h.fit_params(split.validation, booster, anomaly, rules, "regression", out_of_time),
         booster,
         anomaly,
         rules,

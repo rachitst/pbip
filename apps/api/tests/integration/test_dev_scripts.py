@@ -4,21 +4,38 @@ scripts/totp.py derives codes from there. The E2E suite (TASK-077) seeds with a 
 password, takes unused staff codes from totp.py and funds its own customers with e2e_fund.py."""
 
 from collections.abc import Callable
+from datetime import datetime, timedelta
 from pathlib import Path
 from uuid import UUID
 
 import pyotp
 import pytest
+from pbip_api.core.calendar import BANK_TZ
 from pbip_api.core.config import Settings
 from pbip_api.core.crypto import FieldCipher
+from pbip_api.core.db import utcnow
 from pbip_api.core.security import PasswordService
 from pbip_api.modules.accounts.models import Account
 from pbip_api.modules.accounts.service import list_accounts
+from pbip_api.modules.analytics import repository as analytics_repository
+from pbip_api.modules.analytics import service as analytics_service
+from pbip_api.modules.assistant import fallback, tools
+from pbip_api.modules.assistant.faq import FaqFacts
+from pbip_api.modules.assistant.tools import ToolContext, ToolName
 from pbip_api.modules.auth.models import RoleName, User
 from pbip_api.modules.auth.service import AuthService, RequestMeta
 from pbip_api.modules.customers.models import Customer
+from pbip_api.modules.fraud.models import FraudEvent
 from pbip_api.modules.insights import service as insights_service
-from pbip_api.modules.ledger.models import Transaction, TransactionType
+from pbip_api.modules.ledger import service as ledger
+from pbip_api.modules.ledger.models import (
+    EntryDirection,
+    Transaction,
+    TransactionEntry,
+    TransactionType,
+)
+from pbip_api.modules.payees.models import PayeeStatus
+from pbip_api.modules.payees.service import PayeeService
 from pbip_test_support import PASSWORD, FakeClock, generated_password, totp_code
 from sqlalchemy import func, select, text, update
 from sqlalchemy.engine import Engine
@@ -331,3 +348,212 @@ def test_seed_gives_alice_an_authenticator_and_keeps_the_lab_customers_without(
     again = db.scalar(select(User.mfa_secret_enc).where(User.email == "alice@demo.pbip"))
     assert again == alice_secret  # not re-enrolled: the presenter's codes keep working
     assert "authenticator enrolled" not in capsys.readouterr().out
+
+
+def _customer(db: Session, email: str) -> tuple[UUID, UUID, UUID]:
+    """(customer id, user id, primary account id) of a seeded customer."""
+    customer_id, user_id = db.execute(
+        select(Customer.id, User.id)
+        .join(User, User.id == Customer.user_id)
+        .where(User.email == email)
+    ).one()
+    return customer_id, user_id, list_accounts(db, customer_id)[0].id
+
+
+def _salary_credits(db: Session, account_id: UUID) -> list[Transaction]:
+    return list(
+        db.scalars(
+            select(Transaction)
+            .where(
+                Transaction.credit_account_id == account_id,
+                Transaction.reference.like("Salary %"),
+            )
+            .order_by(Transaction.created_at)
+        ).all()
+    )
+
+
+def test_seed_gives_each_demo_customer_a_salary_history_that_is_income(
+    migrated_engine: Engine, db: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0043 counts a credit as income only when its source recurs in 2 of the last 3 calendar
+    months, so a single opening deposit left the demo customers with no income and no loan offer.
+    The seed credits a monthly salary through ``ledger.deposit(posted_at=...)`` (ADR-0048)."""
+    environ = {"PBIP_DEMO_PASSWORD": ENV_PASSWORD}
+    assert _seed_with(settings, migrated_engine, monkeypatch, environ) == 0
+    now = utcnow()
+
+    for email, salary in seed_dev.SALARIES.items():
+        customer_id, _, account_id = _customer(db, email)
+        credits = _salary_credits(db, account_id)
+        months = {
+            (c.created_at.astimezone(BANK_TZ).year, c.created_at.astimezone(BANK_TZ).month)
+            for c in credits
+        }
+        assert len(credits) == seed_dev.SALARY_MONTHS == len(months), email
+        assert all(
+            c.type == TransactionType.DEPOSIT
+            and c.debit_account_id == ledger.SYSTEM_CLEARING_ID
+            and c.amount == salary
+            and c.reference == f"Salary {c.created_at.astimezone(BANK_TZ):%B %Y}"
+            for c in credits
+        )
+        profile = analytics_service.get_cash_flow_profile(db, customer_id, account_id, now)
+        assert profile.monthly_income_minor == salary, email  # exactly the salary, every month
+        account = db.get(Account, account_id)
+        assert account is not None
+        assert account.ledger_balance == ledger.entry_balance(db, account_id)
+        # In time order the running balances are true (statements and forecasts read them so).
+        balances = db.execute(
+            select(
+                TransactionEntry.direction, TransactionEntry.amount, TransactionEntry.balance_after
+            )
+            .where(TransactionEntry.account_id == account_id)
+            .order_by(TransactionEntry.created_at, TransactionEntry.seq)
+        ).all()
+        running = 0
+        for direction, amount, balance_after in balances:
+            running += int(amount) if direction == EntryDirection.CREDIT else -int(amount)
+            assert int(balance_after) == running, email
+
+    # The demo question gets an eligible answer, through the assistant's own routing and tool.
+    customer_id, user_id, _ = _customer(db, "alice@demo.pbip")
+    question = fallback.route("can I afford a 5 lakh car loan over 5 years?")
+    assert question.tool == ToolName.LOAN_AFFORDABILITY
+    ctx = ToolContext(db, customer_id, user_id, now, FaqFacts.from_settings(settings))
+    reply = tools.loan_affordability(ctx, question.arguments).text
+    assert reply.startswith("For a car loan of INR 5,00,000.00 over 60 months you are likely to")
+    assert "of your income of INR 1,25,000.00, within the 50% limit" in reply
+
+    entries = db.scalar(select(func.count()).select_from(TransactionEntry))
+    assert _seed_with(settings, migrated_engine, monkeypatch, environ) == 0  # again: no-op
+    assert db.scalar(select(func.count()).select_from(TransactionEntry)) == entries
+
+
+def test_seed_gives_alice_a_spending_history_in_date_order_with_the_expected_categories(
+    migrated_engine: Engine, db: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The assistant's spending, forecast and recent-transactions answers need history. Alice's is
+    posted through ``ledger.seed_payment`` to her seeded payees, in date order, never below zero,
+    categorised as the merchant words say, unscored, with an average payment that keeps the fraud
+    demo's amounts (demo/demo-script.md) at 5x or more."""
+    environ = {"PBIP_DEMO_PASSWORD": ENV_PASSWORD}
+    assert _seed_with(settings, migrated_engine, monkeypatch, environ) == 0
+    now = utcnow()
+    customer_id, user_id, account_id = _customer(db, "alice@demo.pbip")
+
+    rows = db.execute(
+        select(TransactionEntry.created_at, TransactionEntry.balance_after)
+        .where(TransactionEntry.account_id == account_id)
+        .order_by(TransactionEntry.seq)
+    ).all()
+    stamps = [r.created_at for r in rows]
+    assert stamps == sorted(stamps)  # posting order is date order
+    assert all(int(r.balance_after) >= 0 for r in rows)
+    today = now.astimezone(BANK_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
+    payments = list(
+        db.scalars(select(Transaction).where(Transaction.debit_account_id == account_id)).all()
+    )
+    assert payments and all(
+        p.type == TransactionType.TRANSFER
+        and p.credit_account_id == ledger.SYSTEM_CLEARING_ID
+        and p.payee_id is not None
+        and p.initiated_by_user_id == user_id
+        and p.created_at < today
+        for p in payments
+    )
+    scored = db.scalar(
+        select(func.count())
+        .select_from(FraudEvent)
+        .where(FraudEvent.transaction_id.in_([p.id for p in payments]))
+    )
+    assert scored == 0  # history is not a payment being made: never fraud-scored
+
+    # Last calendar month (closed, complete): every merchant line in its category.
+    local = now.astimezone(BANK_TZ)
+    year, month = (local.year - 1, 12) if local.month == 1 else (local.year, local.month - 1)
+    start = datetime(year, month, 1, tzinfo=BANK_TZ)
+    end = datetime(local.year, local.month, 1, tzinfo=BANK_TZ)
+    by_category: dict[str, int] = {}
+    for debit in analytics_repository.spend_debits(db, account_id, {account_id}, start, end):
+        by_category[debit.category] = by_category.get(debit.category, 0) + debit.amount_minor
+    assert by_category == {
+        "housing": 1_850_000,
+        "transfers": 1_250_000,  # the home-loan EMI (a debt repayment, no merchant category)
+        "groceries": 420_000 + 186_000 + 340_000 + 150_000,
+        "utilities": 238_000 + 99_900,
+        "dining": 18_000 + 164_000 + 85_000 + 120_000,
+        "entertainment": 64_900 + 11_900,
+        "transport": 32_000 + 145_000,
+        "healthcare": 78_000,
+        "shopping": 249_900,
+    }
+
+    # The fraud baseline's 90-day average transfer: the demo's INR 35,000 is still a spike.
+    average = db.scalar(
+        select(func.avg(Transaction.amount)).where(
+            Transaction.debit_account_id == account_id,
+            Transaction.type == TransactionType.TRANSFER,
+            Transaction.created_at >= now - timedelta(days=90),
+        )
+    )
+    assert average is not None and 2_500_00 <= float(average) <= 4_000_00
+    assert 5 * float(average) <= 35_000_00
+
+    payees = {p.name: p for p in PayeeService(db, settings).list(customer_id)}
+    assert set(payees) == set(seed_dev.SEED_PAYEES.values()) | {"Bob Demo"}
+    assert all(p.status == PayeeStatus.VERIFIED for p in payees.values())
+    for email in ("bob@demo.pbip", "carol@demo.pbip"):  # the fraud lab's senders: salary only
+        _, _, other = _customer(db, email)
+        assert db.scalar(select(func.count()).where(Transaction.debit_account_id == other)) == 0
+
+    entries = db.scalar(select(func.count()).select_from(TransactionEntry))
+    payee_count = len(payees)
+    assert _seed_with(settings, migrated_engine, monkeypatch, environ) == 0  # again: no-op
+    assert db.scalar(select(func.count()).select_from(TransactionEntry)) == entries
+    assert len(PayeeService(db, settings).list(customer_id)) == payee_count
+
+
+def test_seed_skips_the_salary_history_of_a_customer_who_transacted_since(
+    migrated_engine: Engine,
+    db: Session,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An older demo database: Alice transacted after the salary dates. The ledger never back-dates
+    before an account's latest entry, so the seed posts nothing for her and says why; Bob, whose
+    only entry is his opening deposit, still gets his history."""
+    environ = {"PBIP_DEMO_PASSWORD": ENV_PASSWORD}
+    monkeypatch.setattr(seed_dev, "SALARIES", {})  # an older seed: no salaries
+    assert _seed_with(settings, migrated_engine, monkeypatch, environ) == 0
+    monkeypatch.undo()
+    _, _, alice_account = _customer(db, "alice@demo.pbip")
+    ledger.deposit(db, alice_account, 1_000, reference="Cash")  # now: after every salary date
+    db.commit()
+    capsys.readouterr()
+
+    assert _seed_with(settings, migrated_engine, monkeypatch, environ) == 0
+
+    out = capsys.readouterr().out
+    assert "history  alice@demo.pbip  skipped" in out
+    assert _salary_credits(db, alice_account) == []
+    _, _, bob_account = _customer(db, "bob@demo.pbip")
+    assert len(_salary_credits(db, bob_account)) == seed_dev.SALARY_MONTHS
+
+
+def test_the_seed_writes_money_only_through_the_ledger_service() -> None:
+    """AGENTS.md section 4: no entry, balance or trigger is touched outside ledger/service.py."""
+    source = (Path(seed_dev.__file__)).read_text(encoding="utf-8")
+    for forbidden in (
+        "TransactionEntry",
+        "ledger_balance",
+        "held_amount",
+        "TRIGGER",
+        "INSERT",
+        "UPDATE ",
+        "_redate",
+        "text(",
+    ):
+        assert forbidden not in source, forbidden
+    assert "ledger.deposit(" in source and "ledger.seed_payment(" in source

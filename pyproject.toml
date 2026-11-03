@@ -147,3 +147,20 @@ forbidden_modules = [
     "pbip_ml.fraud.train",
     "pbip_ml.fraud.training",
 ]
+
+# ADR-0049: the API and the recommendation serving modules never import the uptake simulation or
+# the propensity training, directly or through another module.
+[[tool.importlinter.contracts]]
+name = "recommendation serving must not depend on recommendation training"
+type = "forbidden"
+source_modules = [
+    "pbip_api",
+    "pbip_ml.recommendations.contract",
+    "pbip_ml.recommendations.engine",
+    "pbip_ml.recommendations.propensity",
+]
+forbidden_modules = [
+    "pbip_ml.recommendations.simulation",
+    "pbip_ml.recommendations.train",
+    "pbip_ml.recommendations.training",
+]

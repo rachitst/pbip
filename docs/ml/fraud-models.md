@@ -77,7 +77,7 @@ The output is deterministic: two runs gave identical metrics. It writes `report.
 
 Code: `ml/src/pbip_ml/fraud/hybrid.py` and `ml/tests/test_fraud_hybrid.py`. The training CLI also writes `hybrid_params.json`.
 
-1. The LightGBM probability is calibrated with isotonic regression, fitted on validation and stored as a lookup table.
+1. The LightGBM probability is calibrated with isotonic regression and stored as a lookup table. Since `-3` (ADR-0047, #396) the fit uses the validation scores plus out-of-time scores from 4 chronological folds of the training period, not validation alone.
 2. A logistic regression **stacks** the calibrated probability, the anomaly score and the rule points. Its weights are fitted on validation; that is what "calibrated weights" means here.
 3. Risk = round(100 × stacked probability).
 4. **Hard-rule overrides** set floors: RAPID_ATO_TRANSFER → at least REVIEW (60); NEW_PAYEE_LARGE_AMOUNT and VELOCITY_BURST → at least STEP_UP (30). VELOCITY_BURST joined in TASK-080: without it the stacked weights scored a six-transfers-in-ten-minutes burst at risk 0. The test-period metrics did not change. Full evaluation: `docs/ml/model-evaluation-report-v1.md` (TASK-039).

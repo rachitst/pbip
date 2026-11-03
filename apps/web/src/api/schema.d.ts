@@ -4271,7 +4271,7 @@ export interface components {
             reasons: string[];
             /**
              * Score
-             * @description Rule-based relevance, for ordering only; not a probability
+             * @description Ordering score. rules-v1: rule-based relevance, not a probability. sim-propensity-v1: probability of uptake next month under a SIMULATION of product uptake, not real customer behaviour (ADR-0049)
              */
             score: number;
             /**
@@ -4319,7 +4319,7 @@ export interface components {
             evaluated_at: string;
             /**
              * Model Version
-             * @description Recommendation engine version
+             * @description Ordering version: rules-v1 or sim-propensity-v1 (ADR-0049)
              */
             model_version: string;
             /**
@@ -4327,6 +4327,16 @@ export interface components {
              * @description Top recommended banking products
              */
             recommendations?: components["schemas"]["ProductRecommendationItem"][];
+            /**
+             * Score From Simulated Data
+             * @description True when a model trained on SIMULATED product uptake ordered the list; its measured performance is on simulated data only
+             */
+            score_from_simulated_data: boolean;
+            /**
+             * Score Version
+             * @description Human-readable label of what ordered the list, e.g. 'sim-propensity-v1 (trained on simulated uptake, not real customer behaviour)'
+             */
+            score_version: string;
         };
         /**
          * RecommendedProduct

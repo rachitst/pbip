@@ -34,6 +34,7 @@ from pbip_api.modules.notifications.router import router as notifications_router
 from pbip_api.modules.payees.router import router as payees_router
 from pbip_api.modules.payments.router import router as payments_router
 from pbip_api.modules.recommendations.router import router as recommendations_router
+from pbip_api.modules.recommendations.scorer import active_propensity
 from pbip_api.modules.runtime_config.router import router as runtime_config_router
 from pbip_api.modules.statements.router import router as statements_router
 from pbip_api.modules.wealth.router import router as wealth_router
@@ -108,6 +109,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.readiness_cache = ReadinessCache(settings.health_ready_cache_seconds)
     # Fraud models load once per process, here, never on a request (ADR-0019). None = rules only.
     app.state.fraud_engine = load_engine(settings)
+    # The recommendation model too (ADR-0049); None = rules-v1. Cached for the whole process.
+    active_propensity()
     register_error_handlers(app)
     for router in ROUTERS:
         document_not_found_responses(router)
