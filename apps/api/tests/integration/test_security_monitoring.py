@@ -123,7 +123,7 @@ def test_high_risk_customers_open_alerts_and_flagged_events(
     first_review = next(a for a in reversed(queue) if a["decision"] == "REVIEW")  # alice's oldest
     decided = client.post(
         f"/api/v1/fraud/alerts/{first_review['id']}/decision",
-        headers=analyst.headers,
+        headers={**analyst.headers, "Idempotency-Key": f"decide-{first_review['id']}"},
         json={"action": "REJECT", "note": "confirmed with the customer"},
     )
     assert decided.status_code == 204, decided.text

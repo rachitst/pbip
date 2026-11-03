@@ -245,7 +245,9 @@ authenticated customer id.
   (`BillsService._request_hash`, `"kind": "bill_payment"`), scheduled-transfer creation
   (`_schedule_request_hash`, `"op": "scheduled_transfer.create"`) and loan applications (`loans/service.py`
   `_apply_hash`, `"op": "loan.apply"`). Scheduled occurrences use the deterministic key
-  `sched-{instruction_id}-{YYYY-MM-DD}`.
+  `sched-{instruction_id}-{YYYY-MM-DD}`. Step-up confirmation (`"op": "transfer.step_up"`, the transfer id; the
+  TOTP code is deliberately not hashed) and the analyst decision (`"op": "fraud.alert.decision"`, keyed by the
+  analyst's user id) use `PaymentsService._action_hash` (issue #314).
 * Resolution sequence: [section 5.3](#53-idempotency-resolution).
 
 ### 3.5 Fraud (`api/modules/fraud/models.py`, written by `api/modules/fraud/service.py`)
@@ -778,9 +780,9 @@ ROLLBACK):
 | Book fixed deposit | user lock; idempotency row; accounts sorted (customer, `SYS-FIXED-DEPOSITS`) in `book_fixed_deposit`; header; entries; `fixed_deposits` insert; audit lock | `wealth/service.py` `book_fixed_deposit` |
 | Close fixed deposit | user lock; idempotency row; deposit row `FOR UPDATE`; customer, `SYS-FIXED-DEPOSITS` and `SYS-CLEARING` sorted BEFORE both headers (`pay_out_fixed_deposit`); entries; audit lock | `wealth/service.py` `close_fixed_deposit` |
 | Maturity payout (job) | user lock; idempotency row `fd-maturity/{deposit_id}`; deposit row `FOR UPDATE`; the three accounts sorted BEFORE both headers; entries; audit lock. On a non-active account: rollback, then user lock; deposit row `FOR UPDATE`; audit lock | `wealth/maturity_service.py` `pay_out_matured_deposit` |
-| Confirm step-up | user lock; the transfer row `FOR UPDATE`; accounts sorted in `post_transaction`; audit lock | `confirm_step_up` |
+| Confirm step-up | user lock; idempotency row (claimed after the code is verified); the transfer row `FOR UPDATE`; accounts sorted in `post_transaction`; audit lock | `confirm_step_up` |
 | Step-up escalation | (new transaction after the failure was committed) user lock; transfer row `FOR UPDATE`; debit account for the hold; audit lock | `_escalate_to_review` |
-| Analyst decision | alert row `FOR UPDATE`; transaction row `FOR UPDATE`; RELEASE: accounts sorted then hold row; REJECT: hold row then its account; `bill_payments` row; audit lock. No user lock, no idempotency key | `PaymentsService.review_alert` |
+| Analyst decision | analyst user lock; idempotency row; alert row `FOR UPDATE`; transaction row `FOR UPDATE`; RELEASE: accounts sorted then hold row; REJECT: hold row then its account; `bill_payments` row; audit lock (issue #314 added the first two) | `PaymentsService.review_alert` |
 | Scheduled occurrence | instruction try-lock `pg_try_advisory_xact_lock(1346521424, hashtext(id))` (skips if busy); user lock; instruction row `FOR UPDATE`; then the create-transfer order (the user lock is re-entrant) | `scheduled_service.execute_scheduled_instruction` |
 | Loan repayment run | instruction try-lock; user lock; instruction row; loan row `FOR UPDATE`; `DUE` instalments `FOR UPDATE` by `seq`; accounts sorted; header; entries; audit lock | `_execute_loan_repayment`, `loans.service.collect_due_instalments` |
 | Reversal | original transaction `FOR UPDATE`; accounts sorted; header; entries | `ledger.reverse_transaction` |
@@ -931,10 +933,11 @@ lock, so a repeated run finds nothing due and posts nothing (`test_concurrent_re
    CHECK and never set. Both are **reserved** for a future reversal flow; the Blueprint and HLD say so (GitHub issue #316).
 2. **`PENDING_STEP_UP` never expires.** No job times out an unanswered step-up. The transfer waits until a correct
    code or the third wrong one; no hold is placed meanwhile, and the daily limit is rechecked at confirm time.
-3. **Not every money-moving POST takes an `Idempotency-Key`** (AGENTS.md section 4 says they must). The analyst
-   decision (which posts on RELEASE) and step-up confirm have no key; they are replay-safe through row locks and
-   status checks (a second call is 409), proven by `test_decision_errors_are_specific` and
-   `test_a_second_escalation_after_one_already_won_returns_the_state_and_holds_once`.
+3. **Resolved (issue #314): every money-moving POST takes an `Idempotency-Key`.** The analyst decision and step-up
+   confirm now require it. Step-up checks for a stored answer first, verifies the code, and only then claims the
+   key, so a wrong code (whose evidence `verify_step_up` commits) never leaves a key without an answer. Tests:
+   `test_transfers.py::test_concurrent_step_ups_post_the_transfer_exactly_once`,
+   `test_concurrent_decisions_move_the_money_exactly_once` and their neighbours.
 4. **Idempotency TTL is not enforced** (section 3.15, item 6).
 5. **Table counts in older documents are stale.** Blueprint section 4 says "Implemented (20 tables, migration
    `0001`)" and HLD section 5 says 26 `public` tables; `main` has 30 (`er-diagram.md`). HLD section 15 says there are
