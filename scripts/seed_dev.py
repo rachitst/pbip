@@ -101,14 +101,20 @@ def _enrol_mfa(service: AuthService, user_id: UUID, meta: RequestMeta) -> None:
         service.clock = real_clock
 
 
-def _enrol_demo_customers(session: Session, service: AuthService, meta: RequestMeta) -> None:
-    """Give each of ``MFA_CUSTOMERS`` an authenticator unless they already have one."""
+def _enrol_demo_customers(session: Session, service: AuthService, meta: RequestMeta) -> int:
+    """Give each of ``MFA_CUSTOMERS`` an authenticator unless they already have one; returns how
+    many were enrolled. Only the id and the flag are read: the full row carries the password hash
+    and the MFA secret, and nothing read here is printed (CodeQL py/clear-text-logging)."""
+    enrolled = 0
     for email in MFA_CUSTOMERS:
-        user = session.execute(select(User).where(User.email == email)).scalar_one_or_none()
-        if user is None or user.mfa_enabled:
+        row = session.execute(
+            select(User.id, User.mfa_enabled).where(User.email == email)
+        ).one_or_none()
+        if row is None or row.mfa_enabled:
             continue
-        _enrol_mfa(service, user.id, meta)
-        sys.stdout.write(f"customer {email}  (MFA enrolled)\n")
+        _enrol_mfa(service, row.id, meta)
+        enrolled += 1
+    return enrolled
 
 
 def _assign_demo_portfolio(session: Session) -> None:
@@ -173,7 +179,8 @@ def main(environ: Mapping[str, str] | None = None) -> int:
             _enrol_mfa(service, user.id, meta)
             sys.stdout.write(f"staff    {email}  ({role.value}, MFA enrolled)\n")
 
-        _enrol_demo_customers(session, service, meta)
+        if _enrol_demo_customers(session, service, meta):
+            sys.stdout.write("demo customers in MFA_CUSTOMERS: authenticator enrolled\n")
         _assign_demo_portfolio(session)
 
     sys.stdout.write(

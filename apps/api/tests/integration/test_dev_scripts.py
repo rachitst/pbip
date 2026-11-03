@@ -323,11 +323,11 @@ def test_seed_gives_alice_an_authenticator_and_keeps_the_lab_customers_without(
     assert not enrolled & {"bob@demo.pbip", "carol@demo.pbip"}
     assert totp.current_code(db, _cipher(settings), "alice@demo.pbip", 1_000_000) is not None
     first = capsys.readouterr().out
-    assert "alice@demo.pbip  (MFA enrolled)" in first and "customer carol@demo.pbip" in first
+    assert "MFA_CUSTOMERS: authenticator enrolled" in first and "customer carol@demo.pbip" in first
 
     alice_secret = db.scalar(select(User.mfa_secret_enc).where(User.email == "alice@demo.pbip"))
     assert _seed_with(settings, migrated_engine, monkeypatch, environ) == 0  # again: no-op
     db.expire_all()
     again = db.scalar(select(User.mfa_secret_enc).where(User.email == "alice@demo.pbip"))
     assert again == alice_secret  # not re-enrolled: the presenter's codes keep working
-    assert "MFA enrolled" not in capsys.readouterr().out
+    assert "authenticator enrolled" not in capsys.readouterr().out
