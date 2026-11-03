@@ -17,6 +17,8 @@ whole journey a customer or an analyst depends on.
 | 4 | A standing order is scheduled on `/scheduled` (TASK-021) and listed as upcoming, also after a reload | `journey-scheduled.spec.ts`: "a scheduled transfer is created and listed as upcoming" |
 | 5 | The assistant drawer opens, answers "What is my balance?" with the real balance, and closes | `journey-assistant.spec.ts`: "the assistant answers a balance question from the customer's own account" |
 | 6 | BOLA: another customer's account, payee and transfer ids in a URL give 404 `not_found`, exactly like ids that do not exist; a deep link with them opens nothing | `journey-bola.spec.ts`: "another customer's ids in a URL give Not found, like ids that do not exist" |
+| 7 | Administration (TASK-108): an ADMIN signs in with MFA, changes the standing-order cap with a reason and restores it, creates a staff user and clears its lockout; an RM gets no link, a restricted page and 403 `forbidden` from the admin API | `journey-admin.spec.ts` (#359) |
+| 8 | Compare products (TASK-098) at 1280 and 360 px: the product checkboxes keep their size and the names get the row (a layout guard jsdom cannot give), then two products open the comparison table | `journey-compare.spec.ts` (#360) |
 
 The older specs stay: `smoke.spec.ts`, `sprint1.spec.ts` (account opening, devices, password change),
 `shell.spec.ts` (routing, roles, phone width) and `perf.spec.ts` (TASK-102 page and login budgets).

@@ -46,7 +46,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | FR-02 | The system shall support TOTP multi-factor authentication with single-use recovery codes. A customer with MFA enabled must enter a code before access is granted. | UC-01 flow 3 | Implemented | TASK-006; #201 (UI) | MFA is optional for customers (mandatory for staff); enrolment screens on Profile & security and staff Sign-in security (`MfaEnrolment.tsx`, #201) |
 | FR-03 | The system shall record a security event for every failed login and MFA failure, and lock the account progressively after repeated failures. | UC-01 alternative flow | Implemented | TASK-006, TASK-007 | |
 | FR-04 | The system shall issue short-lived access tokens and rotating refresh tokens, revoke a token family on reuse, and revoke all sessions on password change. | UC-01, section 8 "secure authentication" | Implemented | TASK-006 | |
-| FR-05 | An administrator shall be able to create staff users with explicit roles and inspect and clear a user's lockout. Each action is audited. | Section 6 (administrator) | Implemented | TASK-007; TASK-108 (#282, merged #346) | Web screens on `/staff/admin`. The runtime-configurable settings are exactly the ADR-0031 allow-list (daily transfer limit, per-transfer limit, standing-order cap, each bounded); secrets and security settings are deployment configuration only. No E2E journey for the screens yet |
+| FR-05 | An administrator shall be able to create staff users with explicit roles and inspect and clear a user's lockout. Each action is audited. | Section 6 (administrator) | Implemented | TASK-007; TASK-108 (#282, merged #346) | Web screens on `/staff/admin`. The runtime-configurable settings are exactly the ADR-0031 allow-list (daily transfer limit, per-transfer limit, standing-order cap, each bounded); secrets and security settings are deployment configuration only. E2E journey `e2e/journey-admin.spec.ts` (#359) |
 | FR-06 | A retail customer shall be able to self-register (disabled in production by configuration). | UC-01 precondition "valid customer account exists" | Implemented | #201 (UI) | Web registration page (`Register.tsx`, #201) |
 
 ### 2.2 Dashboard and account services (UC-02, UC-03, section 5)
@@ -179,7 +179,7 @@ delivered (TLS, #280).
 | Requirement | Missing part |
 |---|---|
 | FR-02, FR-06 | Web screens for MFA enrolment and self-registration (owned by #201) |
-| FR-05 | ~~Administration screen and application-configuration function~~: done in TASK-108 (#282, merged #346); the E2E test its DoD asks for is still missing |
+| FR-05 | ~~Administration screen and application-configuration function~~: done in TASK-108 (#282, merged #346; E2E journey #359) |
 | FR-08 | ~~Total-balance overview on the dashboard~~: done in TASK-109 (#283, merged #330) |
 | FR-39 | ~~"Show unusual expenses" in the assistant~~: done in TASK-110 (#284, merged #331) |
 | FR-55 | ~~Existing products as a recommendation input~~: done in TASK-111 (#285, merged #342) |
