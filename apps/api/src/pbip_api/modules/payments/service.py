@@ -23,7 +23,12 @@ from sqlalchemy.orm import Session
 from pbip_api.core.config import Settings
 from pbip_api.core.db import utcnow
 from pbip_api.core.errors import ConflictError, NotFoundError, UnprocessableError
-from pbip_api.core.geoip import CountryResolver, NoCountryResolver
+from pbip_api.core.geoip import (
+    CountryResolver,
+    LocationResolver,
+    NoCountryResolver,
+    NoLocationResolver,
+)
 from pbip_api.core.metrics import (
     FRAUD_DECISIONS_TOTAL,
     FRAUD_INFERENCE_SECONDS,
@@ -134,12 +139,14 @@ class PaymentsService:
         auth: AuthService,
         countries: CountryResolver | None = None,
         counters: VelocityCounters | None = None,
+        locations: LocationResolver | None = None,
     ) -> None:
         self.session = session
         self.settings = settings
         self.scorer = scorer
         self.auth = auth
         self.countries = countries or NoCountryResolver()
+        self.locations = locations or NoLocationResolver()
         self.counters = counters
         self.audit = AuditService(session)
 
@@ -242,6 +249,7 @@ class PaymentsService:
 
         # The scorer contract only knows WEB/MOBILE/API (changing it needs an ADR), so the
         # context keeps its default channel; the real channel is on the transaction and audit row.
+        point = self.locations.locate(ip)  # city-level, for IMPOSSIBLE_TRAVEL (ADR-0034)
         result = self.scorer.score(
             TransactionContext(
                 transaction_id=transaction.id,
@@ -252,8 +260,11 @@ class PaymentsService:
                 occurred_at=utcnow(),
                 payee_id=payee.id if payee else None,
                 device_id=device_id,
-                ip_country=self.countries.country(ip),
+                # the city file carries the country too (ADR-0034), when no country file is set
+                ip_country=self.countries.country(ip) or (point.country if point else None),
                 ip_network=ip_network(ip),
+                geo_lat=point.latitude if point else None,
+                geo_lon=point.longitude if point else None,
             )
         )
         FRAUD_INFERENCE_SECONDS.observe(result.latency_ms / 1000)

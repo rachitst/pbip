@@ -1,13 +1,15 @@
-"""Download and verify the DB-IP "IP to Country Lite" database for the NEW_COUNTRY fraud rule.
+"""Download and verify a DB-IP Lite database for the geographic fraud rules.
 
-DB-IP publishes the file monthly under CC BY 4.0 (attribution: "IP Geolocation by DB-IP",
+``--product country`` (default) is "IP to Country Lite" for NEW_COUNTRY (ADR-0014);
+``--product city`` is "IP to City Lite" for IMPOSSIBLE_TRAVEL (ADR-0034, about 60 MB download,
+120 MB file). DB-IP publishes both monthly under CC BY 4.0 (attribution: "IP Geolocation by DB-IP",
 https://db-ip.com). It is not committed to git: run this on the host, then point
-GEOIP_COUNTRY_DB_PATH at the result (ADR-0014, runbook section 2.4). The file is verified by
-opening it as a country MMDB and looking up two well-known addresses before it replaces the
-previous copy, so a bad download never reaches the API.
+GEOIP_COUNTRY_DB_PATH / GEOIP_CITY_DB_PATH at the result (runbook section 2.4). The file is
+verified by looking up two well-known addresses (and, for the city file, that they have a point)
+before it replaces the previous copy, so a bad download never reaches the API.
 
 Usage:
-    uv run python scripts/fetch_geoip.py [--month 2026-10] [--dest data/geoip/country.mmdb]
+    uv run python scripts/fetch_geoip.py [--product city] [--month 2026-10] [--dest PATH]
 """
 
 import argparse
@@ -20,16 +22,19 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-URL = "https://download.db-ip.com/free/dbip-country-lite-{month}.mmdb.gz"
-DEFAULT_DEST = Path("data/geoip/dbip-country-lite.mmdb")
+URL = "https://download.db-ip.com/free/dbip-{product}-lite-{month}.mmdb.gz"
+PRODUCTS = ("country", "city")
 CHECKS = {"8.8.8.8": "US", "81.2.69.142": "GB"}
 
 
-def url_for(month: str) -> str:
+def url_for(month: str, product: str = "country") -> str:
     if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month):
         msg = f"month must be YYYY-MM, got {month!r}"
         raise ValueError(msg)
-    return URL.format(month=month)
+    if product not in PRODUCTS:
+        msg = f"product must be one of {PRODUCTS}, got {product!r}"
+        raise ValueError(msg)
+    return URL.format(product=product, month=month)
 
 
 def verify(path: Path) -> None:
@@ -41,6 +46,19 @@ def verify(path: Path) -> None:
         got = resolver.country(ip)
         if got != expected:
             msg = f"verification failed: {ip} -> {got!r}, expected {expected!r}"
+            raise ValueError(msg)
+
+
+def verify_city(path: Path) -> None:
+    """A city MMDB: the country checks hold and each address also has a point."""
+    from pbip_api.core.geoip import MmdbLocationResolver
+
+    verify(path)
+    resolver = MmdbLocationResolver.open(str(path))
+    for ip, expected in CHECKS.items():
+        point = resolver.locate(ip)
+        if point is None or point.country != expected:
+            msg = f"verification failed: {ip} has no point in {expected!r}"
             raise ValueError(msg)
 
 
@@ -56,9 +74,10 @@ def fetch(
     dest: Path,
     get: Callable[[str], bytes] = download,
     check: Callable[[Path], None] = verify,
+    product: str = "country",
 ) -> str:
     """Download, decompress, verify, then atomically replace ``dest``. Returns the SHA-256."""
-    data = gzip.decompress(get(url_for(month)))
+    data = gzip.decompress(get(url_for(month, product)))
     dest.parent.mkdir(parents=True, exist_ok=True)
     staged = dest.with_suffix(dest.suffix + ".new")
     staged.write_bytes(data)
@@ -73,11 +92,14 @@ def fetch(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--product", choices=PRODUCTS, default="country")
     parser.add_argument("--month", default=datetime.now(UTC).strftime("%Y-%m"))
-    parser.add_argument("--dest", type=Path, default=DEFAULT_DEST)
+    parser.add_argument("--dest", type=Path)
     args = parser.parse_args()
-    digest = fetch(args.month, args.dest)
-    sys.stdout.write(f"Wrote {args.dest} ({args.month}), sha256 {digest}\n")
+    dest = args.dest or Path(f"data/geoip/dbip-{args.product}-lite.mmdb")
+    check = verify_city if args.product == "city" else verify
+    digest = fetch(args.month, dest, check=check, product=args.product)
+    sys.stdout.write(f"Wrote {dest} ({args.product}, {args.month}), sha256 {digest}\n")
     return 0
 
 
