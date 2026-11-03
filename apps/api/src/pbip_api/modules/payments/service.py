@@ -353,11 +353,24 @@ class PaymentsService:
         inserted = self.session.execute(statement).scalar_one_or_none()
         if inserted is not None:
             return inserted, None
+        existing = self._existing_outcome(user_id, key, request_hash)
+        if existing is None:
+            raise RuntimeError("idempotency key conflict without a row")
+        return existing
+
+    def _existing_outcome(
+        self, user_id: UUID, key: str, request_hash: str
+    ) -> tuple[UUID, TransferResult] | None:
+        """The stored answer for this key, or None if the key was never used.
+
+        Raises if the key belongs to a different request (422) or has no answer yet (409)."""
         existing = self.session.execute(
             select(IdempotencyKey).where(
                 IdempotencyKey.user_id == user_id, IdempotencyKey.key == key
             )
-        ).scalar_one()
+        ).scalar_one_or_none()
+        if existing is None:
+            return None
         if existing.request_hash != request_hash:
             raise IdempotencyKeyReuseError(
                 "Idempotency-Key was already used with a different request"
@@ -366,6 +379,15 @@ class PaymentsService:
             raise ConflictError("a request with this Idempotency-Key is still in progress")
         IDEMPOTENT_REPLAYS_TOTAL.inc()
         return existing.id, TransferResult(existing.response_status, existing.response_body, True)
+
+    @staticmethod
+    def _action_hash(op: str, user_id: UUID, fields: dict[str, Any]) -> str:
+        """Request hash for a follow-up action on an existing transfer or alert. ``op`` keeps it
+        distinct from every other endpoint's hash, so a key reused across endpoints is a 422."""
+        canonical = json.dumps(
+            {"op": op, "user": str(user_id)} | fields, sort_keys=True, separators=(",", ":")
+        )
+        return hashlib.sha256(canonical.encode()).hexdigest()
 
     def _store_idempotent_response(
         self, idem_id: UUID, outcome: TransferResult, transaction_id: UUID
@@ -492,18 +514,46 @@ class PaymentsService:
         return self._build_result(self._owned_transaction(user_id, transaction_id))
 
     def confirm_step_up(
-        self, *, user_id: UUID, transaction_id: UUID, code: str, meta: RequestMeta
+        self,
+        *,
+        user_id: UUID,
+        transaction_id: UUID,
+        code: str,
+        idempotency_key: str,
+        meta: RequestMeta,
     ) -> TransferResult:
+        """Complete a PENDING_STEP_UP transfer. Idempotent (issue #314): a retry with the same key
+        replays the stored answer without checking the code again (a used TOTP step is refused).
+
+        The code is not part of the request hash: it is a secret, and a retry after a wrong code
+        is the same logical request. A wrong code commits its own evidence (``verify_step_up``)
+        BEFORE the key is claimed, so the key is never left without an answer and the customer can
+        retry with it. Lock order: user lock, the key, the transfer row, the accounts.
+        """
         self._lock_user(user_id)
-        transaction = self._owned_transaction(user_id, transaction_id, lock=True)
+        request_hash = self._action_hash(
+            "transfer.step_up", user_id, {"transfer_id": str(transaction_id)}
+        )
+        stored = self._existing_outcome(user_id, idempotency_key, request_hash)
+        if stored is not None:
+            return stored[1]
+        transaction = self._owned_transaction(user_id, transaction_id)
         if transaction.status != TransactionStatus.PENDING_STEP_UP:
             raise ConflictError("this transfer is not waiting for verification")
         try:  # a failure commits its own evidence (security event, lockout counter)
             self.auth.verify_step_up(user_id, code, meta, subject=str(transaction.id))
         except UnprocessableError:
             if self._step_up_failures(user_id, transaction.id) >= STEP_UP_MAX_FAILURES:
-                return self._escalate_to_review(user_id, transaction_id, meta)
+                return self._escalate_to_review(
+                    user_id, transaction_id, meta, idempotency_key=idempotency_key
+                )
             raise
+        idem_id, replay = self._begin_idempotent(user_id, idempotency_key, request_hash)
+        if replay is not None:  # unreachable under the user lock; kept for the same semantics
+            return replay
+        transaction = self._owned_transaction(user_id, transaction_id, lock=True)
+        if transaction.status != TransactionStatus.PENDING_STEP_UP:
+            raise ConflictError("this transfer is not waiting for verification")
         self._enforce_daily_limit(user_id, transaction)
         ledger.post_transaction(self.session, transaction, ledger.transfer_legs(transaction))
         self._enqueue(notifications.TRANSFER_POSTED, user_id, transaction)
@@ -515,9 +565,11 @@ class PaymentsService:
             ip=meta.ip,
             request_id=meta.request_id,
         )
+        outcome = self._build_result(transaction)
+        self._store_idempotent_response(idem_id, outcome, transaction.id)
         self.session.commit()
         TRANSFERS_TOTAL.labels(transaction.status.value).inc()
-        return self._build_result(transaction)
+        return outcome
 
     def _step_up_failures(self, user_id: UUID, transaction_id: UUID) -> int:
         count = self.session.scalar(
@@ -530,16 +582,27 @@ class PaymentsService:
         return int(count or 0)
 
     def _escalate_to_review(
-        self, user_id: UUID, transaction_id: UUID, meta: RequestMeta
+        self, user_id: UUID, transaction_id: UUID, meta: RequestMeta, *, idempotency_key: str
     ) -> TransferResult:
         """Too many wrong codes: hold the money and hand the transfer to an analyst.
 
-        A new transaction (the failure was committed): same lock order as creation.
+        A new transaction (the failure was committed): same lock order as creation. The answer is
+        stored on the request's key, so a retry replays it instead of getting a 409.
         """
         self._lock_user(user_id)
+        idem_id, replay = self._begin_idempotent(
+            user_id,
+            idempotency_key,
+            self._action_hash("transfer.step_up", user_id, {"transfer_id": str(transaction_id)}),
+        )
+        if replay is not None:  # a retry with this key completed while the lock was released
+            self.session.rollback()
+            return replay
         transaction = self._owned_transaction(user_id, transaction_id, lock=True)
         if transaction.status != TransactionStatus.PENDING_STEP_UP:  # a concurrent request won
-            return self._build_result(transaction)
+            current = self._build_result(transaction)
+            self.session.rollback()  # also drops the key claimed above: nothing changed
+            return current
         self._enforce_daily_limit(user_id, transaction)
         ledger.place_hold(self.session, transaction)
         transaction.status = TransactionStatus.PENDING_REVIEW
@@ -564,9 +627,11 @@ class PaymentsService:
             request_id=meta.request_id,
             details={"failed_codes": STEP_UP_MAX_FAILURES},
         )
+        outcome = self._build_result(transaction)
+        self._store_idempotent_response(idem_id, outcome, transaction.id)
         self.session.commit()
         TRANSFERS_TOTAL.labels(transaction.status.value).inc()
-        return self._build_result(transaction)
+        return outcome
 
     # --------------------------------------------------------- analyst review
     def review_alert(
@@ -576,11 +641,28 @@ class PaymentsService:
         alert_id: UUID,
         release: bool,
         note: str | None,
+        idempotency_key: str,
         meta: RequestMeta,
         settle_other: Callable[[Session, Transaction], bool] | None = None,
-    ) -> None:
+    ) -> TransferResult:
         """Resolve an alert. ``settle_other`` lets another module (bill payments) mirror the
-        outcome on its own record in this same transaction; it returns True if it did."""
+        outcome on its own record in this same transaction; it returns True if it did.
+
+        Idempotent (issue #314): a RELEASE posts money, so the analyst's key is claimed after the
+        analyst's advisory lock and before any row lock, as for a transfer. A retry with the same
+        key replays the 204; another key on a resolved alert is a 409."""
+        self._lock_user(analyst_id)
+        idem_id, replay = self._begin_idempotent(
+            analyst_id,
+            idempotency_key,
+            self._action_hash(
+                "fraud.alert.decision",
+                analyst_id,
+                {"alert_id": str(alert_id), "release": release, "note": note},
+            ),
+        )
+        if replay is not None:
+            return replay
         alert = self.session.execute(
             select(FraudAlert)
             .where(FraudAlert.id == alert_id)
@@ -629,7 +711,10 @@ class PaymentsService:
             request_id=meta.request_id,
             details={"release": release, "transaction_id": str(transaction.id)},
         )
+        outcome = TransferResult(204, {})
+        self._store_idempotent_response(idem_id, outcome, transaction.id)
         self.session.commit()
+        return outcome
 
     # --------------------------------------------------- scheduled transfers
     def create_scheduled_transfer(

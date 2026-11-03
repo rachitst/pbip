@@ -250,17 +250,22 @@ def get_transfer(
 @router.post(
     "/{transfer_id}/step-up",
     response_model=TransferOut,
-    summary="Complete a flagged transfer with a TOTP code",
+    summary="Complete a flagged transfer with a TOTP code (idempotent)",
 )
 def confirm_step_up(
     transfer_id: UUID,
     body: StepUpRequest,
+    idempotency_key: IdempotencyKeyHeader,
     principal: Principal = Depends(get_current_principal),
     service: PaymentsService = Depends(get_payments_service),
     meta: RequestMeta = Depends(get_request_meta),
 ) -> JSONResponse:
     return _respond(
         service.confirm_step_up(
-            user_id=principal.user_id, transaction_id=transfer_id, code=body.code, meta=meta
+            user_id=principal.user_id,
+            transaction_id=transfer_id,
+            code=body.code,
+            idempotency_key=idempotency_key,
+            meta=meta,
         )
     )

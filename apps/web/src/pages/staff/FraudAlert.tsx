@@ -106,13 +106,15 @@ export function FraudAlert() {
   const queryClient = useQueryClient();
   const [action, setAction] = useState<Action | null>(null);
   const [note, setNote] = useState("");
+  // A RELEASE moves money: one Idempotency-Key per opened confirmation, reused by its retries.
+  const [intentKey, setIntentKey] = useState(() => crypto.randomUUID());
   const alert = useQuery({
     queryKey: ["fraud", "alert", alertId],
     queryFn: () => api.fraudAlert(alertId),
     enabled: allowed,
   });
   const decide = useMutation({
-    mutationFn: (chosen: Action) => api.decideAlert(alertId, chosen, note),
+    mutationFn: (chosen: Action) => api.decideAlert(alertId, chosen, note, intentKey),
     onSuccess: async () => {
       setAction(null);
       await queryClient.invalidateQueries({ queryKey: ["fraud"] });
@@ -219,6 +221,7 @@ export function FraudAlert() {
           <div className="fraud-actions">
             <Button
               onClick={() => {
+                setIntentKey(crypto.randomUUID());
                 setAction("RELEASE");
               }}
             >
@@ -227,6 +230,7 @@ export function FraudAlert() {
             <Button
               variant="danger"
               onClick={() => {
+                setIntentKey(crypto.randomUUID());
                 setAction("REJECT");
               }}
             >

@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel, Field
 from redis import Redis
 from sqlalchemy.orm import Session
@@ -27,7 +27,7 @@ from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.fraud import monitoring, service, stats
 from pbip_api.modules.fraud.models import AlertStatus, FraudAlert, FraudEvent
 from pbip_api.modules.ledger.models import Transaction
-from pbip_api.modules.payments.router import get_payments_service
+from pbip_api.modules.payments.router import IdempotencyKeyHeader, get_payments_service
 from pbip_api.modules.payments.service import PaymentsService
 
 router = APIRouter(prefix="/api/v1/fraud", tags=["fraud"])
@@ -334,23 +334,28 @@ def get_alert(
 @router.post(
     "/alerts/{alert_id}/decision",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="RELEASE (false positive, posts the held transfer) or REJECT (confirmed fraud)",
+    summary="RELEASE (false positive, posts the held transfer) or REJECT (confirmed fraud) "
+    "(idempotent)",
 )
 def decide_alert(
     alert_id: UUID,
     body: DecisionRequest,
+    idempotency_key: IdempotencyKeyHeader,
     analyst: Principal = Depends(analyst_gate),
     payments: PaymentsService = Depends(get_payments_service),
     meta: RequestMeta = Depends(get_request_meta),
-) -> None:
-    payments.review_alert(
+) -> Response:
+    result = payments.review_alert(
         analyst_id=analyst.user_id,
         alert_id=alert_id,
         release=body.action == "RELEASE",
         note=body.note,
+        idempotency_key=idempotency_key,
         meta=meta,
         settle_other=settle_reviewed_bill,  # a held bill payment follows the decision too
     )
+    headers = {"Idempotent-Replayed": "true"} if result.replayed else None
+    return Response(status_code=status.HTTP_204_NO_CONTENT, headers=headers)
 
 
 # mask helper re-exported for the account numbers shown in future alert views

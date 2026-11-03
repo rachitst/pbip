@@ -452,7 +452,7 @@ def test_bola_customer_b_cannot_touch_customer_a_objects(
         "delete payee": client.delete(f"/api/v1/payees/{ids['payee']}", headers=h),
         "get transfer": client.get(f"/api/v1/transfers/{ids['transfer']}", headers=h),
         "step-up transfer": client.post(
-            f"/api/v1/transfers/{ids['transfer']}/step-up", headers=h, json={"code": "123456"}
+            f"/api/v1/transfers/{ids['transfer']}/step-up", headers=key(), json={"code": "123456"}
         ),
         "transfer FROM victim account": client.post(
             "/api/v1/transfers",

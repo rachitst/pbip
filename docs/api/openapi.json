@@ -10380,6 +10380,20 @@
               "title": "Alert Id",
               "type": "string"
             }
+          },
+          {
+            "description": "Unique per logical request; retrying with the same key never duplicates.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Unique per logical request; retrying with the same key never duplicates.",
+              "maxLength": 128,
+              "minLength": 8,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -10412,7 +10426,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "RELEASE (false positive, posts the held transfer) or REJECT (confirmed fraud)",
+        "summary": "RELEASE (false positive, posts the held transfer) or REJECT (confirmed fraud) (idempotent)",
         "tags": [
           "fraud"
         ]
@@ -12259,6 +12273,20 @@
               "title": "Transfer Id",
               "type": "string"
             }
+          },
+          {
+            "description": "Unique per logical request; retrying with the same key never duplicates.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Unique per logical request; retrying with the same key never duplicates.",
+              "maxLength": 128,
+              "minLength": 8,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -12298,7 +12326,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Complete a flagged transfer with a TOTP code",
+        "summary": "Complete a flagged transfer with a TOTP code (idempotent)",
         "tags": [
           "payments"
         ]

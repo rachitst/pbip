@@ -168,7 +168,7 @@ def test_hybrid_step_up_requires_the_customers_totp(
     assert pending.status_code == 202 and pending.json()["status"] == "PENDING_STEP_UP"
     done = client.post(
         f"/api/v1/transfers/{pending.json()['id']}/step-up",
-        headers=alice.headers,
+        headers={**alice.headers, "Idempotency-Key": f"step-up-{pending.json()['id']}"},
         json={"code": totp_code(secret, clock)},
     )
     assert done.status_code == 200 and done.json()["status"] == "POSTED"
