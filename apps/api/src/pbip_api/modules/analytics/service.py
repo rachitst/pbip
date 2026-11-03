@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from pbip_api.core.db import utcnow
 from pbip_api.core.errors import NotFoundError, UnprocessableError
+from pbip_api.modules.accounts.models import Account
 from pbip_api.modules.accounts.service import mask_account_number
 from pbip_api.modules.analytics import behaviour, projection, repository, unusual
 from pbip_api.modules.analytics.health import compute_financial_health_score
@@ -236,6 +237,16 @@ def get_spending_trends(
     )
 
 
+def _health_inputs(
+    session: Session, customer_id: UUID, account_id: UUID, now: datetime
+) -> tuple[Account, set[UUID], repository.HealthMetrics]:
+    """Ownership check, the customer's account ids and one pass over the account's entries."""
+    account = verify_account_ownership(session, customer_id, account_id)
+    owned = repository.owned_account_ids(session, customer_id)
+    metrics = repository.get_financial_health_metrics(session, account.id, owned, now)
+    return account, owned, metrics
+
+
 def get_financial_health_score(
     session: Session, customer_id: UUID, account_id: UUID, now: datetime | None = None
 ) -> FinancialHealthScoreResponse:
@@ -243,9 +254,7 @@ def get_financial_health_score(
 
     ``now`` is injected by the router from the request clock so month boundaries are testable.
     """
-    account = verify_account_ownership(session, customer_id, account_id)
-    owned = repository.owned_account_ids(session, customer_id)
-    metrics = repository.get_financial_health_metrics(session, account.id, owned, now or utcnow())
+    account, _owned, metrics = _health_inputs(session, customer_id, account_id, now or utcnow())
     return compute_financial_health_score(
         account.id, account.currency, account.available_balance, metrics
     )
@@ -260,20 +269,40 @@ class CashFlowProfile:
     discretionary_ratio: float  # share of spend on dining, shopping, entertainment and travel
 
 
-def get_cash_flow_profile(
-    session: Session, customer_id: UUID, account_id: UUID, now: datetime
+def _cash_flow(
+    session: Session,
+    customer_id: UUID,
+    owned: set[UUID],
+    metrics: repository.HealthMetrics,
+    now: datetime,
 ) -> CashFlowProfile:
-    """Real income, spend and lifestyle share of one owned account, for recommendations."""
-    account = verify_account_ownership(session, customer_id, account_id)
-    owned = repository.owned_account_ids(session, customer_id)
-    metrics = repository.get_financial_health_metrics(session, account.id, owned, now)
     months = max(metrics.months_observed, 1)
-    rfm = repository.extract_customer_rfm_features(session, customer_id, now)
+    rfm = repository.extract_customer_rfm_features(session, customer_id, now, owned)
     return CashFlowProfile(
         monthly_income_minor=metrics.income_minor // months,
         monthly_spend_minor=metrics.spend_minor // months,
         discretionary_ratio=rfm.discretionary_ratio if rfm else 0.0,
     )
+
+
+def get_cash_flow_profile(
+    session: Session, customer_id: UUID, account_id: UUID, now: datetime
+) -> CashFlowProfile:
+    """Real income, spend and lifestyle share of one owned account, for recommendations."""
+    _account, owned, metrics = _health_inputs(session, customer_id, account_id, now)
+    return _cash_flow(session, customer_id, owned, metrics, now)
+
+
+def get_health_and_cash_flow(
+    session: Session, customer_id: UUID, account_id: UUID, now: datetime
+) -> tuple[FinancialHealthScoreResponse, CashFlowProfile]:
+    """Both of the above from one ownership check and one pass over the entries (#343): the
+    recommendation context needs both, and computing them separately read everything twice."""
+    account, owned, metrics = _health_inputs(session, customer_id, account_id, now)
+    health = compute_financial_health_score(
+        account.id, account.currency, account.available_balance, metrics
+    )
+    return health, _cash_flow(session, customer_id, owned, metrics, now)
 
 
 def get_customer_segment(session: Session, customer_id: UUID) -> CustomerSegmentResponse:

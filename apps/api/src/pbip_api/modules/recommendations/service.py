@@ -86,8 +86,7 @@ def _context(
     if not accounts:
         return None
     primary = accounts[0]
-    health = analytics_service.get_financial_health_score(session, customer_id, primary.id, now)
-    cash = analytics_service.get_cash_flow_profile(session, customer_id, primary.id, now)
+    health, cash = analytics_service.get_health_and_cash_flow(session, customer_id, primary.id, now)
     return CustomerRecommendationContext(
         customer_id=customer_id,
         segment=_segment(session, customer_id),

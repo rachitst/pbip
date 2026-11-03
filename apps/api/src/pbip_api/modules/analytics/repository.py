@@ -358,7 +358,10 @@ DAYS_PER_MONTH = 30.0
 
 
 def extract_customer_rfm_features(
-    session: Session, customer_id: UUID, as_of: datetime
+    session: Session,
+    customer_id: UUID,
+    as_of: datetime,
+    account_ids: set[UUID] | None = None,
 ) -> CustomerRFMFeatures | None:
     """RFM and lifestyle features of a customer from POSTED, non-REVERSAL entries on their accounts.
 
@@ -366,12 +369,12 @@ def extract_customer_rfm_features(
     is neither spending nor income (the same rule as the health score). Returns None when the
     customer has no remaining entries: there is nothing to cluster, and a made-up "dormant" profile
     would not be a measurement.
+
+    ``account_ids`` are the customer's accounts when the caller has just read them (same query as
+    ``owned_account_ids``); otherwise they are read here.
     """
-    account_ids = list(
-        session.execute(
-            select(AccountHolder.account_id).where(AccountHolder.customer_id == customer_id)
-        ).scalars()
-    )
+    if account_ids is None:
+        account_ids = owned_account_ids(session, customer_id)
     if not account_ids:
         return None
     stmt = (
@@ -392,7 +395,7 @@ def extract_customer_rfm_features(
         )
         .order_by(TransactionEntry.created_at)
     )
-    owned = set(account_ids)
+    owned = account_ids
     rows = [
         row
         for row in session.execute(stmt).all()
