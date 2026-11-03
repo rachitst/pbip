@@ -102,7 +102,7 @@ const EVENT_KINDS = [
     page: "/accounts/:id",
     properties: () => ({
       search_scope: "TRANSACTIONS",
-      filter_count: Math.floor(Math.random() * 11),
+      filter_count: pick([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
     }),
   },
   { type: "product_clicked", page: "/", properties: () => ({ product_id: uuid4() }) },
