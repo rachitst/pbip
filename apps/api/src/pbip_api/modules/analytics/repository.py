@@ -436,18 +436,20 @@ def _rfm_from_rows(
 
 
 def extract_customer_rfm_features(
-    session: Session, customer_id: UUID, as_of: datetime
+    session: Session,
+    customer_id: UUID,
+    as_of: datetime,
+    account_ids: set[UUID] | None = None,
 ) -> CustomerRFMFeatures | None:
     """RFM and lifestyle features of a customer from POSTED, non-REVERSAL entries on their accounts.
 
     Returns None when the customer has no remaining entries: there is nothing to cluster, and a
     made-up "dormant" profile would not be a measurement.
+
+    ``account_ids`` are the customer's accounts when the caller has just read them (same query as
+    ``owned_account_ids``, #343); otherwise they are read here.
     """
-    owned = set(
-        session.execute(
-            select(AccountHolder.account_id).where(AccountHolder.customer_id == customer_id)
-        ).scalars()
-    )
+    owned = owned_account_ids(session, customer_id) if account_ids is None else account_ids
     if not owned:
         return None
     stmt = (
