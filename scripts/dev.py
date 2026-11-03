@@ -440,6 +440,20 @@ def cmd_fraud_champion(args: list[str]) -> int:
     return _run(["uv", "run", "python", "-m", "pbip_ml.fraud.promotion", "export-champion", *rest])
 
 
+def cmd_recommendation_model(args: list[str]) -> int:
+    """Train the simulated-uptake propensity model into ``models/recommendations`` (ADR-0049).
+
+    Seed 42, 3,000 simulated customers x 24 months; a few seconds of CPU. The model files are
+    written only if it beats rules-v1 on the simulated test months; ``report.json`` always is.
+    The API uses it when ``RECOMMENDATION_MODEL_DIR`` points there (docker-compose does), and
+    serves rules-v1 otherwise. Extra arguments go to the training CLI.
+    """
+    out = ROOT / "models" / "recommendations"
+    return _run(
+        ["uv", "run", "python", "-m", "pbip_ml.recommendations.train", "--out", str(out), *args]
+    )
+
+
 def cmd_notebooks(args: list[str]) -> int:
     """Execute ml/notebooks/*.ipynb head-to-tail and save outputs (``--check`` to only verify)."""
     return _run(["uv", "run", "python", "scripts/run_notebooks.py", *args])
@@ -923,6 +937,7 @@ COMMANDS = {
     "notebooks": "Execute the EDA notebooks head-to-tail (--check: verify only)",
     "datagen": "Generate + COPY-load the synthetic ML dataset (seed 42, 1,000 customers)",
     "fraud-model": "Train the fraud models into models/fraud (needed for FRAUD_SCORER=hybrid)",
+    "recommendation-model": "Train the simulated-uptake recommendation model (used if it wins)",
     "promote-model": "Measure the newest fraud run; promote it to MLflow 'champion' if it passes",
     "fraud-champion": "Export the MLflow 'champion' fraud model into models/fraud (for the API)",
     "dev-api": "Run FastAPI backend on :8000 with auto-reload",
