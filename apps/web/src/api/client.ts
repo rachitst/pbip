@@ -417,10 +417,12 @@ export const api = {
       body: JSON.stringify(body),
     }),
   /** Complete a PENDING_STEP_UP transfer. 200 with POSTED, or PENDING_REVIEW after the third
-   * wrong code (the server escalates); 422 for a wrong code; 409 if it is no longer waiting. */
-  stepUp: (transferId: string, code: string) =>
+   * wrong code (the server escalates); 422 for a wrong code; 409 if it is no longer waiting.
+   * One Idempotency-Key per prompt: a wrong code does not use it up, so retries keep it. */
+  stepUp: (transferId: string, code: string, idempotencyKey: string) =>
     apiFetch<TransferOut>(`/api/v1/transfers/${encodeURIComponent(transferId)}/step-up`, {
       method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify({ code }),
     }),
   loanProducts: () => apiFetch<LoanProductOut[]>("/api/v1/loans/products"),
@@ -517,9 +519,16 @@ export const api = {
   fraudDemoLab: () => apiFetch<DemoLabStatus>("/api/v1/fraud/demo-lab"),
   fraudAlert: (alertId: string) =>
     apiFetch<AlertDetail>(`/api/v1/fraud/alerts/${encodeURIComponent(alertId)}`),
-  decideAlert: (alertId: string, action: "RELEASE" | "REJECT", note: string) =>
+  /** A RELEASE moves money, so the decision is idempotent: one key per chosen action. */
+  decideAlert: (
+    alertId: string,
+    action: "RELEASE" | "REJECT",
+    note: string,
+    idempotencyKey: string,
+  ) =>
     apiFetch<undefined>(`/api/v1/fraud/alerts/${encodeURIComponent(alertId)}/decision`, {
       method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify({ action, note: note.trim() === "" ? null : note.trim() }),
     }),
   fraudStats: (days: number) => apiFetch<FraudStats>(`/api/v1/fraud/stats?days=${days}`),

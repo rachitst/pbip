@@ -478,6 +478,7 @@ def _begin_idempotent(
 ) -> tuple[UUID, ApplyResult | None]:
     """Claim the key. A concurrent duplicate BLOCKS on the unique index until the first commits
     (then replays its response) or rolls back (then runs itself)."""
+    ledger.discard_expired_idempotency_key(session, user_id, key)
     inserted = session.execute(
         pg_insert(IdempotencyKey)
         .values(

@@ -863,7 +863,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** RELEASE (false positive, posts the held transfer) or REJECT (confirmed fraud) */
+        /** RELEASE (false positive, posts the held transfer) or REJECT (confirmed fraud) (idempotent) */
         post: operations["decide_alert_api_v1_fraud_alerts__alert_id__decision_post"];
         delete?: never;
         options?: never;
@@ -1420,7 +1420,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Complete a flagged transfer with a TOTP code */
+        /** Complete a flagged transfer with a TOTP code (idempotent) */
         post: operations["confirm_step_up_api_v1_transfers__transfer_id__step_up_post"];
         delete?: never;
         options?: never;
@@ -6845,7 +6845,10 @@ export interface operations {
     decide_alert_api_v1_fraud_alerts__alert_id__decision_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Unique per logical request; retrying with the same key never duplicates. */
+                "Idempotency-Key": string;
+            };
             path: {
                 alert_id: string;
             };
@@ -8060,7 +8063,10 @@ export interface operations {
     confirm_step_up_api_v1_transfers__transfer_id__step_up_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Unique per logical request; retrying with the same key never duplicates. */
+                "Idempotency-Key": string;
+            };
             path: {
                 transfer_id: string;
             };
