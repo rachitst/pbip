@@ -13,6 +13,7 @@ from pbip_api.core.errors import register_error_handlers
 from pbip_api.core.logging import configure_logging
 from pbip_api.core.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
 from pbip_api.core.redis import get_redis
+from pbip_api.core.worker_metrics import MergedRegistry, read_worker_samples
 from pbip_api.modules.accounts.router import router as accounts_router
 from pbip_api.modules.analytics.router import router as analytics_router
 from pbip_api.modules.assistant.router import router as assistant_router
@@ -115,11 +116,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def metrics(redis_client: Redis = Depends(get_redis)) -> Response:
         """Prometheus scrape endpoint. Not proxied by nginx; internal Docker network only.
 
-        The worker computes PSI drift; this process exports it (ADR-0038). The lock keeps a
+        The worker computes PSI drift; this process exports it (ADR-0038). The worker's counters
+        and histograms are appended with ``source="worker"`` (ADR-0039). The lock keeps a
         concurrent scrape from seeing the gauge between its clear and its refresh."""
         with _METRICS_LOCK:
             publish_feature_psi(redis_client)
-            body = generate_latest()
+            body = generate_latest(MergedRegistry(read_worker_samples(redis_client)))
         return Response(body, media_type=CONTENT_TYPE_LATEST)
 
     return app
