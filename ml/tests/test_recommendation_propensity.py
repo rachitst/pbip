@@ -4,7 +4,6 @@ intact and promoted, and everything it produces says it was trained on simulated
 
 import json
 import math
-import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -336,16 +335,34 @@ def test_a_held_product_stays_excluded_under_the_model() -> None:
     assert FIXED_DEPOSIT_ID not in {r.product_id for r in recs}  # buffer 4 < 6-month top-up rule
 
 
-def test_scoring_six_products_costs_well_under_a_millisecond() -> None:
+def test_scoring_six_products_is_one_feature_pass_and_one_dot_product_each(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The request-path cost is fixed by construction, not timed (a CPU-time bound failed on a CI
+    runner; #362 precedent): each product score builds the feature vector once and evaluates one
+    logistic over exactly len(FEATURE_NAMES) terms, in pure Python with no I/O or NumPy."""
+    from pbip_ml.recommendations import propensity as module
+
     model = _model()
     ctx = _ctx()
-    samples = []
-    for _ in range(300):
-        started = time.process_time()
-        for pid in CATALOGUE_IDS:
-            model.score(pid, ctx)
-        samples.append(time.process_time() - started)
-    assert sorted(samples)[int(0.95 * len(samples))] < 0.002
+    built: list[int] = []
+    real_vector = module.feature_vector
+
+    def counting_vector(c: object) -> list[float]:
+        vector = real_vector(c)  # type: ignore[arg-type]  # same object the API passes
+        built.append(len(vector))
+        return vector
+
+    monkeypatch.setattr(module, "feature_vector", counting_vector)
+    exps: list[float] = []
+    real_exp = math.exp
+    monkeypatch.setattr(module.math, "exp", lambda z: exps.append(z) or real_exp(z))
+    for pid in CATALOGUE_IDS:
+        assert 0.0 < model.score(pid, ctx) < 1.0
+    assert built == [len(module.FEATURE_NAMES)] * len(CATALOGUE_IDS)
+    assert len(exps) == len(CATALOGUE_IDS)  # one logistic per product, no hidden extra work
+    for product in model.products.values():
+        assert len(product.coefficients) == len(module.FEATURE_NAMES)
 
 
 def test_probabilities_are_finite_for_extreme_inputs() -> None:
