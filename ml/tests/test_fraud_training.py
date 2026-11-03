@@ -1,8 +1,10 @@
 """TASK-029/030: time split, LightGBM and Isolation Forest on labelled synthetic data."""
 
+import json
 import time
 from pathlib import Path
 
+import mlflow
 import numpy as np
 import pandas as pd
 import pytest
@@ -136,3 +138,44 @@ def test_cli_run_writes_artifacts_and_logs_to_mlflow(
     assert report["hybrid"]["at_review"]["recall"] >= report["rules_only"]["at_review"]["recall"]
     run_id = log_to_mlflow(report, out, tmp_path / "mlruns", local_target(tmp_path / "mlruns"))
     assert run_id and any((tmp_path / "mlruns").rglob("lightgbm.txt"))
+    assert report["hybrid"]["params"]["model_version"] == train_cli.HYBRID_VERSION
+    assert report["lightgbm"]["params"]["learning_rate"] == t.LGBM_PARAMS["learning_rate"]
+    shap = report["lightgbm"]["shap_mean_abs_test"]  # TASK-084: SHAP summary in the logged report
+    assert list(shap) == sorted(shap, key=lambda f: -shap[f]) and set(shap) == set(t.MODEL_FEATURES)
+    assert all(v >= 0 for v in shap.values()) and max(shap.values()) > 0
+    logged = mlflow.MlflowClient(local_target(tmp_path / "mlruns").uri).get_run(run_id)
+    assert logged.data.params["model_version"] == train_cli.HYBRID_VERSION
+    assert any(k.startswith("shap_mean_abs_") for k in logged.data.metrics)
+
+
+def test_hybrid_version_is_not_the_one_of_the_v2_1_and_v2_2_models() -> None:
+    """TASK-084: both earlier models were served as ``-1``; a retrain must be told apart."""
+    assert train_cli.HYBRID_VERSION == "hybrid-lgbm-iforest-2"
+
+
+def test_lightgbm_params_override_is_used_and_recorded(
+    exported: Path, dataset: pd.DataFrame, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A tuning candidate (``--lgbm-params``) is what trains, and the report says so."""
+
+    def _local_only(local_dir: Path) -> TrackingTarget:  # never probe a shared server
+        target = local_target(local_dir)
+        mlflow.set_tracking_uri(target.uri)
+        return target
+
+    monkeypatch.setattr(train_cli, "configure_tracking", _local_only)
+    split = t.time_split(dataset)
+    shallow = {**t.LGBM_PARAMS, "max_depth": 2, "num_leaves": 3}
+    booster, _ = t.train_lightgbm(split, params=shallow)
+    assert booster.params["max_depth"] == 2 and booster.params["num_leaves"] == 3
+    default, _ = t.train_lightgbm(split)
+    x = t._xy(split.test)[0]
+    assert not np.array_equal(booster.predict(x), default.predict(x))
+    overrides = tmp_path / "params.json"
+    overrides.write_text('{"learning_rate": 0.1}', encoding="utf-8")
+    out = tmp_path / "models"
+    train_cli.main(["--data", str(exported), "--out", str(out), "--lgbm-params", str(overrides),
+                    "--mlflow-local-dir", str(tmp_path / "mlruns")])  # fmt: skip
+    report = json.loads((out / "report.json").read_text(encoding="utf-8"))
+    assert report["lightgbm"]["params"]["learning_rate"] == 0.1
+    assert report["lightgbm"]["params"]["num_leaves"] == t.LGBM_PARAMS["num_leaves"]

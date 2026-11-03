@@ -294,18 +294,18 @@ def test_real_artifacts_load_once_and_score_within_the_latency_budget(
     db: Session,
 ) -> None:
     engine = load_engine(settings.model_copy(update={"fraud_model_dir": str(model_dir)}))
-    assert engine is not None and engine.params.model_version == "hybrid-lgbm-iforest-1"
+    assert engine is not None and engine.params.model_version == "hybrid-lgbm-iforest-2"
     use_engine(engine)
     alice, _bob, payee = pair
     latencies = []
     first = send(client, alice, payee, 1_000)  # #251: an ordinary transfer to a 2-day-old payee
     first_event = event_for(db, first.json()["id"])
     assert first.json()["status"] == "POSTED", first_event.features
-    assert first_event.risk_score < 30 and first_event.model_version == "hybrid-lgbm-iforest-1"
+    assert first_event.risk_score < 30 and first_event.model_version == "hybrid-lgbm-iforest-2"
     for _ in range(24):
         response = send(client, alice, payee, 1_000)  # small: the daily limit never bites
         event = event_for(db, response.json()["id"])
-        assert event.model_version == "hybrid-lgbm-iforest-1", event.features.get("model_error")
+        assert event.model_version == "hybrid-lgbm-iforest-2", event.features.get("model_error")
         assert {"model_probability", "anomaly_score", "rule_points"} <= set(event.features)
         latencies.append(event.latency_ms)
     p95 = statistics.quantiles(latencies, n=20)[-1]
@@ -382,4 +382,4 @@ def test_champion_exported_from_the_registry_is_what_the_api_loads_at_startup(
         mlflow.set_tracking_uri(None)  # type: ignore[arg-type]  # None = unset (mlflow source)
     configured = settings.model_copy(update={"fraud_model_dir": str(served)})
     engine = create_app(configured).state.fraud_engine
-    assert engine is not None and engine.params.model_version == "hybrid-lgbm-iforest-1"
+    assert engine is not None and engine.params.model_version == "hybrid-lgbm-iforest-2"
