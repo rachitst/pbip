@@ -1,8 +1,11 @@
 """Test doubles, app builders and integration helpers (imported via pytest `pythonpath`)."""
 
+import importlib.util
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
+from types import ModuleType
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -13,6 +16,8 @@ from pbip_api.core.config import Settings
 from pbip_api.core.db import get_engine
 from pbip_api.core.redis import get_redis
 from pbip_api.main import create_app
+from pbip_api.modules.wealth import deposit_math
+from pbip_api.modules.wealth.schemas import WealthProductOut
 from sqlalchemy import Engine, text
 
 PASSWORD = "Correct-Horse-9!"
@@ -188,3 +193,46 @@ def month_start(now: datetime, months_back: int) -> datetime:
     """Midnight UTC on the 1st of the calendar month ``months_back`` months before ``now``'s."""
     index = now.year * 12 + now.month - 1 - months_back
     return datetime(index // 12, index % 12 + 1, 1, tzinfo=UTC)
+
+
+_VERSIONS = Path(__file__).resolve().parents[1] / "alembic" / "versions"
+
+
+def _wealth_migration() -> ModuleType:
+    path = next(_VERSIONS.glob("*_0018_wealth_catalogue_and_fixed_deposits.py"))
+    spec = importlib.util.spec_from_file_location("wealth_migration", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def seeded_catalogue() -> list[WealthProductOut]:
+    """The wealth catalogue exactly as migration 0018 seeds it, in the API's output shape."""
+    out = []
+    for row in _wealth_migration().PRODUCTS:
+        rate = row["annual_rate_bps"]
+        guaranteed = row["yield_basis"] == "GUARANTEED"
+        out.append(
+            WealthProductOut(
+                id=UUID(str(row["id"])),
+                code=row["code"],
+                product_type=row["product_type"],
+                name=row["name"],
+                description=row["description"],
+                risk_level=row["risk_level"],
+                yield_basis=row["yield_basis"],
+                annual_rate_bps=rate,
+                apy_bps=deposit_math.apy_bps(rate) if guaranteed else rate,
+                tenures_months=row["tenures_months"],
+                min_lock_in_months=row["min_lock_in_months"],
+                min_amount_minor=row["min_amount_minor"],
+                max_amount_minor=row["max_amount_minor"],
+                premature_closure_allowed=row["premature_penalty_bps"] is not None,
+                premature_penalty_bps=row["premature_penalty_bps"],
+                bookable=row["bookable"],
+                notes=row["notes"],
+                catalogue_version=row["catalogue_version"],
+            )
+        )
+    return out

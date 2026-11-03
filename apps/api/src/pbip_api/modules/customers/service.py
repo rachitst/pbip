@@ -82,6 +82,14 @@ def recommendation_age_band(session: Session, customer_id: UUID, today: date) ->
     return age_band(row.date_of_birth, today)
 
 
+def risk_profile(session: Session, customer_id: UUID) -> RiskProfileOut:
+    """The customer's own risk profile for other modules (TASK-105: assistant suggestions).
+
+    The caller passes the AUTHENTICATED customer's id; the band is read, never derived again.
+    """
+    return _risk_profile_out(session.get_one(Customer, customer_id))
+
+
 def _risk_profile_out(customer: Customer) -> RiskProfileOut:
     return RiskProfileOut(
         band=RiskBand(customer.risk_profile) if customer.risk_profile else None,
