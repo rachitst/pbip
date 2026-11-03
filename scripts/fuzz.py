@@ -392,17 +392,23 @@ def _fuzz_operations(
     identity: FuzzIdentity | None,
     headers: dict[str, str],
 ) -> tuple[_Tally, dict[str, str]]:
-    """Full passes over every operation and mode until at least ``min_cases`` were checked.
+    """Passes over every operation and mode until at least ``min_cases`` were checked.
 
-    A pass is never cut short: "across all endpoints" is part of the acceptance criteria, so the
-    case budget is a floor and every operation is fuzzed in every pass.
+    The first pass is never cut short: "across all endpoints" is part of the acceptance criteria,
+    so every operation is fuzzed in every mode at least once and the case budget is a floor.
+    Hypothesis yields fewer cases than asked for some operations, so the first pass can fall short;
+    top-up passes then size their batches to the shortfall and stop as soon as the floor is
+    reached, instead of running another full pass (#175: 984 cases for ``--cases 500``).
     """
     tally = _Tally(min_cases)
-    per_round = max(1, math.ceil(min_cases / (len(operations) * len(modes))))
+    slots = len(operations) * len(modes)
     unsatisfiable: dict[str, str] = {}
     cycle = 0
     while tally.executed < min_cases and cycle < MAX_CYCLES:
+        per_round = max(1, math.ceil((min_cases - tally.executed) / slots))
         for index, operation in enumerate(operations):
+            if cycle > 0 and tally.executed >= min_cases:
+                break  # a top-up pass: every operation was already fuzzed in the first pass
             if identity is not None:
                 headers = identity.ensure()
             for mode in modes:

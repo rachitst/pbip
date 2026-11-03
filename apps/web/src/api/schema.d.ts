@@ -5385,6 +5385,13 @@ export interface operations {
                     "application/json": components["schemas"]["AccountOut"];
                 };
             };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -5422,6 +5429,13 @@ export interface operations {
                     "application/pdf": unknown;
                     "text/csv": unknown;
                 };
+            };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -5471,6 +5485,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["EntriesPage"];
                 };
+            };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -5526,6 +5547,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RuntimeSettingOut"];
                 };
+            };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -5591,6 +5619,13 @@ export interface operations {
                     "application/json": components["schemas"]["LockoutStatusOut"];
                 };
             };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -5621,6 +5656,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["UnlockResultOut"];
                 };
+            };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -6278,6 +6320,13 @@ export interface operations {
                     "application/json": components["schemas"]["BillPaymentOut"];
                 };
             };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -6555,6 +6604,13 @@ export interface operations {
                     "application/json": components["schemas"]["DeviceOut"];
                 };
             };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -6831,6 +6887,13 @@ export interface operations {
                     "application/json": components["schemas"]["AlertDetail"];
                 };
             };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -6862,6 +6925,13 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7456,6 +7526,13 @@ export interface operations {
                     "application/json": components["schemas"]["LoanOut"];
                 };
             };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -7533,6 +7610,13 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7622,6 +7706,13 @@ export interface operations {
                     "application/json": components["schemas"]["PayeeOut"];
                 };
             };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -7646,6 +7737,13 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7686,6 +7784,13 @@ export interface operations {
                     "application/json": components["schemas"]["PayeeOut"];
                 };
             };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -7716,6 +7821,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PayeeVerificationOut"];
                 };
+            };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -7894,6 +8006,13 @@ export interface operations {
                     "application/json": components["schemas"]["ScheduledTransferOut"];
                 };
             };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -7924,6 +8043,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ScheduledTransferOut"];
                 };
+            };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -7956,6 +8082,13 @@ export interface operations {
                     "application/json": components["schemas"]["ScheduledTransferOut"];
                 };
             };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -7986,6 +8119,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ScheduledTransferOut"];
                 };
+            };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -8018,6 +8158,13 @@ export interface operations {
                     "application/json": components["schemas"]["ScheduledTransferOut"];
                 };
             };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -8048,6 +8195,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TransferOut"];
                 };
+            };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -8086,6 +8240,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TransferOut"];
                 };
+            };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -8205,6 +8366,13 @@ export interface operations {
                     "application/json": components["schemas"]["FixedDepositOut"];
                 };
             };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -8238,6 +8406,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["FixedDepositOut"];
                 };
+            };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Already closed */
             409: {

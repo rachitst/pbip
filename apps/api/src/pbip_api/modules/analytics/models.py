@@ -1,7 +1,7 @@
 """Analytics models: pre-aggregated monthly spending and category totals."""
 
 from datetime import datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import (
     BigInteger,
@@ -14,10 +14,12 @@ from sqlalchemy import (
     SmallInteger,
     String,
     UniqueConstraint,
+    func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from pbip_api.core.db import Base, created_at_col, utcnow, uuid_pk
+from pbip_api.core.db import Base, created_at_col, utcnow
 
 
 class MonthlyCategorySpending(Base):
@@ -44,18 +46,27 @@ class MonthlyCategorySpending(Base):
         CheckConstraint("transaction_count >= 0", name="transaction_count_non_negative"),
     )
 
-    id: Mapped[UUID] = uuid_pk()
+    # Migrations 0003/0004 gave this PK no server default; ids always come from Python.
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     account_id: Mapped[UUID] = mapped_column(
         ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False
     )
     year: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     month: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     category: Mapped[str] = mapped_column(String(32), nullable=False)
-    total_amount_minor: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
-    transaction_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_amount_minor: Mapped[int] = mapped_column(
+        BigInteger, default=0, server_default=text("0"), nullable=False
+    )
+    transaction_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
     created_at: Mapped[datetime] = created_at_col()
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        server_default=func.now(),
+        nullable=False,
     )
 
 
@@ -87,7 +98,8 @@ class CustomerSegment(Base):
         ),
     )
 
-    id: Mapped[UUID] = uuid_pk()
+    # Migrations 0003/0004 gave this PK no server default; ids always come from Python.
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     customer_id: Mapped[UUID] = mapped_column(
         ForeignKey("customers.id", ondelete="CASCADE"), nullable=False
     )
@@ -101,5 +113,9 @@ class CustomerSegment(Base):
     explanation: Mapped[str] = mapped_column(String(512), nullable=False)
     created_at: Mapped[datetime] = created_at_col()
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        server_default=func.now(),
+        nullable=False,
     )

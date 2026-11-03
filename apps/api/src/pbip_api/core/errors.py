@@ -10,6 +10,7 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute, APIRouter
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from pbip_api.core.metrics import UNHANDLED_ERRORS_TOTAL
@@ -144,6 +145,25 @@ async def _unhandled_error_handler(request: Request, exc: Exception) -> JSONResp
     )
     UNHANDLED_ERRORS_TOTAL.labels(route, error_type).inc()
     return problem(request, 500, "internal_error", "Internal server error")
+
+
+NOT_FOUND_DESCRIPTION = (
+    "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+)
+
+
+def document_not_found_responses(router: APIRouter) -> None:
+    """Document 404 on every route of ``router`` with a path parameter, unless it has its own.
+
+    Every such route looks its resource up (through a policy function for customer data), and both
+    "missing" and "not yours" answer 404, but the contract did not say so (#175). Call it before
+    the router is included: FastAPI reads ``route.responses`` when it builds the schema.
+    """
+    for route in router.routes:
+        if not isinstance(route, APIRoute) or not route.dependant.path_params:
+            continue
+        if 404 not in route.responses and "404" not in route.responses:
+            route.responses[404] = {"description": NOT_FOUND_DESCRIPTION}
 
 
 def register_error_handlers(app: FastAPI) -> None:

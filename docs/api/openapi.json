@@ -7886,6 +7886,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -7963,6 +7966,9 @@
               "text/csv": {}
             },
             "description": "The statement file (attachment)"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "422": {
             "content": {
@@ -8173,6 +8179,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -8254,6 +8263,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "422": {
             "content": {
@@ -8349,6 +8361,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -8396,6 +8411,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "422": {
             "content": {
@@ -9478,6 +9496,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -9968,6 +9989,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -10395,6 +10419,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -10459,6 +10486,9 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "422": {
             "content": {
@@ -11390,6 +11420,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -11529,6 +11562,9 @@
           "204": {
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -11644,6 +11680,9 @@
           "204": {
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -11689,6 +11728,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "422": {
             "content": {
@@ -11746,6 +11788,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -11793,6 +11838,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "422": {
             "content": {
@@ -12114,6 +12162,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -12159,6 +12210,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "422": {
             "content": {
@@ -12208,6 +12262,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -12255,6 +12312,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "422": {
             "content": {
@@ -12304,6 +12364,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -12351,6 +12414,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "422": {
             "content": {
@@ -12423,6 +12489,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "422": {
             "content": {
@@ -12603,6 +12672,9 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -12664,6 +12736,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
           },
           "409": {
             "description": "Already closed"

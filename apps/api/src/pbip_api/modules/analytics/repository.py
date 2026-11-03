@@ -4,12 +4,17 @@ The ledger is read through its models only (no ledger internals are called) and 
 the only table this module writes is ``monthly_category_spending``.
 """
 
+from collections import defaultdict
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from itertools import groupby
+from operator import itemgetter
+from typing import Any
 from uuid import UUID
 
 from pbip_ml.segmentation.contract import CustomerRFMFeatures, SegmentAssignment
-from sqlalchemy import case, delete, func, select
+from sqlalchemy import ColumnElement, case, delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, aliased
 
@@ -151,12 +156,30 @@ def month_window(year: int, month: int) -> tuple[datetime, datetime]:
     return start, end
 
 
+@dataclass(frozen=True, slots=True)
+class CategorySpend:
+    """One category's spend in an account-month: a plain value, never an ORM object.
+
+    The read path computes these from the ledger for the running month; returning detached
+    ``MonthlyCategorySpending`` instances instead meant a later ``session.add`` of one would turn
+    a GET into a write (#175).
+    """
+
+    category: str
+    total_amount_minor: int
+    transaction_count: int
+
+
 def get_preaggregated_monthly_spending(
     session: Session, account_id: UUID, year: int, month: int
-) -> list[MonthlyCategorySpending]:
+) -> list[CategorySpend]:
     """Stored per-category spend for an account-month, largest category first."""
     stmt = (
-        select(MonthlyCategorySpending)
+        select(
+            MonthlyCategorySpending.category,
+            MonthlyCategorySpending.total_amount_minor,
+            MonthlyCategorySpending.transaction_count,
+        )
         .where(
             MonthlyCategorySpending.account_id == account_id,
             MonthlyCategorySpending.year == year,
@@ -164,12 +187,15 @@ def get_preaggregated_monthly_spending(
         )
         .order_by(MonthlyCategorySpending.total_amount_minor.desc())
     )
-    return list(session.execute(stmt).scalars().all())
+    return [
+        CategorySpend(category, int(total), int(count))
+        for category, total, count in session.execute(stmt).all()
+    ]
 
 
 def compute_monthly_spending_from_entries(
     session: Session, account_id: UUID, year: int, month: int
-) -> list[MonthlyCategorySpending]:
+) -> list[CategorySpend]:
     """Per-category spend of an account-month computed from the immutable ledger entries.
 
     Spend is every DEBIT entry of a POSTED transaction that is not itself a REVERSAL:
@@ -193,20 +219,12 @@ def compute_monthly_spending_from_entries(
     totals: dict[str, int] = {}
     counts: dict[str, int] = {}
     for amount, reference, tx_type in session.execute(stmt).all():
-        category = categorize_transaction(reference, str(tx_type) if tx_type else None)
+        category = categorize_transaction(reference, str(tx_type))
         totals[category] = totals.get(category, 0) + int(amount)
         counts[category] = counts.get(category, 0) + 1
 
     records = [
-        MonthlyCategorySpending(
-            account_id=account_id,
-            year=year,
-            month=month,
-            category=category,
-            total_amount_minor=total,
-            transaction_count=counts[category],
-        )
-        for category, total in totals.items()
+        CategorySpend(category, total, counts[category]) for category, total in totals.items()
     ]
     records.sort(key=lambda r: r.total_amount_minor, reverse=True)
     return records
@@ -309,7 +327,7 @@ def upsert_monthly_aggregates(
     account_id: UUID,
     year: int,
     month: int,
-    records: list[MonthlyCategorySpending],
+    records: list[CategorySpend],
 ) -> None:
     """Make the stored rows of one account-month equal to ``records``.
 
@@ -355,56 +373,48 @@ def upsert_monthly_aggregates(
 
 DISCRETIONARY_CATEGORIES = frozenset({"dining", "shopping", "entertainment", "travel"})
 DAYS_PER_MONTH = 30.0
+RFM_STREAM_BATCH = 10_000  # rows fetched per round trip by the segmentation pass
 
 
-def extract_customer_rfm_features(
-    session: Session,
+def _rfm_entry_columns() -> tuple[Any, ...]:
+    # Any: a heterogeneous tuple of mapped columns (amount, direction, timestamp, text, ids).
+    return (
+        TransactionEntry.amount,
+        TransactionEntry.direction,
+        TransactionEntry.created_at,
+        Transaction.reference,
+        Transaction.type,
+        Transaction.debit_account_id,
+        Transaction.credit_account_id,
+    )
+
+
+def _rfm_entry_filters() -> tuple[ColumnElement[bool], ...]:
+    return (
+        Transaction.status == TransactionStatus.POSTED,
+        Transaction.type.not_in(NOT_ACTIVITY_TYPES),
+    )
+
+
+def _rfm_from_rows(
     customer_id: UUID,
+    rows: Iterable[Sequence[Any]],  # Any: the columns of _rfm_entry_columns
+    owned: set[UUID],
     as_of: datetime,
-    account_ids: set[UUID] | None = None,
 ) -> CustomerRFMFeatures | None:
-    """RFM and lifestyle features of a customer from POSTED, non-REVERSAL entries on their accounts.
+    """Aggregate one customer's entries (oldest first) into RFM features; None when none count.
 
     Transfers between two of the customer's own accounts are skipped: moving money between pockets
-    is neither spending nor income (the same rule as the health score). Returns None when the
-    customer has no remaining entries: there is nothing to cluster, and a made-up "dormant" profile
-    would not be a measurement.
-
-    ``account_ids`` are the customer's accounts when the caller has just read them (same query as
-    ``owned_account_ids``); otherwise they are read here.
+    is neither spending nor income (the same rule as the health score).
     """
-    if account_ids is None:
-        account_ids = owned_account_ids(session, customer_id)
-    if not account_ids:
-        return None
-    stmt = (
-        select(
-            TransactionEntry.amount,
-            TransactionEntry.direction,
-            TransactionEntry.created_at,
-            Transaction.reference,
-            Transaction.type,
-            Transaction.debit_account_id,
-            Transaction.credit_account_id,
-        )
-        .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
-        .where(
-            TransactionEntry.account_id.in_(account_ids),
-            Transaction.status == TransactionStatus.POSTED,
-            Transaction.type.not_in(NOT_ACTIVITY_TYPES),
-        )
-        .order_by(TransactionEntry.created_at)
-    )
-    owned = account_ids
-    rows = [
-        row
-        for row in session.execute(stmt).all()
-        if not (row.debit_account_id in owned and row.credit_account_id in owned)
-    ]
-    if not rows:
-        return None
     credits = debits = debit_count = discretionary = 0
-    for amount, direction, _created_at, reference, tx_type, _debit, _credit in rows:
+    first: datetime | None = None
+    last: datetime | None = None
+    for amount, direction, created_at, reference, tx_type, debit_account, credit_account in rows:
+        if debit_account in owned and credit_account in owned:
+            continue
+        first = first or created_at
+        last = created_at
         if direction == EntryDirection.CREDIT:
             credits += int(amount)
             continue
@@ -412,7 +422,8 @@ def extract_customer_rfm_features(
         debit_count += 1
         if categorize_transaction(reference, str(tx_type)) in DISCRETIONARY_CATEGORIES:
             discretionary += int(amount)
-    first, last = rows[0][2], rows[-1][2]
+    if first is None or last is None:
+        return None
     months = max((as_of - first).days / DAYS_PER_MONTH, 1.0)
     return CustomerRFMFeatures(
         customer_id=customer_id,
@@ -424,13 +435,62 @@ def extract_customer_rfm_features(
     )
 
 
+def extract_customer_rfm_features(
+    session: Session,
+    customer_id: UUID,
+    as_of: datetime,
+    account_ids: set[UUID] | None = None,
+) -> CustomerRFMFeatures | None:
+    """RFM and lifestyle features of a customer from POSTED, non-REVERSAL entries on their accounts.
+
+    Returns None when the customer has no remaining entries: there is nothing to cluster, and a
+    made-up "dormant" profile would not be a measurement.
+
+    ``account_ids`` are the customer's accounts when the caller has just read them (same query as
+    ``owned_account_ids``, #343); otherwise they are read here.
+    """
+    owned = owned_account_ids(session, customer_id) if account_ids is None else account_ids
+    if not owned:
+        return None
+    stmt = (
+        select(*_rfm_entry_columns())
+        .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
+        .where(TransactionEntry.account_id.in_(owned), *_rfm_entry_filters())
+        .order_by(TransactionEntry.created_at)
+    )
+    return _rfm_from_rows(customer_id, session.execute(stmt).all(), owned, as_of)
+
+
 def extract_all_customers_rfm_features(
     session: Session, as_of: datetime
 ) -> list[CustomerRFMFeatures]:
-    """Features of every customer that has ledger activity, in a stable order."""
-    customer_ids = session.execute(select(Customer.id).order_by(Customer.id)).scalars()
-    features = (extract_customer_rfm_features(session, cid, as_of) for cid in customer_ids)
-    return [f for f in features if f is not None]
+    """Features of every customer that has ledger activity, ordered by customer id.
+
+    Two queries per run, not two per customer (#175): the holdings, then every counted entry of
+    every held account in one pass ordered by holder, aggregated per customer while streaming. A
+    joint account's entries count once for each holder, exactly as in the per-customer function.
+    """
+    owned_by: defaultdict[UUID, set[UUID]] = defaultdict(set)
+    for customer_id, account_id in session.execute(
+        select(AccountHolder.customer_id, AccountHolder.account_id)
+    ).all():
+        owned_by[customer_id].add(account_id)
+    stmt = (
+        select(AccountHolder.customer_id, *_rfm_entry_columns())
+        .select_from(AccountHolder)
+        .join(TransactionEntry, TransactionEntry.account_id == AccountHolder.account_id)
+        .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
+        .where(*_rfm_entry_filters())
+        .order_by(AccountHolder.customer_id, TransactionEntry.created_at)
+        .execution_options(yield_per=RFM_STREAM_BATCH)
+    )
+    features: list[CustomerRFMFeatures] = []
+    for customer_id, group in groupby(session.execute(stmt), key=itemgetter(0)):
+        entries = (row[1:] for row in group)
+        rfm = _rfm_from_rows(customer_id, entries, owned_by[customer_id], as_of)
+        if rfm is not None:
+            features.append(rfm)
+    return features
 
 
 def get_customer_segment(session: Session, customer_id: UUID) -> CustomerSegment | None:
