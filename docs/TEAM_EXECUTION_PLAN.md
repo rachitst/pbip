@@ -3171,8 +3171,8 @@ decision in ADR-0015.
 ### TASK-105 - AI Assistant FAQ, Product Discovery and Investment Suggestion Tools
 
 - **Issue:** #188 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** AI Assistant & Security
-- **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Owner:** Rachit (`rachitst`)
+- **Start:** Mon 02 Nov | **Target deadline:** - | **Actual completion:** Tue 03 Nov (#335, 9697a39; migration 0024, threat T53. The FAQ quotes the effective limits from `runtime_config.effective_settings`, so an admin's runtime change is quoted, `test_the_faq_quotes_the_limits_an_admin_set_at_runtime`) | **Status:** Done | **Risk:** Unscheduled
 - **Depends on:** TASK-057 (#80, Rachit), TASK-054 (#77, Krishna), TASK-097 (#?, ?). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **Goal:** Assistant tools for the UC-08 examples not covered by TASK-057: FAQ and support, product discovery, 'suggest investment options'.

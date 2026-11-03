@@ -461,7 +461,8 @@ not an error. Tests: `tests/integration/test_events.py::test_events_partition_ro
 **`assistant_messages`** (0009, `api/modules/assistant/models.py`). FK `customer_id -> customers` `CASCADE`.
 CHECKs: `role IN ('user','assistant')`, `char_length(content) <= 2000`, `tool_name IS NULL OR tool_name IN
 ('get_account_summary','get_recent_transactions','get_spend','get_balance_forecast','get_loan_affordability',
-'get_unusual_expenses')` (the approved tool registry, AGENTS.md section 9; 0018 added the last one). Index `(customer_id, created_at)`.
+'get_unusual_expenses','get_faq_answer','list_products','get_investment_suggestions')` (the approved tool registry,
+AGENTS.md section 9; 0019 added `get_unusual_expenses` and 0024 the last three). Index `(customer_id, created_at)`.
 
 **`rm_interactions`** (0015, `api/modules/insights/models.py`,
 [ADR-0022](../adr/0022-rm-insights-detail-and-outreach-log.md)). FKs `customer_id -> customers` `CASCADE`,
@@ -534,6 +535,7 @@ fire on `TRUNCATE`; no `public` table has a TRUNCATE guard.
 | 0021 | `20261103_0021_rm_assignments.py` | `rm_assignments` (ADR-0032); downgrade drops the table and its assignment history (the changes stay in the audit chain) |
 | 0022 | `20261103_0022_fd_maturity_payout.py` | `fixed_deposits.payout_held_at`, its CHECK and `ix_fixed_deposits_status_maturity_date` (ADR-0029, issue #332). Number set at merge |
 | 0023 | `20261103_0023_runtime_settings.py` | `runtime_settings` (TASK-108, ADR-0031). Its downgrade drops any overrides; the environment values apply again |
+| 0024 | `20261102_0024_assistant_discovery_tools.py` | Widens the `assistant_messages.tool_name` CHECK for `get_faq_answer`, `list_products` and `get_investment_suggestions` (TASK-105); its downgrade clears only those names; no new table |
 
 Every migration has a downgrade; CI runs up, down, up and `alembic check`. One head is enforced by
 `tests/unit/test_migration_heads.py`.

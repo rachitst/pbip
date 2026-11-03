@@ -78,7 +78,7 @@ The use-case document lists six actors. Here is the support for each:
 | Fraud analyst | `FRAUD_ANALYST` | Alert queue and alert detail screens (`/staff/fraud`) with release/reject; telemetry API `GET /fraud/stats` | Implemented. The `/fraud/stats` telemetry is not charted in the UI; the security monitoring page `/staff/monitoring` (TASK-099) shows flagged events and alerts |
 | Compliance officer | `COMPLIANCE_OFFICER` | Audit-log API and web page with chain verification; exceptions and regulatory indicators (`/compliance/exceptions`, `/staff/compliance`, TASK-100, ADR-0027) | Implemented |
 | Banking administrator | `ADMIN` | Create staff users, inspect and clear lockouts, change the allow-listed runtime settings (`/staff/admin`, TASK-108, [ADR-0031](../adr/0031-runtime-configuration.md)); assign customers to RMs ([ADR-0032](../adr/0032-rm-customer-assignment.md)) | Implemented (no E2E journey for the admin screens yet) |
-| AI assistant | none; it acts as the customer | Read-only tools with the customer id injected server-side | Implemented (narrow scope; TASK-105 for FAQ, product discovery and investments) |
+| AI assistant | none; it acts as the customer | Read-only tools with the customer id injected server-side | Implemented (9 read-only tools, including FAQ, product discovery and investment suggestions: TASK-105, GitHub PR #335) |
 
 Every staff route requires both the role and a session that completed TOTP (`require_roles(..., mfa=True)`).
 
@@ -170,7 +170,7 @@ Across modules, code calls the other module's `service` or `policy` functions on
 | `insights` | Relationship-manager churn signals; staff route of the aggregate behavioural dashboard (queries in `analytics/behaviour.py`, ADR-0027); RM-to-customer assignment: RM insights are scoped per RM by `rm_assignments` and ADMIN sees all ([ADR-0032](../adr/0032-rm-customer-assignment.md)) | `/insights/customers`, `/insights/behaviour`, `/insights/customers/{id}/assignment`, `/insights/relationship-managers` | Partial |
 | `recommendations` | Rule-based product recommendations with reasons (`rules-v1`: a hand-weighted relevance formula, not a trained model; the score is not a probability) | `/recommendations` | Partial: customer carousel on `/accounts` (TASK-062, GitHub PR #328); age band from `customers.service.recommendation_age_band`, `unknown` without date of birth and consent (TASK-107); held products from the accounts, loans and wealth services (TASK-111, ADR-0030); no propensity model is trained (TASK-054, `docs/ml/recommendation-propensity-decision.md`) |
 | `loans` | Catalogue (3 products), EMI schedule, explainable eligibility; idempotent application with ledger disbursal, stored schedule and a repayment instruction on the scheduled transfers engine ([ADR-0024](../adr/0024-loan-disbursal-and-repayments.md)) | `/loans*` | Implemented (API and web) |
-| `assistant` | Read-only tool registry, rules-first router, Ollama adapter, guard, sanitiser, output filter, SSE | `/assistant/*` | Implemented (6 tools, including unusual expenses: TASK-110, GitHub PR #331). FAQ, product and investment tools Planned (TASK-105) |
+| `assistant` | Read-only tool registry, rules-first router, Ollama adapter, guard, sanitiser, output filter, SSE | `/assistant/*` | Implemented (9 tools, including unusual expenses: TASK-110, GitHub PR #331; FAQ, product discovery and investment suggestions: TASK-105, GitHub PR #335) |
 | `events` | Clickstream batch ingestion into monthly partitions | `/events/batch` | Implemented: the web app sends page visits and key interactions (TASK-112, GitHub PR #333); TASK-055 is still In Progress |
 | `runtime_config` | ADMIN runtime overrides of allow-listed business limits (daily limit, per-transfer limit, standing-order cap; bounded), read at each check by payments and bills; every change audited ([ADR-0031](../adr/0031-runtime-configuration.md)) | `/admin/settings*` | Implemented (API and web `/staff/admin`, TASK-108, GitHub PR #346) |
 | `compliance` | Hash-chained audit log read and verify; exceptions (blocked payments, lockouts, chain failures) with audited acknowledge/resolve and SLA indicators (ADR-0027) | `/compliance/audit-logs*`, `/compliance/exceptions*` | Implemented |
@@ -363,7 +363,9 @@ tool for the authenticated customer and writes the answer ([ADR-0018](../adr/001
 **Tools:** `get_account_summary`, `get_recent_transactions`, `get_spend`, `get_balance_forecast`,
 `get_loan_affordability` (amount optional: without one it suggests the largest eligible amount, FR-38), and
 `get_unusual_expenses(account, period)` (TASK-110: categories and single payments well above the customer's own
-3-month baseline; rule in `analytics/unusual.py`).
+3-month baseline; rule in `analytics/unusual.py`), `get_faq_answer(topic)` (curated FAQ-1; the limits it quotes are the
+effective runtime values), `list_products(category)` (loan and wealth catalogues) and `get_investment_suggestions()` (no
+arguments: the customer's risk band and the recommendation engine's eligible products) (TASK-105).
 
 The details and the adversarial suite are in [ai-assistant-security.md](../security/ai-assistant-security.md).
 

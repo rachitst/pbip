@@ -524,7 +524,8 @@ compare them, so that I can invest sensibly.*
 
 * ✓ The recommendation engine suggests a fixed deposit or an index-fund SIP only when income, savings ratio, buffer
   and balance qualify.
-* ✗ The suggestions use my risk tolerance.
+* ✓ The assistant's investment suggestions use my risk tolerance (TASK-105, #335). ✗ The `/recommendations`
+  ranking does not use it yet.
 * ✓ A wealth catalogue lists FDs, funds and a sovereign gold bond with tenure, APY and lock-in, filterable by risk
   level; funds state no yield because PBIP has no market data (TASK-063, ADR-0025).
 * ✓ I can book a fixed deposit from my account with an exact maturity preview, see it with a maturity countdown in
@@ -593,22 +594,37 @@ unusual expenses.*
 
 **Acceptance criteria:**
 
-* ✗ The read-only tools `get_faq_answer`, `list_products` and `get_investment_suggestions` exist.
-* ✗ Investment suggestions use my risk profile.
+* ✓ The read-only tools `get_faq_answer`, `list_products` and `get_investment_suggestions` exist, with bounded enum
+  arguments or none, and no identity argument (TASK-105, #335). FAQ answers come from a curated, versioned source
+  (FAQ-1) whose figures are read from the code and the effective runtime limits.
+* ✓ Investment suggestions use my risk profile and the recommendation engine's output; without an assessed profile
+  the assistant says so.
+* ✓ Adversarial tests cover the new tools: injection in a catalogue name, identity injected by the model,
+  cross-customer probes, SQL and override text.
 * ✓ "Show unusual expenses" (FR-39) lists, for this or last month, the categories at least 1.5x my average month of
   the previous three and the single payments at least 3x my usual (median) payment in that category, each at least
   INR 1,000 above usual and each with the figures that make it unusual. Merchant names are quoted data, stripped and
   capped. Rule: `analytics/unusual.py`.
 
-**Status:** Partial. Unusual expenses are done (TASK-110); the FAQ, product and investment tools are TASK-105.
+**Status:** Implemented (#331, #335). The FAQ has 8 topics; suggestions are limited to the engine's fixed deposit and
+index-fund SIP; `list_products` does not list insurance.
 
 **Tests:** `unit/test_unusual_expenses.py`; `integration/test_assistant.py`:
 `test_unusual_expenses_lists_exactly_the_items_outside_the_own_baseline`,
 `test_unusual_expenses_when_nothing_stands_out_or_history_is_short`; `integration/test_assistant_adversarial.py`:
 `test_injection_in_a_merchant_name_stays_quoted_data_and_selects_nothing`,
-`test_cross_customer_unusual_expense_probes_never_return_the_victims_items`.
+`test_cross_customer_unusual_expense_probes_never_return_the_victims_items`,
+`test_injection_in_a_product_name_stays_quoted_data_and_selects_nothing`,
+`test_a_model_cannot_inject_identity_or_free_text_into_the_new_tools`,
+`test_cross_customer_investment_probes_never_return_the_victims_profile`,
+`test_sql_and_override_text_around_the_discovery_intents_is_refused`; `integration/test_assistant.py`:
+`test_investment_suggestions_need_an_assessed_risk_profile`,
+`test_investment_suggestions_follow_the_risk_band_and_the_engine_reasons`,
+`test_products_are_listed_from_the_real_catalogues_with_their_exact_rates`,
+`test_the_faq_quotes_the_limits_an_admin_set_at_runtime`; `unit/test_assistant_faq.py`,
+`unit/test_assistant_discovery.py`, `unit/test_assistant_routing.py::test_registry_is_exactly_the_approved_read_only_tools`.
 
-**Tasks:** TASK-110 (#284, Done #331); TASK-105 (Todo).
+**Tasks:** TASK-110 (#284, Done #331); TASK-105 (#188, Done #335).
 
 ### US-26 Trust that the assistant cannot be abused (FR-41)
 
@@ -933,6 +949,6 @@ redeployment and without exposing secrets or security settings.*
 
 | Status | Stories |
 |---|---|
-| Implemented | US-02, US-03, US-05, US-09, US-10, US-17, US-18, US-24, US-26, US-28, US-29, US-31, US-34, US-35, US-36, US-37 |
-| Partial | US-01, US-04, US-06, US-07, US-11, US-13, US-14, US-19, US-20, US-23, US-25, US-27, US-30, US-32, US-33 |
+| Implemented | US-02, US-03, US-05, US-09, US-10, US-17, US-18, US-24, US-26, US-28, US-29, US-31, US-25, US-34, US-35, US-36, US-37 |
+| Partial | US-01, US-04, US-06, US-07, US-11, US-13, US-14, US-19, US-20, US-23, US-27, US-30, US-32, US-33 |
 | Planned | US-08, US-12, US-15, US-16, US-21, US-22 |
