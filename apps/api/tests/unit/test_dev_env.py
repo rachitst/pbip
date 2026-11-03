@@ -222,6 +222,7 @@ def test_env_example_uses_the_address_compose_publishes_on() -> None:
         (5432, "DATABASE_URL"),
         (5432, "TEST_DATABASE_URL"),
         (6379, "REDIS_URL"),
+        (4318, "OTEL_EXPORTER_OTLP_ENDPOINT"),
     ):
         assert f'"127.0.0.1:{port}:{port}"' in compose
         assert urlparse(example[key]).hostname == "127.0.0.1", key
@@ -236,6 +237,23 @@ def test_compose_passes_the_fraud_model_budget_to_the_api_and_worker() -> None:
     for service in ("api", "worker"):
         block = compose.split(f"\n  {service}:\n", 1)[1].split("\n\n", 1)[0]
         assert "environment: *api-env" in block, service
+
+
+def test_the_otel_collector_is_optional_pinned_and_reached_through_the_shared_environment() -> None:
+    """Issue #209 (ADR-0049): the collector starts only with `--profile otel`, is pinned by version
+    and digest, and the api/worker/beat environment passes the tracing switches (off by default)."""
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    collector = compose["services"]["otel-collector"]
+    assert collector["profiles"] == ["otel"]
+    assert collector["image"].startswith("otel/opentelemetry-collector:0.")
+    assert "@sha256:" in collector["image"]
+    assert collector["ports"] == ["127.0.0.1:4318:4318"]
+    shared = compose["x-api-env"]
+    assert shared["OTEL_ENABLED"] == "${OTEL_ENABLED:-false}"
+    assert shared["OTEL_EXPORTER"] == "${OTEL_EXPORTER:-none}"
+    assert shared["OTEL_EXPORTER_OTLP_ENDPOINT"].endswith(":-http://otel-collector:4318}")
+    for service in ("api", "worker", "beat"):
+        assert "OTEL_ENABLED" in compose["services"][service]["environment"], service
 
 
 def test_long_running_compose_services_restart_after_a_reboot() -> None:

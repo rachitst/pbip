@@ -1,5 +1,6 @@
 # ADR 0017: OpenTelemetry distributed tracing (spike)
-- Status: Accepted (spike: tracing is off by default; no collector is deployed)
+- Status: Accepted (spike: tracing is off by default; no collector is deployed). Roadmap items 1, 3 and 4 (OTLP
+  export, Celery, Redis) are implemented by ADR-0049.
 - Date: 2026-10-31
 - Deciders: Architecture Team (TASK-085, Platform & DevOps)
 
