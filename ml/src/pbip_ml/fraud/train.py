@@ -38,8 +38,9 @@ from pbip_ml.tracking import (
 
 EXPERIMENT = "pbip-fraud"
 # 1: generator v2.1 and v2.2 models (both served as -1; tell them apart by the MLflow run and the
-# registry version in champion.json). 2: generator v2.3 (#276), TASK-084 retrain.
-HYBRID_VERSION = "hybrid-lgbm-iforest-2"
+# registry version in champion.json). 2: generator v2.3 (#276), TASK-084 retrain (never served).
+# 3: calibration on out-of-time folds and the stack's regularisation (#396, ADR-0047).
+HYBRID_VERSION = "hybrid-lgbm-iforest-3"
 
 
 def load_export(directory: Path) -> pd.DataFrame:
@@ -110,7 +111,8 @@ def run(
         ).as_dict()
 
     rules = default_registry()
-    params = h.fit_params(split.validation, booster, anomaly, rules, HYBRID_VERSION)
+    out_of_time = t.out_of_time_scores(split, booster.best_iteration, params_used)
+    params = h.fit_params(split.validation, booster, anomaly, rules, HYBRID_VERSION, out_of_time)
     full = h.HybridScorer(params, booster, anomaly, rules)
     rules_only = h.HybridScorer(params, None, None, rules)
     for name, scorer in (("hybrid", full), ("rules_only", rules_only)):
@@ -126,6 +128,12 @@ def run(
     report["hybrid"]["params"] = json.loads(params.to_json()) | {
         "calibration_x": f"{len(params.calibration_x)} points",
         "calibration_y": f"{len(params.calibration_y)} points",
+    }
+    report["hybrid"]["calibration"] = {  # #396: what the calibration rests on
+        "folds": t.CALIBRATION_FOLDS,
+        "rows": len(out_of_time[1]) + len(split.validation),
+        "positives": int(out_of_time[1].sum() + split.validation["label"].sum()),
+        "validation_positives": int(split.validation["label"].sum()),
     }
 
     out.mkdir(parents=True, exist_ok=True)
