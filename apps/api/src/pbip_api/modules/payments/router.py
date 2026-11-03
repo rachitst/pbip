@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.db import get_session
-from pbip_api.core.geoip import CountryResolver
+from pbip_api.core.geoip import CountryResolver, LocationResolver
 from pbip_api.core.redis import get_redis
 from pbip_api.core.velocity import VelocityCounters
 from pbip_api.modules.auth.dependencies import (
@@ -21,7 +21,11 @@ from pbip_api.modules.auth.dependencies import (
 from pbip_api.modules.auth.service import AuthService, RequestMeta
 from pbip_api.modules.customers.dependencies import get_current_customer
 from pbip_api.modules.customers.models import Customer
-from pbip_api.modules.fraud.dependencies import get_country_resolver, get_fraud_scorer
+from pbip_api.modules.fraud.dependencies import (
+    get_country_resolver,
+    get_fraud_scorer,
+    get_location_resolver,
+)
 from pbip_api.modules.fraud.signals import device_uuid
 from pbip_api.modules.payments.models import ScheduledTransferStatus
 from pbip_api.modules.payments.schemas import (
@@ -55,9 +59,10 @@ def get_payments_service(
     auth: AuthService = Depends(get_auth_service),
     countries: CountryResolver = Depends(get_country_resolver),
     redis_client: Redis = Depends(get_redis),
+    locations: LocationResolver = Depends(get_location_resolver),
 ) -> PaymentsService:
     return PaymentsService(
-        session, settings, scorer, auth, countries, VelocityCounters(redis_client)
+        session, settings, scorer, auth, countries, VelocityCounters(redis_client), locations
     )
 
 
