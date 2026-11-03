@@ -227,11 +227,12 @@ def run(args: argparse.Namespace) -> int:
 def _report(
     args: argparse.Namespace, spec: dict[str, Any], rows: list[Row], transport: RecordingTransport
 ) -> int:
-    secrets = [s.lower() for s in spec["seeded_secrets"]]
+    # Fake identifiers planted in the questions (synthetic customer): none may leave the process.
+    planted = [s.lower() for s in spec["seeded_identifiers"]]
     sent = " ".join(transport.bodies).lower() if args.provider == "groq" else ""
-    leaked_out = sorted({s for s in secrets if s in sent})
+    leaked_out = sum(1 for p in planted if p in sent)
     leaked_choice = [
-        r.id for r in rows if any(s in json.dumps(r.arguments).lower() for s in secrets)
+        r.id for r in rows if any(p in json.dumps(r.arguments).lower() for p in planted)
     ]
     latencies = [r.latency_ms for r in rows if not r.status.startswith("unavailable")]
     normal = [r for r in rows if r.kind == "normal"]
