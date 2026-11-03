@@ -4,6 +4,8 @@ name: Performance
 # (HTTPS through nginx, hybrid fraud scorer on). Results are uploaded as an artifact with the runner's
 # hardware; any crossed threshold or broken money invariant fails the job. Not a PR gate (it needs
 # ~15 minutes): nightly, on demand, and on pushes to main that touch the API, web app or this suite.
+# The API runs as API_REPLICAS processes, two like production (ADR-0045): one uvicorn process is
+# bound to one core, and at this load it saturated on the slower runner CPUs (docs/testing).
 on:
   schedule:
     - cron: "30 1 * * *"
@@ -11,6 +13,7 @@ on:
     inputs:
       vus: { description: "k6 virtual users", default: "50" }
       duration: { description: "k6 steady-state duration", default: "2m" }
+      api_replicas: { description: "API processes (production runs 2)", default: "2" }
   push:
     branches: [main]
     paths: ["apps/**", "infra/k6/**", "infra/nginx/**", "docker-compose.yml", ".github/workflows/perf.yml"]
@@ -29,6 +32,7 @@ env:
   VUS: ${{ inputs.vus || '50' }}
   DURATION: ${{ inputs.duration || '2m' }}
   LOAD_USERS: "100"
+  API_REPLICAS: ${{ inputs.api_replicas || '2' }}
 
 jobs:
   load:
@@ -67,8 +71,13 @@ jobs:
             echo "cpus: $(nproc)"; lscpu | grep -E 'Model name|Thread|Core' || true
             free -h | head -2
             echo "vus: $VUS duration: $DURATION users: $LOAD_USERS target: https://localhost:8443 (nginx TLS -> api)"
+            echo "api replicas: $(docker compose ps -q api | wc -l) (API_REPLICAS=$API_REPLICAS)"
             echo "commit: $GITHUB_SHA"
           } | tee perf-results/environment.txt
+      - name: Reset the query statistics and sample container CPU during the run
+        run: |
+          docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -qc "CREATE EXTENSION IF NOT EXISTS pg_stat_statements; SELECT pg_stat_statements_reset();"' > /dev/null
+          nohup sh -c 'while true; do date -u +%T; docker stats --no-stream --format "{{.Name}} {{.CPUPerc}} {{.MemUsage}}"; sleep 8; done' > perf-results/container-cpu.txt 2>&1 &
       - name: k6 load suite (thresholds = NFR budgets)
         env:
           BASE_URL: https://localhost:8443
@@ -77,14 +86,18 @@ jobs:
       - name: Money and concurrency invariants after the run
         if: always() && hashFiles('perf-results/invariants-before.json') != ''
         run: uv run python scripts/load_invariants.py check perf-results/invariants-before.json | tee perf-results/invariants-after.json
+      - name: Slowest statements under load (pg_stat_statements, TASK-079)
+        if: always() && hashFiles('perf-results/invariants-before.json') != ''
+        run: docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < infra/k6/top-statements.sql | tee perf-results/pg-stat-statements.txt
       - run: npm ci
         working-directory: apps/web
       - run: npx playwright install --with-deps chromium
         working-directory: apps/web
       - name: Page-load and login budgets (Playwright)
         working-directory: apps/web
-        env: { CI: "true" }
-        run: npx playwright test e2e/perf.spec.ts --reporter=list,json --output=../../perf-results/playwright > ../../perf-results/page-load.json
+        # The JSON report goes to its own file: on stdout it was mixed with the list reporter.
+        env: { CI: "true", PLAYWRIGHT_JSON_OUTPUT_NAME: ../../perf-results/page-load.json }
+        run: npx playwright test e2e/perf.spec.ts --reporter=list,json --output=../../perf-results/playwright
       - uses: actions/upload-artifact@v7
         if: always()
         with: { name: perf-results, path: perf-results }

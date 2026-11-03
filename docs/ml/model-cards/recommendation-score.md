@@ -7,6 +7,7 @@
 | Owner | `rachitst` (`.github/CODEOWNERS`, rule `*`) |
 | Tasks | TASK-054; ADR-0015 |
 | Decision record | [No trained propensity model yet](../recommendation-propensity-decision.md) (2026-11-03) |
+| Simulated-uptake model | [`sim-propensity-v1`](recommendation-propensity.md): trained and compared with this score on simulated uptake; not served (ADR-0049) |
 
 ## What it is
 

@@ -4,7 +4,11 @@ import { useNavigate } from "react-router";
 import { api } from "../api/client";
 import type { ProductRecommendationItem } from "../api/client";
 import { errorMessage } from "../lib/errors";
-import { productTypeLabel, recommendationAction } from "../lib/recommendations";
+import {
+  SIMULATED_ORDER_NOTE,
+  productTypeLabel,
+  recommendationAction,
+} from "../lib/recommendations";
 import { Button } from "../ui/Button";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 
@@ -51,6 +55,10 @@ export function ProductRecommendations({ onProductAction }: ProductRecommendatio
             />
           ))}
         </ul>
+      )}
+      {items.length > 0 && recommendations.data?.score_from_simulated_data === true && (
+        // ADR-0049: the order came from a model trained on simulated uptake; say so plainly.
+        <p className="muted">{SIMULATED_ORDER_NOTE}</p>
       )}
     </section>
   );

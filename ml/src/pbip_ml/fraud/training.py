@@ -176,6 +176,44 @@ def train_lightgbm(
     return booster, threshold
 
 
+CALIBRATION_FOLDS = 4
+
+
+def out_of_time_scores(
+    split: Split,
+    rounds: int,
+    params: Mapping[str, Any] | None = None,
+    folds: int = CALIBRATION_FOLDS,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Out-of-time LightGBM scores on the TRAINING period, for calibration (#396, ADR-0047).
+
+    Calibrating on the validation period alone saw ~40 positives with the 1,500-customer recipe,
+    so isotonic regression was a coarse step function. This cuts the training period into
+    ``folds`` chronological blocks; block k (k >= 1) is scored by a model trained on blocks
+    0..k-1 with the final model's params and number of trees (``rounds``). Every score therefore
+    comes from a model that never saw that row or anything after it, like the final model's
+    validation scores. Validation and test rows are never used here. Returns (scores, labels).
+    """
+    train = split.train.sort_values("occurred_at", kind="stable")
+    cuts = train["occurred_at"].quantile(np.linspace(0, 1, folds + 1)[1:-1]).tolist()
+    block = np.zeros(len(train), dtype=int)
+    for cut in cuts:
+        block += (train["occurred_at"] >= cut).to_numpy(dtype=int)
+    scores, labels = [], []
+    for k in range(1, folds):
+        x_past, y_past = _xy(train[block < k])
+        x_next, y_next = _xy(train[block == k])
+        positives = max(int(y_past.sum()), 1)
+        fold_params = {
+            **(LGBM_PARAMS if params is None else params),
+            "scale_pos_weight": (len(y_past) - positives) / positives,
+        }
+        model = lgb.train(fold_params, lgb.Dataset(x_past, y_past), num_boost_round=rounds)
+        scores.append(np.asarray(model.predict(x_next)))
+        labels.append(y_next)
+    return np.concatenate(scores), np.concatenate(labels)
+
+
 def train_isolation_forest(split: Split, seed: int = 42) -> AnomalyModel:
     normal = split.train[(split.train["label"] == 0) & (split.train["is_debit"] == 1)]
     x = normal[list(ANOMALY_FEATURES)]

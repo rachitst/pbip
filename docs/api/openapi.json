@@ -5458,7 +5458,7 @@
             "type": "array"
           },
           "score": {
-            "description": "Rule-based relevance, for ordering only; not a probability",
+            "description": "Ordering score. rules-v1: rule-based relevance, not a probability. sim-propensity-v1: probability of uptake next month under a SIMULATION of product uptake, not real customer behaviour (ADR-0049)",
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Score",
@@ -5543,7 +5543,7 @@
             "type": "string"
           },
           "model_version": {
-            "description": "Recommendation engine version",
+            "description": "Ordering version: rules-v1 or sim-propensity-v1 (ADR-0049)",
             "title": "Model Version",
             "type": "string"
           },
@@ -5554,11 +5554,23 @@
             },
             "title": "Recommendations",
             "type": "array"
+          },
+          "score_from_simulated_data": {
+            "description": "True when a model trained on SIMULATED product uptake ordered the list; its measured performance is on simulated data only",
+            "title": "Score From Simulated Data",
+            "type": "boolean"
+          },
+          "score_version": {
+            "description": "Human-readable label of what ordered the list, e.g. 'sim-propensity-v1 (trained on simulated uptake, not real customer behaviour)'",
+            "title": "Score Version",
+            "type": "string"
           }
         },
         "required": [
           "customer_id",
           "model_version",
+          "score_version",
+          "score_from_simulated_data",
           "evaluated_at"
         ],
         "title": "RecommendationsResponse",

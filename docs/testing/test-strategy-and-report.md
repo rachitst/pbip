@@ -306,7 +306,7 @@ The causes, from #371:
 | # | Criterion | Status | Evidence |
 |---|---|---|---|
 | 1 | Details test distribution: unit, integration, security tests and E2E journeys | **Met** | §2: CI counts per suite (851 / 798 / 15 / 225 / 60 / 375 / 21), the pyramid shares and the E2E journeys. The one gap is that CI does not report counts per `security` marker. |
-| 2 | Reports branch coverage across core modules (ledger ≥ 90%, auth ≥ 90%) | **Partly met** | §3.1. Branch coverage is reported per module. Ledger branches are 98.08%: **met**. Auth branches are **89.58% (86/96): below 90%**. Auth lines (97.55%) and combined coverage (96.53%) are above 90%, but the criterion asks for branch coverage. |
+| 2 | Reports branch coverage across core modules (ledger ≥ 90%, auth ≥ 90%) | **Met (after #410)** | §3.1. Branch coverage is reported per module. Ledger branches are 98.08%: **met**. Auth branches were **89.58% (86/96): below 90%** in run 41600683787. **Update (3 Nov):** #410 added 5 auth edge-case tests; in CI run 41689113122 (PR #407, merged as `fc4279a`) auth branches are **92/96 = 95.83%** and ledger branches 54/56 = 96.43% (total 96.71%), counted from that run's `coverage-xml` artifact the same way as §3.1. Auth lines (97.55%) and combined coverage (96.53%) are above 90%, but the criterion asks for branch coverage. |
 | 3 | Documents concurrency stress test outcomes and deadlock prevention proof | **Met** | §4: the lock-order design argument, 4 core concurrency tests and more than 20 others passing in CI, and 0 deadlocks and 0 invariant violations in 8 CI load runs and the laptop runs. The "proof" is a design argument checked by tests, not a formal proof. |
 
 **Definition of done:** this file is at the path the backlog names (`docs/testing/test-strategy-and-report.md`).
@@ -314,8 +314,7 @@ Peer review is pending on the PR.
 
 ## 11. Known gaps and follow-ups
 
-* Auth branch coverage is 89.58%, 1 branch short of 90% (87 of 96 would be 90.6%). The missed branches are listed
-  in §3.1.
+* ~~Auth branch coverage is 89.58%, 1 branch short of 90%.~~ Fixed by #410: 95.83% in CI run 41689113122.
 * The Performance job is red on `main`, depending on the runner hardware (§5.2).
 * `npm audit` reports 13 moderate advisories in build tooling (§6).
 * Windows-only test-environment failures (#371).
