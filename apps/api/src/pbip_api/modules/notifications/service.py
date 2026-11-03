@@ -1,16 +1,24 @@
 """Transactional outbox + in-app notifications."""
 
-from datetime import date, datetime
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select, text, update
+import structlog
+from sqlalchemy import delete, func, select, text, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from pbip_api.core.config import Settings
 from pbip_api.core.db import utcnow
 from pbip_api.core.money import format_minor
+from pbip_api.modules.compliance.service import AuditService
 from pbip_api.modules.notifications.models import Notification, OutboxEvent
 from pbip_api.modules.notifications.policy import get_owned_notification
+
+logger = structlog.get_logger(__name__)
 
 TRANSFER_POSTED = "TRANSFER_POSTED"
 TRANSFER_DECLINED = "TRANSFER_DECLINED"
@@ -380,13 +388,134 @@ def _notification(event: OutboxEvent) -> Notification | None:
     return None
 
 
-def relay_outbox(session: Session, batch_size: int = 100) -> int:
-    """Turn pending outbox events into notifications. Safe with several concurrent workers."""
+class NoOutboxHandlerError(LookupError):
+    """No handler is registered for the event type (for example a worker older than the API)."""
+
+
+OutboxHandler = Callable[[Session, OutboxEvent], None]
+
+
+def _deliver_in_app(session: Session, event: OutboxEvent) -> None:
+    """Write the event's in-app notification once: a re-delivered event inserts nothing.
+
+    ``ON CONFLICT DO NOTHING`` on ``notifications.outbox_event_id`` is the exactly-once guarantee;
+    it holds even if the event's ``processed_at`` is lost or reset (ADR-0040)."""
+    notification = _notification(event)
+    if notification is None:
+        raise NoOutboxHandlerError(event.event_type)
+    values = {
+        column.key: getattr(notification, column.key)
+        for column in Notification.__table__.columns
+        if getattr(notification, column.key) is not None
+    }
+    values["outbox_event_id"] = event.id
+    session.execute(
+        pg_insert(Notification)
+        .values(**values)
+        .on_conflict_do_nothing(index_elements=[Notification.outbox_event_id])
+    )
+
+
+_IN_APP_TYPES = (
+    _TRANSFER_TYPES
+    | _SCHEDULED_TRANSFER_TYPES
+    | set(_SECURITY_TEXT)
+    | {STATEMENT_DOWNLOADED, FIXED_DEPOSIT_PAYOUT_HELD}
+)
+# The dispatch handlers by event type (ADR-0040). In-app notifications are PBIP's only consumer;
+# there are no external webhooks.
+OUTBOX_HANDLERS: dict[str, OutboxHandler] = dict.fromkeys(_IN_APP_TYPES, _deliver_in_app)
+
+
+@dataclass(frozen=True)
+class RetryPolicy:
+    """Exponential backoff for failed deliveries. The defaults equal ``Settings``' (tested)."""
+
+    max_attempts: int = 6
+    base_seconds: int = 30
+    max_seconds: int = 3600
+
+    @classmethod
+    def from_settings(cls, settings: Settings) -> "RetryPolicy":
+        return cls(
+            max_attempts=settings.outbox_max_attempts,
+            base_seconds=settings.outbox_retry_base_seconds,
+            max_seconds=settings.outbox_retry_max_seconds,
+        )
+
+    def delay(self, failures: int) -> timedelta:
+        """Wait after the ``failures``-th failed attempt: base, 2 x base, 4 x base, ... capped."""
+        seconds = self.base_seconds * 2 ** min(max(failures - 1, 0), 30)
+        return timedelta(seconds=min(seconds, self.max_seconds))
+
+
+def _record_failure(
+    session: Session, event: OutboxEvent, error: Exception, now: datetime, policy: RetryPolicy
+) -> None:
+    """Schedule the next attempt, or dead-letter the event after the last one (audited)."""
+    event.attempts += 1
+    event.last_error = type(error).__name__[:100]
+    if event.attempts < policy.max_attempts:
+        event.next_attempt_at = now + policy.delay(event.attempts)
+        logger.warning(
+            "outbox_delivery_retry_scheduled",
+            event_id=str(event.id),
+            event_type=event.event_type,
+            attempts=event.attempts,
+            next_attempt_at=event.next_attempt_at.isoformat(),
+            error=event.last_error,
+        )
+        return
+    event.dead_lettered_at = now
+    logger.error(
+        "outbox_event_dead_lettered",
+        event_id=str(event.id),
+        event_type=event.event_type,
+        attempts=event.attempts,
+        error=event.last_error,
+    )
+    AuditService(session).record(
+        None,
+        "OUTBOX_EVENT_DEAD_LETTERED",
+        "outbox_event",
+        str(event.id),
+        details={
+            "actor": "scheduler",
+            "event_type": event.event_type,
+            "attempts": event.attempts,
+            "error": event.last_error,
+        },
+    )
+
+
+def relay_outbox(
+    session: Session,
+    batch_size: int = 100,
+    *,
+    now: datetime | None = None,
+    policy: RetryPolicy | None = None,
+    handlers: Mapping[str, OutboxHandler] | None = None,
+) -> int:
+    """Dispatch due outbox events and return how many were attempted; the caller commits.
+
+    Safe with several concurrent workers (``SKIP LOCKED``). Each event runs in its own savepoint:
+    a failing handler is rolled back alone, its event retried later with backoff, and the rest of
+    the batch still goes out. Deliveries and ``processed_at`` commit together in the caller's one
+    transaction, so a worker killed before the commit leaves every event pending and the next run
+    delivers it; ``_deliver_in_app`` is idempotent per event, so nothing is delivered twice.
+    """
+    moment = now or utcnow()
+    retry = policy or RetryPolicy()
+    registry = OUTBOX_HANDLERS if handlers is None else handlers
     events = (
         session.execute(
             select(OutboxEvent)
-            .where(OutboxEvent.processed_at.is_(None))
-            .order_by(OutboxEvent.created_at)
+            .where(
+                OutboxEvent.processed_at.is_(None),
+                OutboxEvent.dead_lettered_at.is_(None),
+                OutboxEvent.next_attempt_at <= moment,
+            )
+            .order_by(OutboxEvent.next_attempt_at, OutboxEvent.created_at)
             .limit(batch_size)
             .with_for_update(skip_locked=True)
         )
@@ -394,12 +523,35 @@ def relay_outbox(session: Session, batch_size: int = 100) -> int:
         .all()
     )
     for event in events:
-        notification = _notification(event)
-        if notification is not None:
-            session.add(notification)
-        event.processed_at = utcnow()
+        try:
+            with session.begin_nested():
+                handler = registry.get(event.event_type)
+                if handler is None:
+                    raise NoOutboxHandlerError(event.event_type)
+                handler(session, event)
+        except Exception as error:  # any handler failure is retried, never lost
+            _record_failure(session, event, error, moment, retry)
+            continue
+        event.processed_at = moment
     session.flush()
     return len(events)
+
+
+def delete_processed_events(session: Session, cutoff: datetime, limit: int) -> int:
+    """Delete up to ``limit`` events processed before ``cutoff`` and return how many; the caller
+    commits. Pending and dead-lettered events are never deleted (ADR-0040)."""
+    expired = (
+        select(OutboxEvent.id)
+        .where(OutboxEvent.processed_at < cutoff)
+        .order_by(OutboxEvent.processed_at)
+        .limit(limit)
+        .with_for_update(skip_locked=True)
+        .scalar_subquery()
+    )
+    result = session.execute(
+        delete(OutboxEvent).where(OutboxEvent.id.in_(expired)).returning(OutboxEvent.id)
+    )
+    return len(result.all())
 
 
 def list_notifications(

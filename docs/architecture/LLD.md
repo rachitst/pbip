@@ -397,17 +397,27 @@ authenticated customer id.
 ### 3.9 Notifications and outbox (`api/modules/notifications/models.py`)
 
 **`notifications`** (0001, link columns added in 0007)
-* Key columns: `type`, `title VARCHAR(140)`, `body`, `read_at`, `resource_type`, `resource_id`, `account_id`.
+* Key columns: `type`, `title VARCHAR(140)`, `body`, `read_at`, `resource_type`, `resource_id`, `account_id`,
+  `outbox_event_id` (0027).
 * FK `user_id -> users` `CASCADE`. `resource_id` and `account_id` are plain UUIDs without FKs (deep links only).
+* Unique `uq_notifications_outbox_event_id` (no FK: events are purged, the notification stays): one notification
+  per outbox event, inserted with `ON CONFLICT DO NOTHING` (ADR-0040).
 * CHECK `ck_notifications_resource_type_valid` `resource_type IS NULL OR resource_type IN ('transaction','security')`.
 * Index `ix_notifications_user_id_created_at`.
 
-**`outbox_events`** (0001)
-* Key columns: `event_type`, `payload JSONB`, `processed_at`. No FKs.
-* Partial index `ix_outbox_events_unprocessed` on `created_at WHERE processed_at IS NULL`.
+**`outbox_events`** (0001, retry columns added in 0027)
+* Key columns: `event_type`, `payload JSONB`, `processed_at`, `attempts`, `next_attempt_at`, `last_error`
+  (exception class name only), `dead_lettered_at`. No FKs.
+* CHECKs `ck_outbox_events_attempts_non_negative`, `ck_outbox_events_processed_or_dead_lettered`.
+* Partial indexes `ix_outbox_events_due` on `next_attempt_at WHERE processed_at IS NULL AND dead_lettered_at IS
+  NULL` (the poll) and `ix_outbox_events_processed_at` on `processed_at WHERE processed_at IS NOT NULL` (the purge).
 * Written by `notifications.enqueue` inside the business transaction; the Celery beat task `pbip.outbox.relay`
-  (every 10 s, `api/worker/celery_app.py`) runs `relay_outbox`, which claims rows with
-  `FOR UPDATE SKIP LOCKED`, inserts notifications and sets `processed_at`. Proven by
+  (every 10 s, `api/worker/celery_app.py`) runs `relay_outbox`, which claims due rows with
+  `FOR UPDATE SKIP LOCKED` and runs each event's handler (`OUTBOX_HANDLERS`) in a savepoint. Success sets
+  `processed_at`; a failure is retried with capped exponential backoff and dead-lettered (audited) after
+  `OUTBOX_MAX_ATTEMPTS`. `pbip.outbox.purge_processed` (daily, 04:30 UTC) deletes events processed more than
+  `OUTBOX_RETENTION_DAYS` ago (ADR-0040). Proven by `tests/integration/test_outbox_relay.py` (including a worker
+  SIGKILLed before its commit) and
   `tests/integration/test_audit_and_outbox.py::test_outbox_relay_creates_notifications_exactly_once_and_only_for_the_owner`.
 
 ### 3.10 Audit (`api/modules/compliance/models.py`, `compliance/service.py`)

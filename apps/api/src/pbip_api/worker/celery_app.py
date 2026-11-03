@@ -48,6 +48,11 @@ celery_app.conf.update(
             "task": "pbip.ledger.purge_expired_idempotency_keys",
             "schedule": crontab(hour=4, minute=15),
         },
+        # TASK-026 / ADR-0040: delete processed outbox events past OUTBOX_RETENTION_DAYS.
+        "purge-processed-outbox-events": {
+            "task": "pbip.outbox.purge_processed",
+            "schedule": crontab(hour=4, minute=30),
+        },
         # TASK-052 / ADR-0011: one nightly spending job (no second materialisation job).
         "materialize-monthly-spending": {
             "task": "pbip.analytics.materialize_monthly_spending",

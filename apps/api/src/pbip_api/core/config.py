@@ -130,6 +130,14 @@ class Settings(BaseSettings):
     scheduled_transfers_batch_size: int = Field(default=100, ge=1, le=1000)
     # Matured fixed deposits paid out per hourly run (ADR-0029).
     fd_maturity_payout_batch_size: int = Field(default=100, ge=1, le=1000)
+    # Outbox relay (TASK-026, ADR-0040): a failed delivery waits base * 2^(n-1) seconds (capped)
+    # before attempt n+1 and is dead-lettered after the last attempt; processed events are purged
+    # after the retention period, in batches, by a daily job.
+    outbox_max_attempts: int = Field(default=6, ge=1, le=20)
+    outbox_retry_base_seconds: int = Field(default=30, ge=1, le=3600)
+    outbox_retry_max_seconds: int = Field(default=3600, ge=1, le=86_400)
+    outbox_retention_days: int = Field(default=30, ge=1, le=3650)
+    outbox_purge_batch_size: int = Field(default=1000, ge=1, le=10_000)
     # Live (ACTIVE or PAUSED) standing orders one customer may hold (ADR-0023 R6).
     max_active_scheduled_transfers_per_customer: int = Field(default=20, ge=1, le=1000)
 
