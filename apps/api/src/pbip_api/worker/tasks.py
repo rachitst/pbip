@@ -66,3 +66,20 @@ def pay_out_matured_deposits_task() -> dict[str, int]:
     from pbip_api.modules.wealth.maturity_service import process_matured_deposits
 
     return process_matured_deposits()
+
+
+@celery_app.task(name="pbip.transfers.expire_stale_step_ups")
+def expire_stale_step_ups_task() -> dict[str, int]:
+    """Decline step-ups unanswered past the timeout (60s beat; ADR-0036). Idempotent: the user
+    lock and the re-checked row status make a re-delivered run skip what is already declined."""
+    from pbip_api.modules.payments.step_up_expiry import expire_stale_step_ups
+
+    return expire_stale_step_ups()
+
+
+@celery_app.task(name="pbip.ledger.purge_expired_idempotency_keys")
+def purge_expired_idempotency_keys_task() -> int:
+    """Delete expired idempotency keys (daily beat; ADR-0036). Idempotent: a re-run finds fewer."""
+    from pbip_api.modules.ledger.key_purge import purge_expired_keys
+
+    return purge_expired_keys()
