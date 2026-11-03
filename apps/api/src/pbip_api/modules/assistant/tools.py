@@ -20,6 +20,7 @@ from enum import StrEnum
 from typing import Literal
 from uuid import UUID
 
+from pbip_ml.recommendations import PRODUCT_CATALOGUE
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
@@ -29,9 +30,15 @@ from pbip_api.core.pagination import PageDirection
 from pbip_api.modules.accounts import service as accounts_service
 from pbip_api.modules.accounts.models import Account
 from pbip_api.modules.analytics import service as analytics_service
+from pbip_api.modules.assistant import discovery, faq
+from pbip_api.modules.assistant.discovery import ProductCategory
+from pbip_api.modules.assistant.faq import FaqTopic
 from pbip_api.modules.assistant.sanitize import untrusted_block
+from pbip_api.modules.customers import service as customers_service
 from pbip_api.modules.loans import service as loans_service
 from pbip_api.modules.loans.catalogue import PRODUCTS, LoanProduct, LoanType
+from pbip_api.modules.recommendations import service as recommendations_service
+from pbip_api.modules.wealth import service as wealth_service
 
 MAX_ACCOUNTS = 10
 MAX_TRANSACTIONS = 20
@@ -45,6 +52,9 @@ class ToolName(StrEnum):
     BALANCE_FORECAST = "get_balance_forecast"
     LOAN_AFFORDABILITY = "get_loan_affordability"
     UNUSUAL_EXPENSES = "get_unusual_expenses"
+    FAQ_ANSWER = "get_faq_answer"
+    LIST_PRODUCTS = "list_products"
+    INVESTMENT_SUGGESTIONS = "get_investment_suggestions"
 
 
 class SpendPeriod(StrEnum):
@@ -103,6 +113,18 @@ class UnusualExpensesArgs(AccountArgs):
     period: SpendPeriod = SpendPeriod.THIS_MONTH
 
 
+class FaqArgs(_Args):
+    topic: FaqTopic
+
+
+class ProductsArgs(_Args):
+    category: ProductCategory = ProductCategory.ALL
+
+
+class InvestmentSuggestionsArgs(_Args):
+    """No arguments: the risk profile and engine output are the authenticated customer's own."""
+
+
 # A sensible tenure per product when the customer names none (all offered by the catalogue).
 DEFAULT_TENURE_MONTHS = {LoanType.PERSONAL: 36, LoanType.AUTO: 60, LoanType.HOME: 240}
 
@@ -123,6 +145,7 @@ class ToolContext:
     customer_id: UUID
     user_id: UUID
     now: datetime
+    facts: faq.FaqFacts  # configured limits the help answers quote (TASK-105)
 
 
 @dataclass(frozen=True)
@@ -394,6 +417,63 @@ def unusual_expenses(ctx: ToolContext, raw: Mapping[str, object]) -> ToolReply:
     return ToolReply("\n".join(lines), "/insights")
 
 
+def faq_answer(ctx: ToolContext, raw: Mapping[str, object]) -> ToolReply:
+    """TASK-105: a curated answer about how PBIP works; no customer data is read."""
+    args = FaqArgs.model_validate(raw)
+    deposits = (
+        wealth_service.list_products(ctx.session, None)
+        if args.topic is FaqTopic.FIXED_DEPOSITS
+        else []
+    )
+    found = faq.answer(args.topic, ctx.facts, deposits)
+    return ToolReply(found.text, found.link)
+
+
+_CATEGORY_LINK = {
+    ProductCategory.ALL: "/wealth",
+    ProductCategory.LOANS: "/loans",
+    ProductCategory.DEPOSITS: "/wealth",
+    ProductCategory.INVESTMENTS: "/wealth",
+}
+
+
+def list_products(ctx: ToolContext, raw: Mapping[str, object]) -> ToolReply:
+    """TASK-105: the real loan catalogue and the seeded wealth catalogue, figures as stored."""
+    args = ProductsArgs.model_validate(raw)
+    wealth = (
+        []
+        if args.category is ProductCategory.LOANS
+        else wealth_service.list_products(ctx.session, None)
+    )
+    text = discovery.product_list(args.category, PRODUCTS, wealth)
+    return ToolReply(text, _CATEGORY_LINK[args.category])
+
+
+def investment_suggestions(ctx: ToolContext, raw: Mapping[str, object]) -> ToolReply:
+    """TASK-105: the engine's eligible investment products that fit the customer's risk band.
+
+    Both inputs belong to the customer in :class:`ToolContext` (the access token): the band from
+    the TASK-097 questionnaire and the TASK-054 engine output. Without a band nothing is suggested.
+    """
+    InvestmentSuggestionsArgs.model_validate(raw)
+    stored = customers_service.risk_profile(ctx.session, ctx.customer_id)
+    if stored.band is None:
+        return ToolReply(discovery.NO_PROFILE_TEXT, "/profile")
+    profile = discovery.RiskProfile(
+        stored.band.value, stored.questionnaire_version, stored.assessed_at
+    )
+    engine = recommendations_service.get_customer_recommendations(
+        ctx.session, ctx.customer_id, ctx.now, top_k=len(PRODUCT_CATALOGUE)
+    )
+    suggestions = [
+        discovery.EngineSuggestion(item.product_id, item.title, item.reasons)
+        for item in engine.recommendations
+    ]
+    wealth = wealth_service.list_products(ctx.session, None)
+    text = discovery.investment_suggestions(profile, suggestions, engine.model_version, wealth)
+    return ToolReply(text, "/wealth")
+
+
 REGISTRY: dict[ToolName, Tool] = {
     tool.name: tool
     for tool in (
@@ -434,6 +514,26 @@ REGISTRY: dict[ToolName, Tool] = {
             "customer's own usual level.",
             UnusualExpensesArgs,
             unusual_expenses,
+        ),
+        Tool(
+            ToolName.FAQ_ANSWER,
+            "How PBIP works: transfer limits, fraud holds, statements, two-factor sign-in, "
+            "sign-in lockout, scheduled transfers, loans or fixed deposits.",
+            FaqArgs,
+            faq_answer,
+        ),
+        Tool(
+            ToolName.LIST_PRODUCTS,
+            "The bank's loans, fixed deposits, funds and bonds with their catalogue rates.",
+            ProductsArgs,
+            list_products,
+        ),
+        Tool(
+            ToolName.INVESTMENT_SUGGESTIONS,
+            "Investment options for the customer from their risk profile and the "
+            "recommendation engine.",
+            InvestmentSuggestionsArgs,
+            investment_suggestions,
         ),
     )
 }

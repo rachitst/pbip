@@ -13,7 +13,9 @@ from pbip_api.modules.assistant.dependencies import (
     assistant_rate_limit,
     get_assistant_service,
     get_chat_model,
+    get_faq_facts,
 )
+from pbip_api.modules.assistant.faq import FaqFacts
 from pbip_api.modules.assistant.llm import ChatModel
 from pbip_api.modules.assistant.schemas import (
     AssistantHistory,
@@ -85,12 +87,14 @@ def chat_stream(
     principal: Principal = Depends(get_current_principal),
     engine: Engine = Depends(get_engine),
     model: ChatModel | None = Depends(get_chat_model),
+    facts: FaqFacts = Depends(get_faq_facts),
     clock: Callable[[], float] = Depends(get_clock),
     _limited: None = Depends(assistant_rate_limit),
 ) -> StreamingResponse:
     events = stream_chat(
         engine,
         model,
+        facts,
         customer.id,
         principal.user_id,
         body.message,

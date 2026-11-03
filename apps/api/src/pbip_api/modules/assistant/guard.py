@@ -29,7 +29,8 @@ REFUSAL_TEXT: dict[Refusal, str] = {
     Refusal.SQL: "I can't run database queries. Ask me about your balance, spending or loans.",
     Refusal.INSTRUCTION_OVERRIDE: (
         "I can't change how I work. I can help with your balance, transactions, spending, "
-        "balance forecast and loan affordability."
+        "balance forecast, loan affordability, PBIP's products, investment options and how "
+        "PBIP works."
     ),
     Refusal.PRIVILEGE: "I can't change roles or permissions. I can only read your own accounts.",
 }
@@ -63,7 +64,8 @@ _OTHER = re.compile(
     r"|here|who|how|where|let|he|she|account|bank|card)'s)[a-z]+'s"
     r"(?:\s{1,3}(?!(?:my|your|our|the|this|that)\b)[a-z]+){0,2}?\s{1,3}"
     r"(balance|account|accounts|transactions|spending|spend"
-    r"|expenses?|payments?|loans?|statements?)\b",
+    r"|expenses?|payments?|loans?|statements?|investments?|suggestions?|recommendations?"
+    r"|portfolio|risk\s{1,3}profile)\b",
     _I,
 )
 _SQL = re.compile(

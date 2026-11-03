@@ -8,9 +8,11 @@ from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.db import get_session
 from pbip_api.core.ratelimit import consume
 from pbip_api.core.redis import get_redis
+from pbip_api.modules.assistant.faq import FaqFacts
 from pbip_api.modules.assistant.llm import ChatModel, OllamaChatModel
 from pbip_api.modules.assistant.service import AssistantService
 from pbip_api.modules.auth.dependencies import Principal, get_current_principal
+from pbip_api.modules.runtime_config import service as runtime_config
 
 _WINDOW_SECONDS = 60
 
@@ -27,11 +29,20 @@ def get_chat_model(settings: Settings = Depends(get_settings)) -> ChatModel | No
     )
 
 
+def get_faq_facts(
+    session: Session = Depends(get_session), settings: Settings = Depends(get_settings)
+) -> FaqFacts:
+    """The limits the FAQ quotes (TASK-105): the values the services enforce right now, including
+    an ADMIN's runtime overrides (ADR-0031), not the environment defaults."""
+    return FaqFacts.from_settings(runtime_config.effective_settings(session, settings))
+
+
 def get_assistant_service(
     session: Session = Depends(get_session),
     model: ChatModel | None = Depends(get_chat_model),
+    facts: FaqFacts = Depends(get_faq_facts),
 ) -> AssistantService:
-    return AssistantService(session, model)
+    return AssistantService(session, model, facts)
 
 
 def assistant_rate_limit(
