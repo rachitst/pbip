@@ -49,7 +49,8 @@ from sqlalchemy.orm import Session
 pytestmark = pytest.mark.integration
 
 PERSONAL = next(p for p in PRODUCTS if p.loan_type == LoanType.PERSONAL)
-INCOME = 1_00_000_00  # INR 1 lakh of income this month (make_customer deposits it)
+INCOME = 1_00_000_00  # INR 1 lakh of salary a month (make_customer credits it last month and now)
+FUNDS = 2 * INCOME  # the balance those two salary credits leave
 AMOUNT = 1_00_000_00  # INR 1 lakh loan: EMI ~ INR 8,862 over 12 months, well within 50%
 CLEARING = ledger.SYSTEM_CLEARING_ID
 
@@ -136,7 +137,7 @@ def _drain(session: Session, account_id: uuid.UUID, leave: int) -> None:
 def test_apply_disburses_books_the_schedule_and_links_repayments(
     client: TestClient, make_customer: Callable[..., Actor], db: Session
 ) -> None:
-    alice = make_customer(funds=INCOME)
+    alice = make_customer(salary=INCOME)
     resp = _apply(client, alice)
     assert resp.status_code == 201, resp.text
     body = resp.json()
@@ -156,7 +157,7 @@ def test_apply_disburses_books_the_schedule_and_links_repayments(
 
     # Ledger: one LOAN_DISBURSAL, DEBIT clearing / CREDIT the customer, balanced.
     loan_id = uuid.UUID(body["id"])
-    assert _balance(db, alice.account_id) == INCOME + AMOUNT
+    assert _balance(db, alice.account_id) == FUNDS + AMOUNT
     (disbursal,) = _loan_transactions(db, TransactionType.LOAN_DISBURSAL)
     assert str(disbursal.id) == body["disbursal_transaction_id"]
     assert disbursal.status == TransactionStatus.POSTED
@@ -217,7 +218,7 @@ def test_apply_rejects_invalid_requests_and_leaves_no_state(
     change: dict[str, Any],
     status: int,
 ) -> None:
-    alice = make_customer(funds=INCOME)
+    alice = make_customer(salary=INCOME)
     payload = {
         "product_id": str(PERSONAL.id),
         "amount_minor": AMOUNT,
@@ -228,13 +229,13 @@ def test_apply_rejects_invalid_requests_and_leaves_no_state(
     resp = client.post("/api/v1/loans/apply", headers=headers, json=payload)
     assert resp.status_code == status, resp.text
     assert db.execute(select(func.count()).select_from(Loan)).scalar_one() == 0
-    assert _balance(db, alice.account_id) == INCOME
+    assert _balance(db, alice.account_id) == FUNDS
 
 
 def test_apply_requires_an_idempotency_key(
     client: TestClient, make_customer: Callable[..., Actor]
 ) -> None:
-    alice = make_customer(funds=INCOME)
+    alice = make_customer(salary=INCOME)
     resp = client.post(
         "/api/v1/loans/apply",
         headers=alice.headers,
@@ -251,7 +252,7 @@ def test_apply_requires_an_idempotency_key(
 def test_not_eligible_is_refused_with_plain_reasons_and_leaves_no_state(
     client: TestClient, make_customer: Callable[..., Actor], db: Session
 ) -> None:
-    alice = make_customer(funds=50_000_00)  # INR 50,000 income
+    alice = make_customer(salary=50_000_00)  # INR 50,000 income
     resp = _apply(client, alice, 15_00_000_00, 12)  # EMI ~ INR 1.3 lakh
     assert resp.status_code == 422, resp.text
     problem = resp.json()
@@ -260,14 +261,14 @@ def test_not_eligible_is_refused_with_plain_reasons_and_leaves_no_state(
     assert db.execute(select(func.count()).select_from(Loan)).scalar_one() == 0
     assert db.execute(select(func.count()).select_from(ScheduledTransfer)).scalar_one() == 0
     assert _loan_transactions(db, TransactionType.LOAN_DISBURSAL) == []
-    assert _balance(db, alice.account_id) == 50_000_00
+    assert _balance(db, alice.account_id) == 2 * 50_000_00
 
 
 def test_a_second_loan_counts_the_first_loans_emi(
     client: TestClient, make_customer: Callable[..., Actor], db: Session
 ) -> None:
     """Loan stacking: each loan alone is within 50% of income; together they are not."""
-    alice = make_customer(funds=INCOME)
+    alice = make_customer(salary=INCOME)
     first = _apply(client, alice, 4_00_000_00, 12)  # EMI ~ INR 35,450: 35% of income
     assert first.status_code == 201, first.text
     eligibility = client.post(
@@ -293,7 +294,7 @@ def test_loan_routes_are_customer_only(
 def test_idempotent_retry_returns_the_same_loan_and_disburses_once(
     client: TestClient, make_customer: Callable[..., Actor], db: Session
 ) -> None:
-    alice = make_customer(funds=INCOME)
+    alice = make_customer(salary=INCOME)
     key = uuid.uuid4().hex
     first = _apply(client, alice, key=key)
     retry = _apply(client, alice, key=key)
@@ -302,7 +303,7 @@ def test_idempotent_retry_returns_the_same_loan_and_disburses_once(
     assert retry.json()["id"] == first.json()["id"]
     assert db.execute(select(func.count()).select_from(Loan)).scalar_one() == 1
     assert len(_loan_transactions(db, TransactionType.LOAN_DISBURSAL)) == 1
-    assert _balance(db, alice.account_id) == INCOME + AMOUNT
+    assert _balance(db, alice.account_id) == FUNDS + AMOUNT
     reused = _apply(client, alice, AMOUNT + 5_000_00, key=key)  # same key, different request
     assert reused.status_code == 422 and reused.json()["code"] == "idempotency_key_reuse"
 
@@ -338,7 +339,7 @@ def test_concurrent_duplicate_applies_create_exactly_one_loan_and_one_disbursal(
     make_customer: Callable[..., Actor], migrated_engine: Engine, settings: Settings, db: Session
 ) -> None:
     """Real threads, real PostgreSQL: a double-clicked submit sent six times at once."""
-    alice = make_customer(funds=INCOME)
+    alice = make_customer(salary=INCOME)
     workers, key = 6, uuid.uuid4().hex
     barrier = threading.Barrier(workers)
     with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -351,8 +352,8 @@ def test_concurrent_duplicate_applies_create_exactly_one_loan_and_one_disbursal(
     assert sorted(outcomes) == ["created"] + ["replayed"] * (workers - 1)
     assert db.execute(select(func.count()).select_from(Loan)).scalar_one() == 1
     assert len(_loan_transactions(db, TransactionType.LOAN_DISBURSAL)) == 1
-    assert _balance(db, alice.account_id) == INCOME + 4_00_000_00
-    assert _balance(db, CLEARING) == -(INCOME + 4_00_000_00)
+    assert _balance(db, alice.account_id) == FUNDS + 4_00_000_00
+    assert _balance(db, CLEARING) == -(FUNDS + 4_00_000_00)
     _assert_every_transaction_balances(db)
 
 
@@ -361,7 +362,7 @@ def test_concurrent_applications_with_different_keys_cannot_stack_loans(
 ) -> None:
     """Each application alone fits the 50% limit; the per-user lock serialises them, so the
     later ones see the first loan's EMI and are refused."""
-    alice = make_customer(funds=INCOME)
+    alice = make_customer(salary=INCOME)
     workers = 4
     barrier = threading.Barrier(workers)
     with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -383,7 +384,7 @@ def test_concurrent_applications_with_different_keys_cannot_stack_loans(
 def loan(
     client: TestClient, make_customer: Callable[..., Actor]
 ) -> tuple[Actor, uuid.UUID, list[date]]:
-    alice = make_customer(funds=INCOME)
+    alice = make_customer(salary=INCOME)
     resp = _apply(client, alice)
     assert resp.status_code == 201, resp.text
     return alice, uuid.UUID(resp.json()["id"]), due_dates(utcnow().date(), 12)
@@ -413,7 +414,7 @@ def test_a_repayment_marks_the_right_instalment_paid_and_reduces_the_balance(
     assert rows[0].transaction_id == repayment.id and rows[0].paid_at is not None
     assert repayment.amount == rows[0].amount
     assert (repayment.debit_account_id, repayment.credit_account_id) == (alice.account_id, CLEARING)
-    assert _balance(db, alice.account_id) == INCOME + AMOUNT - rows[0].amount
+    assert _balance(db, alice.account_id) == FUNDS + AMOUNT - rows[0].amount
     _assert_every_transaction_balances(db)
     instruction = _instruction(db, loan_id)
     assert instruction.next_run_date == dates[1]
@@ -509,7 +510,7 @@ def test_the_last_repayment_closes_the_loan_and_completes_the_instruction(
     assert _instruction(db, loan_id).status == ScheduledTransferStatus.COMPLETED
     (repayment,) = _loan_transactions(db, TransactionType.LOAN_REPAYMENT)
     assert repayment.amount == closed.principal + closed.total_interest
-    assert _balance(db, alice.account_id) == INCOME + AMOUNT - repayment.amount
+    assert _balance(db, alice.account_id) == FUNDS + AMOUNT - repayment.amount
     assert client.get("/api/v1/loans", headers=alice.headers).json() == []
     detail = client.get(f"/api/v1/loans/{loan_id}", headers=alice.headers).json()
     assert detail["status"] == "CLOSED" and detail["outstanding_principal_minor"] == 0

@@ -114,7 +114,7 @@ def test_a_loan_amount_the_customer_never_wrote_is_not_answered(
     client: TestClient, make_customer: Callable[..., Actor], use_model: Callable[[object], None]
 ) -> None:
     """The model's invented 1 lakh / 12 months is dropped; FR-38 answers for no amount instead."""
-    alice = make_customer(funds=5_000_00)
+    alice = make_customer(salary=5_000_00)
     invented = {"loan_type": "PERSONAL", "amount_rupees": 100000, "tenure_months": 12}
     model = FakeModel(json.dumps({"tool": "get_loan_affordability", "arguments": invented}))
     use_model(model)
@@ -476,7 +476,7 @@ def test_unusual_expenses_when_nothing_stands_out_or_history_is_short(
 def test_a_loan_without_an_amount_suggests_the_largest_eligible_one(
     client: TestClient, make_customer: Callable[..., Actor], use_model: Callable[[object], None]
 ) -> None:
-    alice = make_customer(funds=1_00_000_00)  # INR 1,00,000 income, no repayments
+    alice = make_customer(salary=1_00_000_00)  # INR 1,00,000 income, no repayments
     model = FakeModel('{"tool": "get_account_summary", "arguments": {}}')
     use_model(model)
     body = _chat(client, alice, "Can I afford a loan?")
@@ -504,7 +504,7 @@ def test_a_too_short_tenure_moves_the_suggestion_to_the_next_tenure_that_fits(
 ) -> None:
     """INR 4,000 income: INR 2,000 a month buys less than the INR 25,000 minimum over 12 months,
     so the suggestion is the shortest offered tenure that reaches it (24 months)."""
-    bob = make_customer(funds=4_000_00)
+    bob = make_customer(salary=4_000_00)
     assert emi_math.max_principal(2_000_00, 1_150, 12) < 25_000_00
     body = _chat(client, bob, "can I get a personal loan over 1 year?")
     amount = emi_math.max_principal(2_000_00, 1_150, 24)
@@ -534,7 +534,8 @@ def test_a_loan_without_an_amount_when_repayments_leave_no_room(
     make_verified_payee: Callable[..., dict[str, Any]],
     migrated_engine: Engine,
 ) -> None:
-    alice, lender = make_customer(funds=1_00_000_00), make_customer()
+    # INR 50,000 salary for two months; the INR 60,000 EMI is 60% of that window's income.
+    alice, lender = make_customer(funds=1_00_000_00, salary=50_000_00), make_customer()
     payee = make_verified_payee(alice, lender)
     age_payee(migrated_engine, payee["id"], 48)
     resp = client.post(
@@ -550,7 +551,7 @@ def test_a_loan_without_an_amount_when_repayments_leave_no_room(
     assert resp.status_code in (201, 202), resp.text
     body = _chat(client, alice, "can I take a personal loan?")
     assert body["reply"].startswith("A personal loan isn't affordable right now.")
-    assert "already take 60% of your income of INR 1,00,000.00" in body["reply"]
+    assert "already take 60% of your income of INR 50,000.00" in body["reply"]
 
 
 # ---------------------------------------------------------------- TASK-105 FAQ, products, suggestions
@@ -682,9 +683,10 @@ def test_products_are_listed_from_the_real_catalogues_with_their_exact_rates(
 def _saver(
     client: TestClient, make_customer: Callable[..., Actor], engine: Engine, clock: FakeClock
 ) -> Actor:
-    """INR 5,00,000 paid in, INR 50,000 spent last month: a deposit and an index-fund SIP are
-    both eligible (the spend is in a closed month, so the result does not depend on the date)."""
-    saver = make_customer(funds=5_00_000_00)
+    """INR 5,00,000 of salary paid in (last month and this), INR 50,000 spent last month: a deposit
+    and an index-fund SIP are both eligible (the spend is in a closed month, so the result does
+    not depend on the date)."""
+    saver = make_customer(salary=2_50_000_00)
     spent_at = month_start(datetime.fromtimestamp(clock.now, UTC), 1) + timedelta(days=5)
     post_spend_at(engine, saver.account_id, 50_000_00, "Rent", spent_at)
     return saver

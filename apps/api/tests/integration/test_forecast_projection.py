@@ -21,6 +21,7 @@ from pbip_api.modules.accounts.models import Account
 from pbip_api.modules.analytics import repository
 from pbip_api.modules.analytics.projection import LOW_BALANCE_BUFFER_MINOR, month_end
 from pbip_api.modules.ledger import service as ledger
+from pbip_api.modules.loans import service as loans_service
 from pbip_api.modules.loans.catalogue import PRODUCTS, LoanType
 from pbip_api.modules.loans.models import LoanInstalment
 from pbip_api.modules.notifications.models import Notification
@@ -104,6 +105,14 @@ def _instruction(
     return instruction
 
 
+@pytest.fixture
+def income_for_the_loan(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests need a loan's EMIs, not an income history. Recurring income needs credits in
+    two calendar months (ADR-0043), which would break the flat 20-day balance history the
+    projection is checked against, so eligibility is given INCOME a month and no repayments."""
+    monkeypatch.setattr(loans_service, "_income_and_debt", lambda *_: (INCOME, 0))
+
+
 def _apply_for_loan(client: TestClient, actor: Actor) -> uuid.UUID:
     resp = client.post(
         "/api/v1/loans/apply",
@@ -147,6 +156,7 @@ def test_projection_subtracts_each_scheduled_transfer_and_emi_on_its_date(
     make_customer: Callable[..., Actor],
     make_verified_payee: Callable[..., dict[str, Any]],
     migrated_engine: Engine,
+    income_for_the_loan: None,
 ) -> None:
     alice, bob = make_customer(funds=INCOME), make_customer(funds=INCOME)
     loan_id = _apply_for_loan(client, alice)  # first EMI one month after today (real date)
@@ -233,7 +243,11 @@ def _monthly_dates(first: date, until: date) -> list[date]:
 
 
 def test_an_overdue_emi_is_projected_today_and_the_month_end_is_always_covered(
-    client: TestClient, db: Session, clock: FakeClock, make_customer: Callable[..., Actor]
+    client: TestClient,
+    db: Session,
+    clock: FakeClock,
+    make_customer: Callable[..., Actor],
+    income_for_the_loan: None,
 ) -> None:
     alice = make_customer(funds=INCOME)
     loan_id = _apply_for_loan(client, alice)
