@@ -689,6 +689,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 - **Depends on:** TASK-005 (#16, Sujal), TASK-008 (#19, Sujal). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Done
 - **Follow-up (2026-10-30, owner Rachit):** shared UI foundations per ADR-0016, in two PRs: (1) design tokens, primitives, shared formatting and error handling (#200, merged); (2) React Router, responsive role-aware shell, customer/staff route separation and accessibility (#202, merged). Architecture and sequence posted on #43, #44, #71 and #72. Existing pages keep their behaviour and tests. TASK-048 and TASK-049 start once both are merged and do not wait for each other or for any staff page.
+- **Follow-up (2026-11-03):** #353 (5ab0a0b) fixed a race on the accounts page: an account opened while the first
+  account-list request was still in flight did not appear, because the invalidation joined that stale first fetch.
+  `OpenAccount` now cancels and then invalidates the query (`Accounts.test.tsx` "lists an account opened while the first
+  account list is still loading").
 - **Goal:** React dashboard shell with responsive navigation, account balances, and quick actions.
 - **Implementation steps:**
   1. Read the issue, dependencies and the contracts involved (OpenAPI, `pbip_ml.*.contract`, models).
@@ -1111,6 +1115,11 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   - [x] Triggers REVIEW placing funds hold and raising fraud alert in staff queue (`test_hybrid_risk_drives_the_transfer_state_machine[70-...]`)
   - [x] Triggers BLOCK declining transaction immediately and generating security alert (HIGH fraud alert; `test_hybrid_risk_drives_the_transfer_state_machine[95-...]`)
 - **Definition of done (evidence):** Integration tests verify transfer state machine transitions across all 4 decisions.
+- **Follow-up (2026-11-03):** #350 (with `FRAUD_SCORER=hybrid` the API imported `pbip_ml.fraud.training` through
+  `inference.py` and `hybrid.py`) was fixed in #354 (c85e5ce, ADR-0033 Accepted): the served schema and `AnomalyModel`
+  moved to `pbip_ml.fraud.artifacts`, an allow-listed unpickler loads existing artifacts under the old class path, and the
+  import-linter contract "fraud serving must not depend on fraud training" enforces it
+  (`test_hybrid_scorer_skips_fraud_training.py`). This also narrows threat T34. Metrics are unchanged; no retraining.
 - **Required checks:**
   - Automated: pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths; pytest in `ml/tests` / `data-gen/tests` with no database; seeded determinism; metric gate or behaviour-regression assertions where the task trains or scores; MLflow run logged where applicable
   - Manual: exercise the endpoint through Swagger (`/docs`, local) with a seeded user and a second user (BOLA); inspect outputs/plots for sanity; re-run with the same seed and compare
@@ -1770,7 +1779,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #79 | **Sprint:** 5 | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Sat 31 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** - (partially delivered in #223 on Sat 31 Oct: churn signals from the ledger, RM/admin with MFA, one set-based query and paginated; the list is ordered by churn risk, not product propensity, see #79) | **Status:** In Progress | **Risk:** Low
+- **Start:** Sat 31 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** - (partially delivered in #223 on Sat 31 Oct: churn signals from the ledger, RM/admin with MFA, one set-based query and paginated; the list is ordered by churn risk, not product propensity, see #79; #347, 494e285, merged Tue 03 Nov: RM-to-customer assignment (ADR-0032), an RM sees only the customers an ADMIN assigned to them and every other customer is a 404, unassigned customers are ADMIN-only) | **Status:** In Progress (criterion 1 is still not met: the list is prioritised by churn risk, not by product propensity; #347 is a requested follow-up that scopes the list and does not change its ordering) | **Risk:** Low
 - **Depends on:** TASK-054 (#77, Krishna), TASK-055 (#78, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-054, TASK-055
 - **Goal:** Staff endpoints aggregating customer churn risk, high-value transfer trends, and loan interest.
@@ -1945,7 +1954,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #85 | **Sprint:** 5 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Frontend Web Application
 - **Owner:** Kalpak (`Patil-Kalpak`)
-- **Start:** Mon 02 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** - (#328, d855a71, merged Mon 02 Nov; criteria not all met) | **Status:** In Progress (the fixed-deposit card opens `/wealth`, not the booking dialog, so criterion 3 "directly to the application modal" is met only for the savings account) | **Risk:** Low (1.5 days of slack)
+- **Start:** Mon 02 Nov | **Target deadline:** Mon 02 Nov | **Actual completion:** Tue 03 Nov (#328, d855a71: criteria 1 and 2 and the savings-account action; #339, e5b3da4: the fixed-deposit card opens the booking dialog through `/wealth?book=fixed-deposit`, `ProductRecommendations.test.tsx` and `Wealth.test.tsx` "Wealth booking deep link (TASK-062)"; the credit-line card opens `/loans`, which is the loan application page, with no catalogue loan preselected, see FR-31) | **Status:** Done | **Risk:** Low (1.5 days of slack)
 - **Depends on:** TASK-054 (#77, Krishna), TASK-019 (#42, Kalpak). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-054, TASK-019
 - **UI foundation (ADR-0016, 2026-10-30):** build on the shared tokens, `apps/web/src/ui/` primitives, `lib/errors.ts` and `docs/design/ui-guidelines.md`, and add a route to the shared shell instead of a new layout.
@@ -2018,6 +2027,11 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   - [ ] Requires Idempotency-Key header and validates source account balance
   - [ ] Emits investment confirmation notification to outbox
 - **Definition of done (evidence):** Integration tests verify ledger balancing and premature closure calculations.
+- **Follow-up (2026-11-03):** #332, automatic payout at maturity, delivered in #341 (2123c05; ADR-0029 Accepted,
+  migration 0022, threat T51). The hourly beat entry `pay-out-matured-deposits` credits principal (`FD_CLOSURE`) and
+  interest (`FD_INTEREST`) through `ledger.pay_out_fixed_deposit`, exactly once per deposit (key `fd-maturity/{id}`, user
+  lock, deposit row lock; real-thread tests in `test_fd_maturity_payout.py`), audited and notified. A frozen or closed
+  source account holds the payout and retries each run. All criteria of #332 are met; auto-renewal stays out of scope.
 - **Required checks:**
   - Automated: pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths
   - Manual: exercise the endpoint through Swagger (`/docs`, local) with a seeded user and a second user (BOLA)
@@ -3157,8 +3171,8 @@ decision in ADR-0015.
 ### TASK-105 - AI Assistant FAQ, Product Discovery and Investment Suggestion Tools
 
 - **Issue:** #188 | **Sprint:** unscheduled | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** AI Assistant & Security
-- **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Owner:** Rachit (`rachitst`)
+- **Start:** Mon 02 Nov | **Target deadline:** - | **Actual completion:** Tue 03 Nov (#335, 9697a39; migration 0024, threat T53. The FAQ quotes the effective limits from `runtime_config.effective_settings`, so an admin's runtime change is quoted, `test_the_faq_quotes_the_limits_an_admin_set_at_runtime`) | **Status:** Done | **Risk:** Unscheduled
 - **Depends on:** TASK-057 (#80, Rachit), TASK-054 (#77, Krishna), TASK-097 (#?, ?). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **Goal:** Assistant tools for the UC-08 examples not covered by TASK-057: FAQ and support, product discovery, 'suggest investment options'.
@@ -3245,8 +3259,8 @@ with #201 and TLS was delivered in #280, so neither is repeated here.
 ### TASK-108 - Administration Screens and Application Configuration
 
 - **Issue:** #282 | **Sprint:** unscheduled | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Identity & Core Banking
-- **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Unscheduled
+- **Owner:** Rachit (`rachitst`)
+- **Start:** Tue 03 Nov | **Target deadline:** - | **Actual completion:** - (#346, ba5edd8, merged Tue 03 Nov; ADR-0031 Accepted, migration 0023, threat T52; DoD not all met) | **Status:** In Progress (all four acceptance criteria are met: `/staff/admin` with `Administration.test.tsx`; the three-key allow-list with bounds in `runtime_config/allowlist.py`; `RUNTIME_SETTING_CHANGED` audited in the hash chain; `test_only_admins_with_mfa_may_use_admin_routes` and the route-policy registry. The DoD's E2E test for the screens does not exist: no Playwright journey covers the admin screens yet) | **Risk:** Unscheduled
 - **Depends on:** TASK-007.
 - **Mode:** Unscheduled
 - **Goal:** FR-05 / section 5 administration: an ADMIN can manage staff users and view or change the application settings that are safe to change at runtime, from the web app.
@@ -3387,6 +3401,7 @@ with #201 and TLS was delivered in #280, so neither is repeated here.
 |---|---|---|---|
 | TASK-001, TASK-012, TASK-013 | **Done (2026-10-27)** | Nothing: Windows 10 run 3 on `main` `9386b22` passed steps 0-8 of `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, #24); fixes #128-#131, #134 merged | - |
 | TASK-009 | Done (Linux CI) | #135: on a 2-core Windows laptop the 1,000-customer COPY budget test takes 15.7-24.7 s (budget 15 s, unchanged); #138 improved it but it is not reliable there. Needs a run on an idle or more capable Windows machine | Pranay |
+| #329 (Windows unit tests) | **Fixed in #352 (fd40233), Tue 03 Nov** | All 8 items are addressed, each with a test that fails without its change: `MSYS_NO_PATHCONV=1` for `openssl` in `deploy.sh` and LF test stubs (1-5), basename of a Windows path in `raised_at` (6), a hermetic request-path test that a hybrid `.env` cannot change (7), tracked files only in the uvicorn launch scan (8). Proven on Linux by simulation, not by a native run: re-run `uv run pytest -m unit -q` on the Windows PC | Rachit |
 | TASK-005 | **Done (accepted 2026-10-26)** | Nothing: the product owner accepted the clarified criterion below; issue #16 closed | - |
 
 **TASK-005 decision (accepted 2026-10-26).**
