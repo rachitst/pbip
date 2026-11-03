@@ -563,9 +563,7 @@ Facts found while writing this reference. None is changed by this PR.
    `ck_customers_ck_customers_persona_valid`, and names longer than 63 characters are truncated with a hash
    suffix (e.g. `ck_customer_segments_ck_customer_segments_confidence_sc_d5bb`). Behaviour is unaffected; use the
    names in `er-diagram.md` when writing a migration that drops one.
-6. **`idempotency_keys.expires_at` is never read.** It is set to now plus `IDEMPOTENCY_TTL_HOURS` (default 24,
-   `api/core/config.py`), but no code checks it and no job deletes expired rows, so a key replays for as long as
-   the row exists.
+6. **`idempotency_keys.expires_at` is enforced (issue #314, ADR-0036).** A key past it counts as unused: every `_begin_idempotent` discards the caller's expired row under the user lock before claiming, and the daily job `pbip.ledger.purge_expired_idempotency_keys` deletes expired rows (index `ix_idempotency_keys_expires_at`, migration `0026`).
 
 ---
 
@@ -588,6 +586,7 @@ stateDiagram-v2
     INITIATED --> DECLINED: BLOCK, decline_reason FRAUD_BLOCK
     PENDING_STEP_UP --> POSTED: valid TOTP on POST /transfers/id/step-up
     PENDING_STEP_UP --> PENDING_REVIEW: third wrong code, hold placed, alert opened
+    PENDING_STEP_UP --> DECLINED: unanswered for STEP_UP_EXPIRY_MINUTES, STEP_UP_EXPIRED
     PENDING_REVIEW --> POSTED: analyst RELEASE, hold captured
     PENDING_REVIEW --> DECLINED: analyst REJECT, hold released, ANALYST_REJECTED
     POSTED --> REVERSED: ledger.reverse_transaction, no HTTP route
@@ -610,6 +609,7 @@ stateDiagram-v2
 | `INITIATED` | `DECLINED` | Decision `BLOCK`; `decline_reason = FRAUD_BLOCK`; alert opened; no hold | `_execute_transfer` | `test_transfers.py::test_block_declines_without_moving_money_and_hides_the_reasons` |
 | `PENDING_STEP_UP` | `POSTED` | Correct TOTP (`AuthService.verify_step_up`); daily limit rechecked; entries posted | `PaymentsService.confirm_step_up` | `test_transfers.py::test_step_up_with_mfa_completes_after_a_valid_code`, `test_a_correct_code_after_two_wrong_ones_still_completes` |
 | `PENDING_STEP_UP` | `PENDING_REVIEW` | `STEP_UP_MAX_FAILURES = 3` wrong codes for this transfer (counted in `security_events`); the failure is committed first, then a new transaction places the hold and opens an alert | `_escalate_to_review` | `test_transfers.py::test_three_wrong_step_up_codes_hand_the_transfer_to_an_analyst`, `test_a_second_escalation_after_one_already_won_returns_the_state_and_holds_once` |
+| `PENDING_STEP_UP` | `DECLINED` | No code for `STEP_UP_EXPIRY_MINUTES` (default 15); user lock, row `FOR UPDATE`, re-checked; `decline_reason = STEP_UP_EXPIRED`; no ledger call (no hold exists); audited and notified (ADR-0036) | `payments/step_up_expiry.py` `expire_step_up` | `test_step_up_expiry_and_key_ttl.py::test_an_unanswered_step_up_is_declined_after_the_timeout_audited_and_notified`, `test_step_up_completion_racing_the_expiry_job_settles_exactly_once` |
 | `PENDING_REVIEW` | `POSTED` | Analyst `RELEASE`; `capture_hold_and_post` | `PaymentsService.review_alert` | `test_transfers.py::test_review_holds_funds_and_analyst_release_posts_the_transfer` |
 | `PENDING_REVIEW` | `DECLINED` | Analyst `REJECT`; `release_hold`; `decline_reason = ANALYST_REJECTED` | `review_alert` | `test_transfers.py::test_analyst_reject_releases_the_hold_and_declines` |
 | `POSTED` | `REVERSED` | Only `TRANSFER` type; a compensating `REVERSAL` transaction with swapped legs and `reversal_of_id` | `ledger.reverse_transaction` | `test_ledger.py::test_reversal_is_a_compensating_transaction_not_an_edit`, `test_ledger_guards.py::test_reversal_guards` |
@@ -624,7 +624,7 @@ Rules the diagram does not show:
 * HTTP status per outcome (`_build_result`): `POSTED` 201, `PENDING_STEP_UP` and `PENDING_REVIEW` 202,
   `DECLINED` 403. Reads and step-up completions return 200. Reasons and scores are never in the customer
   response (`test_customer_sees_the_exact_plain_message_for_each_outcome`).
-* `PENDING_STEP_UP` has no timeout (section 6).
+* `PENDING_STEP_UP` expires after `STEP_UP_EXPIRY_MINUTES` (default 15; ADR-0036): the job declines it and a late code gets 409.
 
 ### 4.2 Hold lifecycle (`holds.status`)
 
@@ -931,14 +931,13 @@ lock, so a repeated run finds nothing due and posts nothing (`test_concurrent_re
    `POSTED -> REVERSED`. `ledger.reverse_transaction` exists and is tested, but no route, job or script on `main`
    calls it, and it reverses only `TRANSFER` transactions. `bill_payments.status = 'REVERSED'` is allowed by the
    CHECK and never set. Both are **reserved** for a future reversal flow; the Blueprint and HLD say so (GitHub issue #316).
-2. **`PENDING_STEP_UP` never expires.** No job times out an unanswered step-up. The transfer waits until a correct
-   code or the third wrong one; no hold is placed meanwhile, and the daily limit is rechecked at confirm time.
+2. **Resolved (issue #314, ADR-0036): `PENDING_STEP_UP` expires.** The beat job `pbip.transfers.expire_stale_step_ups` declines a transfer left unanswered for `STEP_UP_EXPIRY_MINUTES`, and `confirm_step_up` refuses one past the deadline.
 3. **Resolved (issue #314): every money-moving POST takes an `Idempotency-Key`.** The analyst decision and step-up
    confirm now require it. Step-up checks for a stored answer first, verifies the code, and only then claims the
    key, so a wrong code (whose evidence `verify_step_up` commits) never leaves a key without an answer. Tests:
    `test_transfers.py::test_concurrent_step_ups_post_the_transfer_exactly_once`,
    `test_concurrent_decisions_move_the_money_exactly_once` and their neighbours.
-4. **Idempotency TTL is not enforced** (section 3.15, item 6).
+4. **Resolved (issue #314, ADR-0036): the idempotency TTL is enforced** (section 3.15, item 6).
 5. **Table counts in older documents are stale.** Blueprint section 4 says "Implemented (20 tables, migration
    `0001`)" and HLD section 5 says 26 `public` tables; `main` has 30 (`er-diagram.md`). HLD section 15 says there are
    no scheduled transfers yet; they exist since migration `0014`. Corrected in the Blueprint and HLD (GitHub issue #316).
