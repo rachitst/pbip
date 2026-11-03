@@ -1,4 +1,4 @@
-# ADR 0038: Order the RM customer list by the rule-based product score
+# ADR 0041: Order the RM customer list by the rule-based product score
 - Status: Accepted (under owner's standing approval, 2026-11-03)
 - Date: 2026-11-03
 - Deciders: Architecture Team

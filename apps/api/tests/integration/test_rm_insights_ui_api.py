@@ -5,7 +5,7 @@
 - the customer detail: exact 30-day volume, health score, eligible products, no extra PII, 404
 - the outreach log: RM/admin with MFA only, validated, audited without the note, 404 for unknown
 - an RM works only on assigned customers (ADR-0032); ``assign_rm`` assigns through the admin API
-- TASK-056: ``order_by=PROPENSITY`` ranks by the rule-based product score (ADR-0038)
+- TASK-056: ``order_by=PROPENSITY`` ranks by the rule-based product score (ADR-0041)
 """
 
 import json

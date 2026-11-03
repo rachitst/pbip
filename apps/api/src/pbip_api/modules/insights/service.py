@@ -4,7 +4,7 @@ Cost is bounded: one set-based query gives every customer's balances and last ac
 signals are computed from those rows, and only the requested page gets product recommendations.
 The one exception is the loan-propensity filter: a customer's loan score exists only after the
 recommendation rules have run, so with that filter every candidate is scored (ADR-0022).
-Two orders (TASK-056 criterion 1, ADR-0038): by churn risk (retention priority, then balance), or
+Two orders (TASK-056 criterion 1, ADR-0041): by churn risk (retention priority, then balance), or
 by product propensity, the rule-based score of each customer's best eligible product (``rules-v1``,
 not a trained model). Like the loan filter, the propensity order scores every candidate in scope.
 
