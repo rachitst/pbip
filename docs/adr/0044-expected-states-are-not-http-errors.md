@@ -1,4 +1,4 @@
-# ADR 0042: A signed-out refresh and a too-new forecast are answers, not HTTP errors
+# ADR 0044: A signed-out refresh and a too-new forecast are answers, not HTTP errors
 - Status: Accepted (under owner's standing approval, 2026-11-03)
 - Date: 2026-11-03
 - Deciders: Architecture Team (issue #382, TASK-089 criterion "zero console errors")

@@ -134,7 +134,7 @@ def refresh(
     meta: RequestMeta = Depends(get_request_meta),
 ) -> TokenResponse | Response:
     # No cookie is the ordinary signed-out state of every page load (the web app asks once to
-    # restore a session), not a failed authentication: 204 with no token (#382, ADR-0042). A
+    # restore a session), not a failed authentication: 204 with no token (#382, ADR-0044). A
     # cookie that is sent but invalid is still a 401 and still triggers reuse detection.
     if not refresh_cookie:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
