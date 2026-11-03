@@ -55,6 +55,7 @@ the deterministic router answers without the LLM, 20% transfers (fresh `Idempote
 replayed and must return the same transfer marked `Idempotent-Replayed`), 10% login plus a cookie refresh.
 
 ```bash
+export API_REPLICAS=2   # two API processes, like production (ADR-0045); one process is bound to one core
 docker compose -f docker-compose.yml -f infra/k6/compose.load.yml up -d --build --wait   # raised per-IP limits
 uv run python scripts/seed_load.py --users 200            # funded users, each with a verified payee
 uv run python scripts/load_invariants.py snapshot > perf-results/before.json
@@ -68,6 +69,12 @@ uv run python scripts/load_invariants.py check perf-results/before.json  # exit 
   < 500 ms, HTTP errors < 0.5%, zero unexpected statuses. Correct business outcomes are not errors: 201 posted,
   202 held for step-up or review, 403 blocked by fraud scoring, and forecast's 422 for accounts with under two
   days of history.
+* Capacity is about one core per API replica. With one process the suite saturated it on the slower GitHub runner
+  CPUs (EPYC 7763, Xeon 8370C: every route group 4-6x slower, transfers p95 600-920 ms) while the host still had idle
+  cores; two replicas pass on the same CPUs. Evidence and numbers: ADR-0045. The workflow input `api_replicas: 1`
+  measures a single process.
+* The overlay also loads `pg_stat_statements`; the workflow resets it before the run and saves the slowest
+  statements (`top-statements.sql`) and per-container CPU (`container-cpu.txt`) with the results.
 * `load_invariants.py` proves the money rules held: no overdrawn account, every transaction balanced, each balance
   equal to its last entry, money conserved inside the load population, and no new PostgreSQL deadlocks.
 * `.github/workflows/perf.yml` runs the suite and the page-load budgets (`apps/web/e2e/perf.spec.ts`) nightly on a
