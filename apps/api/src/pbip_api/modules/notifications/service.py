@@ -28,6 +28,9 @@ LOAN_REPAYMENT_POSTED = "LOAN_REPAYMENT_POSTED"
 # Fixed deposits (ADR-0025): link to the booking / principal payout transaction.
 FIXED_DEPOSIT_BOOKED = "FIXED_DEPOSIT_BOOKED"
 FIXED_DEPOSIT_CLOSED = "FIXED_DEPOSIT_CLOSED"
+# Automatic maturity payout (ADR-0029): paid, or held because the account is not active.
+FIXED_DEPOSIT_MATURED = "FIXED_DEPOSIT_MATURED"
+FIXED_DEPOSIT_PAYOUT_HELD = "FIXED_DEPOSIT_PAYOUT_HELD"
 # Security notifications for events the auth and customers modules already record (#45).
 PASSWORD_CHANGED = "PASSWORD_CHANGED"  # noqa: S105  # pragma: allowlist secret - an event type name
 MFA_ENABLED = "MFA_ENABLED"
@@ -47,6 +50,7 @@ _TRANSFER_TYPES = {
     LOAN_REPAYMENT_POSTED,
     FIXED_DEPOSIT_BOOKED,
     FIXED_DEPOSIT_CLOSED,
+    FIXED_DEPOSIT_MATURED,
 }
 _SCHEDULED_TRANSFER_TYPES = {
     SCHEDULED_TRANSFER_FAILED,
@@ -243,7 +247,31 @@ def _deposit_text(event: OutboxEvent, amount: str) -> tuple[str, str] | None:
             "Fixed deposit closed",
             f"{amount}, including {interest} interest, was credited to your account.",
         )
+    if event.event_type == FIXED_DEPOSIT_MATURED:
+        interest = format_minor(int(event.payload["interest_minor"]), currency)
+        return (
+            "Fixed deposit matured",
+            f"Your fixed deposit matured. {amount}, including {interest} interest, was credited "
+            "to your account.",
+        )
     return None
+
+
+def _payout_held(event: OutboxEvent, user_id: UUID) -> Notification:
+    """No transaction exists yet, so the bell links nowhere; the deposit stays open (ADR-0029)."""
+    amount = format_minor(int(event.payload["amount_minor"]), str(event.payload["currency"]))
+    return Notification(
+        user_id=user_id,
+        type=event.event_type,
+        title="Fixed deposit payout on hold",
+        body=(
+            f"Your fixed deposit has matured, but its payout of {amount} is on hold because the "
+            "account it pays into is not active. It will be paid automatically once the account "
+            "is active again. Contact the bank for help."
+        ),
+        resource_type=None,
+        account_id=_uuid_or_none(event.payload.get("account_id")),
+    )
 
 
 def _scheduled_transfer_text(event: OutboxEvent) -> tuple[str, str] | None:
@@ -314,6 +342,8 @@ def _notification(event: OutboxEvent) -> Notification | None:
         )
     if event.event_type == STATEMENT_DOWNLOADED:
         return _statement(event, user_id)
+    if event.event_type == FIXED_DEPOSIT_PAYOUT_HELD:
+        return _payout_held(event, user_id)
     if event.event_type in _SCHEDULED_TRANSFER_TYPES:
         text = _scheduled_transfer_text(event)
         if text is None:

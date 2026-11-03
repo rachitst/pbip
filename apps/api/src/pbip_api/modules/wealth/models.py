@@ -144,6 +144,12 @@ class FixedDeposit(Base):
         Index("ix_fixed_deposits_user_id", "user_id"),
         Index("ix_fixed_deposits_account_id", "account_id"),
         Index("ix_fixed_deposits_product_id", "product_id"),
+        # ADR-0029: a payout can only be held while the deposit is still open.
+        CheckConstraint(
+            "payout_held_at IS NULL OR status = 'ACTIVE'", name="payout_held_only_while_open"
+        ),
+        # ADR-0029: the hourly maturity payout poll (status = ACTIVE AND maturity_date <= today).
+        Index("ix_fixed_deposits_status_maturity_date", "status", "maturity_date"),
     )
 
     id: Mapped[UUID] = uuid_pk()
@@ -185,6 +191,9 @@ class FixedDeposit(Base):
     paid_interest: Mapped[int | None] = mapped_column(BigInteger)
     closed_on: Mapped[date | None] = mapped_column(Date)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set when the automatic maturity payout first found the account not active (ADR-0029); the
+    # customer is notified once per hold, and the payout is retried every run until it succeeds.
+    payout_held_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = created_at_col()
 
 
