@@ -50,6 +50,7 @@ def test_search_space_covers_learning_rate_depth_and_regularisation() -> None:
 
 def test_cli_writes_the_result_and_a_params_file(tmp_path: Path) -> None:
     out = tmp_path / "data"
+    out.mkdir()
     _export_fraud(GeneratorConfig(seed=3, customers=300, months=6), out)
     result, best = tmp_path / "tune.json", tmp_path / "best.json"
     argv = ["fraud_tune", "--data", str(out), "--trials", "1", "--json", str(result),
