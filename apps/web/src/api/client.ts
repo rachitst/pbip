@@ -157,7 +157,8 @@ async function refreshSession(): Promise<boolean> {
     credentials: "include",
     headers: { "X-Requested-With": "pbip-web" },
   });
-  if (!response.ok) return false;
+  // 204: no refresh cookie, the ordinary signed-out state (#382); 401: the cookie is not valid.
+  if (!response.ok || response.status === 204) return false;
   const body = (await response.json()) as TokenResponse;
   accessToken = body.access_token ?? null;
   return accessToken !== null;

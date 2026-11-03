@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Cookie, Depends, Response, status
 
 from pbip_api.core.config import Settings, get_settings
-from pbip_api.core.errors import UnauthorizedError
 from pbip_api.core.ratelimit import rate_limit
 from pbip_api.modules.auth.dependencies import (
     Principal,
@@ -118,6 +117,14 @@ def verify_mfa(
     response_model=TokenResponse,
     dependencies=[Depends(csrf_guard)],
     summary="Rotate the refresh cookie and get a new access token",
+    responses={
+        status.HTTP_204_NO_CONTENT: {
+            "description": "No refresh cookie was sent: signed out, nothing to restore (no token)"
+        },
+        status.HTTP_401_UNAUTHORIZED: {
+            "description": "The refresh cookie is invalid, expired, revoked or reused"
+        },
+    },
 )
 def refresh(
     response: Response,
@@ -125,9 +132,12 @@ def refresh(
     service: AuthService = Depends(get_auth_service),
     settings: Settings = Depends(get_settings),
     meta: RequestMeta = Depends(get_request_meta),
-) -> TokenResponse:
+) -> TokenResponse | Response:
+    # No cookie is the ordinary signed-out state of every page load (the web app asks once to
+    # restore a session), not a failed authentication: 204 with no token (#382, ADR-0042). A
+    # cookie that is sent but invalid is still a 401 and still triggers reuse detection.
     if not refresh_cookie:
-        raise UnauthorizedError("invalid session")
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
     tokens = service.refresh(refresh_cookie, meta)
     _set_refresh_cookie(response, tokens, settings)
     return _token_response(tokens)

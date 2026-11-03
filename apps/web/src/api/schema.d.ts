@@ -1919,7 +1919,8 @@ export interface components {
             account_id: string;
             /** Currency */
             currency: string;
-            end_of_month: components["schemas"]["EndOfMonthProjection"];
+            /** @description Null only when status is INSUFFICIENT_HISTORY */
+            end_of_month: components["schemas"]["EndOfMonthProjection"] | null;
             /**
              * History
              * @description Actual end-of-day balances of the last 30 days before the first point
@@ -1941,7 +1942,7 @@ export interface components {
             label: "Predicted, not exact";
             /**
              * Method
-             * @description auto_arima, seasonal_naive or naive (by history length)
+             * @description auto_arima, seasonal_naive or naive (by history length); none when status is INSUFFICIENT_HISTORY
              */
             method: string;
             /** Model Version */
@@ -1956,6 +1957,13 @@ export interface components {
              * @description Model forecast of everything except scheduled debits, minus the known obligations (TASK-043)
              */
             points: components["schemas"]["BalanceForecastPoint"][];
+            /**
+             * Status
+             * @description INSUFFICIENT_HISTORY: fewer than two days of balance history, so there is no forecast yet (points and history are empty, end_of_month is null). An expected state of a new account, not an error
+             * @default OK
+             * @enum {string}
+             */
+            status: "OK" | "INSUFFICIENT_HISTORY";
         };
         /**
          * BalanceHistoryPoint
@@ -6112,6 +6120,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TokenResponse"];
                 };
+            };
+            /** @description No refresh cookie was sent: signed out, nothing to restore (no token) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The refresh cookie is invalid, expired, revoked or reused */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

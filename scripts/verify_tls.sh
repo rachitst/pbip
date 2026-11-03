@@ -30,10 +30,11 @@ for path in / /api/health/live; do
 done
 pass "HTTPS verifies against the CA; HSTS on static and API responses"
 
-# 2b. The HTTPS origin is trusted by the CSRF guard: a refresh without a cookie is 401, never 403.
+# 2b. The HTTPS origin is trusted by the CSRF guard: a refresh without a cookie is 204 (signed
+# out, ADR-0042), never 403.
 csrf="$(curl -sS --cacert "$CA" -o /dev/null -w '%{http_code}' -X POST -H "Origin: $HTTPS_URL" \
   -H 'X-Requested-With: pbip-web' "$HTTPS_URL/api/v1/auth/refresh")"
-[ "$csrf" = "401" ] || fail "refresh from origin $HTTPS_URL answered $csrf (403 = origin missing from CORS_ORIGINS)"
+[ "$csrf" = "204" ] || fail "refresh from origin $HTTPS_URL answered $csrf (403 = origin missing from CORS_ORIGINS)"
 pass "the HTTPS origin is trusted for cookie refresh"
 
 # 3. Old protocols are refused (TLS 1.2 minimum).

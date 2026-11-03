@@ -11,7 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ApiError, api } from "../api/client";
+import { api } from "../api/client";
 import type { BalanceForecastResponse } from "../api/client";
 import { errorMessage } from "../lib/errors";
 import { formatMinor } from "../lib/money";
@@ -23,10 +23,11 @@ import {
   axisAmount,
   forecastRows,
   forecastSummary,
+  isProjected,
   obligationLabel,
   shortDate,
 } from "./forecastChart";
-import type { ForecastRow } from "./forecastChart";
+import type { ForecastRow, ProjectedForecast } from "./forecastChart";
 
 /** TASK-050: 30-day balance projection (TASK-042/043) with its prediction interval. */
 export function BalanceForecastSection({ accountId }: { accountId: string }) {
@@ -55,11 +56,6 @@ export function BalanceForecastSection({ accountId }: { accountId: string }) {
 function ForecastBody({ query }: { query: UseQueryResult<BalanceForecastResponse> }) {
   if (query.isPending) return <LoadingState label="Projecting your balance..." />;
   if (query.isError) {
-    if (query.error instanceof ApiError && query.error.status === 422) {
-      return (
-        <EmptyState message="Not enough account history to forecast yet. Check back after a few days of activity." />
-      );
-    }
     return (
       <ErrorState
         message={errorMessage(query.error, "Could not load the balance forecast.")}
@@ -69,10 +65,15 @@ function ForecastBody({ query }: { query: UseQueryResult<BalanceForecastResponse
       />
     );
   }
+  if (!isProjected(query.data)) {
+    return (
+      <EmptyState message="Not enough account history to forecast yet. Check back after a few days of activity." />
+    );
+  }
   return <ForecastView forecast={query.data} />;
 }
 
-function ForecastView({ forecast }: { forecast: BalanceForecastResponse }) {
+function ForecastView({ forecast }: { forecast: ProjectedForecast }) {
   const rows = forecastRows(forecast);
   const summary = forecastSummary(forecast);
   const eom = forecast.end_of_month;
