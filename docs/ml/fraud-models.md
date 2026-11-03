@@ -1,6 +1,6 @@
 # Fraud models: LightGBM classifier and Isolation Forest (TASK-029, TASK-030)
 
-**Status:** trained offline and evaluated. The hybrid scorer is wired into transfers and bill payments behind `FRAUD_SCORER=hybrid` (TASK-033, ADR-0019). Local and demo run `hybrid` since the #251 fix (generator v2.1); the code default for other deployments stays `rules`. Current numbers: `docs/ml/model-evaluation-report-v1.md` (v1.1). The tables below are the v2.0 (pre-#251) training run, kept for history.
+**Status:** trained offline and evaluated. The hybrid scorer is wired into transfers and bill payments behind `FRAUD_SCORER=hybrid` (TASK-033, ADR-0019). Local and demo run `hybrid` since the GitHub issue #251 fix (generator v2.1); the code default for other deployments stays `rules`. Current numbers: `docs/ml/model-evaluation-report-v1.md` (v1.1). The tables below are the v2.0 (before the GitHub issue #251 fix) training run, kept for history.
 **Code:**
 - `ml/src/pbip_ml/fraud/training.py`: dataset, time split, models, metrics.
 - `ml/src/pbip_ml/fraud/artifacts.py`: the served feature order, `AnomalyModel` and the allow-listed artifact loader (inference-safe, ADR-0033).
@@ -117,7 +117,7 @@ Example, a high-risk F5 transfer:
 - **Persistence:** `fraud_events` stores the full snapshot (baseline and hybrid inputs, `model_probability`, `anomaly_score`, both risks) and `model_version`. Customers never see reasons or scores; staff alert detail shows RULE/MODEL/ANOMALY reasons (`test_hybrid_risk_drives_the_transfer_state_machine`).
 - **Latency (laptop, served end to end, 25 transfers):** p50 20.6 ms, p95 24.7 ms, max 29.2 ms.
 
-### Served-path finding: new payees (#251)
+### Served-path finding: new payees (GitHub issue #251)
 In the labelled data, no legitimate debit goes to a payee less than 761 h (about 32 days) old, while 83% of fraud debits use a payee under 72 h old. The models learned "new payee = fraud". When served, a ₹10 transfer to a 48 h-old verified payee scored model probability 0.99 and risk 75 (REVIEW), with `MODEL_PAYEE_AGE_SECONDS` as the top reason.
 
 The offline metrics above do not show this, because the test split has the same blind spot. It was a data-generator gap, not a serving bug.

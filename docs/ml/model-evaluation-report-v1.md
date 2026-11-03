@@ -1,8 +1,8 @@
-# Fraud engine evaluation report v1.1 (TASK-039, revised for #251)
+# Fraud engine evaluation report v1.1 (TASK-039, revised for GitHub issue #251)
 
 **Date:** 1 Nov 2026. **Scorer evaluated:** `hybrid-lgbm-iforest-1`. It is loaded through the same
 `pbip_ml.fraud.inference.load` the API uses (ADR-0019) and includes the TASK-080 VELOCITY_BURST floor.
-**Data:** generator v2.1, which now includes legitimate first-time behaviour (#251).
+**Data:** generator v2.1, which now includes legitimate first-time behaviour (GitHub issue #251).
 **MLflow run:** `5de0a9dc7c534ed29701cd7703d4fb6a`, experiment `pbip-fraud`. The v1.0 report (generator
 v2.0) used run `79157b22dc9a46d0b2dcfbb0ccde5cd9`; its headline numbers are kept in §3.3 for comparison.
 
@@ -78,7 +78,7 @@ Hybrid PR-AUC: **0.860** on test, **0.858** on the held-out seed.
   location feature), F5 (amounts near the customer's own range), and F1 cases that now resemble legitimate
   first payments.
 
-### 3.3 Before and after #251: legitimate first-time transfers
+### 3.3 Before and after GitHub issue #251: legitimate first-time transfers
 
 "Before" is the v2.0 model (trained without legitimate new payees). "After" is the v2.1 model. Both score
 the same v2.1 test and held-out rows. The table shows the share of legitimate transfers in each group that
@@ -253,7 +253,7 @@ F6 legs. Those legs were easy for the model and almost never caught by the rules
 
 - **F7 is not detected by the per-transfer scorer.** Structuring is a pattern of incoming deposits, and the
   scorer only sees outgoing transfers. Detecting it needs a deposit-window aggregate feature or a batch
-  monitor. That is a follow-up (#274); F7 stays in the data as labelled ground truth for it.
+  monitor. That is a follow-up (GitHub issue #274); F7 stays in the data as labelled ground truth for it.
 - **F8 is caught by the takeover signals, not by dormancy.** It looks like F1/F3: a new device, a payee added
   minutes earlier and the maximum amount. No feature measures the time since the last activity, so a careful
-  dormant-account fraud without those signals would be missed. That is also a follow-up (#275).
+  dormant-account fraud without those signals would be missed. That is also a follow-up (GitHub issue #275).

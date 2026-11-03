@@ -195,9 +195,9 @@ the runner, the k6 baseline or this guide. One native Windows run of steps 0-8 i
 
 | Task (issue) | Steps that prove its Windows criteria |
 |---|---|
-| TASK-001 (#12) runner | 3, 5, 6, 8 (exit codes in PowerShell and `cmd.exe`, solo pool + separate beat, clean) |
-| TASK-012 (#23) k6 baseline | 7 ("Cross-platform execution script works on Windows and Linux") |
-| TASK-013 (#24) guide | 0-4 from a fresh clone, plus the whole run following only this guide |
+| TASK-001 (GitHub issue #12) runner | 3, 5, 6, 8 (exit codes in PowerShell and `cmd.exe`, solo pool + separate beat, clean) |
+| TASK-012 (GitHub issue #23) k6 baseline | 7 ("Cross-platform execution script works on Windows and Linux") |
+| TASK-013 (GitHub issue #24) guide | 0-4 from a fresh clone, plus the whole run following only this guide |
 
 **Verified on Linux (Ubuntu, kernel 7.0, Python 3.12, 2026-10-25):**
 - 62 unit tests for the runner, doctor and setup scripts pass, including the Windows code paths exercised by
@@ -205,32 +205,32 @@ the runner, the k6 baseline or this guide. One native Windows run of steps 0-8 i
 - `python scripts/dev.py <unknown>` exits 1 and `help` exits 0; `doctor` reports 12 OK, 0 WARN, 0 MISSING.
 
 **First native Windows run (Windows 10 Pro 22H2, build 19045, PowerShell 5.1, 2026-10-26, commit `86f94a3`):**
-steps 0, 1, 3 and 8 passed; 2, 4, 5, 6 and 7 found defects (evidence on #12, #23, #24). Fixed here: `setup` failing
+steps 0, 1, 3 and 8 passed; 2, 4, 5, 6 and 7 found defects (evidence on GitHub issues #12, #23, #24). Fixed here: `setup` failing
 on a fresh clone (`init_env.py` imported `cryptography` before dependencies were installed), `dev.cmd` exiting 0
 for a failing command when run as `cmd /c` or from PowerShell, a unit test that was not portable to Windows, the
 `winget` id for uv, and checklist commands in steps 5 and 7 that could never show a failure. The tasks stay
 **In Review** until those fixes are merged and steps 2-8 pass on Windows again.
 
-**Second native Windows run (same machine, 2026-10-26, merged `main` `04df85f` with #132 and #133, fresh clone):**
+**Second native Windows run (same machine, 2026-10-26, merged `main` `04df85f` with GitHub PRs #132 and #133, fresh clone):**
 steps 0-6 and 8 pass. Setup works from a clean clone; `test-unit` 272 passed; `dev.ps1` and `dev.cmd` return 1/0 as the
 process exit code, including through `2>&1 | Tee-Object` and `*> file`; one console Ctrl+C on a ready worker stops
 worker and beat in about 4 s with no process left. **Step 7 still fails its latency thresholds** on this 2-core laptop
-(`ready` p95 81.5 / 100.69 ms, overall 62.73 / 80.94 ms; errors 0.00%, checks 100%, both commands exit 99): #134.
+(`ready` p95 81.5 / 100.69 ms, overall 62.73 / 80.94 ms; errors 0.00%, checks 100%, both commands exit 99): GitHub issue #134.
 `.\dev.ps1 check`: 419 passed, coverage 95.78%, all lint/type/security gates green; one TASK-009 COPY-budget
-test took 15.9-17.2 s against 15 s (#135). TASK-001, TASK-012 and TASK-013 therefore stay **In Review**.
+test took 15.9-17.2 s against 15 s (GitHub issue #135). TASK-001, TASK-012 and TASK-013 therefore stay **In Review**.
 
-**Third native Windows run (same machine, 2026-10-27, `main` `9386b22` with #137 and #138, fresh clone): steps 0-8
+**Third native Windows run (same machine, 2026-10-27, `main` `9386b22` with GitHub PRs #137 and #138, fresh clone): steps 0-8
 pass.** Setup exit 0 from a clean clone; migrate exit 0; `test-unit` 283 passed; both runners return 1/0 (also through
 `2>&1 | Tee-Object` and `cmd /c`); one console Ctrl+C after a task was received: warm shutdown, task finished, every
-process gone in 1.79 s. Step 7 after #137 (`/ready` no longer takes four thread-pool hops per probe): `dev.cmd perf`
+process gone in 1.79 s. Step 7 after GitHub PR #137 (`/ready` no longer takes four thread-pool hops per probe): `dev.cmd perf`
 p95 overall 15.44 / 16.00 ms, live 14.22 / 14.86, ready 16.53 / 16.72; `.\dev.ps1 perf` 38.53 / 35.58 / 41.69 ms; errors
 0.00%, checks 100%, exit 0. One further `.\dev.ps1 perf` run failed (182 ms) while other apps saturated the CPU; `/live`,
 which does no I/O, failed by the same margin, so that run measured the machine, not the endpoint. Thresholds unchanged.
 `.\dev.ps1 check`: 430 passed, coverage 95.79%, all lint/type/security gates green; the TASK-009 COPY-budget test is
-still over 15 s on this 2-core laptop (#135, not part of these tasks' criteria). TASK-001, TASK-012 and TASK-013: **Done**.
+still over 15 s on this 2-core laptop (GitHub issue #135, not part of these tasks' criteria). TASK-001, TASK-012 and TASK-013: **Done**.
 
 **Copy-paste checklist (Windows 10/11, PowerShell; Docker Desktop running).** Paste the output of steps 0-8 into
-issues #12 (TASK-001), #23 (TASK-012) and #24 (TASK-013).
+GitHub issues #12 (TASK-001), #23 (TASK-012) and #24 (TASK-013).
 
 ```powershell
 # 0. Environment (record it)
@@ -238,7 +238,7 @@ issues #12 (TASK-001), #23 (TASK-012) and #24 (TASK-013).
 docker version --format '{{.Server.Version}}'
 
 # 1. Fresh clone + diagnostics (TASK-002/013): expect [OK]/[WARN] lines and exit code 0
-git clone https://github.com/rachitst/pbip.git pbip-wincheck; cd pbip-wincheck
+git clone https://github.com/<your-org-or-username>/pbip.git pbip-wincheck; cd pbip-wincheck
 #    If PowerShell refuses to run dev.ps1, apply the execution-policy note in section 4.6 (RemoteSigned, CurrentUser).
 .\dev.ps1 doctor; "exit=$LASTEXITCODE"
 
