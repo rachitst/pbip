@@ -14,7 +14,7 @@ Point-in-time rule: a transfer's features use only events strictly BEFORE it (``
 the transfer's), except ``distinct_devices_7d``, which counts the current device too (the device in
 use is known at decision time). Money is integer paise; ratios are exact floats of integer sums.
 
-``activity`` marks a past movement the CUSTOMER caused (ADR-0049, the same set as ADR-0046's
+``activity`` marks a past movement the CUSTOMER caused (ADR-0051, the same set as ADR-0046's
 DORMANT_REACTIVATION: transfers, deposits, bill payments, deposit bookings). Fees, interest, loan
 postings and reversals are not activity: they do not wake a dormant account. Every generated row is
 activity; the API marks the rest.
@@ -28,12 +28,12 @@ velocity_10m                prior DEBITs in the last 10 minutes
 failure_count_24h           failed logins in the last 24 hours (counted by the platform)
 distinct_devices_7d         distinct devices on the customer's DEBITs in 7 days, incl. this one
 near_threshold_72h          prior activity in 72 hours, either direction, each 90% to 99.99% of
-                            the INR 1,00,000 reporting threshold (F7 structuring, ADR-0049)
+                            the INR 1,00,000 reporting threshold (F7 structuring, ADR-0051)
 days_since_last_activity    whole days since the customer's last prior activity; -1 with none
-                            (F8 dormant-account reactivation, ADR-0049)
+                            (F8 dormant-account reactivation, ADR-0051)
 ==========================  ===========================================================
 
-``distinct_devices_7d`` counts debits only (ADR-0049): a credit is made by the sender, so the API
+``distinct_devices_7d`` counts debits only (ADR-0051): a credit is made by the sender, so the API
 records no device of the customer for it, and the generator's credits carry the customer's usual
 device. Counting them offline would be train/serve skew.
 """

@@ -66,7 +66,7 @@ DAY_MIN = 24 * 60
 
 
 def test_structuring_window_counts_near_threshold_movements_either_way() -> None:
-    """#274 F7 (ADR-0049): prior activity in 72 h, each 90% to 99.99% of INR 1,00,000."""
+    """#274 F7 (ADR-0051): prior activity in 72 h, each 90% to 99.99% of INR 1,00,000."""
     history = [
         _past(10, 95_000_00, "CREDIT", None),
         _past(DAY_MIN, 90_000_00, "CREDIT", None),  # exactly 90%: counts
@@ -82,7 +82,7 @@ def test_structuring_window_counts_near_threshold_movements_either_way() -> None
 
 
 def test_days_since_last_activity_ignores_bank_postings() -> None:
-    """#275 F8 (ADR-0049): whole days since the last customer activity; fees do not count."""
+    """#275 F8 (ADR-0051): whole days since the last customer activity; fees do not count."""
     history = [
         _past(200 * DAY_MIN + 5, 2_000_00),
         _past(3 * DAY_MIN, 100_00, activity=False),  # a fee: the account stays dormant
@@ -97,7 +97,7 @@ def test_days_since_last_activity_ignores_bank_postings() -> None:
 
 
 def test_devices_are_counted_on_debits_only() -> None:
-    """ADR-0049: a credit's device is the sender's business; the API has none for it."""
+    """ADR-0051: a credit's device is the sender's business; the API has none for it."""
     history = [_past(60, 1_000_00, "CREDIT", DEV_B), _past(70, 1_000_00, device=DEV_C)]
     assert online_features(_now(1_00), history).distinct_devices_7d == 2  # A (current), C
 

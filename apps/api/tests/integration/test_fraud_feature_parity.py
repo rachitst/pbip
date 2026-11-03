@@ -1,4 +1,4 @@
-"""API <-> ML feature parity for F7/F8 (#274, #275, ADR-0049), on real PostgreSQL.
+"""API <-> ML feature parity for F7/F8 (#274, #275, ADR-0051), on real PostgreSQL.
 
 The hybrid scorer builds the model's row from the platform's records. These tests put a known
 history in the ledger (back-dated through the ledger service), score a transfer, and compare the
@@ -18,7 +18,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pbip_api.core.config import Settings
 from pbip_api.core.db import utcnow
-from pbip_api.modules.fraud.hybrid import ACTIVITY_TYPES
+from pbip_api.modules.fraud.baseline import ACTIVITY_TYPES
 from pbip_api.modules.fraud.models import FraudEvent
 from pbip_api.modules.ledger import service as ledger
 from pbip_api.modules.ledger.models import Transaction, TransactionStatus, TransactionType

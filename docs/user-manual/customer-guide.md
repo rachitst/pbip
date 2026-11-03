@@ -78,8 +78,10 @@ from your app (or one of your recovery codes) and choose **Verify**.
 further failure doubles the wait, up to one hour. Wait, then try again. A staff administrator can also
 clear a lockout.
 
-> Demo logins for a local copy of PBIP (`alice@demo.pbip`, `bob@demo.pbip`) and where their password comes
-> from are listed in the [README](../../README.md). The password is never printed in this manual.
+> Demo logins for a local copy of PBIP (`alice@demo.pbip`, `bob@demo.pbip`, `carol@demo.pbip`) and where
+> their password comes from are listed in the [README](../../README.md). The password is never printed in
+> this manual. Alice has an authenticator, so she is asked for a code after her password
+> (`scripts/totp.py` prints it); Bob and Carol are not.
 
 ## 2. Turn on two-step sign-in (MFA)
 
@@ -361,6 +363,11 @@ Each part has a label such as Optimal, Adequate, Moderate, Low, Volatile, Burden
 **Actionable Financial Insights** lists what to improve. A new customer sees "Not enough data yet" for
 parts that need at least one or two closed months, as in the screenshot.
 
+**Income** means regular credits only: money from the same payer, for the same purpose, in at least 2 of
+the last 3 months (a salary, for example). A one-off credit such as an opening deposit does not count. Until
+a regular credit has arrived twice, Savings and Debt show "no income observed" and score 0, as in the
+screenshot, and the insights say "No regular income recorded yet".
+
 **Balance Forecast** (marked **Predicted, not exact**) draws your balance for the last 30 days and a
 prediction for the next 30, with shaded 80% and 95% ranges and markers for scheduled payments and loan
 EMIs. It shows the projected month-end balance and the payments still due this month. If your balance may
@@ -387,8 +394,10 @@ repayments. Open **Loans**.
    interest** and **Total payable**.
 3. The **Eligibility pre-check** shows **Eligible** or **Not eligible**, the maximum you could borrow over
    that tenure, your interest rate and the reasons. All your repayments including the new EMI must stay
-   within 50% of your income, worked out from your own account history. A sign-in lockout in the last 90
-   days pauses loan checks.
+   within 50% of your income, worked out from your own account history. Only regular income counts (see
+   [section 10](#10-spending-financial-health-and-balance-forecast)); without it the pre-check says
+   **Not eligible**, "We could not find regular income in your account history.", as in the screenshot of a
+   new customer. A sign-in lockout in the last 90 days pauses loan checks.
 
 **Borrow:**
 
@@ -467,6 +476,11 @@ your balance or spending pattern. The button takes you to the right place:
 | Credit line | **See our loans** | **Loans** |
 | Fixed deposit | **Book a fixed deposit** | **Wealth**, with the booking box open |
 | Anything else (for example insurance) | none | "You cannot apply for this in PBIP yet." |
+
+Most products need a regular income (see
+[section 10](#10-spending-financial-health-and-balance-forecast)) or a few months of history, so a new
+customer whose only credit is the opening deposit sees "No product recommendations for you right now.", as
+in the screenshot.
 
 Recommendations use your age band only if you gave consent (see [Profile and security](#17-profile-and-security)).
 

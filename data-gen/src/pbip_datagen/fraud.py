@@ -26,7 +26,7 @@ customers, ONE injected incident of a scenario:
 v2.3 (#276) fixes a v2.0 defect: ordinary transfers continued after ``churned_on`` (v2.2 dropped
 them only for F8 customers). Now, as in v1, nobody transfers after the day they churned.
 
-v2.4 (#274, ADR-0049) adds legitimate INBOUND transfers (L4 below). Until then every credit was
+v2.4 (#274, ADR-0051) adds legitimate INBOUND transfers (L4 below). Until then every credit was
 fraud (F6, F7), so no false-positive rate on legitimate credits could be measured.
 
 Every row of an incident is labelled (``fraud_labels``: transaction id -> scenario, incident, role).

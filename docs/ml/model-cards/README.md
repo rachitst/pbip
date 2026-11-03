@@ -12,10 +12,11 @@ evaluation report exists, the card says so instead of giving a number.
 | [Balance forecast](balance-forecast.md) | `ml/src/pbip_ml/forecasting/model.py` | `forecast-arima-1` | yes: `GET /api/v1/analytics/forecast` | `docs/ml/balance-forecast.md` |
 | [K-Means customer segmentation](kmeans-segmentation.md) | `ml/src/pbip_ml/segmentation/pipeline.py` | none defined in code | stored by an offline job, read by `GET /api/v1/analytics/segment` | no evaluation report on main |
 | [Rule-based product recommendation score](recommendation-score.md) | `ml/src/pbip_ml/recommendations/engine.py` | `rules-v1` | yes | no ranking evaluation (no outcome labels); latency and the no-model decision: [`docs/ml/recommendation-propensity-decision.md`](../recommendation-propensity-decision.md) |
+| [Simulated-uptake propensity model](recommendation-propensity.md) | `ml/src/pbip_ml/recommendations/training.py`, `propensity.py` | `sim-propensity-v1` | no: failed its gate against `rules-v1` (ADR-0049) | on SIMULATED uptake only: the card, from `models/recommendations/report.json` |
 
 Not covered by a card:
 
-- The baseline fraud rules (`apps/api/src/pbip_api/modules/fraud/baseline.py`, `baseline-rules-0.5`) are a
+- The baseline fraud rules (`apps/api/src/pbip_api/modules/fraud/baseline.py`, `baseline-rules-0.6`) are a
   hand-written rule set, not a model. They appear in the hybrid card as the floor and the fail-safe.
 - The circular-transfer analysis (`docs/ml/circular-transfer-spike.md`, TASK-072) is a spike, not a served model.
 

@@ -1,5 +1,12 @@
 # Decision: no trained propensity model for product recommendations yet (TASK-054)
 
+> **Update 2026-11-04 (ADR-0049).** On the owner's direction a propensity model was trained on a documented,
+> clearly labelled simulation of uptake and compared with `rules-v1` on the same simulated data. It did not pass
+> its promotion gate, so `rules-v1` is still served. See
+> [ADR-0049](../adr/0049-simulated-uptake-propensity-model-behind-the-rules.md) and the
+> [model card](model-cards/recommendation-propensity.md). The reasoning below about simulated labels still
+> applies, and is why every result is labelled as simulated.
+
 | | |
 |---|---|
 | Status | Decided: keep `rules-v1`; do not train a propensity model on synthetic data |
@@ -90,6 +97,37 @@ entries, 5 warm-up calls, then 3 rounds of 60 calls. Machine: 2-CPU laptop share
   idle server has not been measured here; TASK-102 (k6 p95 on the compose stack) is the right place to
   measure it. If it does not, the fix is in the context build (fewer queries, or reuse of the stored
   monthly analytics), not in the engine, and is a separate change, tracked in issue #343.
+
+### Latency after the context-build reduction (#343), measured 2026-11-04
+
+The context now costs 6 SQL statements (accounts, one pass over the customer's entries for both the
+health window and the lifestyle features, segment, age band, loans, fixed deposits; the instalments
+query only when there is a loan), and the HTTP request 7 (token check and customer, then the age
+band reuses the loaded customer). Before: 10 and 12. Pinned by
+`test_recommendation_context_is_six_queries_and_the_request_seven`; the output is unchanged
+(equality tests in `test_recommendations.py`, and byte-identical responses in the benchmark below).
+
+Setup: scratch PostgreSQL 16 (Docker), 21 customers with 12 months of history (1,160+ entries), the
+measured customer with 253 entries; 20 warm-up calls, then 300 sequential calls per variant, main and
+this change interleaved twice. Machine: 2-CPU Celeron N4500 (1.1 GHz) shared with other jobs, 1-minute
+load average **7.5-8.7** throughout (about 4x oversubscribed); it could not be made quiet.
+
+| What (p50 / p95, ms) | main (2 runs) | after (2 runs) |
+|---|---|---|
+| Real HTTP, separate uvicorn process, keep-alive client | 49.6-62.4 / 89.5-92.2 | 33.6-34.1 / 51.3-56.8 |
+| Service call, wall clock | 33.5-44.7 / 53.9-63.8 | 26.2-30.4 / 39.0-39.3 |
+| Service call, Python CPU | 16.3-16.6 / 17.7-18.2 | 10.5-10.8 / 11.5-11.7 |
+| In-process `TestClient`, wall clock | 47.6-55.9 / 80.4-85.1 | 40.2-45.0 / 57.6-59.0 |
+| uvicorn process CPU per request | 22.6 | 15.2 |
+
+**Floor on this hardware.** A request is about 15 ms of server CPU (FastAPI, auth, SQLAlchemy, the
+aggregation; the engine is < 0.2 ms) plus about 10 database round trips (7 statements, BEGIN,
+ROLLBACK and the pool pre-ping). A `SELECT 1` round trip is 0.28 ms p50 here but 2.3 ms p95 under this
+load, and the largest statement (the entries pass) executes in about 1-3 ms in PostgreSQL. On an idle
+machine that adds up to roughly 20-25 ms, inside 40 ms; at 4x oversubscription the CPU part stretches
+and the measured HTTP p95 is 51-57 ms. So the endpoint does **not** meet 40 ms p95 over HTTP on this
+loaded laptop; the service-level p95 is at the limit (39 ms). An idle-machine run is still needed to
+demonstrate the HTTP budget (`scripts/measure_analytics_latency.py` against a quiet stack).
 
 A trained model would not change this picture: an LR or small GBM scores six products in well under a
 millisecond. The latency question is independent of the model decision.

@@ -35,10 +35,10 @@ from pbip_api.core.velocity import VelocityCounters
 from pbip_api.modules.accounts.models import AccountHolder
 from pbip_api.modules.auth.models import SecurityEvent, SecurityEventType
 from pbip_api.modules.customers.models import Customer
-from pbip_api.modules.fraud.baseline import BaselineRulesScorer, decide
+from pbip_api.modules.fraud.baseline import ACTIVITY_TYPES, BaselineRulesScorer, decide
 from pbip_api.modules.fraud.models import FraudEvent
 from pbip_api.modules.fraud.travel import TravelPolicy
-from pbip_api.modules.ledger.models import Transaction, TransactionStatus, TransactionType
+from pbip_api.modules.ledger.models import Transaction, TransactionStatus
 from pbip_api.modules.payees.models import Payee
 
 if TYPE_CHECKING:  # the model stack (LightGBM, scikit-learn) loads only when the flag is on
@@ -48,15 +48,8 @@ if TYPE_CHECKING:  # the model stack (LightGBM, scikit-learn) loads only when th
 _logger = structlog.get_logger(__name__)
 
 LOGIN_WINDOW = timedelta(hours=24)
-# Customer-induced activity (ADR-0049, the same set as ADR-0046's DORMANT_REACTIVATION): what the
-# generator's transfers stand for. Fees, deposit interest, maturity payouts, reversals and loan
-# postings are the bank's doing; they neither wake a dormant account nor count as structuring.
-ACTIVITY_TYPES = (
-    TransactionType.TRANSFER,
-    TransactionType.DEPOSIT,
-    TransactionType.BILL_PAYMENT,
-    TransactionType.FD_BOOKING,
-)
+# Customer-induced activity: the same set as DORMANT_REACTIVATION (ADR-0046, ADR-0051). Fees,
+# interest, payouts, reversals and loan postings neither wake an account nor count as structuring.
 _IS_ACTIVITY = and_(
     Transaction.status == TransactionStatus.POSTED, Transaction.type.in_(ACTIVITY_TYPES)
 )
@@ -183,7 +176,7 @@ class HybridFraudScorer:
             .where(Transaction.debit_account_id.in_(accounts), *window)
         ).all()
         # Money received, from anyone but the customer's own accounts (a move between them is
-        # already a debit above). No device: the sender made it (ADR-0049).
+        # already a debit above). No device: the sender made it (ADR-0051).
         credits = self.session.execute(
             select(Transaction.created_at, Transaction.amount, _IS_ACTIVITY).where(
                 Transaction.credit_account_id.in_(accounts),

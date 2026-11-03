@@ -27,7 +27,7 @@ extra dependency), and the Isolation Forest reason when ``a >= 0.5`` (ANOMALY).
 
 import json
 import math
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -36,6 +36,7 @@ import numpy as np
 import pandas as pd
 
 from pbip_ml.fraud.artifacts import MODEL_FEATURES, AnomalyModel
+from pbip_ml.fraud.compiled_forest import CompiledForest
 from pbip_ml.fraud.contract import FraudDecision, FraudReason, ReasonSource
 from pbip_ml.fraud.features import FraudFeatures
 from pbip_ml.fraud.rules import RuleContext, RuleRegistry, default_registry
@@ -123,7 +124,7 @@ _TEMPLATES: dict[str, Callable[[float], str]] = {
 
 
 def model_columns(booster: lgb.Booster) -> list[str]:
-    """The columns this booster was trained on, in its order (ADR-0049).
+    """The columns this booster was trained on, in its order (ADR-0051).
 
     A model is served with the feature row of the code that serves it, which can have more
     columns than the model was trained on: the -3 artifacts (9 features) still score correctly
@@ -133,10 +134,34 @@ def model_columns(booster: lgb.Booster) -> list[str]:
     return list(booster.feature_name())
 
 
-def shap_reasons(booster: lgb.Booster, row: pd.DataFrame, top: int = TOP_SHAP) -> list[FraudReason]:
-    """Top positive TreeSHAP contributors (log-odds) for ONE row, as MODEL reasons."""
+def model_matrix(row: pd.DataFrame, columns: Sequence[str] = MODEL_FEATURES) -> np.ndarray:
+    """The LightGBM input for ``row``: exactly what ``booster.predict(DataFrame)`` builds itself.
+
+    LightGBM converts a DataFrame with ``np.result_type(*column dtypes, float32)``, float64 for
+    these int64/float64 columns, so passing this matrix gives identical predictions while skipping
+    its pandas conversion (about half a millisecond per call). Built once, shared by predict and
+    TreeSHAP. ``columns`` is the booster's own list (``model_columns``).
+    """
+    matrix: np.ndarray = row[list(columns)].to_numpy(dtype=np.float64)
+    return matrix
+
+
+def shap_reasons(
+    booster: lgb.Booster,
+    row: pd.DataFrame,
+    top: int = TOP_SHAP,
+    matrix: np.ndarray | None = None,
+) -> list[FraudReason]:
+    """Top positive TreeSHAP contributors (log-odds) for ONE row, as MODEL reasons.
+
+    ``matrix`` is ``model_matrix(row, model_columns(booster))`` when the caller has built it
+    already. ``num_threads=1``: one row needs no OpenMP pool, and on the 2-CPU laptop an
+    idle-spinning second thread competes with the API under load (#379). A row's arithmetic is
+    sequential either way: same values.
+    """
     columns = model_columns(booster)
-    contrib = np.asarray(booster.predict(row[columns], pred_contrib=True))[0]
+    data = model_matrix(row, columns) if matrix is None else matrix
+    contrib = np.asarray(booster.predict(data, pred_contrib=True, num_threads=1))[0]
     values = contrib[:-1]  # last column is the expected value (bias)
     order = np.argsort(-values)
     reasons = []
@@ -172,6 +197,8 @@ class HybridScorer:
     booster: lgb.Booster | None
     anomaly: AnomalyModel | None
     rules: RuleRegistry = field(default_factory=default_registry)
+    # The anomaly forest compiled for one-row scoring (``compiled_forest``); None = scikit-learn's.
+    compiled_anomaly: CompiledForest | None = None
 
     def score(self, row: pd.DataFrame, context: RuleContext) -> HybridResult:
         outcome = self.rules.evaluate(context)
@@ -183,9 +210,10 @@ class HybridScorer:
         try:
             if self.booster is None or self.anomaly is None:
                 raise RuntimeError("model unavailable")
-            raw = float(np.asarray(self.booster.predict(row[model_columns(self.booster)]))[0])
+            matrix = model_matrix(row, model_columns(self.booster))
+            raw = float(np.asarray(self.booster.predict(matrix, num_threads=1))[0])
             p = float(self.params.calibrate(np.array([raw]))[0])
-            a = float(self.anomaly.score(row)[0])
+            a = float(self.anomaly.score(row, self.compiled_anomaly)[0])
         except Exception as exc:  # fail safe: rules only, never ALLOW-all
             reasons.append(
                 FraudReason(
@@ -206,7 +234,7 @@ class HybridScorer:
             )
             risk = round(100 * _sigmoid(z))
             snapshot.update(model_probability=round(p, 4), anomaly_score=round(a, 4))
-            reasons.extend(shap_reasons(self.booster, row))
+            reasons.extend(shap_reasons(self.booster, row, matrix=matrix))
             if a >= ANOMALY_REASON_AT:
                 reasons.append(
                     FraudReason(

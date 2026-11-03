@@ -4,7 +4,7 @@
 |---|---|
 | Task | TASK-104 (#187) |
 | Source | *PBIP Use Case Document v0.2*: sections 5 (scope), 6 (actors), 7 (UC-01 to UC-13), 8 (non-functional), 9 to 11 (deliverables, practices, success criteria) |
-| Status checked against | `main` at `2e65b87` (1 Nov 2026): the code and the tests, not earlier documents |
+| Status checked against | `main` at `2e65b87` (1 Nov 2026): the code and the tests, not earlier documents; rows changed by the batch docs PRs since then were checked against `main` at the time, most recently `fc4279a` (3 Nov 2026, batch docs 6) |
 | Companion documents | [User stories](user-stories.md) (acceptance criteria and tests per story), [traceability](traceability.md) (requirement to code, tests and gaps), [HLD](../architecture/HLD.md) |
 
 Every requirement below is derived from a sentence in the use-case document. Its **Source** column says which one.
@@ -73,7 +73,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | FR-19 | A transfer shall be refused when the available balance is insufficient, and leave no partial state. | UC-04 validation "sufficient balance" | Implemented | baseline ledger and payments (before the backlog), TASK-005 | |
 | FR-20 | A transfer shall be refused above the per-transfer limit (₹2,00,000) or above the daily limit (₹5,00,000 per UTC day, shared with bill payments). | UC-04 validation "transfer limits" | Implemented | baseline payments (before the backlog), TASK-014 | |
 | FR-21 | Every transfer shall be fraud-scored before posting. ALLOW posts it; STEP_UP requires a TOTP code (3 wrong codes, or no MFA enrolled, hand it to an analyst); REVIEW holds the funds for an analyst; BLOCK declines it. The customer never sees the reasons. | UC-04 validation "fraud checks" | Implemented | TASK-025, TASK-033 | |
-| FR-22 | Money-moving requests shall be idempotent: a retry with the same key returns the original result and never moves money twice. | UC-04 outcome "successfully submitted" (interpreted for safe retries) | Implemented | baseline payments (before the backlog), TASK-014 | |
+| FR-22 | Money-moving requests shall be idempotent: a retry with the same key returns the original result and never moves money twice. | UC-04 outcome "successfully submitted" (interpreted for safe retries) | Implemented | baseline payments (before the backlog), TASK-014; #314 | The step-up confirmation and the analyst decision also require the key (#364); keys expire after their TTL and are purged daily (ADR-0036, #369) |
 | FR-23 | The customer shall add a payee and verify it by a confirmation-of-payee name check. Only verified payees can receive transfers. | UC-05 add, verify | Implemented | TASK-020 | Web `/payees` (`Payees.tsx`) |
 | FR-24 | The customer shall edit a payee; changing the name forces re-verification. | UC-05 edit | Implemented | TASK-094 | `PATCH /api/v1/payees/{id}` and the edit dialog on `/payees` |
 | FR-25 | The customer shall delete a payee. | UC-05 delete | Implemented | TASK-020 | Web `/payees` (`Payees.tsx`) |
@@ -86,7 +86,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | ID | Requirement | Source | Status | Tasks | Gap |
 |---|---|---|---|---|---|
 | FR-29 | The system shall provide a loan catalogue and an EMI calculator with a repayment schedule. | Section 5 "loan catalogue, EMI calculator" | Implemented | TASK-045, TASK-051 | Web `/loans` (`Loans.tsx`) |
-| FR-30 | The system shall assess loan eligibility from the customer's own income and existing repayments, with the reasons explained. | UC-06 "generates eligibility assessment" | Partial | TASK-046 | Uses income and EMIs (DTI ≤ 50%), not balances or spending patterns as UC-06 lists |
+| FR-30 | The system shall assess loan eligibility from the customer's own income and existing repayments, with the reasons explained. | UC-06 "generates eligibility assessment" | Partial | TASK-046 | Uses income and EMIs (DTI ≤ 50%), not balances or spending patterns as UC-06 lists. Income counts only recurring credits (#404, ADR-0043), so a customer with no salary history gets no income-based offer |
 | FR-31 | The system shall display personalised loan suggestions. | UC-06 "displays recommendations" | Partial | TASK-054, TASK-062 | The recommendation engine suggests a credit line and a rewards card, not the catalogue loans; the carousel (TASK-062, PR #328) links the credit line to `/loans` without preselecting a catalogue loan |
 | FR-32 | The customer shall apply for a loan and track it. | Section 5 "loan applications, loan tracking" | Implemented | TASK-047, TASK-051 | API and web `/loans` (application, disbursal receipt, amortisation progress; ADR-0024) |
 | FR-33 | The system shall record the customer's risk tolerance. | UC-07 input | Implemented | TASK-097 | Five-question questionnaire, deterministic LOW/MODERATE/HIGH band, answers and assessment time stored and audited (`/api/v1/customers/me/risk-profile`) |
@@ -111,7 +111,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | FR-42 | The system shall produce a 0-100 fraud risk score with a decision, readable reasons and a model version for every transfer and bill payment, and persist the feature snapshot. | UC-09 outcome | Implemented | TASK-025, TASK-033 | |
 | FR-43 | Trigger: large transfer amount. | UC-09 | Implemented | TASK-025 | `LARGE_AMOUNT`, `NEW_PAYEE_LARGE_AMOUNT` |
 | FR-44 | Trigger: multiple login failures. | UC-09 | Implemented | TASK-095 | `RECENT_LOGIN_FAILURES` (3 or more in 24 h) |
-| FR-45 | Trigger: new geographic location. | UC-09 | Partial | TASK-095 | Country-level (`NEW_COUNTRY`, needs the GeoIP file) and new device/network only; no finer location; accuracy not evaluated |
+| FR-45 | Trigger: new geographic location. | UC-09 | Partial | TASK-095; #143 | Country-level `NEW_COUNTRY`, new device/network, and city-level `IMPOSSIBLE_TRAVEL` (DB-IP City Lite, ADR-0034, #365); both need a GeoIP file and switch off without one (#370, #372); accuracy not evaluated (no labelled location data) |
 | FR-46 | Trigger: rapid consecutive transactions. | UC-09 | Implemented | TASK-034 | `VELOCITY_BURST` (4 or more in 10 min) |
 | FR-47 | Trigger: unusual transaction behaviour. | UC-09 | Implemented | TASK-030, TASK-033, #251 | `AMOUNT_SPIKE` in every mode; the Isolation Forest anomaly reason with `FRAUD_SCORER=hybrid`, which the local and demo configuration use since #251 (the code default and the staging compose stay `rules`) |
 | FR-48 | A flagged transaction shall raise an alert, notify the customer, and appear in the analyst queue for resolution (release or reject). | UC-10 | Implemented | TASK-018, TASK-033, TASK-036 | |
@@ -127,7 +127,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | FR-53 | The system shall recommend loan, savings, investment and insurance products with reasons, using the behaviour profile and spending patterns. | UC-12 | Partial | TASK-054; TASK-062 | Rules-based (`rules-v1`) API; carousel on `/accounts` (TASK-062, merged #328); the propensity model is deferred until real exposure and conversion data exist (`docs/ml/recommendation-propensity-decision.md`, #345) |
 | FR-54 | Recommendations shall use demographics. | UC-12 input | Implemented | TASK-107 | Limited by ADR-0015 to a consented age band derived from an optional date of birth; `unknown` without both |
 | FR-55 | Recommendations shall take existing products into account. | UC-12 input | Implemented | TASK-111 (#285, merged #342) | Accounts, active loans and open fixed deposits are an input. A held savings account, fixed deposit or (with an active personal loan) the personal credit line is not offered again, except a fixed-deposit top-up when the balance covers at least 6 months of spending, whose reason says so (ADR-0030) |
-| FR-56 | A relationship manager shall see customers ranked by churn risk, with signals and the top eligible product. | Section 6 (relationship manager) | Implemented | TASK-056; TASK-066; #347 | RM page `/staff/insights` (TASK-066). Since #347 an RM sees only the customers an administrator assigned to them; any other customer is indistinguishable from a non-existent one (404); unassigned customers are visible to administrators only (ADR-0032) |
+| FR-56 | A relationship manager shall see customers ranked by churn risk, with signals and the top eligible product. | Section 6 (relationship manager) | Implemented | TASK-056; TASK-066; #347; #391 | RM page `/staff/insights` (TASK-066). Since #391 (merged in #397, ADR-0041) an RM's list opens in rule-based product score order (`order_by=PROPENSITY`), with churn-risk order one click away and the default for an administrator. Since #347 an RM sees only the customers an administrator assigned to them; any other customer is indistinguishable from a non-existent one (404); unassigned customers are visible to administrators only (ADR-0032) |
 | FR-57 | Staff shall see a behavioural analytics dashboard: segmentation, spending patterns, product affinity, engagement. | Section 5 | Implemented | TASK-101 (merged #325) | Engagement is filled by the web app's clickstream events (TASK-112, merged #333); the seeded demo data has none |
 
 ### 2.8 Monitoring and compliance (UC-13, section 5)
@@ -143,7 +143,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | ID | Requirement | Status | Evidence | Tasks | Gap |
 |---|---|---|---|---|---|
 | NFR-01 | Secure authentication | Implemented | Argon2id, TOTP, rotating refresh, lockout; `test_auth.py` | TASK-006 | |
-| NFR-02 | Encrypt sensitive data | Partial | MultiFernet field encryption with key rotation; `test_crypto.py`, `test_rotate_field_key.py` | TASK-075 | TLS is terminated outside the repo (runbook section 1.4); no task |
+| NFR-02 | Encrypt sensitive data | Partial | MultiFernet field encryption with key rotation; `test_crypto.py`, `test_rotate_field_key.py`; TLS in nginx and to PostgreSQL (#280, `scripts/verify_tls.sh`); field-encryption policy for PII, ADR-0042 (#402) | TASK-075 | Certbot issuance on a real host (#198); #145 waits for #398 and #399 |
 | NFR-03 | Role-based access control | Implemented | `require_roles`, policy functions; `test_rbac_bola.py`, route-policy registry test | | |
 | NFR-04 | Audit logs | Implemented | Hash-chained append-only `audit_logs`; `test_audit_and_outbox.py` | | |
 | NFR-05 | Protection against OWASP Top 10 | Partial | Threat-model mapping, Bandit, CodeQL, nightly Schemathesis | TASK-090 | No DAST against a deployed environment |
@@ -152,7 +152,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | NFR-08 | Login < 3 s | Planned | Not measured | TASK-102 | |
 | NFR-09 | 99% availability in the test environment | Planned | No environment deployed | TASK-103, #198 | |
 | NFR-10 | Horizontal scaling, stateless APIs, containerised deployment | Partial | Stateless API, one worker per container, Docker images and compose | TASK-079 | Multi-replica deployment never exercised |
-| NFR-11 | Centralised logging, error tracking, health monitoring, performance metrics | Partial | structlog → Alloy → Loki, Prometheus metrics and alert rules, Grafana, health probes (dev compose) | TASK-069, TASK-103 | No error tracking; no Alertmanager; not deployed |
+| NFR-11 | Centralised logging, error tracking, health monitoring, performance metrics | Partial | structlog → Alloy → Loki, Prometheus metrics and alert rules, Grafana, health probes (dev compose); `unhandled_exception` events and `unhandled_errors_total` (#289); Celery worker metrics through Redis and the API `/metrics` (#380, ADR-0039) | TASK-069, TASK-103 | No Alertmanager; not deployed; worker metrics not yet checked against a live Prometheus (#378) |
 
 ## 4. Engineering and documentation requirements (sections 9 to 11)
 
@@ -161,13 +161,13 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | ER-01 | Responsive web application | Partial | Remaining UI tasks above | Customer and staff screens exist for the journeys above (`apps/web/src/shell/routes.tsx`); the fraud statistics are not charted (FR-49) |
 | ER-02 | Backend API and database implementation | Implemented | | 57 operations, migrations 0001-0010, [ER diagram](../architecture/er-diagram.md) |
 | ER-03 | API documentation | Implemented | | `docs/api/openapi.json`, drift-checked in CI |
-| ER-04 | Automated tests, ≥ 70% coverage | Implemented | TASK-087 (report) | CI coverage gate is 80% (backend) |
+| ER-04 | Automated tests, ≥ 70% coverage | Implemented | TASK-087 (report, #373; auth branch coverage 95.83% after #410) | CI coverage gate is 80% (backend); 96.71% in CI run 41689113122, 96.53% in run 41600683787 ([test strategy and report](../testing/test-strategy-and-report.md)) |
 | ER-05 | CI: build, test, quality scan, security scan | Implemented | | |
 | ER-06 | CI: package, deploy, smoke test | Partial | #198, TASK-091 | Deploy workflow exists but is gated off; no staging host |
 | ER-07 | Requirements specification, user stories, use case document | Implemented | TASK-104 | This document and [user-stories.md](user-stories.md) |
 | ER-08 | HLD, LLD, ER diagram | Partial | TASK-053 (HLD), TASK-106 (ER, done), TASK-027 (LLD) | LLD waits for TASK-015 |
 | ER-09 | Deployment guide, support guide | Implemented | TASK-013, TASK-075 | |
-| ER-10 | User manual | Planned | TASK-092 | Waits for the remaining UI |
+| ER-10 | User manual | Implemented | TASK-092 (#374) | [`docs/user-manual/`](../user-manual/README.md): customer, staff and compliance guides with screenshots |
 | ER-11 | Peer reviews | Partial | | The ruleset requires 0 approvals (see traceability) |
 
 ## 5. Gaps with no owning task

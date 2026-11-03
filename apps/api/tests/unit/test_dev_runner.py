@@ -473,6 +473,45 @@ def test_k6_load_suite_keeps_its_nfr_thresholds() -> None:
         assert required in script, required
 
 
+def test_load_events_runs_the_events_script_with_the_load_mounts(tmp_path: Path) -> None:
+    """TASK-055: `load-events` reuses the load runner (results mount, dev CA) for events.js."""
+    ca = tmp_path / "ca.crt"
+    ca.write_text("dummy", encoding="utf-8")
+    with (
+        patch("scripts.dev.DEV_CA", ca),
+        patch("scripts.dev.PERF_RESULTS", tmp_path / "out"),
+        patch("scripts.dev.IS_WINDOWS", True),
+        patch("scripts.dev._find_tool", return_value=None),
+        patch.dict(os.environ, {"BASE_URL": "https://localhost:8443", "EVENTS_PER_SECOND": "600"}),
+        patch("scripts.dev._run", return_value=0) as mock_run,
+    ):
+        assert dev_mod.cmd_load_events(["--summary-export", "/results/events.json"]) == 0
+    cmd = mock_run.call_args[0][0]
+    assert cmd[-3:] == ["/scripts/events.js", "--summary-export", "/results/events.json"]
+    image_at = cmd.index(dev_mod.K6_IMAGE)
+    assert f"{(tmp_path / 'out').as_posix()}:/results" in cmd[:image_at]
+    assert "SSL_CERT_FILE=/certs/ca.crt" in cmd[:image_at]
+    assert "EVENTS_PER_SECOND=600" in cmd[:image_at]
+    assert "load-events" in dev_mod.COMMANDS
+
+
+def test_k6_events_load_test_keeps_its_ingestion_budget() -> None:
+    """Guard against silently weakening TASK-055's 500 events/s criteria (issue #78)."""
+    script = (dev_mod.ROOT / "infra" / "k6" / "events.js").read_text(encoding="utf-8")
+    for required in (
+        'executor: "constant-arrival-rate"',
+        "EVENTS_PER_SECOND || 500",
+        'http_req_failed: ["rate<0.005"]',
+        '"http_req_duration{endpoint:events_batch}": ["p(95)<500"]',
+        'dropped_iterations: ["count<1"]',
+        "r.status === 202",
+        "/api/v1/events/batch",
+    ):
+        assert required in script, required
+    overlay = (dev_mod.ROOT / "infra" / "k6" / "compose.load.yml").read_text(encoding="utf-8")
+    assert "RATE_LIMIT_EVENTS_PER_MINUTE" in overlay
+
+
 def test_promotion_commands_default_to_the_trained_export_and_the_served_directory() -> None:
     """TASK-038: promote-model measures the newest run on data/fraud; fraud-champion writes
     models/fraud, the directory the API loads at startup. Arguments replace the defaults."""
@@ -486,3 +525,18 @@ def test_promotion_commands_default_to_the_trained_export_and_the_served_directo
         assert cmd[-3:] == ["export-champion", "--out", str(dev_mod.ROOT / "models" / "fraud")]
         dev_mod.cmd_promote_model(["--run-id", "abc", "--data", "d"])
         assert mock_run.call_args[0][0][-5:] == ["promote", "--run-id", "abc", "--data", "d"]
+
+
+def test_k6_load_suite_renews_tokens_before_the_access_ttl() -> None:
+    """Regression: setup() signed each user in once, so in a run longer than the access-token TTL
+    (15 min) every request after minute 15 was a 401 (16-minute local run: 3,698 of 33,132
+    requests). Each VU must sign in again before its token reaches the TTL."""
+    from pbip_api.core.config import Settings
+
+    script = (dev_mod.ROOT / "infra" / "k6" / "load.js").read_text(encoding="utf-8")
+    match = re.search(r"TOKEN_MAX_AGE_SECONDS \|\| (\d+)\)", script)
+    assert match is not None
+    ttl_seconds = Settings.model_fields["jwt_access_ttl_minutes"].default * 60
+    assert int(match.group(1)) < ttl_seconds
+    assert "const u = current(" in script  # every iteration goes through the renewal
+    assert "issuedAt" in script.split("export function setup()", 1)[1].split("\n}\n", 1)[0]
