@@ -138,33 +138,29 @@ def get_financial_health_metrics(
     session: Session, account_id: UUID, owned: set[UUID], now: datetime
 ) -> HealthMetrics:
     """One pass over the account's entries in the window (which bounds the work per request)."""
-    start = window_start(now, HEALTH_WINDOW_MONTHS)
     stmt = (
-        select(
-            TransactionEntry.amount,
-            TransactionEntry.direction,
-            TransactionEntry.created_at,
-            Transaction.type,
-            Transaction.reference,
-            Transaction.debit_account_id,
-            Transaction.credit_account_id,
-        )
+        select(*_rfm_entry_columns())
         .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
         .where(
             TransactionEntry.account_id == account_id,
-            TransactionEntry.created_at >= start,
-            Transaction.status == TransactionStatus.POSTED,
-            Transaction.type.not_in(NOT_ACTIVITY_TYPES),
+            TransactionEntry.created_at >= window_start(now, HEALTH_WINDOW_MONTHS),
+            *_rfm_entry_filters(),
         )
         .order_by(TransactionEntry.created_at)
     )
+    return _health_from_rows(session.execute(stmt).all(), owned, now)
+
+
+def _health_from_rows(
+    rows: Iterable[Sequence[Any]],  # Any: the columns of _rfm_entry_columns, oldest first
+    owned: set[UUID],
+    now: datetime,
+) -> HealthMetrics:
     spend = debt = 0
     credits: list[tuple[tuple[UUID | None, str], datetime, int]] = []
     by_month: dict[tuple[int, int], int] = {}
     first: datetime | None = None
-    for amount, direction, created_at, tx_type, reference, debit_acc, credit_acc in session.execute(
-        stmt
-    ).all():
+    for amount, direction, created_at, reference, tx_type, debit_acc, credit_acc in rows:
         first = first or created_at
         if direction == EntryDirection.CREDIT:
             if tx_type in INCOME_TYPES and debit_acc not in owned:
@@ -509,6 +505,28 @@ def extract_customer_rfm_features(
         .order_by(TransactionEntry.created_at)
     )
     return _rfm_from_rows(customer_id, session.execute(stmt).all(), owned, as_of)
+
+
+def health_and_rfm_of_customer(
+    session: Session, customer_id: UUID, account_id: UUID, owned: set[UUID], now: datetime
+) -> tuple[HealthMetrics, CustomerRFMFeatures | None]:
+    """``get_financial_health_metrics`` of ``account_id`` and ``extract_customer_rfm_features`` of
+    the customer from ONE query (#343): the account's window is a subset of the entries the RFM
+    features read (same filters, every owned account, all history), so it is taken from those rows
+    in Python instead of being read again. Both aggregations are order-independent sums, minimums
+    and maximums, so the results are exactly those of the two separate functions.
+    """
+    stmt = (
+        select(TransactionEntry.account_id, *_rfm_entry_columns())
+        .join(Transaction, Transaction.id == TransactionEntry.transaction_id)
+        .where(TransactionEntry.account_id.in_(owned), *_rfm_entry_filters())
+        .order_by(TransactionEntry.created_at)
+    )
+    rows = session.execute(stmt).all()
+    start = window_start(now, HEALTH_WINDOW_MONTHS)
+    window = (row[1:] for row in rows if row[0] == account_id and row[3] >= start)
+    health = _health_from_rows(window, owned, now)
+    return health, _rfm_from_rows(customer_id, (row[1:] for row in rows), owned, now)
 
 
 def extract_all_customers_rfm_features(

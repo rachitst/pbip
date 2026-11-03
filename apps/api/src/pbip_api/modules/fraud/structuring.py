@@ -1,4 +1,4 @@
-"""Deposit-side structuring detection (F7, #274, ADR-0051): the pure core, no database.
+"""Deposit-side structuring detection (F7, #274, ADR-0052): the pure core, no database.
 
 Structuring is splitting money into several credits that each stay just under a reporting
 threshold. The per-transfer STRUCTURING rule (ADR-0046) sees it only when the customer next sends
@@ -27,7 +27,7 @@ from datetime import datetime, timedelta
 from itertools import groupby
 
 # The monitor scans two windows back on every hourly run: every pattern is then seen whole in at
-# least one run, however its window falls (ADR-0051).
+# least one run, however its window falls (ADR-0052).
 LOOKBACK_WINDOWS = 2
 
 

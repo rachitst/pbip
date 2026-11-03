@@ -702,7 +702,7 @@ class PaymentsService:
             .execution_options(populate_existing=True)
         ).scalar_one()
 
-        # A monitor alert (ADR-0051) is on a credit that was posted before it was flagged: the
+        # A monitor alert (ADR-0052) is on a credit that was posted before it was flagged: the
         # decision only labels it, and nobody is told the transfer "posted" a second time.
         already_posted = transaction.status == TransactionStatus.POSTED
         if transaction.status == TransactionStatus.PENDING_REVIEW:

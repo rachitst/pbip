@@ -1,12 +1,12 @@
 {
-  "_note": "Re-recorded 2026-11-01 for generator v2.1 (#251: legitimate new payees). app_scam 97 -> 92, still BLOCK: the old score leaned on 'new payee = fraud'. Raise deliberately; never lower without a stated reason.",
+  "_note": "Re-recorded 2026-11-04 for hybrid-lgbm-iforest-3 (#396, ADR-0047: out-of-time calibration): app_scam 92 -> 95 (raised deliberately). 2026-11-01, generator v2.1 (#251): app_scam 97 -> 92, the old score leaned on 'new payee = fraud'. Raise deliberately; never lower without a stated reason.",
   "account_takeover": {
     "decision": "REVIEW",
     "risk_score": 60
   },
   "app_scam": {
     "decision": "BLOCK",
-    "risk_score": 92
+    "risk_score": 95
   },
   "velocity_burst": {
     "decision": "STEP_UP",

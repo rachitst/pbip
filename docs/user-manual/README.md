@@ -22,9 +22,11 @@ Then [start the services](../SETUP_GUIDE.md#5-starting-services--local-developme
 apply migrations, seed the demo data, and start the API, worker and web app. Open
 <http://localhost:5173> (development) or <https://localhost:8443> (full Docker stack).
 
-**Demo users.** The seed creates two customers (`alice@demo.pbip`, `bob@demo.pbip`) and four staff users
-(`analyst@demo.pbip`, `compliance@demo.pbip`, `admin@demo.pbip`, `rm@demo.pbip`). Where their password
-comes from, and how to print a staff authenticator code (`scripts/totp.py`), is explained in the
+**Demo users.** The seed creates three customers (`alice@demo.pbip`, `bob@demo.pbip`, `carol@demo.pbip`)
+and four staff users (`analyst@demo.pbip`, `compliance@demo.pbip`, `admin@demo.pbip`, `rm@demo.pbip`).
+Alice has an authenticator (for the step-up demo); Carol is the fraud demo lab's customer and has none.
+Where their password comes from, and how to print a staff or Alice's authenticator code
+(`scripts/totp.py`), is explained in the
 [README](../../README.md#1-run-it). This manual never prints a password. You can also register your
 own customer from the sign-in page.
 
@@ -71,7 +73,8 @@ customers at `example.com`. Keep in mind:
 - **Test data only.** Names such as "Asha Example" and "Vikram Example" are throwaway test customers.
   Authenticator keys and recovery codes are blurred even though they belong to throwaway users.
 - **New customers have little history,** so the balance forecast and month-on-month trends show their "not
-  enough history yet" states.
+  enough history yet" states. Their only credit is the opening deposit, which is not regular income, so
+  they have no income-based loan offer or product recommendation yet.
 - **The assistant** answered with its built-in, rule-based helper because no local language model was
   running. With a model running, the facts are the same and the wording is more natural.
 - **The fraud model** was trained locally (`fraud-model` in the setup guide) so the alert screens show

@@ -48,6 +48,8 @@ export const noRecommendations = {
   customer_id: "cust-1",
   recommendations: [],
   model_version: "rules-v1",
+  score_version: "rules-v1 (hand-weighted rules, not a trained model or a probability)",
+  score_from_simulated_data: false,
   evaluated_at: "2026-11-02T09:00:00Z",
 };
 

@@ -302,3 +302,19 @@ def test_safe_overrides_are_the_settings_defaults(monkeypatch: pytest.MonkeyPatc
             assert not forced.fraud_model_dir and defaults.fraud_model_dir is None
             continue
         assert getattr(forced, field) == getattr(defaults, field), key
+
+
+def test_api_scales_with_replicas_and_production_runs_two() -> None:
+    """ADR-0045: one uvicorn process uses one core; the k6 suite saturated it on the slower CI
+    runners (transfers p95 600-920 ms against the 500 ms budget). The API scales with replicas:
+    production runs two, the perf workflow measures that topology, and the local stack keeps one
+    by default with a host port range so a second replica can be started without a clash."""
+    local = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))["services"]
+    assert local["api"]["deploy"]["replicas"] == "${API_REPLICAS:-1}"
+    assert local["api"]["ports"] == ["127.0.0.1:8000-8003:8000"]  # replica 1 keeps 8000
+    prod_file = ROOT / "infra" / "deploy" / "docker-compose.prod.yml"
+    prod = yaml.safe_load(prod_file.read_text(encoding="utf-8"))["services"]
+    assert prod["api"]["deploy"]["replicas"] == "${API_REPLICAS:-2}"
+    assert "ports" not in prod["api"]  # only nginx is published
+    perf = yaml.safe_load((ROOT / ".github" / "workflows" / "perf.yml").read_text("utf-8"))
+    assert perf["env"]["API_REPLICAS"] == "${{ inputs.api_replicas || '2' }}"

@@ -54,7 +54,7 @@ celery_app.conf.update(
             "task": "pbip.fraud.evaluate_feature_drift",
             "schedule": crontab(minute=20),
         },
-        # #274 / ADR-0051: F7 deposit-side structuring monitor, hourly at :35 (away from :05/:20).
+        # #274 / ADR-0052: F7 deposit-side structuring monitor, hourly at :35 (away from :05/:20).
         "monitor-structuring-deposits": {
             "task": "pbip.fraud.monitor_structuring_deposits",
             "schedule": crontab(minute=35),

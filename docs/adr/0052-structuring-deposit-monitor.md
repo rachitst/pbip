@@ -1,4 +1,4 @@
-# ADR 0051: F7 deposit-side structuring monitor as an hourly beat job in the existing alert queue
+# ADR 0052: F7 deposit-side structuring monitor as an hourly beat job in the existing alert queue
 - Status: Accepted (under owner's standing approval, 2026-11-04)
 - Date: 2026-11-04
 - Deciders: Architecture Team (issue #274, follow-up to ADR-0046)

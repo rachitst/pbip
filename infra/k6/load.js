@@ -25,6 +25,10 @@ const THINK_SECONDS = Number(__ENV.THINK_SECONDS || 1);
 const PASSWORD = __ENV.LOAD_PASSWORD || "Load-Test-Password-2026!"; // pragma: allowlist secret (local seed_load.py constant)
 const JSON_HEADERS = { "Content-Type": "application/json" };
 const CSRF = { "X-Requested-With": "pbip-web" };
+// Access tokens live 15 minutes (JWT_ACCESS_TTL_MINUTES). Each VU signs in again before its token is
+// that old, as the web app renews its session, so a run longer than the TTL keeps measuring the API
+// instead of answering 401 (found in a 16-minute local run: every request after minute 15 failed).
+const TOKEN_MAX_AGE_MS = Number(__ENV.TOKEN_MAX_AGE_SECONDS || 600) * 1000;
 
 const transferOutcome = new Counter("transfer_outcomes");
 const unexpected = new Counter("unexpected_responses");
@@ -94,6 +98,7 @@ function auth(token) {
 
 // setup(): one session per seeded user, plus the ids each VU needs. Runs once, before the load.
 export function setup() {
+  const issuedAt = Date.now(); // before the first login: every token is at least this old
   const users = [];
   for (let i = 0; i < USERS; i++) {
     const token = login(i);
@@ -107,7 +112,24 @@ export function setup() {
     const payees = http.get(`${BASE_URL}/api/v1/payees`, auth(token)).json();
     users.push({ i, token, accountId: accounts[0].id, payeeId: payees[0].id });
   }
-  return { users };
+  return { users, issuedAt };
+}
+
+// Per-VU session (module state is per VU in k6): the setup token until it nears expiry, then a fresh one.
+const session = { token: null, at: 0 };
+function current(u, issuedAt) {
+  if (session.token === null) {
+    session.token = u.token;
+    session.at = issuedAt;
+  }
+  if (Date.now() - session.at >= TOKEN_MAX_AGE_MS) {
+    const token = login(u.i);
+    if (token) {
+      session.token = token;
+      session.at = Date.now();
+    }
+  }
+  return { ...u, token: session.token };
 }
 
 function readAccounts(u) {
@@ -212,6 +234,8 @@ function authFlow(u) {
   jar.clear(BASE_URL);
   const token = login(u.i);
   if (!token) return;
+  session.token = token;
+  session.at = Date.now();
   const res = http.post(`${BASE_URL}/api/v1/auth/refresh`, null, {
     headers: CSRF,
     tags: { endpoint: "refresh", kind: "auth" },
@@ -222,7 +246,10 @@ function authFlow(u) {
 }
 
 export default function (data) {
-  const u = data.users[(exec.vu.idInTest - 1) % data.users.length];
+  const u = current(
+    data.users[(exec.vu.idInTest - 1) % data.users.length],
+    data.issuedAt,
+  );
   const roll = Math.random() * 100;
   if (roll < 50) readAccounts(u);
   else if (roll < 62) readAnalytics(u);

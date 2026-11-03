@@ -125,7 +125,7 @@ def evaluate_feature_drift_task() -> dict[str, float]:
 
 @celery_app.task(name="pbip.fraud.monitor_structuring_deposits")
 def monitor_structuring_deposits_task() -> dict[str, int]:
-    """Alert analysts to credits structured just under the threshold (hourly beat; ADR-0051).
+    """Alert analysts to credits structured just under the threshold (hourly beat; ADR-0052).
 
     Read-only on money. Idempotent: a credit already in an alert is never alerted again, under a
     per-account advisory lock, so a re-delivered or concurrent run opens nothing twice."""

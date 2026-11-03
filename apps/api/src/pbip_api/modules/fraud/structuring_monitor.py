@@ -1,4 +1,4 @@
-"""The F7 deposit-side structuring monitor: an hourly beat job (#274, ADR-0051).
+"""The F7 deposit-side structuring monitor: an hourly beat job (#274, ADR-0052).
 
 It scans the credits customer accounts received in the last ``LOOKBACK_WINDOWS`` structuring
 windows and opens an analyst alert for every new pattern ``structuring.find_patterns`` finds. The

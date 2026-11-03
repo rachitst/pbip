@@ -80,7 +80,7 @@ def test_beat_relays_the_outbox_every_ten_seconds_and_purges_it_daily() -> None:
 
 
 def test_beat_monitors_structured_deposits_hourly_through_a_registered_task() -> None:
-    """#274 / ADR-0051: one hourly entry at :35, away from the :05 payout and :20 drift runs."""
+    """#274 / ADR-0052: one hourly entry at :35, away from the :05 payout and :20 drift runs."""
     schedule = celery_app.conf.beat_schedule
     entries = [
         e for e in schedule.values() if e["task"] == "pbip.fraud.monitor_structuring_deposits"

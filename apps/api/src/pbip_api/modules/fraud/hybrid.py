@@ -159,7 +159,7 @@ class HybridFraudScorer:
                 Transaction.amount,
                 FraudEvent.features["device_id"].astext,  # the device of each earlier transfer
             )
-            # The customer's own event only: a structuring-monitor alert (ADR-0051) may add a
+            # The customer's own event only: a structuring-monitor alert (ADR-0052) may add a
             # second event on a transfer this customer sent, and must not duplicate the debit.
             .outerjoin(
                 FraudEvent,

@@ -55,6 +55,7 @@ the deterministic router answers without the LLM, 20% transfers (fresh `Idempote
 replayed and must return the same transfer marked `Idempotent-Replayed`), 10% login plus a cookie refresh.
 
 ```bash
+export API_REPLICAS=2   # two API processes, like production (ADR-0045); one process is bound to one core
 docker compose -f docker-compose.yml -f infra/k6/compose.load.yml up -d --build --wait   # raised per-IP limits
 uv run python scripts/seed_load.py --users 200            # funded users, each with a verified payee
 uv run python scripts/load_invariants.py snapshot > perf-results/before.json
@@ -68,8 +69,46 @@ uv run python scripts/load_invariants.py check perf-results/before.json  # exit 
   < 500 ms, HTTP errors < 0.5%, zero unexpected statuses. Correct business outcomes are not errors: 201 posted,
   202 held for step-up or review, 403 blocked by fraud scoring, and forecast's 422 for accounts with under two
   days of history.
+* Capacity is about one core per API replica. With one process the suite saturated it on the slower GitHub runner
+  CPUs (EPYC 7763, Xeon 8370C: every route group 4-6x slower, transfers p95 600-920 ms) while the host still had idle
+  cores; two replicas pass on the same CPUs. Evidence and numbers: ADR-0045. The workflow input `api_replicas: 1`
+  measures a single process.
+* The overlay also loads `pg_stat_statements`; the workflow resets it before the run and saves the slowest
+  statements (`top-statements.sql`) and per-container CPU (`container-cpu.txt`) with the results.
 * `load_invariants.py` proves the money rules held: no overdrawn account, every transaction balanced, each balance
   equal to its last entry, money conserved inside the load population, and no new PostgreSQL deadlocks.
 * `.github/workflows/perf.yml` runs the suite and the page-load budgets (`apps/web/e2e/perf.spec.ts`) nightly on a
   GitHub-hosted runner and uploads `perf-results/` with the runner's hardware. Results and their limits:
   `docs/testing/performance-2026-11-01.md`.
+
+## Clickstream ingestion (TASK-055, #78): `events.js`
+
+Sustains **500 events/s** through `POST /api/v1/events/batch`: a `constant-arrival-rate` scenario starts
+`ceil(EVENTS_PER_SECOND / BATCH_SIZE)` batches per second (default 5 batches of 100 events), round-robin over
+`USERS` seeded customers. Every event is valid against the API schema and the web catalogue
+(`apps/web/src/telemetry/catalogue.ts`): allow-listed types, route templates as `page_url`, catalogue properties only.
+
+```bash
+docker compose -f docker-compose.yml -f infra/k6/compose.load.yml up -d --build --wait   # raised per-IP limits
+uv run python scripts/seed_load.py --users 200            # the same load customers as load.js
+python scripts/dev.py load-events --summary-export /results/events-summary.json         # or: make load-events
+```
+
+```powershell
+# Windows, k6 in the grafana/k6 image (Docker Desktop). Default target: the API port, http://host.docker.internal:8000.
+.\dev.ps1 load-events --summary-export /results/events-summary.json
+# Through nginx TLS: the dev certificate has no SAN for host.docker.internal, so skip verification (local only).
+$env:BASE_URL = "https://host.docker.internal:8443"; .\dev.ps1 load-events --insecure-skip-tls-verify
+```
+
+* Options (environment variables): `EVENTS_PER_SECOND` (default 500), `BATCH_SIZE` (1-100, default 100), `DURATION`
+  (default `1m`; keep it under the 15 min access-token lifetime), `USERS` (default 20), `BASE_URL`.
+* Thresholds: HTTP errors < 0.5%, batch p95 < 500 ms, > 99.5% of batches answered 202 with every event stored, and
+  `dropped_iterations` = 0 (every scheduled batch started, so the target rate was sustained, not just attempted).
+* Events/s achieved: the `events_accepted` counter (`accepted + duplicates` from each 202) and its `/s` rate in the
+  summary. That rate is averaged over the whole run including the `setup()` logins, so it reads slightly below the
+  steady-state rate; `events_sent` is the number attempted.
+* `compose.load.yml` raises `RATE_LIMIT_EVENTS_PER_MINUTE` (default 120 per IP, so at most 200 events/s from one IP)
+  to 60,000 because every batch comes from one IP; the limiter stays covered by `tests/integration/test_events.py`.
+* The insert is synchronous (committed before the 202), so this measures the database write path. Each run adds
+  `EVENTS_PER_SECOND x DURATION` rows to `clickstream_events` (30,000 with the defaults).

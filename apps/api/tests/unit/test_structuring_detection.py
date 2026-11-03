@@ -1,4 +1,4 @@
-"""#274 / ADR-0051: the pure structuring-pattern search the deposit monitor and the eval share."""
+"""#274 / ADR-0052: the pure structuring-pattern search the deposit monitor and the eval share."""
 
 from datetime import UTC, datetime, timedelta
 

@@ -4,7 +4,7 @@
 |---|---|
 | Task | TASK-104 (#187) |
 | Derived from | *PBIP Use Case Document v0.2*, use cases UC-01 to UC-13 and the section 5 scope |
-| Status checked against | `main` at `2e65b87` (1 Nov 2026) |
+| Status checked against | `main` at `2e65b87` (1 Nov 2026); the stories changed in batch docs 5 (US-01, US-06, US-08, US-11 to US-16, US-19 to US-21, US-27, US-32 and US-33) against `bae2580` (3 Nov 2026), and in batch docs 6 (US-06, US-18 and US-20) against `fc4279a` (3 Nov 2026) |
 | Related | [Requirements specification](requirements-specification.md) (FR/NFR ids), [traceability](traceability.md) (per-use-case code, tests and gaps) |
 
 Each story has:
@@ -40,18 +40,21 @@ money.*
   also lock it.
 * ✓ A TOTP code cannot be replayed, and a recovery code works once.
 * ✓ The web sign-in form asks for the authenticator code when the server requires MFA.
-* ✗ A customer can enrol in MFA from the web app.
+* ✓ A customer can enrol in MFA from the web app: the secret and an `otpauth` link, a confirmation code, then the
+  recovery codes shown once (#300).
 
-**Status:** Partial. The MFA enrolment screen has no task; the API exists.
+**Status:** Implemented.
 
 **Tests:**
 
 * `integration/test_auth.py`: `test_register_login_and_me`, `test_unknown_user_and_wrong_password_are_indistinguishable`,
   `test_progressive_lockout_and_recovery`, `test_mfa_enrolment_login_replay_protection_and_recovery_codes`,
   `test_repeated_bad_mfa_codes_lock_the_account`, `test_login_rate_limit_per_ip`;
-* `apps/web/src/pages/Login.test.tsx`: "asks for the authenticator code when the server requires MFA".
+* `apps/web/src/pages/Login.test.tsx`: "asks for the authenticator code when the server requires MFA";
+* `apps/web/src/pages/MfaEnrolment.test.tsx`: "enrols, confirms a code and shows the recovery codes once",
+  "shows the server's message for a wrong code and keeps the form"; `apps/web/src/pages/Register.test.tsx`.
 
-**Tasks:** TASK-004, TASK-006 (Done).
+**Tasks:** TASK-004, TASK-006 (Done); registration and MFA enrolment screens (#201, Done #300).
 
 ### US-02 Keep my session safe (FR-04)
 
@@ -159,8 +162,10 @@ habits.*
 * ✓ The projection includes the known scheduled payments up to the month end, and the customer is warned once a
   month (bell notification) when the month may end within INR 1,000 of zero or of the overdraft limit
   (TASK-043).
+* ✓ An account too new to forecast shows an empty state, not an error: the API returns
+  `INSUFFICIENT_HISTORY` (#406, ADR-0044).
 
-**Status:** Implemented (in review).
+**Status:** Implemented.
 
 **Tests:**
 
@@ -171,9 +176,9 @@ habits.*
 * `integration/test_forecast.py::test_forecast_is_labelled_with_intervals_from_the_account_history`;
 * `integration/test_forecast_projection.py` (obligations, threshold, once-a-month alert) and
   `unit/test_balance_projection.py`;
-* `apps/web/src/pages/BalanceForecastSection.test.tsx`.
+* `apps/web/src/pages/BalanceForecastSection.test.tsx` (including the `INSUFFICIENT_HISTORY` empty state, #406).
 
-**Tasks:** TASK-040, TASK-041, TASK-042, TASK-049 (Done); TASK-043, TASK-050 (in review).
+**Tasks:** TASK-040, TASK-041, TASK-042, TASK-049 (Done); TASK-043, TASK-050 (Done #318).
 
 ### US-07 See products recommended for me (FR-12)
 
@@ -203,15 +208,23 @@ record.*
 
 **Acceptance criteria:**
 
-* ✗ I choose an account and a period, then click Download.
-* ✗ The PDF has a bank header and the opening and closing balances.
-* ✗ Only the account holder can generate it.
+* ✓ I choose an account and a period, then click Download (PDF or CSV, `/statements`).
+* ✓ The PDF has a bank header and the opening and closing balances.
+* ✓ Only the account holder can generate it; another customer's account is 404 and nothing is recorded.
 
-**Status:** Planned (`modules/statements` is empty).
+**Status:** Implemented (#302).
 
-**Tests:** none yet.
+**Tests:**
 
-**Tasks:** TASK-016, TASK-074 (Todo).
+* `integration/test_statements.py`: `test_pdf_has_the_bank_header_summary_and_balances`,
+  `test_opening_balance_carries_history_before_the_period`, `test_another_customer_gets_404_and_nothing_is_recorded`,
+  `test_a_statement_needs_authentication`, `test_invalid_periods_and_formats_are_rejected`;
+* `integration/test_rbac_bola.py::test_bola_customer_b_cannot_touch_customer_a_objects` (statement cases);
+* `unit/test_statements_render.py`;
+* `apps/web/src/pages/Statements.test.tsx`: "downloads the chosen format through an authenticated blob request",
+  "checks the period before calling the API and shows server errors".
+
+**Tasks:** TASK-016, TASK-074 (Done #302).
 
 ## UC-04 Transfer money
 
@@ -290,14 +303,16 @@ person.*
 * ✓ A payee can be added.
 * ✓ A name mismatch leaves it unverified and never reveals the real name.
 * ✓ Another customer's payee is 404.
-* ✗ I can add and verify payees in the web app.
+* ✓ I can add and verify payees in the web app (`/payees`).
 
-**Status:** Partial. The UI is TASK-020.
+**Status:** Implemented (#301).
 
 **Tests:** `integration/test_transfers.py::test_payee_name_mismatch_is_not_verified_and_never_reveals_the_real_name`;
-`integration/test_rbac_bola.py::test_bola_customer_b_cannot_touch_customer_a_objects`.
+`integration/test_rbac_bola.py::test_bola_customer_b_cannot_touch_customer_a_objects`;
+`apps/web/src/pages/Payees.test.tsx`: "adds a payee, runs the name check and warns on a mismatch without revealing the
+name", "retries only the name check when the payee was already created".
 
-**Tasks:** TASK-020 (Todo).
+**Tasks:** TASK-020 (Done #301).
 
 ### US-12 Edit a payee (FR-24)
 
@@ -305,16 +320,25 @@ person.*
 
 **Acceptance criteria:**
 
-* ✗ `PATCH /payees/{id}` updates an owned payee.
-* ✗ A name change forces re-verification.
-* ✗ The account number is immutable.
-* ✗ Each edit is audited.
+* ✓ `PATCH /payees/{id}` updates an owned payee. A non-owned payee is 404.
+* ✓ A name change forces re-verification.
+* ✓ The account number is immutable.
+* ✓ Each edit is audited, with the changed field names only; an edit that changes nothing is not.
+* ✓ I can edit a payee in the web app, which warns that a new name must be verified again.
 
-**Status:** Planned.
+**Status:** Implemented (#301).
 
-**Tests:** none yet.
+**Tests:**
 
-**Tasks:** TASK-094 (Todo).
+* `integration/test_payee_edit.py`: `test_nickname_change_keeps_the_payee_verified_and_is_audited`,
+  `test_renaming_resets_verification_and_blocks_transfers_until_verified_again`, `test_same_name_is_not_a_change`,
+  `test_account_details_are_immutable_and_input_is_validated`, `test_another_customer_cannot_edit_and_gets_404`,
+  `test_a_removed_payee_with_history_cannot_be_edited`;
+* `integration/test_rbac_bola.py::test_bola_customer_b_cannot_touch_customer_a_objects` (edit-payee cases);
+* `apps/web/src/pages/Payees.test.tsx`: "edits the nickname, warns that a new name needs re-verification, and sends
+  only changes".
+
+**Tasks:** TASK-094, TASK-020 (Done #301).
 
 ### US-13 Remove a payee (FR-25)
 
@@ -323,13 +347,14 @@ person.*
 **Acceptance criteria:**
 
 * ✓ `DELETE /payees/{id}` removes an owned payee. A non-owned payee is 404.
-* ✗ I can delete a payee from the web app.
+* ✓ I can delete a payee from the web app, after a confirmation.
 
-**Status:** Partial. The UI is TASK-020.
+**Status:** Implemented (#301).
 
-**Tests:** `integration/test_rbac_bola.py::test_bola_customer_b_cannot_touch_customer_a_objects` (delete-payee case).
+**Tests:** `integration/test_rbac_bola.py::test_bola_customer_b_cannot_touch_customer_a_objects` (delete-payee case);
+`apps/web/src/pages/Payees.test.tsx`: "removes a payee after confirmation".
 
-**Tasks:** TASK-020 (Todo).
+**Tasks:** TASK-020 (Done #301).
 
 ## Section 5 payment scope (no single use case)
 
@@ -344,9 +369,10 @@ person.*
   alert, and the analyst's decision settles the payment. BLOCK declines it and opens an alert.
 * ✓ Insufficient funds leave no partial state.
 * ✓ A receipt and a notification are recorded.
-* ✗ I can pay a bill from the web app.
+* ✓ I can pay a bill from the web app (`/bills`): an exact minor-unit amount with one Idempotency-Key, a receipt, and
+  a plain message when the payment is held or declined.
 
-**Status:** Partial. The UI is TASK-020.
+**Status:** Implemented (#301).
 
 **Tests** (`integration/test_bills.py`): `test_pay_bill_posts_balanced_double_entry_and_records_audit_and_notification`,
 `test_idempotent_retry_returns_original_receipt_and_increments_metric`,
@@ -354,9 +380,11 @@ person.*
 `test_a_flagged_bill_payment_is_held_for_review_like_a_transfer`,
 `test_the_analysts_decision_settles_the_held_bill_payment`,
 `test_a_blocked_bill_payment_is_declined_and_opens_an_alert`,
-`test_pay_bill_insufficient_funds_leaves_zero_partial_state`.
+`test_pay_bill_insufficient_funds_leaves_zero_partial_state`; `apps/web/src/pages/PayBills.test.tsx`: "pays in integer
+minor units with one idempotency key and shows the receipt", "reuses the same idempotency key when the same confirmed
+payment is retried", "says a held payment is on hold and a declined one was not paid".
 
-**Tasks:** TASK-014 (Done); TASK-020 (Todo).
+**Tasks:** TASK-014 (Done); TASK-020 (Done #301).
 
 ### US-15 Schedule a recurring transfer (FR-27)
 
@@ -364,16 +392,18 @@ person.*
 
 **Acceptance criteria:**
 
-* ✓ I can create, list and cancel schedules (API; the screens are TASK-021).
+* ✓ I can create, list and cancel schedules, through the API and the `/scheduled` screens (TASK-021, #306).
 * ✓ Each occurrence runs exactly once, with key `sched-{id}-{date}`.
 * ✓ Insufficient funds notify me without breaking the schedule.
 
-**Status:** API implemented (ADR-0023); UI planned.
+**Status:** Implemented (ADR-0023).
 
 **Tests:** `integration/test_scheduled_transfers_engine.py::test_concurrent_workers_on_one_due_occurrence_post_it_exactly_once`,
-`::test_insufficient_funds_retryable_failure_and_same_day_retry`; `integration/test_scheduled_transfers_api.py`.
+`::test_insufficient_funds_retryable_failure_and_same_day_retry`; `integration/test_scheduled_transfers_api.py`;
+`apps/web/src/pages/ScheduledTransfers.test.tsx` ("lists upcoming orders with payee, frequency and next date",
+"cancels optimistically through DELETE and restores the row if the API refuses").
 
-**Tasks:** TASK-015 (in review), TASK-021 (Todo).
+**Tasks:** TASK-015 (Done #296), TASK-021 (Done #306).
 
 ### US-16 Search my transactions (FR-14)
 
@@ -381,14 +411,23 @@ person.*
 
 **Acceptance criteria:**
 
-* ✗ Date and amount filters work with cursor pagination.
-* ✗ The filtered query uses the account/date index.
+* ✓ Date and amount filters (and direction and reference text) work with cursor pagination, in the API and on the
+  transactions page.
+* ✓ The filtered query reads the account's rows through an account index (`ix_transaction_entries_account_id_*`),
+  never a sequential scan of the entries table.
 
-**Status:** Planned.
+**Status:** Implemented (#303).
 
-**Tests:** none yet.
+**Tests:**
 
-**Tasks:** TASK-017 (Todo).
+* `integration/test_transaction_search.py`: `test_amount_direction_and_text_filters`,
+  `test_date_range_is_bank_days_inclusive`, `test_cursor_walks_the_filtered_list_without_gaps_or_repeats`,
+  `test_invalid_filters_are_rejected`, `test_sql_in_the_search_is_just_text`,
+  `test_another_customer_cannot_search_my_account`, `test_filtered_query_uses_an_account_index`;
+* `apps/web/src/pages/AccountTransactions.test.tsx`: "sends the filters in paise and keeps them on the next page's
+  cursor (TASK-017)", "checks the filters locally and clears them".
+
+**Tasks:** TASK-017 (Done #303).
 
 ### US-17 Manage my profile and devices (FR-16)
 
@@ -430,9 +469,11 @@ guessing.*
 * `integration/test_notifications.py`: `test_list_notifications_pagination_and_unread_filtering`,
   `test_bola_cannot_read_or_mark_other_users_notifications`;
 * `integration/test_notification_links.py`;
+* `integration/test_outbox_relay.py` (retries with backoff, dead letters, exactly-once delivery after a worker crash;
+  TASK-026, #393);
 * `apps/web/src/shell/NotificationBell.test.tsx`.
 
-**Tasks:** TASK-018, TASK-022 (Done).
+**Tasks:** TASK-018, TASK-022, TASK-026 (Done #393).
 
 ## UC-06 Loan recommendation
 
@@ -446,12 +487,12 @@ guessing.*
 * ✓ The EMI calculation returns an exact integer-paise schedule.
 * ✓ I can use a loan calculator in the web app (`/loans`: principal and tenure sliders, EMI from the server).
 
-**Status:** Implemented (in review).
+**Status:** Implemented.
 
 **Tests:** `integration/test_loans.py::test_catalogue_and_emi_schedule`; `unit/test_loan_emi.py::test_known_emi_values`;
 `apps/web/src/pages/Loans.test.tsx`.
 
-**Tasks:** TASK-045 (Done); TASK-051 (In review).
+**Tasks:** TASK-045 (Done); TASK-051 (Done #309).
 
 ### US-20 Know whether I am eligible, and why (FR-30, FR-31)
 
@@ -460,18 +501,27 @@ that I only apply for what I can afford.*
 
 **Acceptance criteria:**
 
-* ✓ Eligibility uses my ledger income and existing repayments, with debt-to-income at most 50%.
+* ✓ Eligibility uses my ledger income and existing repayments, with debt-to-income at most 50%. Income counts only
+  credits that recur in 2 of the last 3 months, so a one-off deposit is not income (#404, ADR-0043).
 * ✓ The reasons show the figures.
 * ✓ A recent lockout refuses the check.
-* ✗ Suggestions are drawn from the loan catalogue and shown to me.
+* ✓ Asked about a loan without an amount, the assistant suggests the largest catalogue loan I am eligible for, at
+  the catalogue rate (#331); `/loans` shows the eligibility pre-check with the maximum amount for the loan I pick.
+* ✗ Personalised suggestions shown without asking are not drawn from the loan catalogue: the recommendation engine
+  and the carousel suggest a credit line and a rewards card, and the credit-line card opens `/loans` with no
+  catalogue loan preselected.
 
-**Status:** Partial. Suggestions and their UI are TASK-054 and TASK-062. The engine currently suggests a credit line
-and a rewards card.
+**Status:** Partial. Catalogue loan suggestions in the recommendations are TASK-054.
 
 **Tests** (`integration/test_loans.py`): `test_eligible_with_explained_figures`,
-`test_rejected_when_dti_would_exceed_half_of_income`, `test_rejected_after_a_recent_lockout`.
+`test_a_one_off_opening_deposit_is_not_income_so_no_loan_is_offered`,
+`test_a_salary_paid_in_two_months_is_income_even_with_month_named_references`,
+`test_rejected_when_dti_would_exceed_half_of_income`, `test_rejected_after_a_recent_lockout`;
+`integration/test_assistant.py::test_a_loan_without_an_amount_suggests_the_largest_eligible_one`;
+`apps/web/src/pages/Loans.test.tsx`: "shows the eligibility pre-check with the maximum amount, the rate and the
+reasons".
 
-**Tasks:** TASK-046 (Done); TASK-054 (In Progress), TASK-062 (In Progress: #328 merged; the fixed-deposit action opens `/wealth`, not the booking dialog).
+**Tasks:** TASK-046 (Done); TASK-054 (In Progress); TASK-062 (Done #328, #339); TASK-110 (Done #331).
 
 ### US-21 Apply for and track a loan (FR-32)
 
@@ -484,7 +534,7 @@ and a rewards card.
 * ✓ Monthly EMIs are collected by the scheduled transfers engine; a missed EMI is retried, not skipped (ADR-0024).
 * ✓ The active loan shows its remaining balance, amortisation progress and upcoming EMIs (web `/loans`).
 
-**Status:** Implemented (in review).
+**Status:** Implemented.
 
 **Tests** (`integration/test_loan_applications.py`): `test_apply_disburses_books_the_schedule_and_links_repayments`,
 `test_not_eligible_is_refused_with_plain_reasons_and_leaves_no_state`,
@@ -492,7 +542,7 @@ and a rewards card.
 `test_a_repayment_marks_the_right_instalment_paid_and_reduces_the_balance`,
 `test_a_missed_repayment_is_retried_and_arrears_are_collected_together`; `apps/web/src/pages/Loans.test.tsx`.
 
-**Tasks:** TASK-047, TASK-051 (In review).
+**Tasks:** TASK-047, TASK-051 (Done #309).
 
 ## UC-07 Investment recommendation
 
@@ -668,8 +718,12 @@ stopped and I can see why.*
   to the rules, never to allow-all.
 * ✓ The local and demo configuration serve the hybrid scorer (#251 fixed: legitimate first-time behaviour in the
   generator, retrained models). The code default and the staging compose stay `rules`.
-* ✗ Location is assessed below country level.
-* ✗ The standalone `LARGE_AMOUNT` rule has a dedicated test.
+* ✓ Location is assessed below country level: `IMPOSSIBLE_TRAVEL` compares the payment's city with the customer's
+  last located sign-in and fires when the speed needed is impossible (DB-IP City Lite, ADR-0034). Without the city
+  file the rule switches off and the payment path is unchanged. Its accuracy is not evaluated (no labelled location
+  data).
+* ✗ The standalone `LARGE_AMOUNT` rule has a dedicated test: no test asserts the `LARGE_AMOUNT` code on its own;
+  only `NEW_PAYEE_LARGE_AMOUNT` is tested.
 
 **Status:** Partial.
 
@@ -682,9 +736,17 @@ stopped and I can see why.*
   `test_velocity_falls_back_to_postgresql_when_redis_is_down`,
   `test_new_network_fires_and_the_full_ip_is_never_stored`;
 * `integration/test_fraud_hybrid.py::test_any_model_problem_falls_back_to_the_rules_never_allow_all`;
-* `ml/tests/test_fraud_behaviour_regression.py`.
+* `ml/tests/test_fraud_behaviour_regression.py`;
+* `integration/test_fraud_impossible_travel.py`:
+  `test_sign_in_in_london_then_payment_from_mumbai_two_hours_later_is_impossible`,
+  `test_the_same_two_places_fourteen_hours_apart_are_plausible`,
+  `test_a_nearby_city_five_minutes_earlier_is_below_the_distance_floor`,
+  `test_transfer_flow_fills_the_location_and_persists_the_travel_snapshot`,
+  `test_bill_payment_fills_the_location_and_is_scored_for_travel`,
+  `test_with_no_city_database_the_payment_path_is_unchanged`; `unit/test_fraud_travel.py`.
 
-**Tasks:** TASK-023 to TASK-034, TASK-039, TASK-080, TASK-095 (Done); #251 (closed by #257).
+**Tasks:** TASK-023 to TASK-034, TASK-039, TASK-080, TASK-095 (Done); #251 (closed by #257); impossible travel (#365,
+post-merge review fixed in #372).
 
 ## UC-10 Fraud alert management
 
@@ -798,8 +860,11 @@ behavioural dashboard, so that I contact the right people.*
   segment, product holdings and recommendation clicks, and clickstream engagement, filtered by segment and period;
   aggregates only, with a per-segment link to the RM leads (`integration/test_behaviour_analytics.py`,
   `BehaviourAnalytics.test.tsx`).
+* ✓ An RM's list opens ranked by the rule-based product score (`order_by=PROPENSITY`, `rules-v1`, not a trained
+  model), with the top product and its first reason on each row; churn-risk order stays available and is the
+  administrator's default (ADR-0041, #391 merged in #397).
 
-**Status:** Partial.
+**Status:** Implemented.
 
 **Tests** (`integration/test_insights.py`): `test_insights_rbac_authorization`,
 `test_churn_signals_are_exact_on_known_ledger_data`, `test_pagination_and_filters`;
@@ -809,9 +874,11 @@ behavioural dashboard, so that I contact the right people.*
 (`test_every_insights_route_is_behind_the_mfa_rm_gate`); web `RMInsights.test.tsx`, `routing.test.tsx`;
 `integration/test_rm_assignment.py` (`test_an_rm_sees_only_assigned_customers_and_admin_sees_everyone`,
 `test_reassignment_moves_visibility_and_keeps_the_history`, `test_concurrent_assignments_keep_exactly_one_active`),
-`integration/test_rbac_bola.py::test_bola_rm_only_reaches_assigned_customers`.
+`integration/test_rbac_bola.py::test_bola_rm_only_reaches_assigned_customers` (both orders);
+`integration/test_rm_insights_ui_api.py` (`test_propensity_order_ranks_by_product_score_within_the_rm_scope`,
+`test_propensity_order_combines_with_the_loan_filter`).
 
-**Tasks:** TASK-056 (In Progress; assignment merged in #347); TASK-066 (Done #277); TASK-101 (Done #325).
+**Tasks:** TASK-056 (Done: #223, assignment #347, product-score order #391 merged in #397); TASK-066 (Done #277); TASK-101 (Done #325).
 
 ## UC-12 Product recommendation engine
 
@@ -844,7 +911,7 @@ behaviour, spending, demographics and what I already hold.*
 * `integration/test_demographics.py`; `apps/web/src/pages/DemographicsSection.test.tsx`;
 * `ml/tests/test_recommendations_held_products.py`, `integration/test_recommendations_held_products.py`.
 
-**Tasks:** TASK-054 (In Progress); TASK-062 (In Progress: #328 merged; the fixed-deposit action opens `/wealth`, not the booking dialog); TASK-107 (Done #326); TASK-111 (Done #342).
+**Tasks:** TASK-054 (In Progress); TASK-062 (Done #328, #339); TASK-107 (Done #326); TASK-111 (Done #342).
 
 ## UC-13 Security monitoring dashboard
 

@@ -53,7 +53,7 @@ def fraud_stats(session: Session, redis_client: Redis, days: int, now: datetime)
 
 def compute(session: Session, days: int, now: datetime) -> dict[str, Any]:
     since = now - timedelta(days=days)
-    # Payment decisions only: a batch monitor's alert (ADR-0051) did not score a payment.
+    # Payment decisions only: a batch monitor's alert (ADR-0052) did not score a payment.
     in_window = and_(FraudEvent.created_at >= since, FraudEvent.model_version != MONITOR_VERSION)
     day = cast(func.timezone("UTC", FraudEvent.created_at), Date)
     per_day: dict[str, dict[str, int]] = {}

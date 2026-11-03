@@ -55,6 +55,10 @@ services:
   api:
     image: ${IMAGE_PREFIX}/api:${IMAGE_TAG}
     environment: *api-env
+    # One uvicorn process per container: two replicas use two cores (ADR-0045, measured with the
+    # k6 load suite). nginx re-resolves "api" every 10 s and spreads requests over all replicas.
+    deploy:
+      replicas: ${API_REPLICAS:-2}
     volumes:
       - ./geoip:/data/geoip:ro
       - *db-ca

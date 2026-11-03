@@ -1,4 +1,4 @@
-"""#274 / ADR-0051: the F7 deposit-side structuring monitor on real PostgreSQL.
+"""#274 / ADR-0052: the F7 deposit-side structuring monitor on real PostgreSQL.
 
 Credits are posted through ``ledger.deposit`` or the transfer API and then dated (test-only
 history), and the job runs with an injected ``now``: nothing sleeps. The job opens alerts in the

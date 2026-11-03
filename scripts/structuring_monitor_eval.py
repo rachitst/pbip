@@ -1,4 +1,4 @@
-"""Measure the F7 deposit-side structuring monitor on a synthetic export (#274, ADR-0051).
+"""Measure the F7 deposit-side structuring monitor on a synthetic export (#274, ADR-0052).
 
 Usage (dev tool, not shipped)::
 

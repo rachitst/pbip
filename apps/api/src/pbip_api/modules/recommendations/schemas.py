@@ -21,7 +21,11 @@ class ProductRecommendationItem(BaseModel):
         ...,
         ge=0.0,
         le=1.0,
-        description="Rule-based relevance, for ordering only; not a probability",
+        description=(
+            "Ordering score. rules-v1: rule-based relevance, not a probability. "
+            "sim-propensity-v1: probability of uptake next month under a SIMULATION of product "
+            "uptake, not real customer behaviour (ADR-0049)"
+        ),
     )
     reasons: list[str] = Field(min_length=1, description="Human-readable justification reasons")
     model_version: str = Field(..., description="Recommendation model version identifier")
@@ -37,5 +41,21 @@ class RecommendationsResponse(BaseModel):
     recommendations: list[ProductRecommendationItem] = Field(
         default_factory=list, description="Top recommended banking products"
     )
-    model_version: str = Field(..., description="Recommendation engine version")
+    model_version: str = Field(
+        ..., description="Ordering version: rules-v1 or sim-propensity-v1 (ADR-0049)"
+    )
+    score_version: str = Field(
+        ...,
+        description=(
+            "Human-readable label of what ordered the list, e.g. 'sim-propensity-v1 (trained on "
+            "simulated uptake, not real customer behaviour)'"
+        ),
+    )
+    score_from_simulated_data: bool = Field(
+        ...,
+        description=(
+            "True when a model trained on SIMULATED product uptake ordered the list; its "
+            "measured performance is on simulated data only"
+        ),
+    )
     evaluated_at: datetime = Field(..., description="UTC timestamp of the recommendation run")
