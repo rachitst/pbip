@@ -1,10 +1,10 @@
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response, status
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
 from redis import Redis
 from sqlalchemy.orm import Session
 
@@ -12,7 +12,7 @@ from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.db import get_session, utcnow
 from pbip_api.core.errors import NotFoundError
 from pbip_api.core.redis import get_redis
-from pbip_api.core.validation import Text
+from pbip_api.core.validation import Text, storable_text
 from pbip_api.modules.accounts.service import mask_account_number
 from pbip_api.modules.auth.dependencies import (
     Principal,
@@ -203,6 +203,25 @@ class DecisionRequest(BaseModel):
     note: Text | None = Field(default=None, max_length=1000)
 
 
+class ScheduledClearRequest(BaseModel):
+    """Why the analyst lifts the lock; kept in the audit log, never shown to the customer."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Strip BEFORE the length check, so blank padding cannot make up a reason.
+    reason: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=3, max_length=500),
+        AfterValidator(storable_text),
+    ]
+
+
+class ScheduledClearOut(BaseModel):
+    id: UUID
+    status: str = Field(description="Still PAUSED: the customer resumes the order themselves")
+    pause_reason: str | None = Field(description="CUSTOMER once the fraud lock is cleared")
+
+
 def _top_reason(event: FraudEvent) -> str | None:
     """Rule reasons are stored before model and anomaly reasons, so the first one leads."""
     first = event.reasons[0] if event.reasons else None
@@ -356,6 +375,35 @@ def decide_alert(
     )
     headers = {"Idempotent-Replayed": "true"} if result.replayed else None
     return Response(status_code=status.HTTP_204_NO_CONTENT, headers=headers)
+
+
+@router.post(
+    "/scheduled-transfers/{scheduled_transfer_id}/clear",
+    response_model=ScheduledClearOut,
+    summary="Clear a FRAUD_BLOCK pause on a standing order; the customer must still resume it",
+    responses={
+        404: {"description": "No such standing order"},
+        409: {"description": "Not fraud-paused"},
+    },
+)
+def clear_scheduled_transfer_fraud_block(
+    scheduled_transfer_id: UUID,
+    body: ScheduledClearRequest,
+    analyst: Principal = Depends(analyst_gate),
+    payments: PaymentsService = Depends(get_payments_service),
+    meta: RequestMeta = Depends(get_request_meta),
+) -> ScheduledClearOut:
+    instruction = payments.clear_scheduled_fraud_block(
+        analyst_id=analyst.user_id,
+        scheduled_transfer_id=scheduled_transfer_id,
+        reason=body.reason,
+        meta=meta,
+    )
+    return ScheduledClearOut(
+        id=instruction.id,
+        status=instruction.status.value,
+        pause_reason=instruction.pause_reason,
+    )
 
 
 # mask helper re-exported for the account numbers shown in future alert views
