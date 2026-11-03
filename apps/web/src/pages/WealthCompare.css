@@ -22,8 +22,14 @@
   padding: var(--space-1) 0;
   overflow-wrap: anywhere;
 }
-.compare-picker__option input {
-  margin-top: 0.2em;
+/* The global input rule makes controls full width; a checkbox here must keep its own size, or
+   it takes the whole row and squeezes the product name to one character per line. */
+.compare-picker__option input[type="checkbox"] {
+  display: inline-block;
+  width: auto;
+  min-height: auto;
+  margin: 0.2em 0 0;
+  padding: 0;
   flex: none;
 }
 .compare-status {
