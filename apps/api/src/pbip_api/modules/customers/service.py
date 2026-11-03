@@ -71,15 +71,14 @@ def recommendation_age_band(session: Session, customer_id: UUID, today: date) ->
 
     Returns the derived band when the customer has BOTH a date of birth and a recorded consent,
     and ``unknown`` otherwise. The date itself never leaves this module.
+
+    ``session.get``: on a customer request the row is already in the session (the authenticated
+    customer was just loaded), so this costs no query (#343).
     """
-    row = session.execute(
-        select(Customer.date_of_birth, Customer.recommendations_consent_at).where(
-            Customer.id == customer_id
-        )
-    ).one_or_none()
-    if row is None or row.recommendations_consent_at is None:
+    customer = session.get(Customer, customer_id)
+    if customer is None or customer.recommendations_consent_at is None:
         return AgeBand.UNKNOWN
-    return age_band(row.date_of_birth, today)
+    return age_band(customer.date_of_birth, today)
 
 
 def risk_profile(session: Session, customer_id: UUID) -> RiskProfileOut:

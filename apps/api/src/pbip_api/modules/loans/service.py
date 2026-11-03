@@ -518,6 +518,8 @@ def _store_response(
 # ---------------------------------------------------------------------- reads
 def _instalments(session: Session, loan_ids: Sequence[UUID]) -> dict[UUID, list[LoanInstalment]]:
     by_loan: dict[UUID, list[LoanInstalment]] = {loan_id: [] for loan_id in loan_ids}
+    if not by_loan:
+        return by_loan  # no loans, no instalments: skip the round trip (#343)
     rows = session.execute(
         select(LoanInstalment)
         .where(LoanInstalment.loan_id.in_(loan_ids))

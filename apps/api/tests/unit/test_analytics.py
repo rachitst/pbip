@@ -4,7 +4,11 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
-from pbip_api.modules.analytics.categorization import categorize_transaction, is_debt_repayment
+from pbip_api.modules.analytics.categorization import (
+    CATEGORY_CACHE_SIZE,
+    categorize_transaction,
+    is_debt_repayment,
+)
 from pbip_api.modules.analytics.health import (
     calculate_volatility_component,
     compute_financial_health_score,
@@ -53,6 +57,17 @@ def test_categorize_transaction_keywords() -> None:
     assert categorize_transaction(None, "TRANSFER") == "transfers"
     assert categorize_transaction(None, "FEE") == "fees"
     assert categorize_transaction("Unknown random payment") == "other"
+
+
+def test_categorization_is_memoised_per_distinct_reference_and_bounded() -> None:
+    """#343: the regex scan runs once per (reference, type); untrusted text cannot grow the cache."""
+    categorize_transaction.cache_clear()
+    first = categorize_transaction("Swiggy food order", "TRANSFER")
+    assert categorize_transaction("Swiggy food order", "TRANSFER") == first == "dining"
+    assert categorize_transaction.cache_info().hits == 1
+    for n in range(CATEGORY_CACHE_SIZE + 10):
+        categorize_transaction(f"Payment {n}", "TRANSFER")
+    assert categorize_transaction.cache_info().currsize == CATEGORY_CACHE_SIZE
 
 
 def test_spending_breakdown_schema_validation() -> None:
