@@ -194,12 +194,12 @@ def main() -> int:
     args = parser.parse_args()
     budgets: list[int] = args.budgets or [50]
 
-    import logging
-
-    logging.disable(logging.CRITICAL)  # one fallback warning per timed-out call would add I/O
     engine = _load(args.model_dir, budgets)
     if engine is None:
         return 2
+    import logging
+
+    logging.disable(logging.CRITICAL)  # one fallback warning per timed-out call would add I/O
     inputs = transfer_inputs(args.calls, args.seed)
     passes = [run_pass(engine, inputs, "unbounded", None)]
     mode = "back2back" if args.back_to_back else "budget"

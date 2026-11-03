@@ -1,5 +1,6 @@
 """The fraud latency benchmark (#362): seeded inputs, fallback counting, the API's budget bounds."""
 
+import logging
 import threading
 from types import SimpleNamespace
 from typing import Any
@@ -59,6 +60,7 @@ def test_a_model_that_raises_inside_counts_as_a_fallback() -> None:
 def test_a_budget_the_api_refuses_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("sys.argv", ["bench", "--budget-ms", "101", "--calls", "1"])
     assert bench.main() == 2
+    assert not logging.root.manager.disable  # refused before logging is muted: nothing leaks
 
 
 def test_report_line_names_the_budget_rate_and_load() -> None:
