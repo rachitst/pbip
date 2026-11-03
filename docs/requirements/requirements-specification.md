@@ -28,10 +28,10 @@ the work is spread over several tasks, the requirement takes the highest of thei
 | ID | Actor (use-case document section 6) | Role in the system |
 |---|---|---|
 | A1 | Retail customer | `CUSTOMER` role with a customer profile |
-| A2 | Relationship manager | `RELATIONSHIP_MANAGER` |
+| A2 | Relationship manager | `RELATIONSHIP_MANAGER`. Reviews insights and logs outreach only for the customers an administrator assigned to them (ADR-0032) |
 | A3 | Fraud analyst | `FRAUD_ANALYST` |
 | A4 | Compliance officer | `COMPLIANCE_OFFICER` |
-| A5 | Banking administrator | `ADMIN` |
+| A5 | Banking administrator | `ADMIN`. Manages staff users and lockouts, changes the allow-listed runtime settings (ADR-0031), and assigns, reassigns and unassigns customers to RMs; every change is audited (ADR-0032) |
 | A6 | AI assistant | Not a role. It acts only on behalf of the authenticated customer, through read-only tools |
 
 Every staff role (A2 to A5) must have completed TOTP in the current session to call staff endpoints.
@@ -46,7 +46,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | FR-02 | The system shall support TOTP multi-factor authentication with single-use recovery codes. A customer with MFA enabled must enter a code before access is granted. | UC-01 flow 3 | Partial | TASK-006; no task for UI | MFA is optional for customers (mandatory for staff); there is no MFA-enrolment screen in the web app |
 | FR-03 | The system shall record a security event for every failed login and MFA failure, and lock the account progressively after repeated failures. | UC-01 alternative flow | Implemented | TASK-006, TASK-007 | |
 | FR-04 | The system shall issue short-lived access tokens and rotating refresh tokens, revoke a token family on reuse, and revoke all sessions on password change. | UC-01, section 8 "secure authentication" | Implemented | TASK-006 | |
-| FR-05 | An administrator shall be able to create staff users with explicit roles and inspect and clear a user's lockout. Each action is audited. | Section 6 (administrator) | Partial | TASK-007; TASK-108 (#282) | API only; no administration screen; no application-configuration function |
+| FR-05 | An administrator shall be able to create staff users with explicit roles and inspect and clear a user's lockout. Each action is audited. | Section 6 (administrator) | Implemented | TASK-007; TASK-108 (#282, merged #346) | Web screens on `/staff/admin`. The runtime-configurable settings are exactly the ADR-0031 allow-list (daily transfer limit, per-transfer limit, standing-order cap, each bounded); secrets and security settings are deployment configuration only. No E2E journey for the screens yet |
 | FR-06 | A retail customer shall be able to self-register (disabled in production by configuration). | UC-01 precondition "valid customer account exists" | Partial | no task for UI | API only; the web app has no registration page |
 
 ### 2.2 Dashboard and account services (UC-02, UC-03, section 5)
@@ -91,7 +91,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | FR-32 | The customer shall apply for a loan and track it. | Section 5 "loan applications, loan tracking" | Planned | TASK-047, TASK-051 | |
 | FR-33 | The system shall record the customer's risk tolerance. | UC-07 input | Implemented | TASK-097 | Five-question questionnaire, deterministic LOW/MODERATE/HIGH band, answers and assessment time stored and audited (`/api/v1/customers/me/risk-profile`) |
 | FR-34 | The system shall suggest investment products using risk tolerance, savings behaviour, income and available funds. | UC-07 | Partial | TASK-054; TASK-097, TASK-105 | Fixed deposit and index-fund SIP suggestions use income, savings ratio, buffer and balance; the risk band is recorded (FR-33) but not yet an input |
-| FR-35 | The customer shall browse fixed deposits, mutual funds, stocks and bonds, and insurance products. | Section 5 wealth | Partial | TASK-063, TASK-064, TASK-065, TASK-096 (merged #337) | Seeded catalogues: deposits, illustrative funds and a gold bond (`GET /api/v1/wealth/products`, ADR-0025), term-life and health insurance with indicative premiums and entry-age hints (`GET /api/v1/wealth/insurance`, ADR-0028); no stocks |
+| FR-35 | The customer shall browse fixed deposits, mutual funds, stocks and bonds, and insurance products. | Section 5 wealth | Partial | TASK-063, TASK-064, TASK-065, TASK-096 (merged #337) | Seeded catalogues: deposits, illustrative funds and a gold bond (`GET /api/v1/wealth/products`, ADR-0025), term-life and health insurance with indicative premiums and entry-age hints (`GET /api/v1/wealth/insurance`, ADR-0028); fixed deposits pay out automatically at maturity (#332, merged #341, ADR-0029); no stocks |
 | FR-36 | The customer shall compare wealth and insurance products. | Section 5 "product comparison" | Implemented | TASK-098 (merged #337) | `/wealth/compare`: two to four products side by side, "Not applicable" where a field does not apply |
 
 ### 2.5 AI assistant (UC-08, section 5)
@@ -127,7 +127,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | FR-53 | The system shall recommend loan, savings, investment and insurance products with reasons, using the behaviour profile and spending patterns. | UC-12 | Partial | TASK-054; TASK-062 | Rules-based (`rules-v1`) API; carousel on `/accounts` (TASK-062, merged #328); the propensity model is deferred until real exposure and conversion data exist (`docs/ml/recommendation-propensity-decision.md`, #345) |
 | FR-54 | Recommendations shall use demographics. | UC-12 input | Implemented | TASK-107 | Limited by ADR-0015 to a consented age band derived from an optional date of birth; `unknown` without both |
 | FR-55 | Recommendations shall take existing products into account. | UC-12 input | Implemented | TASK-111 (#285, merged #342) | Accounts, active loans and open fixed deposits are an input. A held savings account, fixed deposit or (with an active personal loan) the personal credit line is not offered again, except a fixed-deposit top-up when the balance covers at least 6 months of spending, whose reason says so (ADR-0030) |
-| FR-56 | A relationship manager shall see customers ranked by churn risk, with signals and the top eligible product. | Section 6 (relationship manager) | Partial | TASK-056; TASK-066 | API only; no UI |
+| FR-56 | A relationship manager shall see customers ranked by churn risk, with signals and the top eligible product. | Section 6 (relationship manager) | Implemented | TASK-056; TASK-066; #347 | RM page `/staff/insights` (TASK-066). Since #347 an RM sees only the customers an administrator assigned to them; any other customer is indistinguishable from a non-existent one (404); unassigned customers are visible to administrators only (ADR-0032) |
 | FR-57 | Staff shall see a behavioural analytics dashboard: segmentation, spending patterns, product affinity, engagement. | Section 5 | Implemented | TASK-101 (merged #325) | Engagement is filled by the web app's clickstream events (TASK-112, merged #333); the seeded demo data has none |
 
 ### 2.8 Monitoring and compliance (UC-13, section 5)
@@ -179,7 +179,7 @@ delivered (TLS, #280).
 | Requirement | Missing part |
 |---|---|
 | FR-02, FR-06 | Web screens for MFA enrolment and self-registration (owned by #201) |
-| FR-05 | Administration screen and application-configuration function (TASK-108, #282) |
+| FR-05 | ~~Administration screen and application-configuration function~~: done in TASK-108 (#282, merged #346); the E2E test its DoD asks for is still missing |
 | FR-08 | ~~Total-balance overview on the dashboard~~: done in TASK-109 (#283, merged #330) |
 | FR-39 | ~~"Show unusual expenses" in the assistant~~: done in TASK-110 (#284, merged #331) |
 | FR-55 | ~~Existing products as a recommendation input~~: done in TASK-111 (#285, merged #342) |

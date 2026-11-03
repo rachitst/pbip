@@ -60,10 +60,10 @@ flowchart LR
     gh["GitHub Actions + GHCR<br/>build, scan, package, deploy"]
 
     cust -->|"HTTPS: accounts, transfers, bills,<br/>insights, assistant"| pbip
-    rm -->|"churn insights (API only)"| pbip
+    rm -->|"insights and outreach for assigned customers"| pbip
     fa -->|"fraud alert queue, decisions, telemetry"| pbip
     co -->|"audit log and hash-chain verification"| pbip
-    adm -->|"staff users, lockouts (API only)"| pbip
+    adm -->|"staff users, lockouts, runtime settings,<br/>RM assignment"| pbip
     pbip -->|"HTTP JSON, tool choice only"| ollama
     pbip -->|"file read: IP to country"| geoip
     gh -->|"SSH deploy of tagged images<br/>(gated off)"| pbip
@@ -74,10 +74,10 @@ The use-case document lists six actors. Here is the support for each:
 | Actor | Role in code | What exists | Status |
 |---|---|---|---|
 | Retail customer | `CUSTOMER` (plus a customer profile) | Web app and API | Partial (see [traceability](../requirements/traceability.md)) |
-| Relationship manager | `RELATIONSHIP_MANAGER` | `GET /api/v1/insights/customers`; behavioural analytics dashboard (`GET /api/v1/insights/behaviour`, `/staff/behaviour`, TASK-101) | Partial |
+| Relationship manager | `RELATIONSHIP_MANAGER` | `GET /api/v1/insights/customers` and the RM page, scoped to the customers an ADMIN assigned to the RM ([ADR-0032](../adr/0032-rm-customer-assignment.md)); behavioural analytics dashboard (`GET /api/v1/insights/behaviour`, `/staff/behaviour`, TASK-101) | Partial |
 | Fraud analyst | `FRAUD_ANALYST` | Alert queue and alert detail screens (`/staff/fraud`) with release/reject; telemetry API `GET /fraud/stats` | Implemented. The telemetry charts are part of the security dashboard (TASK-099, Planned) |
 | Compliance officer | `COMPLIANCE_OFFICER` | Audit-log API and web page with chain verification; exceptions and regulatory indicators (`/compliance/exceptions`, `/staff/compliance`, TASK-100, ADR-0027) | Implemented |
-| Banking administrator | `ADMIN` | Create staff users, inspect and clear lockouts (API) | Partial: no configuration UI (no task) |
+| Banking administrator | `ADMIN` | Create staff users, inspect and clear lockouts, change the allow-listed runtime settings (`/staff/admin`, TASK-108, [ADR-0031](../adr/0031-runtime-configuration.md)); assign customers to RMs ([ADR-0032](../adr/0032-rm-customer-assignment.md)) | Implemented (no E2E journey for the admin screens yet) |
 | AI assistant | none; it acts as the customer | Read-only tools with the customer id injected server-side | Implemented (narrow scope; TASK-105 for FAQ, product discovery and investments) |
 
 Every staff route requires both the role and a session that completed TOTP (`require_roles(..., mfa=True)`).
@@ -167,15 +167,16 @@ Across modules, code calls the other module's `service` or `policy` functions on
 | `fraud` | Baseline rules, hybrid scorer adapter, event persistence, alert queue, telemetry (decisions over time, top reasons, masked risky payees; 60 s Redis cache) | `/fraud/alerts*`, `/fraud/stats` | Implemented (API and analyst web screens) |
 | `notifications` | Inbox, read state, outbox relay target | `/notifications*` | Implemented (API and web bell) |
 | `analytics` | Spending, trends, health score, balance forecast, segment; nightly and weekly jobs | `/analytics/*` | Implemented. Forecast UI Planned (TASK-050) |
-| `insights` | Relationship-manager churn signals; staff route of the aggregate behavioural dashboard (queries in `analytics/behaviour.py`, ADR-0027) | `/insights/customers`, `/insights/behaviour` | Partial |
+| `insights` | Relationship-manager churn signals; staff route of the aggregate behavioural dashboard (queries in `analytics/behaviour.py`, ADR-0027); RM-to-customer assignment: RM insights are scoped per RM by `rm_assignments` and ADMIN sees all ([ADR-0032](../adr/0032-rm-customer-assignment.md)) | `/insights/customers`, `/insights/behaviour`, `/insights/customers/{id}/assignment`, `/insights/relationship-managers` | Partial |
 | `recommendations` | Rule-based product recommendations with reasons (`rules-v1`: a hand-weighted relevance formula, not a trained model; the score is not a probability) | `/recommendations` | Partial: customer carousel on `/accounts` (TASK-062, GitHub PR #328); age band from `customers.service.recommendation_age_band`, `unknown` without date of birth and consent (TASK-107); held products from the accounts, loans and wealth services (TASK-111, ADR-0030); no propensity model is trained (TASK-054, `docs/ml/recommendation-propensity-decision.md`) |
 | `loans` | Catalogue (3 products), EMI schedule, explainable eligibility; idempotent application with ledger disbursal, stored schedule and a repayment instruction on the scheduled transfers engine ([ADR-0024](../adr/0024-loan-disbursal-and-repayments.md)) | `/loans*` | Implemented (API and web) |
 | `assistant` | Read-only tool registry, rules-first router, Ollama adapter, guard, sanitiser, output filter, SSE | `/assistant/*` | Implemented (6 tools, including unusual expenses: TASK-110, GitHub PR #331). FAQ, product and investment tools Planned (TASK-105) |
 | `events` | Clickstream batch ingestion into monthly partitions | `/events/batch` | Implemented: the web app sends page visits and key interactions (TASK-112, GitHub PR #333); TASK-055 is still In Progress |
+| `runtime_config` | ADMIN runtime overrides of allow-listed business limits (daily limit, per-transfer limit, standing-order cap; bounded), read at each check by payments and bills; every change audited ([ADR-0031](../adr/0031-runtime-configuration.md)) | `/admin/settings*` | Implemented (API and web `/staff/admin`, TASK-108, GitHub PR #346) |
 | `compliance` | Hash-chained audit log read and verify; exceptions (blocked payments, lockouts, chain failures) with audited acknowledge/resolve and SLA indicators (ADR-0027) | `/compliance/audit-logs*`, `/compliance/exceptions*` | Implemented |
 | `health` | Liveness and readiness (DB + Redis) | `/api/health/live`, `/api/health/ready` | Implemented |
 | `statements` | PDF/CSV statements | none (empty package) | Planned (TASK-016, TASK-074) |
-| `wealth` | Seeded catalogue (fixed deposits, illustrative funds and gold bond, risk filter); exact quarterly-compounded deposit maths; idempotent fixed-deposit booking and closure through the ledger (`SYS-FIXED-DEPOSITS`), maturity and portfolio computed on read ([ADR-0025](../adr/0025-wealth-catalogue-and-fixed-deposits.md)) | `/wealth/products`, `/wealth/insurance`, `/wealth/fixed-deposits*`, `/wealth/portfolio` | Implemented (API and web `/wealth`, GitHub PR #327); seeded insurance catalogue ([ADR-0028](../adr/0028-insurance-catalogue.md)) and the comparison page `/wealth/compare` (TASK-096, TASK-098, GitHub PR #337); the risk band (TASK-097, GitHub PR #326) is recorded but does not filter the catalogue |
+| `wealth` | Seeded catalogue (fixed deposits, illustrative funds and gold bond, risk filter); exact quarterly-compounded deposit maths; idempotent fixed-deposit booking and closure through the ledger (`SYS-FIXED-DEPOSITS`), maturity and portfolio computed on read ([ADR-0025](../adr/0025-wealth-catalogue-and-fixed-deposits.md)); matured deposits are paid automatically within the hour by a beat job, and the customer can still withdraw first ([ADR-0029](../adr/0029-fd-maturity-payout.md)) | `/wealth/products`, `/wealth/insurance`, `/wealth/fixed-deposits*`, `/wealth/portfolio` | Implemented (API and web `/wealth`, GitHub PR #327); seeded insurance catalogue ([ADR-0028](../adr/0028-insurance-catalogue.md)) and the comparison page `/wealth/compare` (TASK-096, TASK-098, GitHub PR #337); the risk band (TASK-097, GitHub PR #326) is recorded but does not filter the catalogue |
 
 Scheduled and recurring transfers live in the `payments` module (`scheduled_service.py`, table `scheduled_transfers`,
 migration `0014`, [ADR-0023](../adr/0023-scheduled-transfers.md)); the Celery job is in section 4.2.
@@ -188,6 +189,7 @@ migration `0014`, [ADR-0023](../adr/0023-scheduled-transfers.md)); the Celery jo
 | `materialize-monthly-spending` | `pbip.analytics.materialize_monthly_spending` | 02:00 UTC daily | Writes `monthly_category_spending` ([ADR-0011](../adr/0011-monthly-spending-aggregates.md)) | Implemented |
 | `ensure-clickstream-partitions` | `pbip.events.ensure_partitions` | 01:30 UTC daily | Creates future monthly partitions (idempotent) | Implemented |
 | `execute-scheduled-transfers` | `pbip.transfers.execute_scheduled` | every 60 s | Runs due standing orders through the transfer use case (key `sched-{id}-{date}`, per-instruction try-lock); records missed occurrences without catch-up ([ADR-0023](../adr/0023-scheduled-transfers.md)). Loan repayment instructions instead collect every due and overdue instalment in one ledger posting and retry daily until paid ([ADR-0024](../adr/0024-loan-disbursal-and-repayments.md)) | Implemented |
+| `pay-out-matured-deposits` | `pbip.wealth.pay_out_matured_deposits` | hourly at :05 UTC | Pays matured fixed deposits (principal via `FD_CLOSURE`, interest via `FD_INTEREST`) to the source account, exactly once per deposit (key `fd-maturity/{id}`, user lock, deposit row lock); a frozen or closed account holds the payout (`payout_held_at`), notifies once and retries each run ([ADR-0029](../adr/0029-fd-maturity-payout.md)) | Implemented |
 | `segment-customers-weekly` | `pbip.analytics.segment_customers` | Sunday 03:00 UTC | K-Means segmentation into `customer_segments` ([ADR-0012](../adr/0012-customer-segmentation-offline-job.md)) | Implemented |
 
 The worker runs with `acks_late`, `reject_on_worker_lost` and prefetch 1, so a task interrupted by a crash is
@@ -213,7 +215,9 @@ source of API types.
 * the assistant drawer, streamed over SSE.
 
 **Staff screens:** a staff home page, the fraud alert queue and alert detail (plain-language reasons, SHAP bars, customer profile, release/reject), the compliance audit log, compliance exceptions with regulatory indicators (`/staff/compliance`) and the
-behavioural analytics dashboard (`/staff/behaviour`) (TASK-100, TASK-101, GitHub PR #325).
+behavioural analytics dashboard (`/staff/behaviour`) (TASK-100, TASK-101, GitHub PR #325), the administration page `/staff/admin`
+(staff users, lockouts, runtime settings; ADMIN only; TASK-108, GitHub PR #346), and in the RM insights customer flyout an
+ADMIN-only RM assignment control (GitHub PR #347).
 
 Every other screen is Planned under the task named in section 4.1.
 
@@ -221,7 +225,7 @@ Every other screen is Planned under the task named in section 4.1.
 
 | Package | Contents | Runs where |
 |---|---|---|
-| `ml/src/pbip_ml/fraud` | Contract, features (offline/online parity-tested), rule registry, LightGBM, Isolation Forest, hybrid combiner, TreeSHAP reasons, `inference.load` | Training: offline scripts, tracked in MLflow. Inference: in-process in `api` |
+| `ml/src/pbip_ml/fraud` | Contract, features (offline/online parity-tested), rule registry, LightGBM, Isolation Forest, hybrid combiner, TreeSHAP reasons, `inference.load`; served artifact schema and an allow-listed anomaly-model unpickler in `artifacts` ([ADR-0033](../adr/0033-fraud-artifact-schema-and-allow-listed-unpickler.md)) | Training: offline scripts, tracked in MLflow. Inference: in-process in `api`, which imports only `pbip_ml.fraud.{contract,artifacts,features,rules,hybrid,inference}`; the import-linter contract "fraud serving must not depend on fraud training" enforces it |
 | `ml/src/pbip_ml/forecasting` | Balance forecast with 80/95% intervals | In-process, on request |
 | `ml/src/pbip_ml/segmentation` | RFM + lifestyle K-Means | Celery weekly job only |
 | `ml/src/pbip_ml/recommendations` | Eligibility rules + hand-weighted ranking (explicitly not a trained model); held products suppress or explain a product (ADR-0030) | In-process, on request |
@@ -232,10 +236,10 @@ Every other screen is Planned under the task named in section 4.1.
 
 | Store | What lives there | Notes |
 |---|---|---|
-| PostgreSQL `public` | 33 tables (36 with the 3 `synthetic` tables below; `alembic_version` and clickstream partitions are not counted, as in the LLD): identity and sessions, customers and devices, accounts, ledger, holds, idempotency keys, payees, bills, scheduled transfers, loans and instalments, fraud events and alerts, notifications and outbox, hash-chained audit log, security events, RM interactions, wealth catalogue, insurance catalogue and fixed deposits, analytics aggregates, segments, clickstream (monthly range partitions), assistant messages | Full diagram: [er-diagram.md](er-diagram.md) (generated, CI-checked). Integer minor units for money. CHECK constraints for enums and ranges. Triggers keep `transaction_entries` immutable and balanced and `audit_logs` append-only |
+| PostgreSQL `public` | 35 tables (38 with the 3 `synthetic` tables below; `alembic_version` and clickstream partitions are not counted, as in the LLD): identity and sessions, customers and devices, accounts, ledger, holds, idempotency keys, payees, bills, scheduled transfers, loans and instalments, fraud events and alerts, notifications and outbox, hash-chained audit log, security events, RM interactions and RM assignments, runtime settings, wealth catalogue, insurance catalogue and fixed deposits, analytics aggregates, segments, clickstream (monthly range partitions), assistant messages | Full diagram: [er-diagram.md](er-diagram.md) (generated, CI-checked). Integer minor units for money. CHECK constraints for enums and ranges. Triggers keep `transaction_entries` immutable and balanced and `audit_logs` append-only |
 | PostgreSQL `synthetic` | Generation runs, synthetic customers, synthetic transactions | Training data only, never read on the request path ([ADR-0009](../adr/0009-synthetic-dataset-schema.md)) |
 | Redis | Celery broker and result backend (results expire after 1 h); fixed-window rate limits `rl:{name}:{subject}`; sorted-set velocity windows for transfers and login failures | Not a system of record. Rate limits fail open if Redis is down. Velocity falls back to PostgreSQL ([ADR-0020](../adr/0020-device-network-signals-and-velocity-counters.md)). Idempotency is in PostgreSQL, not Redis ([ADR-0003](../adr/0003-idempotency-in-postgresql.md)) |
-| Fraud model directory | `lightgbm.txt`, `isolation_forest.joblib`, `hybrid_params.json`, `manifest.json` (SHA-256 of each file) | Built by `make fraud-model` into `models/fraud`; mounted read-only into `api` in the dev compose. Read once per process when `FRAUD_SCORER=hybrid`. A damaged or missing artefact means rules-only |
+| Fraud model directory | `lightgbm.txt`, `isolation_forest.joblib`, `hybrid_params.json`, `manifest.json` (SHA-256 of each file) | Built by `make fraud-model` into `models/fraud`; mounted read-only into `api` in the dev compose. Read once per process when `FRAUD_SCORER=hybrid`; the anomaly pickle is read by an allow-listed unpickler ([ADR-0033](../adr/0033-fraud-artifact-schema-and-allow-listed-unpickler.md)). A damaged, missing or disallowed artefact means rules-only |
 | MLflow | SQLite backend store and proxied artefacts (dev compose, profile `ml`) | Training runs only. The API does **not** load models from the MLflow registry; registry promotion is Planned (TASK-038) |
 | GeoIP file | DB-IP Lite country `.mmdb` (CC BY 4.0) | Optional. Unset means no `NEW_COUNTRY` signal ([ADR-0014](../adr/0014-geoip-country-for-fraud-signals.md)) |
 
@@ -421,6 +425,7 @@ adversarial transcripts). Here is the summary, with the enforcing code:
 | Data at rest | MultiFernet field encryption with rotation | Implemented |
 | Audit | SHA-256 hash-chained `audit_logs`, append-only trigger, verification endpoint | Implemented |
 | Logging hygiene | structlog JSON with a final redaction processor (secrets, tokens, e-mails, long digit runs) | Implemented |
+| Runtime configuration | ADMIN with MFA only; three allow-listed business limits within reviewed bounds; secrets and security settings cannot be named (enum and DB CHECK); each change audited with old and new value and reason ([ADR-0031](../adr/0031-runtime-configuration.md), threat T52) | Implemented |
 | Safe configuration | Staging and production refuse to boot with the dev JWT secret, an empty encryption key, insecure cookies, wildcard CORS or the memory trace exporter. API docs are off when deployed | Implemented |
 | Supply chain | First-party or SHA-pinned actions, Bandit, pip-audit, npm audit, detect-secrets, CodeQL, Dependabot, nightly Schemathesis fuzzing ([ADR-0006](../adr/0006-ci-supply-chain.md)) | Implemented |
 | Passkeys | Evaluated ([ADR-0013](../adr/0013-passkeys-evaluation.md)) | Planned (roadmap in the ADR; no task) |

@@ -82,13 +82,16 @@ access.*
 
 * ✓ ADMIN with MFA can inspect the lockout state and unlock the user. The action is audited.
 * ✓ Other roles get 403.
-* ✗ The administrator can do this from a screen.
+* ✓ The administrator can do this from a screen: `/staff/admin` looks up a user's lockout and clears it after a
+  confirmation (TASK-108, #346).
 
-**Status:** Partial. The administration UI has no task.
+**Status:** Implemented (#346).
 
-**Tests:** `integration/test_admin_lockout.py`; `integration/test_rbac_bola.py::test_admin_can_create_staff_and_it_is_audited`.
+**Tests:** `integration/test_admin_lockout.py`; `integration/test_rbac_bola.py::test_admin_can_create_staff_and_it_is_audited`,
+`test_only_admins_with_mfa_may_use_admin_routes`; web `apps/web/src/pages/staff/Administration.test.tsx`
+("inspects a lockout and clears it after confirmation"), `routing.test.tsx`.
 
-**Tasks:** TASK-007 (Done).
+**Tasks:** TASK-007 (Done); TASK-108 (In Progress: #346 merged; the E2E test its DoD asks for is missing).
 
 ## UC-02 View banking dashboard
 
@@ -189,7 +192,7 @@ disclosure.
 `test_recommendations_use_the_customers_real_figures_and_ignore_date_of_birth_without_consent`;
 `apps/web/src/pages/ProductRecommendations.test.tsx`.
 
-**Tasks:** TASK-054 (In Progress); TASK-062 (In Progress: #328 merged; the fixed-deposit action opens `/wealth`, not the booking dialog).
+**Tasks:** TASK-054 (In Progress); TASK-062 (Done #328, #339: the fixed-deposit card opens the booking dialog).
 
 ## UC-03 Download account statement
 
@@ -530,6 +533,9 @@ compare them, so that I can invest sensibly.*
   reference profile and entry-age hints, without underwriting (TASK-096, ADR-0028).
 * ✓ Two to four products can be compared side by side, with "Not applicable" where a field does not apply
   (`/wealth/compare`, TASK-098).
+* ✓ When my fixed deposit matures, the principal and interest are credited to its source account automatically,
+  exactly once, within the hour, and I get a notification; if that account is frozen or closed, I am told the payout
+  is on hold, and it is paid when the account is active again (#332, ADR-0029).
 
 **Status:** Partial.
 
@@ -538,10 +544,12 @@ compare them, so that I can invest sensibly.*
 `test_catalogue_filters_by_risk_level`, `test_booking_posts_one_balanced_entry_and_stores_the_deposit`,
 `test_premature_closure_pays_the_penalty_rate_and_balances`,
 `test_maturity_is_computed_on_read_and_pays_exactly_the_projected_amount`; `test_wealth_deposit_math.py`;
-`Wealth.test.tsx`; `integration/test_insurance.py`, `unit/test_wealth_insurance.py`, `WealthCompare.test.tsx`.
+`Wealth.test.tsx`; `integration/test_insurance.py`, `unit/test_wealth_insurance.py`, `WealthCompare.test.tsx`;
+`integration/test_fd_maturity_payout.py` (`test_a_matured_deposit_is_paid_once_to_its_account_audited_and_notified`,
+`test_concurrent_payout_runs_pay_each_deposit_exactly_once`, `test_an_inactive_account_holds_the_payout_notifies_once_and_pays_when_active`).
 
 **Tasks:** TASK-054 (In Progress); TASK-063, TASK-064, TASK-065 (Done #327); TASK-097 (Done #326: the band is recorded,
-not yet used here); TASK-096, TASK-098 (Done #337).
+not yet used here); TASK-096, TASK-098 (Done #337); #332 (fixed in #341).
 
 ## UC-08 AI assistant interaction
 
@@ -766,8 +774,10 @@ behavioural dashboard, so that I contact the right people.*
   ledger data, with filters and pagination.
 * ✓ An RM screen exists: `/staff/insights` lists the leads filtered on the server by segment, churn risk and
   loan propensity; a customer detail shows the 30-day volume, health score, churn score and eligible products;
-  calls and notes are logged server-side and audited (TASK-066, ADR-0022). RMs see every customer: there is
-  no RM-to-customer assignment.
+  calls and notes are logged server-side and audited (TASK-066, ADR-0022). An RM sees only the customers assigned
+  to them; any other customer gives the same 404 as an unknown id (ADR-0032, #347).
+* ✓ An ADMIN with MFA assigns, reassigns and unassigns a customer's RM from the customer flyout; each change is audited,
+  the history is kept, and unassigned customers are visible to ADMIN only (ADR-0032, #347).
 * ✓ A behavioural dashboard (`/staff/behaviour`, `GET /insights/behaviour`, TASK-101) shows the segment mix, spend by
   segment, product holdings and recommendation clicks, and clickstream engagement, filtered by segment and period;
   aggregates only, with a per-segment link to the RM leads (`integration/test_behaviour_analytics.py`,
@@ -780,9 +790,12 @@ behavioural dashboard, so that I contact the right people.*
 `integration/test_rm_insights_ui_api.py` (`test_loan_propensity_is_reported_and_filtered_on_the_server`,
 `test_detail_has_exact_volume_health_and_products_and_no_extra_pii`, `test_new_routes_need_rm_or_admin_with_mfa`,
 `test_logged_interaction_is_listed_shared_and_audited_without_the_note`); `security/test_route_policy_registry.py`
-(`test_every_insights_route_is_behind_the_mfa_rm_gate`); web `RMInsights.test.tsx`, `routing.test.tsx`.
+(`test_every_insights_route_is_behind_the_mfa_rm_gate`); web `RMInsights.test.tsx`, `routing.test.tsx`;
+`integration/test_rm_assignment.py` (`test_an_rm_sees_only_assigned_customers_and_admin_sees_everyone`,
+`test_reassignment_moves_visibility_and_keeps_the_history`, `test_concurrent_assignments_keep_exactly_one_active`),
+`integration/test_rbac_bola.py::test_bola_rm_only_reaches_assigned_customers`.
 
-**Tasks:** TASK-056 (In Progress); TASK-066 (In Review); TASK-101 (Done #325).
+**Tasks:** TASK-056 (In Progress; assignment merged in #347); TASK-066 (Done #277); TASK-101 (Done #325).
 
 ## UC-12 Product recommendation engine
 
@@ -885,12 +898,41 @@ acknowledge and resolve, with indicators of overdue reviews.*
 
 **Tasks:** TASK-100 (Done #325).
 
+## Administration (section 6)
+
+### US-37 Manage staff users and safe runtime settings (FR-05)
+
+*As a banking administrator, I want to create staff users with explicit roles and change the business limits that are
+safe to change at runtime, with a reason that is audited, so that the bank is run from the web app without a
+redeployment and without exposing secrets or security settings.*
+
+**Acceptance criteria:**
+
+* ✓ ADMIN with MFA creates a staff user from `/staff/admin`; no role is preselected (TASK-108).
+* ✓ Only the ADR-0031 allow-list can be changed: the daily transfer limit, the per-transfer limit and the
+  standing-order cap, each typed and bounded. Secrets and security settings cannot be named.
+* ✓ A change applies on the next check, in the API and in the worker, without a restart.
+* ✓ Every change is audited in the hash chain with the actor, the old and new value and the reason.
+* ✓ Every other role gets 403 on the admin routes and a restricted page in the web app.
+
+**Status:** Implemented (#346).
+
+**Tests:** `integration/test_runtime_config.py` (`test_invalid_changes_are_422_and_leave_no_state`,
+`test_a_lowered_daily_limit_is_enforced_on_the_next_transfer_and_bill_payment`,
+`test_every_change_is_audited_with_actor_old_new_and_reason_in_the_hash_chain`,
+`test_only_mfa_verified_admins_may_read_or_change_settings`); `unit/test_runtime_config_allowlist.py`;
+`integration/test_scheduled_transfers_engine.py::test_the_worker_enforces_an_admins_runtime_daily_limit_without_a_restart`;
+`integration/test_rbac_bola.py::test_only_admins_with_mfa_may_use_admin_routes`; web
+`apps/web/src/pages/staff/Administration.test.tsx`, `routing.test.tsx`.
+
+**Tasks:** TASK-108 (In Progress: #346 merged; the E2E test its DoD asks for is missing).
+
 ---
 
 ## Summary
 
 | Status | Stories |
 |---|---|
-| Implemented | US-02, US-05, US-09, US-10, US-17, US-18, US-24, US-26, US-28, US-29, US-31, US-34, US-35, US-36 |
-| Partial | US-01, US-03, US-04, US-06, US-07, US-11, US-13, US-14, US-19, US-20, US-23, US-25, US-27, US-30, US-32, US-33 |
+| Implemented | US-02, US-03, US-05, US-09, US-10, US-17, US-18, US-24, US-26, US-28, US-29, US-31, US-34, US-35, US-36, US-37 |
+| Partial | US-01, US-04, US-06, US-07, US-11, US-13, US-14, US-19, US-20, US-23, US-25, US-27, US-30, US-32, US-33 |
 | Planned | US-08, US-12, US-15, US-16, US-21, US-22 |
