@@ -981,6 +981,61 @@ class PaymentsService:
         self.session.commit()
         return instruction
 
+    def clear_scheduled_fraud_block(
+        self,
+        *,
+        analyst_id: UUID,
+        scheduled_transfer_id: UUID,
+        reason: str,
+        meta: RequestMeta,
+    ) -> ScheduledTransfer:
+        """A fraud analyst lifts the FRAUD_BLOCK lock after review (ADR-0023 R1/R5, issue #304).
+
+        The order stays PAUSED with ``pause_reason = CUSTOMER``: it never restarts unattended, the
+        customer resumes it (with the usual re-validation and no-backlog roll-forward). Staff act
+        across customers by role, like alert decisions, so there is no ownership policy here.
+        Repeating the call is a 409, as deciding an already resolved alert is.
+        """
+        owner = self.session.execute(
+            select(ScheduledTransfer.user_id).where(ScheduledTransfer.id == scheduled_transfer_id)
+        ).scalar_one_or_none()
+        if owner is None:
+            raise NotFoundError("scheduled transfer not found")
+        self._lock_user(owner)  # the same first lock the customer's pause/resume/cancel take
+        instruction = self.session.execute(
+            select(ScheduledTransfer)
+            .where(ScheduledTransfer.id == scheduled_transfer_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).scalar_one()
+        if instruction.pause_reason != SchedulePauseReason.FRAUD_BLOCK:
+            raise ConflictError("scheduled transfer is not paused by a fraud block")
+
+        instruction.pause_reason = SchedulePauseReason.CUSTOMER
+        self.audit.record(
+            analyst_id,
+            "SCHEDULED_TRANSFER_FRAUD_BLOCK_CLEARED",
+            "scheduled_transfer",
+            str(instruction.id),
+            ip=meta.ip,
+            request_id=meta.request_id,
+            details={"reason": reason, "customer_user_id": str(instruction.user_id)},
+        )
+        # The customer learns only that they may resume: no score, reasons or analyst note.
+        notifications.enqueue(
+            self.session,
+            notifications.SCHEDULED_TRANSFER_UNLOCKED,
+            {
+                "user_id": str(instruction.user_id),
+                "account_id": str(instruction.from_account_id),
+                "scheduled_transfer_id": str(instruction.id),
+                "amount_minor": instruction.amount,
+                "currency": instruction.currency,
+            },
+        )
+        self.session.commit()
+        return instruction
+
     # ------------------------------------------------------------- projections
     def upcoming_occurrences(self, customer_id: UUID, until: date) -> list[UpcomingOccurrence]:
         """Project upcoming occurrences for customer's active instructions (R15)."""

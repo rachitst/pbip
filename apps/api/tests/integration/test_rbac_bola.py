@@ -63,6 +63,7 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("get", "/api/v1/fraud/stats"),
         ("get", "/api/v1/fraud/monitoring"),
         ("get", "/api/v1/fraud/demo-lab"),
+        ("post", f"/api/v1/fraud/scheduled-transfers/{uuid.uuid4()}/clear"),
         ("get", "/api/v1/compliance/audit-logs"),
         ("get", "/api/v1/compliance/exceptions"),
         ("post", f"/api/v1/compliance/exceptions/ACCOUNT_LOCKOUT/{uuid.uuid4()}/acknowledge"),
@@ -105,6 +106,8 @@ def test_customer_cannot_use_staff_endpoints(
     assert client.get("/api/v1/fraud/alerts", headers=alice.headers).status_code == 403
     assert client.get("/api/v1/fraud/monitoring", headers=alice.headers).status_code == 403
     assert client.get("/api/v1/fraud/demo-lab", headers=alice.headers).status_code == 403
+    clear = f"/api/v1/fraud/scheduled-transfers/{uuid.uuid4()}/clear"
+    assert client.post(clear, headers=alice.headers, json={"reason": "x" * 5}).status_code == 403
     assert client.get("/api/v1/compliance/audit-logs", headers=alice.headers).status_code == 403
     assert client.get("/api/v1/compliance/exceptions", headers=alice.headers).status_code == 403
     assert client.get("/api/v1/insights/customers", headers=alice.headers).status_code == 403
@@ -276,6 +279,9 @@ def test_staff_endpoints_demand_mfa_in_the_session(
     assert denied.status_code == 403 and denied.json()["code"] == "mfa_required"
     denied = client.get("/api/v1/fraud/demo-lab", headers=no_mfa.headers)
     assert denied.status_code == 403 and denied.json()["code"] == "mfa_required"
+    clear = f"/api/v1/fraud/scheduled-transfers/{uuid.uuid4()}/clear"
+    denied = client.post(clear, headers=no_mfa.headers, json={"reason": "x" * 5})
+    assert denied.status_code == 403 and denied.json()["code"] == "mfa_required"
     with_mfa = make_staff(RoleName.FRAUD_ANALYST)
     assert client.get("/api/v1/fraud/alerts", headers=with_mfa.headers).status_code == 200
 
@@ -301,6 +307,11 @@ def test_roles_are_separated_between_staff_functions(
         assert client.post(ack, headers=staff.headers, json={"reason": "x" * 5}).status_code == 403
     for staff in (analyst, compliance):
         assert client.get(behaviour, headers=staff.headers).status_code == 403
+    clear = f"/api/v1/fraud/scheduled-transfers/{uuid.uuid4()}/clear"
+    for staff in (rm, compliance):  # #304: only fraud analysts (and admins) lift a fraud lock
+        assert (
+            client.post(clear, headers=staff.headers, json={"reason": "x" * 5}).status_code == 403
+        )
     assert client.get(exceptions, headers=compliance.headers).status_code == 200
     assert client.get(behaviour, headers=rm.headers).status_code == 200
 

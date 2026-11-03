@@ -6065,6 +6065,56 @@
         "title": "ScheduleFrequency",
         "type": "string"
       },
+      "ScheduledClearOut": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "pause_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "CUSTOMER once the fraud lock is cleared",
+            "title": "Pause Reason"
+          },
+          "status": {
+            "description": "Still PAUSED: the customer resumes the order themselves",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "pause_reason"
+        ],
+        "title": "ScheduledClearOut",
+        "type": "object"
+      },
+      "ScheduledClearRequest": {
+        "additionalProperties": false,
+        "description": "Why the analyst lifts the lock; kept in the audit log, never shown to the customer.",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "ScheduledClearRequest",
+        "type": "object"
+      },
       "ScheduledTransferCreate": {
         "properties": {
           "amount_minor": {
@@ -10470,6 +10520,70 @@
           }
         ],
         "summary": "Security monitoring: high-risk customers, open alerts, login anomalies, fraud events",
+        "tags": [
+          "fraud"
+        ]
+      }
+    },
+    "/api/v1/fraud/scheduled-transfers/{scheduled_transfer_id}/clear": {
+      "post": {
+        "operationId": "clear_scheduled_transfer_fraud_block_api_v1_fraud_scheduled_transfers__scheduled_transfer_id__clear_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scheduled_transfer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Scheduled Transfer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduledClearRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledClearOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such standing order"
+          },
+          "409": {
+            "description": "Not fraud-paused"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Clear a FRAUD_BLOCK pause on a standing order; the customer must still resume it",
         "tags": [
           "fraud"
         ]
