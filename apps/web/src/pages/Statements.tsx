@@ -9,6 +9,7 @@ import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
 import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
+import "./ChoiceGroup.css";
 
 type Format = "pdf" | "csv";
 const MAX_DAYS = 366;

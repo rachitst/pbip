@@ -2,7 +2,11 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useSearchParams } from "react-router";
 import { api } from "../../api/client";
-import type { CustomerInsightItem, CustomerInsightsListResponse } from "../../api/client";
+import type {
+  CustomerInsightItem,
+  CustomerInsightsListResponse,
+  InsightOrder,
+} from "../../api/client";
 import { errorMessage } from "../../lib/errors";
 import { countOf, formatDateTime } from "../../lib/format";
 import { useCurrentUser } from "../../shell/MeContext";
@@ -22,6 +26,7 @@ import {
   score100,
   segmentLabel,
 } from "./rmInsightsFormat";
+import "./RMInsights.css";
 
 export const PAGE_SIZE = 20;
 
@@ -39,12 +44,36 @@ const LOAN_FILTERS = [
   { value: "0.7", label: "Loan propensity 70 or more" },
 ] as const;
 
+/** TASK-056: the API orders the whole scope before paging, so page 2 continues page 1. */
+const ORDER_OPTIONS: readonly { value: InsightOrder; label: string }[] = [
+  { value: "PROPENSITY", label: "Best product match first" },
+  { value: "CHURN_RISK", label: "Highest churn risk first" },
+];
+
+const ORDER_TEXT: Record<InsightOrder, { description: string; caption: string }> = {
+  PROPENSITY: {
+    description:
+      "Customers with the strongest product match come first, by a rule-based score (not a trained model or a probability); churn risk is still shown for each one.",
+    caption: "Customers, best product match first",
+  },
+  CHURN_RISK: {
+    description: "Customers most at risk of leaving come first.",
+    caption: "Customers, highest churn risk first",
+  },
+};
+
+function isOrder(value: string): value is InsightOrder {
+  return ORDER_OPTIONS.some((o) => o.value === value);
+}
+
 function toNumber(value: string): number | undefined {
   return value === "" ? undefined : Number(value);
 }
 
-/** TASK-066: the Relationship Manager's leads, highest churn risk first (GET /insights/customers).
- * Every filter is applied by the API before paging, so a match on another page is never hidden. */
+/** TASK-066: the Relationship Manager's leads (GET /insights/customers). An RM starts with the best
+ * product match first (TASK-056, a small assigned portfolio); an administrator, who sees every
+ * customer, starts with churn risk, which the API answers without scoring everyone. Every filter
+ * and the order are applied by the API before paging, so a match on another page is never hidden. */
 export function RMInsights() {
   const me = useCurrentUser();
   const allowed = canAccessRMInsights(me);
@@ -57,6 +86,7 @@ export function RMInsights() {
   });
   const [churn, setChurn] = useState("");
   const [loan, setLoan] = useState("");
+  const [order, setOrder] = useState<InsightOrder>(isAdmin ? "CHURN_RISK" : "PROPENSITY");
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<CustomerInsightItem | null>(null);
 
@@ -64,6 +94,7 @@ export function RMInsights() {
     segment: segment || undefined,
     min_churn_risk: toNumber(churn),
     min_loan_propensity: toNumber(loan),
+    order_by: order,
     limit: PAGE_SIZE,
     offset,
   };
@@ -98,9 +129,17 @@ export function RMInsights() {
     <div className="page">
       <PageHeader
         title="Customer insights"
-        description="Customers most at risk of leaving come first. Open one to see their health score, recent activity and eligible products, and to log a call or note."
+        description={`${ORDER_TEXT[order].description} Open one to see their health score, recent activity and eligible products, and to log a call or note.`}
       />
       <section className="rm-filters" aria-label="Filter customers">
+        <FilterSelect
+          label="Order"
+          value={order}
+          onChange={choose((value) => {
+            if (isOrder(value)) setOrder(value);
+          })}
+          options={ORDER_OPTIONS}
+        />
         <FilterSelect
           label="Segment"
           value={segment}
@@ -153,6 +192,7 @@ export function RMInsights() {
           </p>
           <LeadsTable
             items={items}
+            caption={ORDER_TEXT[data.order].caption}
             onOpen={(item) => {
               setSelected(item);
             }}
@@ -248,17 +288,35 @@ function LoanCell({ item }: { item: CustomerInsightItem }) {
   );
 }
 
+/** The top product's rule-based score with its first reason (TASK-056). */
+function ProductCell({ item }: { item: CustomerInsightItem }) {
+  const score = item.top_product_score;
+  if (typeof score !== "number" || !item.top_recommended_product) {
+    return <span className="muted">No eligible product</span>;
+  }
+  return (
+    <>
+      {score100(score)} <span className="muted">({item.top_recommended_product})</span>
+      {item.top_product_reason && (
+        <span className="rm-product-reason muted">{item.top_product_reason}</span>
+      )}
+    </>
+  );
+}
+
 function LeadsTable({
   items,
+  caption,
   onOpen,
 }: {
   items: CustomerInsightItem[];
+  caption: string;
   onOpen: (item: CustomerInsightItem) => void;
 }) {
   return (
     <div className="entries">
       <table>
-        <caption className="sr-only">Customers, highest churn risk first</caption>
+        <caption className="sr-only">{caption}</caption>
         <thead>
           <tr>
             <th scope="col">Customer</th>
@@ -266,6 +324,7 @@ function LeadsTable({
             <th scope="col" className="right">
               Balance
             </th>
+            <th scope="col">Product match (rule-based)</th>
             <th scope="col">Churn risk</th>
             <th scope="col">Last active</th>
             <th scope="col">Loan propensity</th>
@@ -291,6 +350,9 @@ function LeadsTable({
                 <td>{segmentLabel(item.segment)}</td>
                 <td className="right">
                   <Amount minor={item.total_balance_minor} currency="INR" />
+                </td>
+                <td className="rm-product">
+                  <ProductCell item={item} />
                 </td>
                 <td>
                   <StatusBadge
