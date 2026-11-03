@@ -1,0 +1,16 @@
+/* Figure cards (.loan-card) on Loans and Wealth. Component stylesheet: tokens only.
+   The shared .details grid gives the label its full max-content width and lets the value break
+   anywhere, so at phone width a long label ("Maximum over 12 months") squeezes an amount into
+   "INR 6,34,76 / 8.10" (TASK-089 bug bash). On narrow screens the label keeps at least 45% and
+   the value takes the rest it needs, on the right, wrapping only between words (a long tenure
+   list). Wider screens keep the shared layout. */
+@media (max-width: 40rem) {
+  .loan-card .details {
+    grid-template-columns: minmax(45%, 1fr) auto;
+    gap: var(--space-2) var(--space-3);
+  }
+  .loan-card .details dd {
+    overflow-wrap: break-word;
+    text-align: right;
+  }
+}

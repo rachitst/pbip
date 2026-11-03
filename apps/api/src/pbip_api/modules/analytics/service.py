@@ -523,6 +523,7 @@ def get_balance_forecast(
         repository.scheduled_debits_by_day(session, account.id, now, FORECAST_HISTORY_DAYS),
     )
     method, model_days = _model_days(discretionary, model_horizon, today)
+    model_days = projection.anchor(model_days, account.ledger_balance + paid_in_history)
     obligations = upcoming_obligations(session, customer_id, account.id, today, until)
     days = projection.project(model_days, today, paid_in_history, obligations)
     shown = history[-FORECAST_HISTORY_SHOWN_DAYS:]
