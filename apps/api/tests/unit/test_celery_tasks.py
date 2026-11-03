@@ -31,3 +31,12 @@ def test_beat_runs_scheduled_transfers_job() -> None:
     entry = schedule["execute-scheduled-transfers"]
     assert entry["task"] == "pbip.transfers.execute_scheduled"
     assert entry["schedule"] == 60.0
+
+
+def test_beat_pays_out_matured_deposits_hourly_through_a_registered_task() -> None:
+    """Issue #332 / ADR-0029: one hourly entry on the existing beat, pointing at a real task."""
+    schedule = celery_app.conf.beat_schedule
+    entries = [e for e in schedule.values() if e["task"] == "pbip.wealth.pay_out_matured_deposits"]
+    assert len(entries) == 1
+    assert entries[0]["schedule"] == crontab(minute=5)
+    assert "pbip.wealth.pay_out_matured_deposits" in celery_app.tasks

@@ -12,7 +12,7 @@ import type {
   UserOut,
 } from "../../api/client";
 import { MeContext } from "../../shell/MeContext";
-import { json, urlOf } from "../../test-utils";
+import { json, noContent, urlOf } from "../../test-utils";
 import { RMInsights } from "./RMInsights";
 import { canAccessRMInsights, declineText, inactivityText, segmentLabel } from "./rmInsightsFormat";
 
@@ -61,8 +61,12 @@ const ravi: CustomerInsightItem = {
   high_value: false,
 };
 
-function page(items: CustomerInsightItem[], total = items.length): CustomerInsightsListResponse {
-  return { items, total, evaluated_at: "2026-11-01T12:00:00Z" };
+function page(
+  items: CustomerInsightItem[],
+  total = items.length,
+  scope: CustomerInsightsListResponse["scope"] = "ASSIGNED",
+): CustomerInsightsListResponse {
+  return { items, total, evaluated_at: "2026-11-01T12:00:00Z", scope };
 }
 
 const detail: CustomerInsightDetail = {
@@ -84,6 +88,7 @@ const detail: CustomerInsightDetail = {
     },
   ],
   evaluated_at: "2026-11-01T12:00:00Z",
+  assigned_rm: null,
 };
 
 const logged: InteractionOut = {
@@ -100,6 +105,8 @@ interface Routes {
   detail?: () => Response;
   log?: () => Response;
   post?: (body: unknown) => Response;
+  rms?: () => Response;
+  assign?: (method: string, body: unknown) => Response;
 }
 
 /** Answers the insights endpoints by path and method; records every call for assertions. */
@@ -107,6 +114,13 @@ function mockApi(routes: Routes) {
   return vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
     const url = new URL(urlOf(input), "http://localhost");
     const method = init?.method ?? "GET";
+    if (url.pathname === "/api/v1/insights/relationship-managers") {
+      return Promise.resolve(routes.rms ? routes.rms() : json(200, { items: [] }));
+    }
+    if (url.pathname.endsWith("/assignment")) {
+      const body: unknown = typeof init?.body === "string" ? JSON.parse(init.body) : null;
+      return Promise.resolve(routes.assign ? routes.assign(method, body) : json(500, {}));
+    }
     if (url.pathname.endsWith("/interactions")) {
       if (method === "POST") {
         const body: unknown = JSON.parse(typeof init?.body === "string" ? init.body : "null");
@@ -268,9 +282,11 @@ describe("RMInsights page (TASK-066)", () => {
     let fail = true;
     mockApi({
       list: () =>
-        fail ? json(500, { title: "Internal Server Error", status: 500 }) : json(200, page([])),
+        fail
+          ? json(500, { title: "Internal Server Error", status: 500 })
+          : json(200, page([], 0, "ALL")),
     });
-    renderPage();
+    renderPage(admin);
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not load customer insights.");
     fail = false;
     await user.click(screen.getByRole("button", { name: "Try again" }));
@@ -377,6 +393,110 @@ describe("customer flyout (TASK-066)", () => {
     await user.click(within(dialog).getByRole("button", { name: "Close" }));
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+  });
+});
+
+describe("RM portfolio scoping and assignment (ADR-0032)", () => {
+  const OTHER_RM = { user_id: "u-rm-2", email: "rm2@bank.example" };
+  const RMS = { items: [{ user_id: rm.id, email: rm.email }, OTHER_RM] };
+
+  async function openAshaAs(me: UserOut, routes: Routes) {
+    const user = userEvent.setup();
+    const fetchMock = mockApi({
+      list: () => json(200, page([asha], 1, me === admin ? "ALL" : "ASSIGNED")),
+      ...routes,
+    });
+    renderPage(me);
+    await user.click(await screen.findByRole("button", { name: "Open Asha Rao" }));
+    const dialog = await screen.findByRole("dialog", { name: "Asha Rao" });
+    return { user, fetchMock, dialog };
+  }
+
+  function calls(fetchMock: ReturnType<typeof mockApi>, suffix: string) {
+    return fetchMock.mock.calls.filter(([input]) => urlOf(input).endsWith(suffix));
+  }
+
+  it("tells an RM the list is their own customers, and why it may be empty", async () => {
+    mockApi({ list: () => json(200, page([])) });
+    renderPage(rm);
+    expect(await screen.findByTestId("rm-scope")).toHaveTextContent(
+      "Your customers: only customers assigned to you are listed.",
+    );
+    expect(screen.getByText(/No customers are assigned to you yet/)).toBeInTheDocument();
+  });
+
+  it("tells an administrator the list is every customer", async () => {
+    mockApi({ list: () => json(200, page([asha], 1, "ALL")) });
+    renderPage(admin);
+    expect(await screen.findByTestId("rm-scope")).toHaveTextContent(/All customers/);
+  });
+
+  it("shows an RM who looks after the customer but no assignment control", async () => {
+    const assigned = { rm_user_id: rm.id, rm_email: rm.email, assigned_at: "2026-10-01T09:00:00Z" };
+    const { fetchMock, dialog } = await openAshaAs(rm, {
+      detail: () => json(200, { ...detail, assigned_rm: assigned }),
+    });
+    expect(await within(dialog).findByText("rm@demo.pbip")).toBeVisible();
+    expect(within(dialog).getByText(/since 1 Oct 2026/)).toBeVisible();
+    expect(within(dialog).queryByLabelText("Assign to")).not.toBeInTheDocument();
+    expect(calls(fetchMock, "/relationship-managers")).toHaveLength(0);
+  });
+
+  it("lets an administrator assign an unassigned customer", async () => {
+    let current: CustomerInsightDetail = detail;
+    const assign = vi.fn((method: string, body: unknown) => {
+      const chosen = body as { rm_user_id: string };
+      const rmAssigned = {
+        rm_user_id: chosen.rm_user_id,
+        rm_email: OTHER_RM.email,
+        assigned_at: "2026-11-03T09:00:00Z",
+      };
+      current = { ...detail, assigned_rm: rmAssigned };
+      return json(200, { customer_id: ASHA, assigned_rm: rmAssigned, method });
+    });
+    const { user, dialog } = await openAshaAs(admin, {
+      detail: () => json(200, current),
+      rms: () => json(200, RMS),
+      assign,
+    });
+    expect(await within(dialog).findByText(/Unassigned/)).toBeVisible();
+    const assignButton = await within(dialog).findByRole("button", { name: "Assign" });
+    expect(assignButton).toBeDisabled(); // nothing chosen yet
+    await user.selectOptions(within(dialog).getByLabelText("Assign to"), OTHER_RM.user_id);
+    await user.click(assignButton);
+    await waitFor(() => {
+      expect(assign).toHaveBeenCalledWith("PUT", { rm_user_id: OTHER_RM.user_id });
+    });
+    expect(await within(dialog).findByText(OTHER_RM.email, { selector: "strong" })).toBeVisible();
+    expect(within(dialog).getByRole("button", { name: "Unassign" })).toBeVisible();
+  });
+
+  it("lets an administrator unassign, and shows a failure", async () => {
+    const assigned = { rm_user_id: rm.id, rm_email: rm.email, assigned_at: "2026-10-01T09:00:00Z" };
+    let fail = true;
+    const assign = vi.fn((method: string) =>
+      fail
+        ? json(403, { status: 403, title: "Forbidden" })
+        : method === "DELETE"
+          ? noContent()
+          : json(200, {}),
+    );
+    const { user, dialog } = await openAshaAs(admin, {
+      detail: () => json(200, { ...detail, assigned_rm: assigned }),
+      rms: () => json(200, RMS),
+      assign,
+    });
+    const unassign = await within(dialog).findByRole("button", { name: "Unassign" });
+    expect(within(dialog).getByRole("button", { name: "Reassign" })).toBeDisabled(); // same RM
+    await user.click(unassign);
+    expect(
+      await within(dialog).findByText(/Could not change the assignment|Forbidden/),
+    ).toBeVisible();
+    fail = false;
+    await user.click(unassign);
+    await waitFor(() => {
+      expect(assign).toHaveBeenLastCalledWith("DELETE", null);
     });
   });
 });

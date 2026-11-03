@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useSearchParams } from "react-router";
 import { api } from "../../api/client";
-import type { CustomerInsightItem } from "../../api/client";
+import type { CustomerInsightItem, CustomerInsightsListResponse } from "../../api/client";
 import { errorMessage } from "../../lib/errors";
 import { countOf, formatDateTime } from "../../lib/format";
 import { useCurrentUser } from "../../shell/MeContext";
@@ -48,6 +48,7 @@ function toNumber(value: string): number | undefined {
 export function RMInsights() {
   const me = useCurrentUser();
   const allowed = canAccessRMInsights(me);
+  const isAdmin = me.roles.includes("ADMIN");
   // TASK-101: the behavioural dashboard links here with ?segment=... to drill into one segment.
   const [searchParams] = useSearchParams();
   const [segment, setSegment] = useState(() => {
@@ -132,12 +133,15 @@ export function RMInsights() {
           }}
         />
       )}
+      {data && <ScopeNote scope={data.scope} />}
       {data?.total === 0 && (
         <EmptyState
           message={
             segment || churn || loan
               ? "No customers match these filters."
-              : "There are no customers yet."
+              : data.scope === "ASSIGNED"
+                ? "No customers are assigned to you yet. An administrator assigns them."
+                : "There are no customers yet."
           }
         />
       )}
@@ -182,12 +186,24 @@ export function RMInsights() {
           key={selected.customer_id}
           customerId={selected.customer_id}
           name={selected.full_name}
+          canAssign={isAdmin}
           onClose={() => {
             setSelected(null);
           }}
         />
       )}
     </div>
+  );
+}
+
+/** ADR-0032: an RM works on their own portfolio; an administrator sees every customer. */
+function ScopeNote({ scope }: { scope: CustomerInsightsListResponse["scope"] }) {
+  return (
+    <p className="muted rm-summary" data-testid="rm-scope">
+      {scope === "ASSIGNED"
+        ? "Your customers: only customers assigned to you are listed."
+        : "All customers (administrator view), including those not assigned to a relationship manager."}
+    </p>
   );
 }
 

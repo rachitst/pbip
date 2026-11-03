@@ -77,9 +77,10 @@ and is never joined to the operational schema ([ADR-0009](../adr/0009-synthetic-
 | 31 | `clickstream_events` | `events` | 0006 | Web behaviour events, range-partitioned by month |
 | 32 | `assistant_messages` | `assistant` | 0009 | AI assistant conversation history |
 | 33 | `rm_interactions` | `insights` | 0015 | Relationship manager outreach log |
-| 34 | `synthetic.generation_runs` | none (`pbip_datagen`) | 0002 | One seeded generator run |
-| 35 | `synthetic.customers` | none (`pbip_datagen`) | 0002 | Synthetic customers of a run |
-| 36 | `synthetic.transactions` | none (`pbip_datagen`) | 0002 | Synthetic transactions of a run (ML training data) |
+| 34 | `rm_assignments` | `insights` | 0021 | Which RM looks after a customer, with history (ADR-0032) |
+| 35 | `synthetic.generation_runs` | none (`pbip_datagen`) | 0002 | One seeded generator run |
+| 36 | `synthetic.customers` | none (`pbip_datagen`) | 0002 | Synthetic customers of a run |
+| 37 | `synthetic.transactions` | none (`pbip_datagen`) | 0002 | Synthetic transactions of a run (ML training data) |
 
 ---
 
@@ -370,6 +371,9 @@ authenticated customer id.
   `ix_fixed_deposits_product_id`.
 * "Matured" is not stored: it is `ACTIVE` with `maturity_date` on or before today (IST), derived on read like
   loan arrears.
+* `payout_held_at` (0022, ADR-0029): set when the automatic maturity payout found the source account not active
+  (customer notified once), cleared on payout; CHECK `ck_fixed_deposits_payout_held_only_while_open`. Index
+  `ix_fixed_deposits_status_maturity_date` serves the hourly poll.
 
 **`insurance_products`** (0020, TASK-096, ADR-0028)
 * Purpose: the insurance catalogue, seeded by migration 0020 (two term-life and two health plans,
@@ -451,6 +455,18 @@ CHECKs: `role IN ('user','assistant')`, `char_length(content) <= 2000`, `tool_na
 `outcome IN ('INTERESTED','NOT_INTERESTED','FOLLOW_UP','NO_ANSWER','INFORMATION_SENT','ACCOUNT_REVIEW')`,
 `char_length(note) BETWEEN 1 AND 1000`. Indexes `(customer_id, created_at)`, `(staff_user_id)`.
 
+**`rm_assignments`** (0021, `api/modules/insights/models.py`,
+[ADR-0032](../adr/0032-rm-customer-assignment.md)). One row per assignment period; reassigning or unassigning
+closes the active row (`unassigned_at`, `unassigned_by_user_id`) and never deletes it. FKs `customer_id ->
+customers` `CASCADE`; `rm_user_id`, `assigned_by_user_id`, `unassigned_by_user_id -> users` `RESTRICT`. CHECKs:
+`unassigned_at IS NULL OR unassigned_at >= assigned_at`, `(unassigned_at IS NULL) = (unassigned_by_user_id IS
+NULL)`. Unique partial index `uq_rm_assignments_active_customer_id` on `(customer_id) WHERE unassigned_at IS NULL`
+(one active RM per customer); indexes `(customer_id, assigned_at)`, `(rm_user_id)`, `(assigned_by_user_id)`,
+`(unassigned_by_user_id)`. Writers: `insights/service.assign_rm` and `unassign_rm` only (ADMIN with MFA), under
+the advisory lock `pg_advisory_xact_lock(hashtext('rm_assignments'), hashtext(customer_id))`, each writing
+`RM_ASSIGNED`/`RM_UNASSIGNED` to the audit chain in the same transaction. Read by `insights/policy.py` to scope
+an RM to their customers.
+
 ### 3.12 Synthetic ML dataset (`synthetic` schema, migration 0002, ADR-0009)
 
 | Table | Keys and FKs | CHECKs (as written in 0002) | Triggers |
@@ -501,6 +517,8 @@ fire on `TRUNCATE`; no `public` table has a TRUNCATE guard.
 | 0018 | `20261102_0018_wealth_catalogue_and_fixed_deposits.py` | `wealth_products` (seeded), `fixed_deposits`, `SYS-FIXED-DEPOSITS`, deposit transaction types (ADR-0025). Its downgrade fails on purpose if deposit transactions exist |
 | 0019 | `20261102_0019_assistant_unusual_expenses_tool.py` | Widens the `assistant_messages.tool_name` CHECK for `get_unusual_expenses` (TASK-110); no new table |
 | 0020 | `20261102_0020_insurance_catalogue.py` | `insurance_products` (seeded, ADR-0028); the downgrade drops it (nothing references it) |
+| 0021 | `20261103_0021_rm_assignments.py` | `rm_assignments` (ADR-0032); downgrade drops the table and its assignment history (the changes stay in the audit chain) |
+| 0022 | `20261103_0022_fd_maturity_payout.py` | `fixed_deposits.payout_held_at`, its CHECK and `ix_fixed_deposits_status_maturity_date` (ADR-0029, issue #332). Number set at merge |
 
 Every migration has a downgrade; CI runs up, down, up and `alembic check`. One head is enforced by
 `tests/unit/test_migration_heads.py`.
@@ -742,6 +760,7 @@ ROLLBACK):
 | Apply for loan | user lock; idempotency row; accounts sorted (`disburse_loan` via `create_transaction`); header; entries; then `loans`, `loan_instalments`, `scheduled_transfers` inserts; audit lock | `loans/service.py` `apply_for_loan` |
 | Book fixed deposit | user lock; idempotency row; accounts sorted (customer, `SYS-FIXED-DEPOSITS`) in `book_fixed_deposit`; header; entries; `fixed_deposits` insert; audit lock | `wealth/service.py` `book_fixed_deposit` |
 | Close fixed deposit | user lock; idempotency row; deposit row `FOR UPDATE`; customer, `SYS-FIXED-DEPOSITS` and `SYS-CLEARING` sorted BEFORE both headers (`pay_out_fixed_deposit`); entries; audit lock | `wealth/service.py` `close_fixed_deposit` |
+| Maturity payout (job) | user lock; idempotency row `fd-maturity/{deposit_id}`; deposit row `FOR UPDATE`; the three accounts sorted BEFORE both headers; entries; audit lock. On a non-active account: rollback, then user lock; deposit row `FOR UPDATE`; audit lock | `wealth/maturity_service.py` `pay_out_matured_deposit` |
 | Confirm step-up | user lock; the transfer row `FOR UPDATE`; accounts sorted in `post_transaction`; audit lock | `confirm_step_up` |
 | Step-up escalation | (new transaction after the failure was committed) user lock; transfer row `FOR UPDATE`; debit account for the hold; audit lock | `_escalate_to_review` |
 | Analyst decision | alert row `FOR UPDATE`; transaction row `FOR UPDATE`; RELEASE: accounts sorted then hold row; REJECT: hold row then its account; `bill_payments` row; audit lock. No user lock, no idempotency key | `PaymentsService.review_alert` |
