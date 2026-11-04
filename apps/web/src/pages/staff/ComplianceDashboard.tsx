@@ -34,6 +34,16 @@ export const KIND_LABEL: Record<ExceptionKind, string> = {
   BLOCKED_TRANSFER: "Blocked payment",
   ACCOUNT_LOCKOUT: "Sign-in lockout",
   AUDIT_CHAIN_FAILURE: "Audit chain failure",
+  NOTIFICATION_DEAD_LETTER: "Undelivered notification",
+  SCHEDULED_TRANSFER_FAILURE: "Scheduled transfer failure",
+};
+
+/** Scheduler reason codes in words; an unknown code is shown as it is. */
+const FAILURE_REASON: Record<string, string> = {
+  insufficient_funds: "not enough money",
+  daily_limit_exceeded: "daily limit reached",
+  expired_without_execution: "not run that day",
+  customer_not_found: "customer record missing",
 };
 
 export const STATUS_VIEW: Record<ExceptionStatus, { label: string; tone: Tone }> = {
@@ -148,6 +158,41 @@ function Detail({ item }: { item: ExceptionOut }) {
   }
   if (item.kind === "ACCOUNT_LOCKOUT") {
     return <span className="muted">Too many failed sign-ins</span>;
+  }
+  if (item.kind === "NOTIFICATION_DEAD_LETTER") {
+    return (
+      <>
+        <code>{item.event_type ?? "?"}</code>{" "}
+        <span className="muted">
+          not delivered after {countOf(item.attempts ?? 0, "attempt")}
+          {item.error_type ? ` · ${item.error_type}` : ""}
+        </span>
+      </>
+    );
+  }
+  if (item.kind === "SCHEDULED_TRANSFER_FAILURE") {
+    const reason = item.failure_reason
+      ? (FAILURE_REASON[item.failure_reason] ?? item.failure_reason)
+      : null;
+    return (
+      <>
+        {item.failure === "AUTO_PAUSED"
+          ? "Order paused by the scheduler"
+          : `Occurrence ${item.occurrence_date ?? ""} not paid`}{" "}
+        <span className="muted">
+          {reason ? `(${reason})` : ""}
+          {item.subject_id ? (
+            <>
+              {" "}
+              order{" "}
+              <code className="short-id" title={item.subject_id}>
+                {item.subject_id.slice(0, 8)}
+              </code>
+            </>
+          ) : null}
+        </span>
+      </>
+    );
   }
   return (
     <>
@@ -356,7 +401,7 @@ export function ComplianceDashboard() {
     <div className="page dashboard-page">
       <PageHeader
         title="Compliance & risk"
-        description="Blocked payments, sign-in lockouts and audit chain failures to acknowledge and resolve, with service-level indicators."
+        description="Blocked payments, sign-in lockouts, audit chain failures, undelivered notifications and failed scheduled transfers to acknowledge and resolve, with service-level indicators."
         actions={
           data && (
             <span className="muted" title={formatDateTime(data.generated_at)}>
