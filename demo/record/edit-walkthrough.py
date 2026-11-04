@@ -384,8 +384,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--plan-only", action="store_true", help="print lengths, encode nothing")
     args = parser.parse_args(argv)
     timeline = json.loads(args.timeline.read_text(encoding="utf-8"))
-    raw = args.timeline.parent / timeline["video"]
-    out = args.out or args.timeline.parent
+    # Absolute: ffmpeg runs inside a temporary work directory.
+    raw = (args.timeline.parent / timeline["video"]).resolve()
+    out = (args.out or args.timeline.parent).resolve()
     out.mkdir(parents=True, exist_ok=True)
     cuts = [] if args.skip_full else [(args.name, plan(timeline), "PBIP walkthrough")]
     cuts.append(
