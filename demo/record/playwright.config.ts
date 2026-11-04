@@ -1,12 +1,10 @@
 import { defineConfig } from "@playwright/test";
 
 // TASK-093: records the fallback demo video by driving the web UI on the running stack
-// (demo/demo-script.md section 7a). It is a recording, not a test suite: one long run, no retries,
+// (demo/demo-script.md section 7.1). It is a recording, not a test suite: one long run, no retries,
 // and it stops at the first step whose outcome the demo script does not allow.
 // `@playwright/test` resolves to the copy in apps/web through tsconfig.json `paths`, so this
 // directory adds no dependency of its own. Playwright's ESM loader needs index.mjs there; type-check
-// with `npx tsc -p ../../demo/record/tsconfig.typecheck.json` (from apps/web), which maps the same
-// import to the package's index.d.ts. Playwright's ESM loader needs index.mjs there; type-check
 // with `npx tsc -p ../../demo/record/tsconfig.typecheck.json` (from apps/web), which maps the same
 // import to the package's index.d.ts.
 export default defineConfig({
