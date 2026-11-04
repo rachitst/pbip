@@ -82,6 +82,11 @@ describe("accounts page", () => {
       }
       if (url.endsWith("/payees")) return Promise.resolve(json(200, [payee]));
       if (url.endsWith("/recommendations")) return Promise.resolve(json(200, recommendations));
+      if (url.endsWith("/customers/me/analytics-consent")) {
+        return Promise.resolve(
+          json(200, { granted: true, updated_at: null, policy_version: null }),
+        );
+      }
       if (url.endsWith("/events/batch")) return Promise.resolve(json(202, {}));
       if (url.endsWith("/transfers") && init?.method === "POST") {
         return Promise.resolve(
@@ -120,8 +125,8 @@ describe("accounts page", () => {
     await user.click(
       await screen.findByRole("button", { name: "See our loans: Personal credit line" }),
     );
-    window.dispatchEvent(new Event("pagehide"));
     await waitFor(() => {
+      window.dispatchEvent(new Event("pagehide")); // sent once the recorded consent has loaded
       expect(fetchMock.mock.calls.some(([input]) => urlOf(input).endsWith("/events/batch"))).toBe(
         true,
       );
