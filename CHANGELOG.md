@@ -113,6 +113,7 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
 - PII field-encryption policy: email, name and date of birth are not field-encrypted, with the baseline verified
   (ADR-0042, #402).
 - CI hardening: SHA-pinned third-party actions, PR-title check, admin-only merges (#117, #123, #125).
+- `minimatch` forced to 11 under ESLint and typescript-eslint in the web build tooling (#434, #232).
 - Dependency advisories fixed: dnspython CVE-2026-114605 (#141), pyasn1 (#207), and Dependabot updates (#31, #34,
   #229, #234, #241, #269).
 
