@@ -197,7 +197,7 @@ authenticated customer id.
 * FKs, all `NO ACTION`: `initiated_by_user_id -> users`, `debit_account_id -> accounts`,
   `credit_account_id -> accounts`, `payee_id -> payees`, `reversal_of_id -> transactions` (self).
 * CHECK:
-  * `ck_transactions_type_valid` `type IN ('TRANSFER','DEPOSIT','REVERSAL','FEE','BILL_PAYMENT','LOAN_DISBURSAL','LOAN_REPAYMENT','FD_BOOKING','FD_CLOSURE','FD_INTEREST')`
+  * `ck_transactions_type_valid` `type IN ('TRANSFER','DEPOSIT','REVERSAL','BILL_PAYMENT','LOAN_DISBURSAL','LOAN_REPAYMENT','FD_BOOKING','FD_CLOSURE','FD_INTEREST')` (FEE removed by migration 0029, #175: never created, no fees engine)
     (0001 had the first four; 0008 added `BILL_PAYMENT`; 0016 added the two loan types; 0018 the three deposit types)
   * `ck_transactions_status_valid` `status IN ('INITIATED','PENDING_STEP_UP','PENDING_REVIEW','POSTED','DECLINED','REVERSED')`
   * `ck_transactions_amount_positive` `amount > 0`

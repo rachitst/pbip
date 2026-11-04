@@ -298,22 +298,24 @@ def test_an_active_account_is_not_dormant(
     assert reason(e, "DORMANT_REACTIVATION") is None and e.features["dormant_gap_days"] == 30
 
 
-def test_a_bank_fee_does_not_wake_a_dormant_account(
+def test_a_bank_posting_does_not_wake_a_dormant_account(
     dormant: Actor, migrated_engine: Engine, settings: Settings
 ) -> None:
+    """A system posting (here interest credited by the bank; the FEE type no longer exists,
+    #431) is not customer activity, so the account stays dormant."""
     with sessionmaker(bind=migrated_engine)() as session:
-        fee = ledger.create_transaction(
+        interest = ledger.create_transaction(
             session,
-            type_=TransactionType.FEE,
+            type_=TransactionType.FD_INTEREST,
             amount=10_000,
             currency="INR",
-            debit_account_id=dormant.account_id,
-            credit_account_id=ledger.SYSTEM_CLEARING_ID,
+            debit_account_id=ledger.SYSTEM_CLEARING_ID,
+            credit_account_id=dormant.account_id,
         )
-        ledger.post_transaction(session, fee, ledger.transfer_legs(fee))
+        ledger.post_transaction(session, interest, ledger.transfer_legs(interest))
         session.commit()
-        fee_id = fee.id
-    _redate_transaction(migrated_engine, fee_id, utcnow() - timedelta(days=30))
+        interest_id = interest.id
+    _redate_transaction(migrated_engine, interest_id, utcnow() - timedelta(days=30))
     result = score_now(migrated_engine, settings, dormant, LARGE)
     assert reason(result, "DORMANT_REACTIVATION") is not None
     assert result.features["dormant_gap_days"] == 200
