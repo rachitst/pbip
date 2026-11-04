@@ -20,7 +20,13 @@ from pbip_api.modules.auth.dependencies import get_clock
 from pbip_api.modules.customers.dependencies import get_current_customer
 from pbip_api.modules.customers.models import Customer
 
-router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
+# Every analytics route can answer 404: an account that is missing or not the caller's (the
+# policy function answers both alike), or, for the segment, none assigned yet (#175 M11).
+router = APIRouter(
+    prefix="/api/v1/analytics",
+    tags=["analytics"],
+    responses={404: {"description": "No such account of mine, or no segment yet (problem+json)"}},
+)
 
 
 @router.get(

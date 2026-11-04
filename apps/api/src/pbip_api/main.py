@@ -9,7 +9,11 @@ from redis import Redis
 
 from pbip_api import __version__
 from pbip_api.core.config import Settings, get_settings
-from pbip_api.core.errors import document_not_found_responses, register_error_handlers
+from pbip_api.core.errors import (
+    document_not_found_responses,
+    document_problem_responses,
+    register_error_handlers,
+)
 from pbip_api.core.logging import configure_logging
 from pbip_api.core.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
 from pbip_api.core.redis import get_redis
@@ -114,6 +118,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_error_handlers(app)
     for router in ROUTERS:
         document_not_found_responses(router)
+        document_problem_responses(router)
         app.include_router(router)
 
     @app.get("/metrics", include_in_schema=False)

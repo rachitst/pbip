@@ -86,6 +86,7 @@ def list_insurance(
     "/fixed-deposits/quote",
     response_model=DepositQuoteOut,
     summary="Exact maturity preview for a fixed deposit (books nothing)",
+    responses={404: {"description": "No such wealth product (problem+json)"}},
 )
 def quote_fixed_deposit(
     body: DepositTermsRequest,
@@ -101,7 +102,10 @@ def quote_fixed_deposit(
     response_model=FixedDepositOut,
     status_code=201,
     summary="Book a fixed deposit from one of my accounts (idempotent)",
-    responses={422: {"description": "Insufficient funds, terms not offered or invalid request"}},
+    responses={
+        404: {"description": "No such wealth product, or the account is not mine (problem+json)"},
+        422: {"description": "Insufficient funds, terms not offered or invalid request"},
+    },
 )
 def book_fixed_deposit(
     body: DepositBookRequest,

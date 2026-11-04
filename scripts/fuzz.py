@@ -33,9 +33,10 @@ import os
 import secrets
 import sys
 import time
+import uuid
 from collections import Counter, defaultdict
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -44,6 +45,10 @@ SPEC_DEFAULT = ROOT / "docs" / "api" / "openapi.json"
 REGISTER_PATH = "/api/v1/auth/register"
 LOGIN_PATH = "/api/v1/auth/login"
 ME_PATH = "/api/v1/auth/me"
+MFA_VERIFY_PATH = "/api/v1/auth/mfa/verify"
+TOTP_STEP_SECONDS = 30  # the API's TOTP step (auth/service.py)
+STAFF_GATE = "require_roles_dependency"  # the dependency every staff gate returns
+SEED_FUNDS_MINOR = 10_000_000  # INR 1,00,000.00 for the fuzz customer's money-moving routes
 GENERATION_MODES = ("positive", "negative")
 LOGIN_RETRY_SECONDS = 61  # the login limiter is a 60-second fixed window
 # Upper bound on passes over the operation list when topping up to --cases (Hypothesis runs an
@@ -96,6 +101,9 @@ class FuzzResult:
     input_digest: str
     duration_seconds: float
     failures: list[Json]
+    undocumented_status_codes: int = 0
+    staff_authenticated: bool = False
+    owned_ids: dict[str, int] = field(default_factory=dict)
 
     @property
     def is_success(self) -> bool:
@@ -118,16 +126,27 @@ class Target:
             return case.call(base_url=self.base_url, headers=headers or None)
         return case.call(app=self.app, headers=headers or None)
 
-    def post_json(self, path: str, payload: Json) -> tuple[int, Json]:
+    def post_json(
+        self, path: str, payload: Json, headers: dict[str, str] | None = None
+    ) -> tuple[int, Any]:
+        return self.send("POST", path, headers or {}, payload)
+
+    def send(
+        self, method: str, path: str, headers: dict[str, str], payload: Json | None = None
+    ) -> tuple[int, Any]:
+        """One plain request (seeding and sign-in, not fuzzing): status and decoded JSON body."""
         if self.base_url:
             import requests
 
-            live = requests.post(f"{self.base_url}{path}", json=payload, timeout=30)
-            return live.status_code, dict(live.json()) if live.content else {}
+            live = requests.request(
+                method, f"{self.base_url}{path}", json=payload, headers=headers, timeout=30
+            )
+            return live.status_code, live.json() if live.content else {}
         from fastapi.testclient import TestClient
 
-        local = TestClient(self.app, raise_server_exceptions=False).post(path, json=payload)
-        return local.status_code, dict(local.json()) if local.content else {}
+        client = TestClient(self.app, raise_server_exceptions=False)
+        local = client.request(method, path, json=payload, headers=headers)
+        return local.status_code, local.json() if local.content else {}
 
     def get_status(self, path: str, headers: dict[str, str]) -> int:
         if self.base_url:
@@ -185,6 +204,200 @@ class FuzzIdentity:
         return self.headers
 
 
+class StaffIdentity:
+    """An MFA-enrolled ADMIN for the staff routes (#175 M11), with a TOTP session (``amr: otp``).
+
+    No public API creates staff, so the harness bootstraps one through the service layer on the
+    target's own database (the way ``scripts/seed_dev.py`` creates demo staff), then signs in
+    through the API like a person: password, then a TOTP code. The secret stays in this process.
+    ADMIN passes every staff gate (analyst, compliance, RM and admin all accept it).
+    """
+
+    def __init__(
+        self, target: Target, settings: Any, engine: Any, clock: Callable[[], float] = time.time
+    ) -> None:
+        self.target, self.settings, self.engine, self.clock = target, settings, engine, clock
+        self.email = f"fuzz-staff-{secrets.token_hex(6)}@bank.example"
+        self.password = f"Fuzz-Staff-{secrets.token_hex(4)}!9"
+        self.secret = ""
+        self.last_step = 0
+        self.token = ""
+
+    @property
+    def headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self.token}"}
+
+    def provision(self) -> dict[str, str]:
+        import pyotp
+        from pbip_api.core.crypto import FieldCipher
+        from pbip_api.core.security import PasswordService
+        from pbip_api.modules.auth.models import RoleName
+        from pbip_api.modules.auth.service import AuthService, RequestMeta
+        from sqlalchemy.orm import Session
+
+        meta = RequestMeta(ip="127.0.0.1", user_agent="fuzz-harness")
+        with Session(self.engine) as session:
+            service = AuthService(
+                session,
+                self.settings,
+                PasswordService.from_settings(self.settings),
+                FieldCipher(self.settings.field_encryption_key.get_secret_value()),
+            )
+            user = service.create_user(
+                self.email, self.password, "Fuzz Staff", [RoleName.ADMIN], meta
+            )
+            self.secret = service.begin_mfa_enrollment(user.id).secret
+            now = self.clock()
+            service.clock = lambda: now  # the code and its check share one instant
+            service.confirm_mfa_enrollment(user.id, pyotp.TOTP(self.secret).at(int(now)), meta)
+            session.commit()
+        self.last_step = int(now) // TOTP_STEP_SECONDS
+        return self.login()
+
+    def _unused_code(self) -> str:
+        """A code for a step the API has not seen: it accepts the previous, current and next step,
+        each once (replay protection), so wait only if all three are used."""
+        import pyotp
+
+        step = max(self.last_step + 1, int(self.clock()) // TOTP_STEP_SECONDS - 1)
+        deadline = time.monotonic() + TOTP_STEP_SECONDS + 1
+        while int(self.clock()) // TOTP_STEP_SECONDS < step - 1:
+            if time.monotonic() > deadline:  # a frozen test clock never reaches the next step
+                msg = "no unused TOTP step for the fuzz staff user"
+                raise RuntimeError(msg)
+            time.sleep(1)
+        self.last_step = step
+        return pyotp.TOTP(self.secret).at(step * TOTP_STEP_SECONDS)
+
+    def login(self) -> dict[str, str]:
+        status, body = self.target.post_json(
+            LOGIN_PATH, {"email": self.email, "password": self.password}
+        )
+        if status != 200 or not body.get("mfa_token"):
+            msg = f"could not sign the fuzz staff user in on {self.target.description}: {status}"
+            raise RuntimeError(msg)
+        payload = {"mfa_token": body["mfa_token"], "code": self._unused_code()}
+        status, body = self.target.post_json(MFA_VERIFY_PATH, payload)
+        if status != 200 or "access_token" not in body:
+            msg = f"the fuzz staff user's TOTP was refused on {self.target.description}: {status}"
+            raise RuntimeError(msg)
+        self.token = str(body["access_token"])
+        return self.headers
+
+    def ensure(self) -> dict[str, str]:
+        if self.target.get_status(ME_PATH, self.headers) == 401:
+            return self.login()
+        return self.headers
+
+
+def staff_operations() -> frozenset[str]:
+    """``METHOD path`` of every route behind a staff gate (``require_roles``, always with MFA).
+
+    Read from the application's routers, as the route-policy registry test does, so a new staff
+    route is fuzzed with the staff session without a list to keep in sync.
+    """
+    from fastapi.routing import APIRoute
+    from pbip_api.main import ROUTERS
+
+    found: set[str] = set()
+    for router in ROUTERS:
+        for route in router.routes:
+            if not isinstance(route, APIRoute):
+                continue
+            stack, names = [route.dependant], set()
+            while stack:
+                dependant = stack.pop()
+                names.add(getattr(dependant.call, "__name__", ""))
+                stack.extend(dependant.dependencies)
+            if STAFF_GATE in names:
+                found.update(f"{method} {route.path}" for method in route.methods)
+    return frozenset(found)
+
+
+def _created_id(target: Target, path: str, headers: dict[str, str], payload: Json) -> str:
+    status, body = target.post_json(path, payload, headers)
+    if status not in (200, 201, 202) or not isinstance(body, dict) or "id" not in body:
+        msg = f"could not seed {path} on {target.description}: HTTP {status}"
+        raise RuntimeError(msg)
+    return str(body["id"])
+
+
+def seed_owned_resources(
+    target: Target, headers: dict[str, str], engine: Any
+) -> dict[str, list[str]]:
+    """Resources the fuzz customer owns, by path-parameter name (#175 M11).
+
+    Without them every ``/{id}`` route only ever saw random ids and answered 404, so its business
+    logic was never fuzzed. Everything is created through the API as the customer, except the
+    opening deposit: money enters only through the ledger (``ledger.deposit``), on the target's
+    database, as every seed and test does.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from pbip_api.modules.ledger import service as ledger
+    from sqlalchemy.orm import Session
+
+    status, accounts = target.send("GET", "/api/v1/accounts", headers)
+    if status != 200 or not accounts:
+        msg = f"the fuzz customer has no account on {target.description}: HTTP {status}"
+        raise RuntimeError(msg)
+    primary = str(accounts[0]["id"])
+    second = _created_id(target, "/api/v1/accounts", headers, {"account_type": "CURRENT"})
+    with Session(engine) as session:
+        ledger.deposit(session, uuid.UUID(primary), SEED_FUNDS_MINOR, reference="Fuzz funds")
+        session.commit()
+    payee = _created_id(
+        target,
+        "/api/v1/payees",
+        headers,
+        {"name": "Fuzz Payee", "account_number": f"FZ{secrets.randbelow(10**10):010d}",
+         "bank_code": "FUZZ0001"},
+    )  # fmt: skip
+    device = _created_id(
+        target,
+        "/api/v1/customers/devices",
+        headers,
+        {"fingerprint": "fuzz-device", "label": "fuzz"},
+    )
+    money = {"from_account_id": primary, "to_account_id": second, "amount_minor": 1_000}
+    keyed = {**headers, "Idempotency-Key": f"fuzz-{secrets.token_hex(8)}"}
+    transfer = _created_id(target, "/api/v1/transfers", keyed, {**money, "reference": "fuzz"})
+    start = (datetime.now(UTC) + timedelta(days=7)).date().isoformat()
+    keyed = {**headers, "Idempotency-Key": f"fuzz-{secrets.token_hex(8)}"}
+    status, scheduled = target.post_json(
+        "/api/v1/transfers/scheduled", {**money, "frequency": "MONTHLY", "start_date": start}, keyed
+    )
+    if status != 201:
+        msg = f"could not seed a scheduled transfer on {target.description}: HTTP {status}"
+        raise RuntimeError(msg)
+    status, me = target.send("GET", ME_PATH, headers)
+    return {
+        "account_id": [primary, second],
+        "payee_id": [payee],
+        "device_id": [device],
+        "transfer_id": [transfer],
+        "scheduled_transfer_id": [str(scheduled["id"])],
+        "customer_id": [str(scheduled["customer_id"])],  # staff routes about this customer
+        "user_id": [str(me["id"])] if status == 200 else [],
+    }
+
+
+def use_owned_ids(case: Case, owned: dict[str, list[str]]) -> None:
+    """Swap about half of a positive case's generated path ids for owned ones, chosen from the
+    generated value (so the same seed still gives the same requests). The other half keeps the
+    random id, which exercises the 404 path."""
+    params = case.path_parameters
+    if not isinstance(params, dict):
+        return
+    for name, value in list(params.items()):
+        choices = owned.get(name)
+        if not choices:
+            continue
+        digest = hashlib.sha256(str(value).encode()).digest()
+        if digest[0] % 2 == 0:
+            params[name] = choices[digest[1] % len(choices)]
+
+
 def build_isolated_app(database_url: str | None = None) -> FastAPI:
     """The real application on a real (migrated) database, with Redis and secrets replaced."""
     import fakeredis
@@ -240,9 +453,25 @@ def _describe(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {exc}"
 
 
+def _error_type(exc: BaseException, status: int) -> str:
+    """Which check failed: a 5xx, a status code the contract does not document, or a body."""
+    from schemathesis.openapi.checks import UndefinedStatusCode
+
+    if status >= 500:
+        return "UnhandledServerError"
+    found = exc.exceptions if isinstance(exc, BaseExceptionGroup) else (exc,)
+    if any(isinstance(e, UndefinedStatusCode) for e in found):
+        return "UndocumentedStatusCode"
+    return "ResponseSchemaViolation"
+
+
 def _make_executor(target: Target) -> Executor:
     def execute(case: Case, headers: dict[str, str]) -> tuple[int, FuzzFailure | None]:
-        from schemathesis.checks import not_a_server_error, response_schema_conformance
+        from schemathesis.checks import (
+            not_a_server_error,
+            response_schema_conformance,
+            status_code_conformance,
+        )
 
         try:
             response = target.call(case, headers)
@@ -259,10 +488,11 @@ def _make_executor(target: Target) -> Executor:
         status = int(response.status_code)
         try:
             case.validate_response(
-                response, checks=[not_a_server_error, response_schema_conformance]
+                response,
+                checks=[not_a_server_error, status_code_conformance, response_schema_conformance],
             )
         except _CAUGHT as exc:  # one FailureGroup per failed check; the status says which
-            error_type = "UnhandledServerError" if status >= 500 else "ResponseSchemaViolation"
+            error_type = _error_type(exc, status)
             failure = FuzzFailure(
                 method=case.method,
                 path=case.path,
@@ -285,6 +515,7 @@ class _Tally:
         self.executed = 0
         self.server_errors = 0
         self.schema_violations = 0
+        self.undocumented_status_codes = 0
         self.status_counts: Counter[str] = Counter()
         self.per_operation: defaultdict[str, Counter[str]] = defaultdict(Counter)
         self.failures: list[FuzzFailure] = []
@@ -306,6 +537,8 @@ class _Tally:
                 self.server_errors += 1
             elif failure.error_type == "ResponseSchemaViolation":
                 self.schema_violations += 1
+            elif failure.error_type == "UndocumentedStatusCode":
+                self.undocumented_status_codes += 1
         if self.executed % PROGRESS_EVERY == 0 or self.executed == self.goal:
             sys.stdout.write(
                 f"Progress: {self.executed}/{self.goal} cases "
@@ -383,6 +616,51 @@ def _authenticate(
     return None, {}
 
 
+Owned = dict[str, list[str]]
+
+
+@dataclass
+class _Harness:
+    """What the run seeded: owned ids by path-parameter name and the staff session (#175 M11)."""
+
+    owned: Owned
+    staff: StaffIdentity | None
+    staff_ops: frozenset[str]
+
+
+def _build_harness(
+    target: Target, app: FastAPI | None, database_url: str | None, headers: dict[str, str]
+) -> _Harness | None:
+    """Seed owned resources and bootstrap the staff user on the target's database.
+
+    In-process, the app's own settings, engine and clock are used. A live target needs
+    ``--database-url`` (its database) and the server's settings in the environment; without it
+    the run keeps the customer-only coverage and says so.
+    """
+    from pbip_api.core.config import get_settings
+    from pbip_api.core.db import get_engine
+    from pbip_api.modules.auth.dependencies import get_clock
+    from sqlalchemy import create_engine
+
+    overrides = app.dependency_overrides if app is not None else {}
+    settings = overrides.get(get_settings, get_settings)()
+    if settings.is_deployed:  # like scripts/seed_dev.py: never create an ADMIN in staging/prod
+        msg = "refusing to seed or bootstrap staff on a staging/production configuration"
+        raise RuntimeError(msg)
+    if get_engine in overrides:
+        engine = overrides[get_engine]()
+    elif app is not None or database_url:
+        engine = create_engine(database_url or settings.database_url)
+    else:
+        sys.stdout.write("No --database-url: no owned resources and no staff session\n")
+        return None
+    clock = overrides.get(get_clock, get_clock)()
+    owned = seed_owned_resources(target, headers, engine)
+    staff = StaffIdentity(target, settings, engine, clock)
+    staff.provision()
+    return _Harness(owned=owned, staff=staff, staff_ops=staff_operations())
+
+
 def _fuzz_operations(
     operations: list[APIOperation],
     modes: tuple[str, ...],
@@ -391,6 +669,7 @@ def _fuzz_operations(
     executor: Executor,
     identity: FuzzIdentity | None,
     headers: dict[str, str],
+    harness: _Harness | None = None,
 ) -> tuple[_Tally, dict[str, str]]:
     """Passes over every operation and mode until at least ``min_cases`` were checked.
 
@@ -409,14 +688,21 @@ def _fuzz_operations(
         for index, operation in enumerate(operations):
             if cycle > 0 and tally.executed >= min_cases:
                 break  # a top-up pass: every operation was already fuzzed in the first pass
-            if identity is not None:
+            name = f"{operation.method.upper()} {operation.path}"
+            if harness is not None and harness.staff is not None and name in harness.staff_ops:
+                headers = harness.staff.ensure()
+            elif identity is not None:
                 headers = identity.ensure()
             for mode in modes:
-                label = f"{mode} {operation.method.upper()} {operation.path}"
+                label = f"{mode} {name}"
                 if label in unsatisfiable:
                     continue
+                owned = harness.owned if harness is not None and mode == "positive" else {}
 
-                def consume(case: Case, headers: dict[str, str] = headers) -> None:
+                def consume(
+                    case: Case, headers: dict[str, str] = headers, owned: Owned = owned
+                ) -> None:
+                    use_owned_ids(case, owned)
                     status, failure = executor(case, headers)
                     tally.record(case, status, failure)
 
@@ -439,6 +725,7 @@ def run_fuzz(
     modes: tuple[str, ...] = GENERATION_MODES,
     database_url: str | None = None,
     execute: Executor | None = None,
+    harness: bool = True,
 ) -> FuzzResult:
     """Fuzz every operation until at least ``min_cases`` requests were checked."""
     logging.getLogger("pbip_api").setLevel(logging.ERROR)
@@ -451,17 +738,21 @@ def run_fuzz(
     executor = execute or _make_executor(target)
 
     identity, headers = _authenticate(target, auth, bearer_token)
+    seeded = None
+    if harness and identity is not None and execute is None:  # a stub executor has no target
+        seeded = _build_harness(target, app, database_url, headers)
 
     sys.stdout.write(f"Loaded {len(operations)} operations from {spec_path.relative_to(ROOT)}\n")
     sys.stdout.write(
         f"Fuzzing target: {target.description} (modes: {', '.join(modes)}; "
-        f"authenticated: {bool(headers)}; target cases: {min_cases})\n"
+        f"authenticated: {bool(headers)}; staff session: {seeded is not None}; "
+        f"target cases: {min_cases})\n"
     )
     sys.stdout.flush()
 
     started = time.perf_counter()
     tally, unsatisfiable = _fuzz_operations(
-        operations, modes, min_cases, seed, executor, identity, headers
+        operations, modes, min_cases, seed, executor, identity, headers, seeded
     )
 
     return FuzzResult(
@@ -481,6 +772,9 @@ def run_fuzz(
         input_digest=tally.input_digest,
         duration_seconds=round(time.perf_counter() - started, 2),
         failures=[asdict(f) for f in tally.failures],
+        undocumented_status_codes=tally.undocumented_status_codes,
+        staff_authenticated=seeded is not None and seeded.staff is not None,
+        owned_ids={k: len(v) for k, v in seeded.owned.items()} if seeded else {},
     )
 
 
@@ -492,6 +786,8 @@ def print_summary(res: FuzzResult) -> None:
     out.write(f"Target:                {res.target}\n")
     out.write(f"OpenAPI Spec:          {res.spec_path}\n")
     out.write(f"Authenticated:         {res.authenticated}\n")
+    out.write(f"Staff session (TOTP):  {res.staff_authenticated}\n")
+    out.write(f"Owned path ids:        {res.owned_ids or 'none'}\n")
     out.write(f"Generation modes:      {', '.join(res.generation_modes)}\n")
     out.write(f"Seed:                  {res.seed}\n")
     out.write(f"Operations Fuzzed:     {res.operations_count}\n")
@@ -499,6 +795,7 @@ def print_summary(res: FuzzResult) -> None:
     out.write(f"Passed Cases:          {res.passed_cases}\n")
     out.write(f"Unhandled 5xx Errors:  {res.server_errors}\n")
     out.write(f"Schema Violations:     {res.schema_violations}\n")
+    out.write(f"Undocumented statuses: {res.undocumented_status_codes}\n")
     out.write(f"Execution Duration:    {res.duration_seconds}s\n")
     out.write(f"Input digest:          {res.input_digest[:16]} (same --seed => same inputs)\n")
     if res.duration_seconds > 0:
@@ -557,6 +854,11 @@ def main() -> int:
         default="both",
         help="positive (schema-valid), negative (schema-violating) or both",
     )
+    parser.add_argument(
+        "--no-harness",
+        action="store_true",
+        help="Do not seed owned resources or bootstrap the staff user (customer-only coverage)",
+    )
     parser.add_argument("--spec", type=Path, default=SPEC_DEFAULT, help="OpenAPI JSON path")
     parser.add_argument("--seed", type=int, default=None, help="Reproduce the generated inputs")
     parser.add_argument("--report-file", type=Path, default=None, help="Write a JSON report")
@@ -572,6 +874,7 @@ def main() -> int:
         seed=args.seed,
         modes=modes,
         database_url=args.database_url,
+        harness=not args.no_harness,
     )
     print_summary(result)
 
