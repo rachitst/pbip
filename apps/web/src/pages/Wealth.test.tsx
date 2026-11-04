@@ -7,6 +7,7 @@ import type {
   AccountOut,
   DepositQuoteOut,
   FixedDepositOut,
+  HoldingOut,
   PortfolioOut,
   WealthProductOut,
 } from "../api/client";
@@ -189,6 +190,7 @@ interface Options {
   products?: (url: string) => Response;
   book?: () => Response;
   close?: () => Response;
+  holdings?: () => Response;
 }
 
 type Body = Record<string, number | string>;
@@ -219,6 +221,10 @@ function mockApi(options: Options = {}) {
     if (url === "/api/v1/wealth/fixed-deposits/book") {
       return Promise.resolve(options.book?.() ?? json(201, active));
     }
+    if (url === "/api/v1/wealth/holdings") {
+      return Promise.resolve(options.holdings?.() ?? json(200, []));
+    }
+    if (url.endsWith("/sell")) return Promise.resolve(json(200, {}));
     if (url.endsWith("/close")) {
       return Promise.resolve(options.close?.() ?? json(200, { ...active, status: "CLOSED" }));
     }
@@ -243,6 +249,53 @@ function renderPage(path = "/wealth") {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+describe("Wealth holdings (ADR-0058)", () => {
+  const holding: HoldingOut = {
+    id: "h-1",
+    instrument_id: "50000000-0000-4000-a000-000000000004",
+    instrument_code: "STK-SIMINFRA",
+    instrument_name: "Simulated Infrastructure Ltd (fictional)",
+    kind: "STOCK",
+    risk_level: "HIGH",
+    units_micro: 3_000_000,
+    price_minor: 900_00,
+    price_date: "2026-11-05",
+    price_source: "SIMULATED",
+    value_minor: 2_700_00,
+    cost_basis_minor: 2_536_50,
+    gain_minor: 163_50,
+    gain_bps: 645,
+  };
+
+  it("shows holdings with value, cost and gain, and sells whole units after review", async () => {
+    const user = userEvent.setup({ delay: null });
+    const fetchMock = mockApi({ holdings: () => json(200, [holding]) });
+    renderPage();
+    const table = await screen.findByRole("table", {
+      name: "My fund, stock and bond holdings",
+    });
+    const row = within(table).getByText(holding.instrument_name).closest("tr");
+    expect(row).toHaveTextContent("INR 2,700.00");
+    expect(row).toHaveTextContent("+6.45%");
+    expect(screen.getByText(/one price per day\. They are not market data/)).toBeInTheDocument();
+    const units = within(table).getByLabelText(`Units of ${holding.instrument_name} to sell`);
+    await user.type(units, "1.5");
+    expect(within(table).getByRole("button", { name: "Sell" })).toBeDisabled();
+    await user.clear(units);
+    await user.type(units, "2");
+    await user.click(within(table).getByRole("button", { name: "Sell" }));
+    const dialog = within(
+      await screen.findByRole("dialog", { name: `Sell ${holding.instrument_name}` }),
+    );
+    expect(dialog.getByText("INR 1,800.00")).toBeInTheDocument();
+    await user.click(dialog.getByRole("button", { name: "Sell now" }));
+    const sell = callsTo(fetchMock, "/api/v1/wealth/holdings/h-1/sell");
+    expect(sell).toHaveLength(1);
+    expect(bodyOf(sell[0]?.[1])).toEqual({ account_id: account.id, units_micro: 2_000_000 });
+    expect(new Headers(sell[0]?.[1]?.headers).get("Idempotency-Key")).toBeTruthy();
+  });
 });
 
 describe("Wealth (TASK-065)", () => {

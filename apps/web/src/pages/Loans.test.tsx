@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   AccountOut,
@@ -179,11 +180,13 @@ function callsTo(fetchMock: ReturnType<typeof mockApi>, path: string) {
   return fetchMock.mock.calls.filter(([input]) => urlOf(input) === path);
 }
 
-function renderPage() {
+function renderPage(path = "/loans") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <Loans />
+      <MemoryRouter initialEntries={[path]}>
+        <Loans />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -193,6 +196,19 @@ afterEach(() => {
 });
 
 describe("Loans (TASK-051)", () => {
+  it("preselects the catalogue loan a recommendation card links to (ADR-0058)", async () => {
+    const car: LoanProductOut = { ...personal, id: "p-2", loan_type: "AUTO", name: "Car loan" };
+    mockApi({ products: () => json(200, [personal, car]) });
+    renderPage("/loans?product=p-2");
+    expect(await screen.findByLabelText("Loan product")).toHaveValue("p-2");
+  });
+
+  it("ignores a product id that is not a catalogue loan", async () => {
+    mockApi();
+    renderPage("/loans?product=not-a-loan");
+    expect(await screen.findByLabelText("Loan product")).toHaveValue("p-1");
+  });
+
   it("formats basis points without floating point", () => {
     expect(formatRate(1150)).toBe("11.50% p.a.");
     expect(formatRate(925)).toBe("9.25% p.a.");

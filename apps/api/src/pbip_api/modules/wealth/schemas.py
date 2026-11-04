@@ -329,3 +329,21 @@ class InsuranceApplicationOut(BaseModel):
     decision_reason: str
     quote_version: str
     created_at: datetime
+
+
+# ------------------------------------------------- suitability by risk band (ADR-0058 s. 9)
+class SuitabilityItemOut(BaseModel):
+    product_id: UUID
+    kind: Literal["WEALTH_PRODUCT", "INSTRUMENT", "INSURANCE"]
+    risk_level: RiskLevelLiteral | None = Field(description="None for insurance (not risk-rated)")
+    suitable: bool | None = Field(
+        description="True: risk at or below my band; False: above it; None: no band or insurance"
+    )
+    reason: str
+
+
+class SuitabilityOut(BaseModel):
+    band: RiskLevelLiteral | None = Field(description="My RTQ-1 risk band; None if not assessed")
+    questionnaire_version: str | None
+    assessed_at: datetime | None
+    items: list[SuitabilityItemOut]

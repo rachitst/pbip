@@ -70,6 +70,7 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("post", "/api/v1/wealth/insurance/applications"),
         ("get", "/api/v1/wealth/insurance/applications"),
         ("get", f"/api/v1/wealth/insurance/applications/{uuid.uuid4()}"),
+        ("get", "/api/v1/wealth/suitability"),
         ("get", "/api/v1/fraud/alerts"),
         ("get", "/api/v1/fraud/stats"),
         ("get", "/api/v1/fraud/monitoring"),

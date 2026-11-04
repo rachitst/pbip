@@ -7703,6 +7703,125 @@
         "title": "StreamToolResult",
         "type": "object"
       },
+      "SuitabilityItemOut": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "WEALTH_PRODUCT",
+              "INSTRUMENT",
+              "INSURANCE"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "risk_level": {
+            "anyOf": [
+              {
+                "enum": [
+                  "LOW",
+                  "MODERATE",
+                  "HIGH"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "None for insurance (not risk-rated)",
+            "title": "Risk Level"
+          },
+          "suitable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "True: risk at or below my band; False: above it; None: no band or insurance",
+            "title": "Suitable"
+          }
+        },
+        "required": [
+          "product_id",
+          "kind",
+          "risk_level",
+          "suitable",
+          "reason"
+        ],
+        "title": "SuitabilityItemOut",
+        "type": "object"
+      },
+      "SuitabilityOut": {
+        "properties": {
+          "assessed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessed At"
+          },
+          "band": {
+            "anyOf": [
+              {
+                "enum": [
+                  "LOW",
+                  "MODERATE",
+                  "HIGH"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "My RTQ-1 risk band; None if not assessed",
+            "title": "Band"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SuitabilityItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "questionnaire_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Questionnaire Version"
+          }
+        },
+        "required": [
+          "band",
+          "questionnaire_version",
+          "assessed_at",
+          "items"
+        ],
+        "title": "SuitabilityOut",
+        "type": "object"
+      },
       "SupportedCurrency": {
         "description": "Single-currency bank (blueprint section 7): the clearing account and every rail are INR.",
         "enum": [
@@ -14961,6 +15080,38 @@
           }
         ],
         "summary": "Wealth catalogue: fixed deposits, mutual funds and the sovereign gold bond",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/suitability": {
+      "get": {
+        "operationId": "get_suitability_api_v1_wealth_suitability_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuitabilityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Which wealth products suit my recorded risk band (RTQ-1), with the reason",
         "tags": [
           "wealth"
         ]

@@ -1719,6 +1719,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/wealth/suitability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Which wealth products suit my recorded risk band (RTQ-1), with the reason */
+        get: operations["get_suitability_api_v1_wealth_suitability_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5518,6 +5535,45 @@ export interface components {
              */
             outcome: "ok" | "input" | "error";
             tool: components["schemas"]["ToolName"];
+        };
+        /** SuitabilityItemOut */
+        SuitabilityItemOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "WEALTH_PRODUCT" | "INSTRUMENT" | "INSURANCE";
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Risk Level
+             * @description None for insurance (not risk-rated)
+             */
+            risk_level: ("LOW" | "MODERATE" | "HIGH") | null;
+            /**
+             * Suitable
+             * @description True: risk at or below my band; False: above it; None: no band or insurance
+             */
+            suitable: boolean | null;
+        };
+        /** SuitabilityOut */
+        SuitabilityOut: {
+            /** Assessed At */
+            assessed_at: string | null;
+            /**
+             * Band
+             * @description My RTQ-1 risk band; None if not assessed
+             */
+            band: ("LOW" | "MODERATE" | "HIGH") | null;
+            /** Items */
+            items: components["schemas"]["SuitabilityItemOut"][];
+            /** Questionnaire Version */
+            questionnaire_version: string | null;
         };
         /**
          * SupportedCurrency
@@ -11342,6 +11398,40 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    get_suitability_api_v1_wealth_suitability_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuitabilityOut"];
+                };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

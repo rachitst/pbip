@@ -21,7 +21,12 @@ from pbip_api.modules.auth.dependencies import (
 from pbip_api.modules.auth.service import RequestMeta
 from pbip_api.modules.customers.dependencies import get_current_customer
 from pbip_api.modules.customers.models import Customer
-from pbip_api.modules.wealth import insurance_service, investing_service, service
+from pbip_api.modules.wealth import (
+    insurance_service,
+    investing_service,
+    service,
+    suitability_service,
+)
 from pbip_api.modules.wealth.models import InsuranceType, RiskLevel
 from pbip_api.modules.wealth.schemas import (
     BuyRequest,
@@ -38,6 +43,7 @@ from pbip_api.modules.wealth.schemas import (
     OrderOut,
     PortfolioOut,
     SellRequest,
+    SuitabilityOut,
     WealthProductOut,
 )
 
@@ -387,3 +393,16 @@ def get_insurance_application(
     session: Session = Depends(get_session),
 ) -> InsuranceApplicationOut:
     return insurance_service.get_application(session, customer.id, application_id)
+
+
+# ------------------------------------------------- suitability by risk band (ADR-0058 s. 9)
+@router.get(
+    "/suitability",
+    response_model=SuitabilityOut,
+    summary="Which wealth products suit my recorded risk band (RTQ-1), with the reason",
+)
+def get_suitability(
+    customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+) -> SuitabilityOut:
+    return suitability_service.suitability(session, customer.id)

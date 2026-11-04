@@ -103,6 +103,16 @@ export type PortfolioOut = components["schemas"]["PortfolioOut"];
 export type AllocationSlice = components["schemas"]["AllocationSlice"];
 export type InsuranceProductOut = components["schemas"]["InsuranceProductOut"];
 export type RiskLevel = WealthProductOut["risk_level"];
+// ADR-0058: simulated investing, fund SIPs, insurance applications and suitability.
+export type InstrumentOut = components["schemas"]["InstrumentOut"];
+export type BuyRequest = components["schemas"]["BuyRequest"];
+export type SellRequest = components["schemas"]["SellRequest"];
+export type OrderOut = components["schemas"]["OrderOut"];
+export type HoldingOut = components["schemas"]["HoldingOut"];
+export type InsuranceQuoteRequest = components["schemas"]["InsuranceQuoteRequest"];
+export type InsuranceQuoteOut = components["schemas"]["InsuranceQuoteOut"];
+export type InsuranceApplicationOut = components["schemas"]["InsuranceApplicationOut"];
+export type SuitabilityOut = components["schemas"]["SuitabilityOut"];
 
 export class ApiError extends Error {
   constructor(
@@ -496,6 +506,37 @@ export const api = {
   portfolio: () => apiFetch<PortfolioOut>("/api/v1/wealth/portfolio"),
   /** The seeded insurance catalogue (ADR-0028): indicative premiums, no underwriting. */
   insuranceProducts: () => apiFetch<InsuranceProductOut[]>("/api/v1/wealth/insurance"),
+  /** ADR-0058: investable funds, stocks and bonds with today's SIMULATED price. */
+  instruments: () => apiFetch<InstrumentOut[]>("/api/v1/wealth/instruments"),
+  holdings: () => apiFetch<HoldingOut[]>("/api/v1/wealth/holdings"),
+  /** One key per confirmed intent: a retried order never debits twice. */
+  buyInvestment: (body: BuyRequest, idempotencyKey: string) =>
+    apiFetch<OrderOut>("/api/v1/wealth/investments/buy", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(body),
+    }),
+  sellHolding: (holdingId: string, body: SellRequest, idempotencyKey: string) =>
+    apiFetch<OrderOut>(`/api/v1/wealth/holdings/${encodeURIComponent(holdingId)}/sell`, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(body),
+    }),
+  quoteInsurance: (body: InsuranceQuoteRequest) =>
+    apiFetch<InsuranceQuoteOut>("/api/v1/wealth/insurance/quote", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  applyForInsurance: (body: InsuranceQuoteRequest, idempotencyKey: string) =>
+    apiFetch<InsuranceApplicationOut>("/api/v1/wealth/insurance/applications", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(body),
+    }),
+  insuranceApplications: () =>
+    apiFetch<InsuranceApplicationOut[]>("/api/v1/wealth/insurance/applications"),
+  /** ADR-0058: products suitable or unsuitable for my RTQ-1 risk band. */
+  suitability: () => apiFetch<SuitabilityOut>("/api/v1/wealth/suitability"),
   notifications: (options?: { unread_only?: boolean; limit?: number; offset?: number }) => {
     const params = new URLSearchParams();
     if (options?.unread_only !== undefined) params.set("unread_only", String(options.unread_only));
