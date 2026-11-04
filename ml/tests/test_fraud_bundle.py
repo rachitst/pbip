@@ -2,24 +2,27 @@
 
 import io
 import json
+import shutil
 import tarfile
 from pathlib import Path
 
 import pytest
-from pbip_datagen.__main__ import _export_fraud
-from pbip_datagen.generator import GeneratorConfig
 from pbip_ml.fraud import bundle as b
 from pbip_ml.fraud.inference import load
-from pbip_ml.fraud.train import run
 
 REPO = Path(__file__).resolve().parents[2]
 
+# Hang guard, not a speed bar (as #446, #454): the first test that needs the session's trained model
+# pays for training it (about 5 s idle, over 60 s at load 9-10 on the 2-CPU laptop).
+pytestmark = pytest.mark.timeout(240)
+
 
 @pytest.fixture(scope="module")
-def model_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    data, out = tmp_path_factory.mktemp("data"), tmp_path_factory.mktemp("model")
-    _export_fraud(GeneratorConfig(seed=42, customers=600, months=4), data)
-    run(data, out)
+def model_dir(artifacts: Path, tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """The session's shared trained model (``ml/tests/conftest.py``), copied so the champion
+    provenance file can be added without touching the shared, read-only directory."""
+    out = tmp_path_factory.mktemp("model")
+    shutil.copytree(artifacts, out, dirs_exist_ok=True)
     (out / b.PROVENANCE).write_text(json.dumps({"alias": "champion"}) + "\n", "utf-8")
     return out
 
