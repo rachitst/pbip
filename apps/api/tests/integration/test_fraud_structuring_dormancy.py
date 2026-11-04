@@ -18,6 +18,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pbip_api.core.config import Settings
 from pbip_api.core.db import utcnow
+from pbip_api.modules.accounts import service as accounts_service
 from pbip_api.modules.fraud.baseline import BaselineRulesScorer
 from pbip_api.modules.fraud.models import FraudEvent
 from pbip_api.modules.ledger import service as ledger
@@ -231,6 +232,27 @@ def test_scoring_stays_fast_with_1000_near_threshold_inbound_transfers(
 # --- DORMANT_REACTIVATION (F8) -------------------------------------------------------------
 
 
+@pytest.fixture(
+    params=[timedelta(seconds=2), timedelta(0), timedelta(seconds=-2)],
+    ids=["db-clock-ahead", "same-clock", "db-clock-behind"],
+)
+def app_clock(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> Callable[[], datetime]:
+    """The app clock, offset from PostgreSQL's ``now()`` (#442). Docker Desktop's VM clock drifts
+    from the host's by hundreds of ms either way; ``db-clock-ahead`` runs the app 2 s behind the
+    database, the case that read 181 dormant days as 180 and printed "-1 days ago". The ledger and
+    account opening stamp rows with this clock, and the scorer is handed it."""
+    offset: timedelta = request.param
+
+    def clock() -> datetime:
+        return utcnow() - offset
+
+    monkeypatch.setattr(ledger, "utcnow", clock)
+    monkeypatch.setattr(accounts_service, "utcnow", clock)
+    return clock
+
+
 @pytest.fixture
 def dormant(make_customer: Callable[..., Actor], migrated_engine: Engine) -> Actor:
     """An account whose only activity, a deposit, was 200 days ago."""
@@ -288,6 +310,51 @@ def test_a_small_first_transfer_does_not_hide_a_large_second(
     assert e.features["dormant_woke_at"] is not None
 
 
+def test_days_since_waking_are_measured_on_the_scorers_clock(
+    app_clock: Callable[[], datetime], make_customer: Callable[..., Actor],
+    migrated_engine: Engine, settings: Settings,
+) -> None:  # fmt: skip
+    """#442: the small transfer that woke the account was stamped by the database's ``now()``, so
+    with the database clock ahead it was "in the future" for the scorer and analysts read "became
+    active again -1 days ago". Woken a moment ago reads 0 days on any clock offset."""
+    b, other = make_customer(), make_customer()
+    post_deposit_at(migrated_engine, b.account_id, 10_000_000, "Old",
+                    app_clock() - timedelta(days=200))  # fmt: skip
+    with sessionmaker(bind=migrated_engine)() as session:
+        small = ledger.create_transaction(
+            session,
+            type_=TransactionType.TRANSFER,
+            amount=SMALL,
+            currency="INR",
+            debit_account_id=b.account_id,
+            credit_account_id=other.account_id,
+        )
+        ledger.post_transaction(session, small, ledger.transfer_legs(small))
+        session.commit()
+    now = app_clock()
+    result = score_now(migrated_engine, settings, b, LARGE, at=lambda: now)
+    found = reason(result, "DORMANT_REACTIVATION")
+    assert found is not None and found["message"] == (
+        "No customer activity on this account for 200 days until it became active again 0 days "
+        "ago; sending INR 50,000.00"
+    )
+    assert datetime.fromisoformat(str(result.features["dormant_woke_at"])) <= now
+    assert result.features["dormant_gap_days"] == 200
+
+
+def test_a_clock_stepped_back_never_reads_negative_days(
+    dormant: Actor, known_payee: Callable[[Actor], dict[str, Any]], client: TestClient,
+    migrated_engine: Engine, settings: Settings,
+) -> None:  # fmt: skip
+    """The scorer's clock an hour before the wake-up transfer's stamp (an NTP step back): the
+    reason says 0 days, not -1 (#442)."""
+    assert pay(client, dormant, SMALL, known_payee(dormant))["status"] == "POSTED"
+    stepped_back = utcnow() - timedelta(hours=1)
+    result = score_now(migrated_engine, settings, dormant, LARGE, at=lambda: stepped_back)
+    found = reason(result, "DORMANT_REACTIVATION")
+    assert found is not None and "until it became active again 0 days ago;" in found["message"]
+
+
 def test_an_active_account_is_not_dormant(
     client: TestClient, dormant: Actor, known_payee: Callable[[Actor], dict[str, Any]],
     migrated_engine: Engine, db: Session,
@@ -322,14 +389,16 @@ def test_a_bank_posting_does_not_wake_a_dormant_account(
 
 
 def test_an_account_never_used_since_it_was_opened_is_dormant(
-    make_customer: Callable[..., Actor], migrated_engine: Engine, settings: Settings
-) -> None:
+    app_clock: Callable[[], datetime], make_customer: Callable[..., Actor],
+    migrated_engine: Engine, settings: Settings,
+) -> None:  # fmt: skip
+    """Whatever the database clock's offset (#442): 181 days after opening is 181, not 180."""
     b = make_customer()
-    later = utcnow() + timedelta(days=181)
+    later = app_clock() + timedelta(days=181)
     result = score_now(migrated_engine, settings, b, LARGE, at=lambda: later)
     assert reason(result, "DORMANT_REACTIVATION") is not None
     assert result.features["dormant_gap_days"] == 181
-    fresh = score_now(migrated_engine, settings, b, LARGE)
+    fresh = score_now(migrated_engine, settings, b, LARGE, at=app_clock)
     assert (
         reason(fresh, "DORMANT_REACTIVATION") is None and fresh.features["dormant_gap_days"] is None
     )
