@@ -26,6 +26,9 @@ customers, ONE injected incident of a scenario:
 v2.3 (#276) fixes a v2.0 defect: ordinary transfers continued after ``churned_on`` (v2.2 dropped
 them only for F8 customers). Now, as in v1, nobody transfers after the day they churned.
 
+v2.4 (#274, ADR-0051) adds legitimate INBOUND transfers (L4 below). Until then every credit was
+fraud (F6, F7), so no false-positive rate on legitimate credits could be measured.
+
 Every row of an incident is labelled (``fraud_labels``: transaction id -> scenario, incident, role).
 Normal customers also do things for the first time (v2.1, #251), because real ones do:
 * L1 a new payee, paid minutes to days after it was added (a new landlord, a one-off purchase,
@@ -33,9 +36,17 @@ Normal customers also do things for the first time (v2.1, #251), because real on
   the payee is then used again like any other.
 * L2 a new phone: from some date on, the customer's transfers come from a new device.
 * L3 a forgotten password: 1-4 failed logins, then a normal transfer from the usual device.
-None of these reaches a scenario's full signature (a new payee never gets 1.5x income or more, a
+* L4 money received (v2.4): about one transfer a month from one to three regular senders (family,
+  a flatmate settling up) at 1-15% of monthly income, and about one large one-off a year (a car
+  sold, a loan from family, a deposit refunded) of 0.5-3x monthly income, capped at the API's
+  per-transfer maximum. One-offs are drawn independently, so some land just under the reporting
+  threshold, and occasionally several of them fall in one window: a structuring detector's false
+  positives are measured on these rows, not designed away.
+None of L1-L3 reaches a scenario's full signature (a new payee never gets 1.5x income or more, a
 new device never comes with failed logins or a new payee), so labels stay clean by construction.
-They draw from their own random stream, so ordinary and fraud rows are identical to v2.0.
+They draw from their own random stream, so ordinary and fraud rows are identical to v2.0. L4 draws
+last, on a fourth stream ``[seed, index, 10]`` with its own ids, so every v2.3 row and label is
+unchanged (``test_v2_1_rows_are_unchanged``, ``test_v2_3_rows_are_unchanged_by_money_received``).
 F7 and F8 (v2.2) are drawn last, on a third stream ``[seed, index, 9]``, only for customers with no
 F1-F6 incident, so every v2.1 row and label is unchanged (``test_v2_1_rows_are_unchanged``) except
 the post-churn ordinary transfers (v2.3, above).
@@ -64,7 +75,8 @@ from pbip_datagen.generator import (
     run_id_for,
 )
 
-FRAUD_VERSION = "2.3.0"  # 2.1: first-time behaviour (#251); 2.2: F7, F8 (TASK-071); 2.3: #276
+FRAUD_VERSION = "2.4.0"  # 2.1: first-time behaviour (#251); 2.2: F7, F8 (TASK-071); 2.3: #276;
+# 2.4: legitimate inbound transfers (L4, #274)
 Scenario = Literal["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8"]
 SCENARIOS: tuple[Scenario, ...] = ("F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8")
 _V2_0_SCENARIOS = SCENARIOS[:6]  # drawn on the original stream, exactly as in v2.0 and v2.1
@@ -97,6 +109,7 @@ DEFAULT_MAX_TRANSFER_MINOR = 2_00_000_00  # INR 2,00,000
 DEFAULT_DORMANCY_DAYS = 180
 FOREIGN_COUNTRIES = ("AE", "SG", "GB", "US", "NG", "RU")
 _PAYEE_MIN_DAYS = 30  # ordinary payees are at least this old
+INBOUND_IDS = "inbound-transfers"  # L4 rows' id namespace (v2.4); earlier counters are untouched
 _MIN_MINOR = 100
 
 Direction = Literal["DEBIT", "CREDIT"]
@@ -438,6 +451,28 @@ def _first_time_behaviour(ctx: _Ctx, rng: np.random.Generator, months: int) -> N
     _forgotten_password(ctx, rng, months)
 
 
+def _money_received(ctx: _Ctx, rng: np.random.Generator, months: int, cap: int) -> None:
+    """L4 (v2.4): legitimate inbound transfers. Last, on its own stream and ids, so no earlier row
+    changes. Senders are not payees: ``payee_added_at`` is None, as for every credit."""
+    ids, senders = _Ids(ctx.customer, INBOUND_IDS), _Ids(ctx.customer, "inbound-senders")
+    regular = [senders.next() for _ in range(int(rng.integers(1, 4)))]
+    income = ctx.customer.monthly_income_minor
+    rows: list[tuple[datetime, int, uuid.UUID]] = []
+    for _ in range(int(rng.poisson(1.0 * months))):
+        sender = regular[int(rng.integers(0, len(regular)))]
+        when = _instant(ctx, rng)  # drawn before the amount: the stream order is the data
+        rows.append((when, ctx.money(income * float(rng.uniform(0.01, 0.15))), sender))
+    for _ in range(int(rng.poisson(0.08 * months))):
+        amount = min(ctx.money(income * float(rng.uniform(0.5, 3.0))), cap)
+        rows.append((_instant(ctx, rng), amount, senders.next()))
+    for when, amount, sender in rows:
+        if when < ctx.window_end:
+            ctx.rows.append(
+                Transfer(ids.next(), ctx.customer.id, when, "CREDIT", amount, sender, None,
+                         ctx.device, False, "IN", ctx.home_city, 0)
+            )  # fmt: skip
+
+
 _INJECTORS = {"F1": _f1, "F2": _f2, "F3": _f3, "F4": _f4, "F5": _f5, "F6": _f6}
 
 
@@ -492,6 +527,8 @@ def customer_transfers(
     _first_time_behaviour(ctx, first_time_rng, config.months)
     if scenario is None:
         labels = _later_scenarios(config, fraud, ctx, data_end)
+    received_rng = np.random.default_rng([config.seed, customer.index, 10])
+    _money_received(ctx, received_rng, config.months, fraud.max_transfer_minor)
     rows = sorted(ctx.rows, key=lambda t: (t.occurred_at, t.id))
     return rows, labels
 

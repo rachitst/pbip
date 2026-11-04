@@ -27,7 +27,7 @@ extra dependency), and the Isolation Forest reason when ``a >= 0.5`` (ANOMALY).
 
 import json
 import math
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -110,6 +110,12 @@ _TEMPLATES: dict[str, Callable[[float], str]] = {
     "velocity_10m": lambda v: f"{int(v)} other transfers in the previous 10 minutes",
     "failure_count_24h": lambda v: f"{int(v)} failed sign-ins in the previous 24 hours",
     "distinct_devices_7d": lambda v: f"{int(v)} different devices used in 7 days",
+    "near_threshold_72h": lambda v: (
+        f"{int(v)} movements just under INR 1,00,000 in the previous 72 hours"
+    ),
+    "days_since_last_activity": lambda v: (
+        "no earlier activity on record" if v < 0 else f"first activity in {int(v)} days"
+    ),
     "log_amount": lambda v: f"amount of INR {10**v / 100:,.2f}",
     "hour_ist": lambda v: f"made at {int(v):02d}:00 IST",
     "new_device": lambda v: "from a device not seen before" if v >= 1 else "from a known device",
@@ -117,15 +123,26 @@ _TEMPLATES: dict[str, Callable[[float], str]] = {
 }
 
 
-def model_matrix(row: pd.DataFrame) -> np.ndarray:
+def model_columns(booster: lgb.Booster) -> list[str]:
+    """The columns this booster was trained on, in its order (ADR-0051).
+
+    A model is served with the feature row of the code that serves it, which can have more
+    columns than the model was trained on: the -3 artifacts (9 features) still score correctly
+    after ``near_threshold_72h`` and ``days_since_last_activity`` were added. LightGBM matches
+    columns by position, never by name, so the row is always cut to the booster's own list.
+    """
+    return list(booster.feature_name())
+
+
+def model_matrix(row: pd.DataFrame, columns: Sequence[str] = MODEL_FEATURES) -> np.ndarray:
     """The LightGBM input for ``row``: exactly what ``booster.predict(DataFrame)`` builds itself.
 
     LightGBM converts a DataFrame with ``np.result_type(*column dtypes, float32)``, float64 for
     these int64/float64 columns, so passing this matrix gives identical predictions while skipping
     its pandas conversion (about half a millisecond per call). Built once, shared by predict and
-    TreeSHAP.
+    TreeSHAP. ``columns`` is the booster's own list (``model_columns``).
     """
-    matrix: np.ndarray = row[list(MODEL_FEATURES)].to_numpy(dtype=np.float64)
+    matrix: np.ndarray = row[list(columns)].to_numpy(dtype=np.float64)
     return matrix
 
 
@@ -137,11 +154,13 @@ def shap_reasons(
 ) -> list[FraudReason]:
     """Top positive TreeSHAP contributors (log-odds) for ONE row, as MODEL reasons.
 
-    ``matrix`` is ``model_matrix(row)`` when the caller has built it already. ``num_threads=1``:
-    one row needs no OpenMP pool, and on the 2-CPU laptop an idle-spinning second thread competes
-    with the API under load (#379). A row's arithmetic is sequential either way: same values.
+    ``matrix`` is ``model_matrix(row, model_columns(booster))`` when the caller has built it
+    already. ``num_threads=1``: one row needs no OpenMP pool, and on the 2-CPU laptop an
+    idle-spinning second thread competes with the API under load (#379). A row's arithmetic is
+    sequential either way: same values.
     """
-    data = model_matrix(row) if matrix is None else matrix
+    columns = model_columns(booster)
+    data = model_matrix(row, columns) if matrix is None else matrix
     contrib = np.asarray(booster.predict(data, pred_contrib=True, num_threads=1))[0]
     values = contrib[:-1]  # last column is the expected value (bias)
     order = np.argsort(-values)
@@ -149,7 +168,7 @@ def shap_reasons(
     for index in order[:top]:
         if values[index] <= 0:
             break
-        name = MODEL_FEATURES[index]
+        name = columns[index]
         reasons.append(
             FraudReason(
                 code=f"MODEL_{name.upper()}",
@@ -191,7 +210,7 @@ class HybridScorer:
         try:
             if self.booster is None or self.anomaly is None:
                 raise RuntimeError("model unavailable")
-            matrix = model_matrix(row)
+            matrix = model_matrix(row, model_columns(self.booster))
             raw = float(np.asarray(self.booster.predict(matrix, num_threads=1))[0])
             p = float(self.params.calibrate(np.array([raw]))[0])
             a = float(self.anomaly.score(row, self.compiled_anomaly)[0])
@@ -250,6 +269,8 @@ def rule_context(row: pd.Series, currency: str = "INR") -> RuleContext:
         velocity_10m=int(row["velocity_10m"]),
         failure_count_24h=int(row["failure_count_24h"]),
         distinct_devices_7d=int(row["distinct_devices_7d"]),
+        near_threshold_72h=int(row["near_threshold_72h"]),
+        days_since_last_activity=int(row["days_since_last_activity"]),
     )
     return RuleContext(int(row["amount_minor"]), currency, features, bool(row["new_device"]))
 
@@ -274,7 +295,7 @@ def fit_params(
     from sklearn.linear_model import LogisticRegression
 
     y = validation["label"].to_numpy()
-    raw = np.asarray(booster.predict(validation[list(MODEL_FEATURES)]))
+    raw = np.asarray(booster.predict(validation[model_columns(booster)]))
     cal_raw, cal_y = (
         (raw, y)
         if out_of_time is None
@@ -317,7 +338,7 @@ def batch_risk(scorer: HybridScorer, frame: pd.DataFrame) -> np.ndarray:
     if scorer.booster is None or scorer.anomaly is None:
         risk = rule_points
     else:
-        raw = np.asarray(scorer.booster.predict(frame[list(MODEL_FEATURES)]))
+        raw = np.asarray(scorer.booster.predict(frame[model_columns(scorer.booster)]))
         p = scorer.params.calibrate(raw)
         a = scorer.anomaly.score(frame)
         z = (

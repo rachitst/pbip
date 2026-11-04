@@ -22,6 +22,8 @@ QUIET = FraudFeatures(
     velocity_10m=0,
     failure_count_24h=0,
     distinct_devices_7d=1,
+    near_threshold_72h=0,
+    days_since_last_activity=2,
 )
 
 
