@@ -41,6 +41,7 @@ const regular: WealthProductOut = {
   premature_closure_allowed: true,
   premature_penalty_bps: 100,
   bookable: true,
+  investable: false,
   notes: "Indicative, simulated rate set by PBIP, not a real bank's offer.",
   catalogue_version: "2026-11-v1",
 };
@@ -63,6 +64,7 @@ const notBookable: WealthProductOut = {
   name: "Senior citizens fixed deposit",
   annual_rate_bps: 760,
   bookable: false,
+  investable: false,
 };
 const index: WealthProductOut = {
   ...regular,
@@ -81,6 +83,7 @@ const index: WealthProductOut = {
   premature_closure_allowed: false,
   premature_penalty_bps: null,
   bookable: false,
+  investable: false,
   notes: "Market-linked: returns are not guaranteed.",
 };
 const active: FixedDepositOut = {
@@ -290,6 +293,8 @@ describe("Wealth (TASK-065)", () => {
     expect(row("Accrued returns")).toHaveTextContent("INR 4,123.45");
     expect(row("Value at maturity")).toHaveTextContent("INR 1,07,291.28");
     expect(row("Total")).toHaveTextContent("INR 2,04,123.45");
+    expect(row("Funds, stocks and bonds")).toHaveTextContent("INR 0.00");
+    expect(screen.getByText(/valued at today's simulated prices, not market data/)).toBeVisible();
     expect(screen.getByRole("region", { name: "Asset allocation chart" })).toBeInTheDocument();
     const legend = screen.getByRole("list", { name: "Asset allocation" });
     const items = within(legend).getAllByRole("listitem");

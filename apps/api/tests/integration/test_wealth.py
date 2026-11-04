@@ -150,7 +150,14 @@ def test_catalogue_lists_deposits_funds_and_the_gold_bond_with_yield_and_lock_in
     assert products["MF-ELSS"]["min_lock_in_months"] == 36
     gold = products["SGB"]
     assert (gold["apy_bps"], gold["tenures_months"], gold["min_lock_in_months"]) == (250, [96], 60)
-    assert {p["catalogue_version"] for p in products.values()} == {"2026-11-v1"}
+    # ADR-0058: the three investable funds were re-versioned with a note saying so (migration 0031)
+    investable = {"MF-LIQUID", "MF-BALANCED", "MF-INDEX"}
+    assert {c for c, p in products.items() if p["investable"]} == investable
+    assert {products[c]["catalogue_version"] for c in investable} == {"2026-11-v2"}
+    assert {p["catalogue_version"] for c, p in products.items() if c not in investable} == {
+        "2026-11-v1"
+    }
+    assert all("not sold online" not in products[c]["notes"] for c in investable)
     assert all(
         "simulated" in p["notes"] or "market" in p["notes"].lower() for p in products.values()
     )

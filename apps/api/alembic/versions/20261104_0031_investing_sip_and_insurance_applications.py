@@ -132,6 +132,34 @@ def _seed() -> None:
     )
 
 
+# The three investable funds' catalogue notes said "not sold online by PBIP" (migration 0018); they
+# can now be bought, so their rows are versioned 2026-11-v2 with the new note. The downgrade puts
+# the 0018 note and version back exactly.
+INVESTABLE_FUND_CODES = ("MF-LIQUID", "MF-BALANCED", "MF-INDEX")
+FUND_NOTE_BEFORE = (
+    "Market-linked: returns are not guaranteed. PBIP has no market-data feed, so no yield, NAV or "
+    "past performance is shown. Listed for comparison; not sold online by PBIP."
+)
+FUND_NOTE_AFTER = (
+    "Market-linked: returns are not guaranteed. Can be bought online at a simulated NAV from "
+    "PBIP's price model, not market data; no yield or past performance is shown."
+)
+
+
+def _set_fund_notes(note: str, version: str) -> None:
+    products = sa.table(
+        "wealth_products",
+        sa.column("code", sa.String),
+        sa.column("notes", sa.String),
+        sa.column("catalogue_version", sa.String),
+    )
+    op.execute(
+        products.update()
+        .where(products.c.code.in_(INVESTABLE_FUND_CODES))
+        .values(notes=note, catalogue_version=version)
+    )
+
+
 def _replace_type_check(allowed: str) -> None:
     op.drop_constraint(op.f("ck_transactions_type_valid"), "transactions", type_="check")
     op.create_check_constraint(
@@ -578,11 +606,13 @@ def upgrade() -> None:
         sa.UniqueConstraint("sip_id", "run_on", name=op.f("uq_fund_sip_runs_sip_id_run_on")),
     )
     _seed()
+    _set_fund_notes(FUND_NOTE_AFTER, CATALOGUE_VERSION)
     _replace_type_check(_TYPES_AFTER)
 
 
 def downgrade() -> None:
     _replace_type_check(_TYPES_BEFORE)  # fails (and rolls back) if investment postings exist
+    _set_fund_notes(FUND_NOTE_BEFORE, "2026-11-v1")
     op.drop_table("fund_sip_runs")
     op.drop_index("ix_investment_orders_user_id", table_name="investment_orders")
     op.drop_index("ix_investment_orders_sip_id", table_name="investment_orders")

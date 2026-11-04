@@ -8116,6 +8116,11 @@
             "title": "Id",
             "type": "string"
           },
+          "investable": {
+            "description": "A fund that can be bought online at a simulated price (ADR-0058)",
+            "title": "Investable",
+            "type": "boolean"
+          },
           "max_amount_minor": {
             "anyOf": [
               {
@@ -8218,6 +8223,7 @@
           "premature_closure_allowed",
           "premature_penalty_bps",
           "bookable",
+          "investable",
           "notes",
           "catalogue_version"
         ],

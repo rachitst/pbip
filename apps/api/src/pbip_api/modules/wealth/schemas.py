@@ -37,6 +37,9 @@ class WealthProductOut(BaseModel):
     premature_closure_allowed: bool
     premature_penalty_bps: int | None
     bookable: bool = Field(description="Only fixed deposits can be booked online")
+    investable: bool = Field(
+        description="A fund that can be bought online at a simulated price (ADR-0058)"
+    )
     notes: str
     catalogue_version: str
 

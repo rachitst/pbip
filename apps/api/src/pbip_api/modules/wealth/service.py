@@ -91,7 +91,7 @@ def _product_apy(product: WealthProduct) -> int | None:
     return product.annual_rate_bps  # a coupon is paid out, not compounded
 
 
-def _product_out(product: WealthProduct) -> WealthProductOut:
+def _product_out(product: WealthProduct, investable: bool) -> WealthProductOut:
     return WealthProductOut(
         id=product.id,
         code=product.code,
@@ -109,6 +109,7 @@ def _product_out(product: WealthProduct) -> WealthProductOut:
         premature_closure_allowed=product.premature_penalty_bps is not None,
         premature_penalty_bps=product.premature_penalty_bps,
         bookable=product.bookable,
+        investable=investable,
         notes=product.notes,
         catalogue_version=product.catalogue_version,
     )
@@ -118,7 +119,14 @@ def list_products(session: Session, risk_level: RiskLevel | None) -> list[Wealth
     stmt = select(WealthProduct).order_by(WealthProduct.product_type, WealthProduct.code)
     if risk_level is not None:
         stmt = stmt.where(WealthProduct.risk_level == risk_level)
-    return [_product_out(p) for p in session.execute(stmt).scalars()]
+    investable = set(
+        session.execute(
+            select(InvestmentInstrument.wealth_product_id).where(
+                InvestmentInstrument.wealth_product_id.is_not(None)
+            )
+        ).scalars()
+    )
+    return [_product_out(p, p.id in investable) for p in session.execute(stmt).scalars()]
 
 
 def _insurance_out(product: InsuranceProduct) -> InsuranceProductOut:

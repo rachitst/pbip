@@ -37,6 +37,9 @@ fund or bond purchases and insurance applications need their own ADR; this is it
   so nothing can be read as advice about a listed company.
 * **Not investable:** `MF-ELSS` (3-year lock-in) and `SGB` (5-year exit window). A lock-in applies per purchase lot,
   which needs lot-level holdings; that is not built, so they stay catalogue-only, as today. No lock-in is faked.
+* The three funds' `wealth_products` notes said "not sold online by PBIP". Migration `0031` replaces that note and
+  versions those three rows `2026-11-v2` (its downgrade restores the `0018` note and version), the catalogue API gains
+  `investable`, and the assistant's product list says "can be bought online at a simulated price" for them.
 * Bonds are **accumulating** in the simulation: the coupon is reflected in the price trend and no coupon is paid
   out. The UI and the notes say so.
 

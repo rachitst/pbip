@@ -5611,6 +5611,11 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Investable
+             * @description A fund that can be bought online at a simulated price (ADR-0058)
+             */
+            investable: boolean;
             /** Max Amount Minor */
             max_amount_minor: number | null;
             /** Min Amount Minor */
