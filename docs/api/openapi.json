@@ -3105,7 +3105,9 @@
         "enum": [
           "BLOCKED_TRANSFER",
           "ACCOUNT_LOCKOUT",
-          "AUDIT_CHAIN_FAILURE"
+          "AUDIT_CHAIN_FAILURE",
+          "NOTIFICATION_DEAD_LETTER",
+          "SCHEDULED_TRANSFER_FAILURE"
         ],
         "title": "ExceptionKind",
         "type": "string"
@@ -3134,6 +3136,18 @@
             "description": "Blocked payments only",
             "title": "Amount Minor"
           },
+          "attempts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Notification dead letters: delivery attempts made",
+            "title": "Attempts"
+          },
           "currency": {
             "anyOf": [
               {
@@ -3144,6 +3158,70 @@
               }
             ],
             "title": "Currency"
+          },
+          "error_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Notification dead letters: exception class of the last failure (no message)",
+            "title": "Error Type"
+          },
+          "event_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Notification dead letters: the outbox event type",
+            "title": "Event Type"
+          },
+          "failed_attempts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Scheduled transfer failures: failed runs that day, if any",
+            "title": "Failed Attempts"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "enum": [
+                  "MISSED",
+                  "AUTO_PAUSED"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Scheduled transfer failures: an occurrence never paid, or the order paused",
+            "title": "Failure"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Scheduled transfer failures: the scheduler's reason code",
+            "title": "Failure Reason"
           },
           "first_invalid_seq": {
             "anyOf": [
@@ -3169,6 +3247,19 @@
             "format": "date-time",
             "title": "Occurred At",
             "type": "string"
+          },
+          "occurrence_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Scheduled transfer failures: the missed occurrence's date",
+            "title": "Occurrence Date"
           },
           "reason_codes": {
             "description": "Fraud rule/model codes of a blocked payment",
@@ -3207,6 +3298,18 @@
           },
           "status": {
             "$ref": "#/components/schemas/ExceptionStatus"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "System exceptions: the dead-lettered outbox event id, or the scheduled transfer (standing order) id",
+            "title": "Subject Id"
           },
           "transaction_type": {
             "anyOf": [
@@ -3284,12 +3387,20 @@
           },
           "BLOCKED_TRANSFER": {
             "$ref": "#/components/schemas/ExceptionCounts"
+          },
+          "NOTIFICATION_DEAD_LETTER": {
+            "$ref": "#/components/schemas/ExceptionCounts"
+          },
+          "SCHEDULED_TRANSFER_FAILURE": {
+            "$ref": "#/components/schemas/ExceptionCounts"
           }
         },
         "required": [
           "BLOCKED_TRANSFER",
           "ACCOUNT_LOCKOUT",
-          "AUDIT_CHAIN_FAILURE"
+          "AUDIT_CHAIN_FAILURE",
+          "NOTIFICATION_DEAD_LETTER",
+          "SCHEDULED_TRANSFER_FAILURE"
         ],
         "title": "ExceptionsByKind",
         "type": "object"

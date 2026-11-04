@@ -65,3 +65,17 @@ chain (`AuditService.verify_chain`), `fraud_alerts`, `customer_segments`, ledger
   yet (US-30), so on the demo data those panels show their empty state rather than invented numbers.
 * Spend is INR only (every customer account is INR) and excludes reversals and moves between the customer's own
   accounts; segment averages are the features the weekly job stored, so they are as old as the last run.
+
+## Addendum (2026-11-05): system exceptions
+Two kinds are added so section 5 "exception management" covers system failures, not only security and fraud events:
+* `NOTIFICATION_DEAD_LETTER`: an outbox event that failed its last delivery attempt (ADR-0040);
+* `SCHEDULED_TRANSFER_FAILURE`: an occurrence the scheduler recorded as missed, or an order it paused after a
+  permanent failure (ADR-0023).
+
+Both producers already write an audit row (`OUTBOX_EVENT_DEAD_LETTERED`; `SCHEDULED_TRANSFER_MISSED` and
+`SCHEDULED_TRANSFER_AUTO_PAUSED`). The exception is that row: its reference is the audit sequence number, its time the
+row's `created_at`, and its detail an allow-list of the row's fields (event type, attempts, error class, reason code,
+date, failed attempts), never an outbox payload. Reading the audit log keeps the compliance module inside its own
+tables, and the scan is narrowed by `resource_type` to `ix_audit_logs_resource`. Workflow, audit and 409 rules are
+unchanged. Refused postings (a payment the ledger declines) are not listed: by design they leave no state behind
+(AGENTS.md section 4), and a payment the fraud engine refuses is already a `BLOCKED_TRANSFER`. No schema change.

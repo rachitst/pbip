@@ -6,7 +6,14 @@ An *exception* is a system-generated event a compliance officer must look at:
   ``BLOCK``);
 * ``ACCOUNT_LOCKOUT``: a sign-in lockout (a ``security_events`` row of type ``ACCOUNT_LOCKED``);
 * ``AUDIT_CHAIN_FAILURE``: the audit hash chain no longer verifies; the reference is the first
-  sequence number that fails.
+  sequence number that fails;
+* ``NOTIFICATION_DEAD_LETTER``: an outbox event (a customer notification) that failed its last
+  delivery attempt and was dead-lettered (ADR-0040);
+* ``SCHEDULED_TRANSFER_FAILURE``: a scheduled-transfer occurrence that was never paid (missed) or
+  an order the scheduler paused because a run failed permanently (ADR-0023).
+
+The last two are system exceptions: the producer already writes an audit row for each one (actor
+"scheduler"), so the reference is that row's sequence number and the detail is read from it.
 
 Exceptions are derived from the tables that already record those facts; nothing is copied. Their
 workflow state (OPEN -> ACKNOWLEDGED -> RESOLVED, or OPEN -> RESOLVED) lives only in the
@@ -47,12 +54,37 @@ RESOLVED_ACTION = "COMPLIANCE_EXCEPTION_RESOLVED"
 REVIEW_SLA = timedelta(hours=24)  # an open fraud review (held payment) should be decided within it
 ACKNOWLEDGE_SLA = timedelta(hours=24)  # an exception should be acknowledged within it
 BLOCK_DECISION = "BLOCK"
+_MAX_SEQ = 9_223_372_036_854_775_807  # audit_logs.seq is a bigint
 
 
 class ExceptionKind(StrEnum):
     BLOCKED_TRANSFER = "BLOCKED_TRANSFER"
     ACCOUNT_LOCKOUT = "ACCOUNT_LOCKOUT"
     AUDIT_CHAIN_FAILURE = "AUDIT_CHAIN_FAILURE"
+    NOTIFICATION_DEAD_LETTER = "NOTIFICATION_DEAD_LETTER"
+    SCHEDULED_TRANSFER_FAILURE = "SCHEDULED_TRANSFER_FAILURE"
+
+
+# System exceptions read from the audit rows their producers write (notifications.service,
+# payments.scheduled_service): the audit resource type and actions are those modules' vocabulary.
+# The resource type narrows the scan to ix_audit_logs_resource.
+_AUDITED_KINDS: dict[ExceptionKind, tuple[str, tuple[str, ...]]] = {
+    ExceptionKind.NOTIFICATION_DEAD_LETTER: ("outbox_event", ("OUTBOX_EVENT_DEAD_LETTERED",)),
+    ExceptionKind.SCHEDULED_TRANSFER_FAILURE: (
+        "scheduled_transfer",
+        ("SCHEDULED_TRANSFER_MISSED", "SCHEDULED_TRANSFER_AUTO_PAUSED"),
+    ),
+}
+# Only these audit detail fields are shown: codes, counts and dates, never a payload or free text.
+_AUDITED_DETAIL_FIELDS = (
+    "event_type",
+    "attempts",
+    "error",
+    "reason",
+    "missed_date",
+    "failed_attempts",
+    "last_failure_reason",
+)
 
 
 class ExceptionStatus(StrEnum):
@@ -130,13 +162,25 @@ def _sources(since: datetime | None, ref: str | None = None) -> Subquery:
         cast(SecurityEvent.id, String),
         SecurityEvent.created_at,
     ).where(SecurityEvent.event_type == SecurityEventType.ACCOUNT_LOCKED)
+    audited = [
+        select(
+            literal(kind.value, String),
+            cast(AuditLog.seq, String),
+            AuditLog.created_at,
+        ).where(AuditLog.resource_type == resource_type, AuditLog.action.in_(actions))
+        for kind, (resource_type, actions) in _AUDITED_KINDS.items()
+    ]
     if since is not None:
         blocked = blocked.where(FraudEvent.created_at >= since)
         lockouts = lockouts.where(SecurityEvent.created_at >= since)
+        audited = [q.where(AuditLog.created_at >= since) for q in audited]
     if ref is not None:
         blocked = blocked.where(cast(FraudEvent.id, String) == ref)
         lockouts = lockouts.where(cast(SecurityEvent.id, String) == ref)
-    return union_all(blocked, lockouts).subquery("src")
+        # A system exception's reference is a sequence number; any other reference matches none.
+        seq = int(ref) if ref.isdigit() and int(ref) <= _MAX_SEQ else 0
+        audited = [q.where(AuditLog.seq == seq) for q in audited]
+    return union_all(blocked, lockouts, *audited).subquery("src")
 
 
 def _steps(action: str) -> Subquery:
@@ -315,6 +359,36 @@ def _blocked_details(session: Session, refs: list[str]) -> dict[str, dict[str, A
     }
 
 
+def _audited_details(session: Session, refs: list[str]) -> dict[str, dict[str, Any]]:
+    """What a system exception's audit row says: the affected resource and allow-listed fields."""
+    if not refs:
+        return {}
+    rows = session.execute(
+        select(AuditLog.seq, AuditLog.action, AuditLog.resource_id, AuditLog.details).where(
+            AuditLog.seq.in_([int(r) for r in refs])
+        )
+    ).all()
+    return {
+        str(seq): {
+            "source_action": action,
+            "resource_id": resource_id,
+            **{k: details[k] for k in _AUDITED_DETAIL_FIELDS if k in details},
+        }
+        for seq, action, resource_id, details in rows
+    }
+
+
+def _details(session: Session, items: list[ExceptionRecord]) -> None:
+    """Fill each listed exception's detail from its source (one query per source)."""
+    blocked = _blocked_details(
+        session, [r.ref for r in items if r.kind is ExceptionKind.BLOCKED_TRANSFER]
+    )
+    audited = _audited_details(session, [r.ref for r in items if r.kind in _AUDITED_KINDS])
+    for item in items:
+        found = blocked if item.kind is ExceptionKind.BLOCKED_TRANSFER else audited
+        item.detail = found.get(item.ref, item.detail)
+
+
 def _codes(reasons: list[dict[str, Any]]) -> list[str]:
     """Rule and model codes only: messages may quote amounts or payee details, codes never do."""
     return [
@@ -366,11 +440,7 @@ def exceptions_view(
         items.append(record)
     items.sort(key=lambda r: (r.occurred_at, r.ref), reverse=True)
     items = items[:limit]
-    details = _blocked_details(
-        session, [r.ref for r in items if r.kind is ExceptionKind.BLOCKED_TRANSFER]
-    )
-    for item in items:
-        item.detail = details.get(item.ref, item.detail)
+    _details(session, items)
     pending, reviews_late, oldest = _reviews(session, now - REVIEW_SLA)
     return ExceptionsView(
         window_days=window_days,
@@ -389,9 +459,9 @@ def exceptions_view(
 def _canonical_ref(kind: ExceptionKind, ref: str) -> str:
     """The reference in the form the sources use; anything malformed cannot exist (404)."""
     try:
-        if kind is ExceptionKind.AUDIT_CHAIN_FAILURE:
+        if kind is ExceptionKind.AUDIT_CHAIN_FAILURE or kind in _AUDITED_KINDS:
             seq = int(ref)
-            if seq < 1:
+            if not 1 <= seq <= _MAX_SEQ:  # beyond bigint no row can exist (and SQL would fail)
                 raise ValueError(ref)
             return str(seq)
         return str(UUID(ref))
@@ -411,8 +481,7 @@ def _current(session: Session, kind: ExceptionKind, ref: str) -> ExceptionRecord
     if row is None:
         raise NotFoundError("Exception not found")
     record = _record(row)
-    if record.kind is ExceptionKind.BLOCKED_TRANSFER:
-        record.detail = _blocked_details(session, [record.ref]).get(record.ref, {})
+    _details(session, [record])
     return record
 
 

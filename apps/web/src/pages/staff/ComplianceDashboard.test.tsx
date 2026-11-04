@@ -7,7 +7,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComplianceExceptionsOut, ExceptionOut, UserOut } from "../../api/client";
 import { MeContext } from "../../shell/MeContext";
 import { json, urlOf } from "../../test-utils";
-import { ComplianceDashboard, Indicators, canManageCompliance } from "./ComplianceDashboard";
+import {
+  ComplianceDashboard,
+  ExceptionsTable,
+  Indicators,
+  canManageCompliance,
+} from "./ComplianceDashboard";
 
 const officer: UserOut = {
   id: "u-co",
@@ -56,6 +61,41 @@ const lockout: ExceptionOut = {
   reason_codes: [],
 };
 
+const ORDER = "5c4ed000-1111-4222-8333-444455556666";
+const system = { ...lockout, status: "OPEN", acknowledged: null } as const;
+
+const deadLetter: ExceptionOut = {
+  ...system,
+  id: "NOTIFICATION_DEAD_LETTER:41",
+  kind: "NOTIFICATION_DEAD_LETTER",
+  ref: "41",
+  subject_id: "0b0e0000-1111-4222-8333-444455556666",
+  event_type: "TRANSFER_POSTED",
+  attempts: 6,
+  error_type: "KeyError",
+};
+
+const missed: ExceptionOut = {
+  ...system,
+  id: "SCHEDULED_TRANSFER_FAILURE:42",
+  kind: "SCHEDULED_TRANSFER_FAILURE",
+  ref: "42",
+  subject_id: ORDER,
+  failure: "MISSED",
+  failure_reason: "insufficient_funds",
+  occurrence_date: "2026-11-03",
+  failed_attempts: 2,
+};
+
+const paused: ExceptionOut = {
+  ...missed,
+  id: "SCHEDULED_TRANSFER_FAILURE:43",
+  ref: "43",
+  failure: "AUTO_PAUSED",
+  failure_reason: "account_not_active",
+  occurrence_date: null,
+};
+
 const empty: ComplianceExceptionsOut = {
   generated_at: new Date().toISOString(),
   indicators: {
@@ -67,7 +107,13 @@ const empty: ComplianceExceptionsOut = {
     reviews_pending: 0,
     reviews_past_sla: 0,
     oldest_review_at: null,
-    by_kind: { BLOCKED_TRANSFER: zero, ACCOUNT_LOCKOUT: zero, AUDIT_CHAIN_FAILURE: zero },
+    by_kind: {
+      BLOCKED_TRANSFER: zero,
+      ACCOUNT_LOCKOUT: zero,
+      AUDIT_CHAIN_FAILURE: zero,
+      NOTIFICATION_DEAD_LETTER: zero,
+      SCHEDULED_TRANSFER_FAILURE: zero,
+    },
   },
   audit_chain: { valid: true, checked: 120, first_invalid_seq: null },
   items: [],
@@ -86,6 +132,8 @@ const full: ComplianceExceptionsOut = {
       BLOCKED_TRANSFER: { OPEN: 1, ACKNOWLEDGED: 0, RESOLVED: 3 },
       ACCOUNT_LOCKOUT: { OPEN: 0, ACKNOWLEDGED: 1, RESOLVED: 0 },
       AUDIT_CHAIN_FAILURE: zero,
+      NOTIFICATION_DEAD_LETTER: { OPEN: 1, ACKNOWLEDGED: 0, RESOLVED: 0 },
+      SCHEDULED_TRANSFER_FAILURE: { OPEN: 2, ACKNOWLEDGED: 0, RESOLVED: 1 },
     },
   },
   items: [blocked, lockout],
@@ -162,6 +210,31 @@ describe("Regulatory indicators", () => {
     );
     expect(within(metric("Audit chain")).getByText("Broken at #7")).toBeInTheDocument();
     expect(within(metric("Audit chain")).getByText(/before the break/)).toBeInTheDocument();
+  });
+});
+
+describe("System exceptions (section 5 exception management)", () => {
+  it("describes undelivered notifications and failed scheduled transfers in words", () => {
+    const onAct = vi.fn();
+    renderWith(<ExceptionsTable items={[deadLetter, missed, paused]} onAct={onAct} />);
+    const dead = screen.getByRole("row", { name: /Undelivered notification/ });
+    expect(dead).toHaveTextContent("TRANSFER_POSTED not delivered after 6 attempts · KeyError");
+    const missedRow = screen.getByRole("row", { name: /Occurrence 2026-11-03 not paid/ });
+    expect(missedRow).toHaveTextContent("(not enough money) order 5c4ed000");
+    const pausedRow = screen.getByRole("row", { name: /Order paused by the scheduler/ });
+    expect(pausedRow).toHaveTextContent("(account_not_active)");
+    expect(within(pausedRow).getByRole("button", { name: "Acknowledge" })).toBeInTheDocument();
+  });
+
+  it("counts the new kinds in the per-kind table", () => {
+    renderWith(<Indicators data={full} />);
+    const row = screen.getByRole("row", { name: /Scheduled transfer failure/ });
+    expect(
+      within(row)
+        .getAllByRole("cell")
+        .map((c) => c.textContent),
+    ).toEqual(["2", "0", "1"]);
+    expect(screen.getByRole("row", { name: /Undelivered notification 1 0 0/ })).toBeVisible();
   });
 });
 
