@@ -1,6 +1,7 @@
 """Recommendation contract. Every recommendation carries human-readable reasons."""
 
 from enum import StrEnum
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -56,6 +57,26 @@ class HeldProduct(BaseModel):
     )
 
 
+class LoanOffer(BaseModel):
+    """UC-06 (ADR-0056): one catalogue loan as the API's loans module assessed it on the
+    customer's own income, spending and balance. The engine never re-decides eligibility; it only
+    offers an ``eligible`` loan the customer does not already hold and orders it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    product_id: UUID = Field(description="The loan catalogue id (stable)")
+    loan_type: Literal["PERSONAL", "AUTO", "HOME"]
+    title: str
+    description: str
+    eligible: bool
+    min_amount_minor: int = Field(ge=0, description="Suggested range: from (0 if not eligible)")
+    max_amount_minor: int = Field(ge=0, description="Suggested range: up to (0 if not eligible)")
+    tenure_months: int = Field(ge=0, description="The tenor the range is sized at")
+    emi_minor: int = Field(ge=0, description="EMI at the suggested maximum")
+    annual_rate_bps: int = Field(ge=0)
+    reasons: tuple[str, ...] = Field(min_length=1, description="The loans module's own reasons")
+
+
 class Recommendation(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -75,6 +96,7 @@ class Recommendation(BaseModel):
     title: str = Field(default="", description="Product title / name")
     description: str = Field(default="", description="Product description")
     cta_label: str = Field(default="Learn more", description="Call to action button text")
+    loan: LoanOffer | None = Field(default=None, description="Set for a catalogue loan (UC-06)")
 
 
 class CustomerRecommendationContext(BaseModel):
@@ -111,6 +133,13 @@ class CustomerRecommendationContext(BaseModel):
     held_products: tuple[HeldProduct, ...] = Field(
         default=(),
         description="Open accounts, active loans and open fixed deposits (TASK-111, ADR-0030)",
+    )
+    loan_offers: tuple[LoanOffer, ...] = Field(
+        default=(),
+        description=(
+            "Every catalogue loan as the loans module assessed it (UC-06, ADR-0056). When given, "
+            "the catalogue loans replace the abstract credit line"
+        ),
     )
     risk_band: RiskLevel | None = Field(
         default=None,

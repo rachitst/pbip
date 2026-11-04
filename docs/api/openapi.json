@@ -2509,6 +2509,12 @@
       },
       "EligibilityOut": {
         "properties": {
+          "available_balance_minor": {
+            "default": 0,
+            "description": "Available balance across my accounts (ADR-0056, rule 5)",
+            "title": "Available Balance Minor",
+            "type": "integer"
+          },
           "dti_existing": {
             "description": "Existing repayments / income",
             "title": "Dti Existing",
@@ -2534,6 +2540,12 @@
             "title": "Monthly Income Minor",
             "type": "integer"
           },
+          "monthly_spend_minor": {
+            "default": 0,
+            "description": "Average monthly spending from the ledger (ADR-0056, rule 4)",
+            "title": "Monthly Spend Minor",
+            "type": "integer"
+          },
           "product_id": {
             "format": "uuid",
             "title": "Product Id",
@@ -2555,6 +2567,18 @@
           "requested_amount_minor": {
             "title": "Requested Amount Minor",
             "type": "integer"
+          },
+          "rules_version": {
+            "default": "loan-eligibility-v2",
+            "description": "Version of the eligibility rules applied",
+            "title": "Rules Version",
+            "type": "string"
+          },
+          "spending_with_loan_ratio": {
+            "default": 0.0,
+            "description": "(Spending + active PBIP EMIs + proposed EMI) / income; limit 0.90",
+            "title": "Spending With Loan Ratio",
+            "type": "number"
           },
           "status": {
             "enum": [
@@ -4579,6 +4603,121 @@
         "title": "LoanInstalmentOut",
         "type": "object"
       },
+      "LoanOfferOut": {
+        "description": "UC-06: one catalogue loan assessed on my own figures. Amounts are 0 when not eligible.",
+        "properties": {
+          "annual_rate_bps": {
+            "description": "Indicative annual rate in basis points",
+            "title": "Annual Rate Bps",
+            "type": "integer"
+          },
+          "emi_at_max_minor": {
+            "description": "EMI at the suggested maximum",
+            "title": "Emi At Max Minor",
+            "type": "integer"
+          },
+          "loan_type": {
+            "enum": [
+              "PERSONAL",
+              "AUTO",
+              "HOME"
+            ],
+            "title": "Loan Type",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "reasons": {
+            "description": "Why, quoting my own income, spending and balance",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Reasons",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "ELIGIBLE",
+              "NOT_ELIGIBLE"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "suggested_max_amount_minor": {
+            "description": "The largest amount the eligibility rules allow at ``tenure_months``",
+            "title": "Suggested Max Amount Minor",
+            "type": "integer"
+          },
+          "suggested_min_amount_minor": {
+            "description": "The product's smallest amount",
+            "title": "Suggested Min Amount Minor",
+            "type": "integer"
+          },
+          "tenure_months": {
+            "description": "The tenor the offer is sized at",
+            "title": "Tenure Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "product_id",
+          "loan_type",
+          "name",
+          "annual_rate_bps",
+          "status",
+          "suggested_min_amount_minor",
+          "suggested_max_amount_minor",
+          "tenure_months",
+          "emi_at_max_minor",
+          "reasons"
+        ],
+        "title": "LoanOfferOut",
+        "type": "object"
+      },
+      "LoanOffersOut": {
+        "properties": {
+          "available_balance_minor": {
+            "title": "Available Balance Minor",
+            "type": "integer"
+          },
+          "monthly_income_minor": {
+            "title": "Monthly Income Minor",
+            "type": "integer"
+          },
+          "monthly_spend_minor": {
+            "title": "Monthly Spend Minor",
+            "type": "integer"
+          },
+          "offers": {
+            "items": {
+              "$ref": "#/components/schemas/LoanOfferOut"
+            },
+            "title": "Offers",
+            "type": "array"
+          },
+          "rules_version": {
+            "title": "Rules Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "offers",
+          "monthly_income_minor",
+          "monthly_spend_minor",
+          "available_balance_minor",
+          "rules_version"
+        ],
+        "title": "LoanOffersOut",
+        "type": "object"
+      },
       "LoanOut": {
         "properties": {
           "account_id": {
@@ -5878,6 +6017,17 @@
             "title": "Description",
             "type": "string"
           },
+          "loan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendedLoanOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set when the product is a catalogue loan (product_id is the loan catalogue id): its eligibility, suggested range and EMI (UC-06, ADR-0056)"
+          },
           "model_version": {
             "description": "Recommendation model version identifier",
             "title": "Model Version",
@@ -5890,7 +6040,7 @@
             "type": "string"
           },
           "product_type": {
-            "description": "Product category: SAVINGS, LOAN, INVESTMENT, or INSURANCE",
+            "description": "Product kind: SAVINGS, LOAN, INVESTMENT, or INSURANCE. With product_id it is stable across responses, for wiring card actions",
             "title": "Product Type",
             "type": "string"
           },
@@ -6069,6 +6219,62 @@
           "evaluated_at"
         ],
         "title": "RecommendationsResponse",
+        "type": "object"
+      },
+      "RecommendedLoanOut": {
+        "description": "UC-06 (ADR-0056): the loans module's assessment of a recommended catalogue loan.",
+        "properties": {
+          "annual_rate_bps": {
+            "description": "Indicative annual rate in basis points",
+            "title": "Annual Rate Bps",
+            "type": "integer"
+          },
+          "eligibility_status": {
+            "const": "ELIGIBLE",
+            "description": "Only loans the eligibility rules allow are recommended",
+            "title": "Eligibility Status",
+            "type": "string"
+          },
+          "emi_at_max_minor": {
+            "description": "EMI at the suggested maximum",
+            "title": "Emi At Max Minor",
+            "type": "integer"
+          },
+          "loan_type": {
+            "enum": [
+              "PERSONAL",
+              "AUTO",
+              "HOME"
+            ],
+            "title": "Loan Type",
+            "type": "string"
+          },
+          "suggested_max_amount_minor": {
+            "description": "The largest amount the eligibility rules allow at tenure_months",
+            "title": "Suggested Max Amount Minor",
+            "type": "integer"
+          },
+          "suggested_min_amount_minor": {
+            "description": "The product's smallest amount",
+            "title": "Suggested Min Amount Minor",
+            "type": "integer"
+          },
+          "tenure_months": {
+            "description": "The tenor the range is sized at",
+            "title": "Tenure Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "loan_type",
+          "eligibility_status",
+          "suggested_min_amount_minor",
+          "suggested_max_amount_minor",
+          "tenure_months",
+          "emi_at_max_minor",
+          "annual_rate_bps"
+        ],
+        "title": "RecommendedLoanOut",
         "type": "object"
       },
       "RecommendedProduct": {
@@ -12767,6 +12973,39 @@
           }
         ],
         "summary": "Explainable eligibility from the customer's own ledger figures",
+        "tags": [
+          "loans"
+        ]
+      }
+    },
+    "/api/v1/loans/offers": {
+      "get": {
+        "description": "Read-only. The customer is the authenticated one; nothing is taken from the request.",
+        "operationId": "loan_offers_api_v1_loans_offers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoanOffersOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Every catalogue loan assessed on my own income, spending and balance (UC-06)",
         "tags": [
           "loans"
         ]

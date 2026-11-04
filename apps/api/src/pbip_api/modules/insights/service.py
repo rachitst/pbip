@@ -18,7 +18,6 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from pbip_ml.recommendations import PRODUCT_CATALOGUE
 from pbip_ml.recommendations.engine import MODEL_VERSION
 from sqlalchemy.orm import Session
 
@@ -116,7 +115,7 @@ def _ranked_products(
     score (ADR-0041), and a simulated probability must not rank real customers against each other.
     """
     return recommendations_service.get_customer_recommendations(
-        session, customer_id, now, top_k=len(PRODUCT_CATALOGUE), propensity=None
+        session, customer_id, now, top_k=recommendations_service.EVERY_PRODUCT, propensity=None
     ).recommendations
 
 
