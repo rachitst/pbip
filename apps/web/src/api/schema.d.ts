@@ -1667,6 +1667,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/wealth/sips": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My fund SIPs with their latest runs */
+        get: operations["list_sips_api_v1_wealth_sips_get"];
+        put?: never;
+        /** Set up a monthly fund purchase from one of my accounts (idempotent; moves no money) */
+        post: operations["create_sip_api_v1_wealth_sips_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/sips/{sip_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One of my fund SIPs */
+        get: operations["get_sip_api_v1_wealth_sips__sip_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/sips/{sip_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel one of my fund SIPs (no further instalments; safe to repeat) */
+        post: operations["cancel_sip_api_v1_wealth_sips__sip_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5211,6 +5263,104 @@ export interface components {
          * @enum {string}
          */
         SettingUnit: "MINOR_UNITS" | "COUNT";
+        /**
+         * SipCreateRequest
+         * @description A monthly fund purchase. No date or price from the client: the first instalment is the
+         *     next ``day_of_month`` (today if it is today), at that day's simulated NAV.
+         */
+        SipCreateRequest: {
+            /**
+             * Account Id
+             * Format: uuid
+             * @description One of MY accounts: pays every instalment
+             */
+            account_id: string;
+            /** Amount Minor */
+            amount_minor: number;
+            /**
+             * Day Of Month
+             * @description 1 to 28, so every month has the day
+             */
+            day_of_month: number;
+            /**
+             * Instrument Id
+             * Format: uuid
+             * @description A mutual fund from GET /wealth/instruments
+             */
+            instrument_id: string;
+        };
+        /** SipOut */
+        SipOut: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Amount Minor */
+            amount_minor: number;
+            /** Cancelled At */
+            cancelled_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Day Of Month */
+            day_of_month: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Instrument Code */
+            instrument_code: string;
+            /**
+             * Instrument Id
+             * Format: uuid
+             */
+            instrument_id: string;
+            /** Instrument Name */
+            instrument_name: string;
+            /**
+             * Next Run On
+             * @description Next instalment; None once cancelled
+             */
+            next_run_on: string | null;
+            /**
+             * Runs
+             * @description The latest instalments, newest first (up to 12)
+             */
+            runs: components["schemas"]["SipRunOut"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ACTIVE" | "CANCELLED";
+        };
+        /** SipRunOut */
+        SipRunOut: {
+            /**
+             * Failure Reason
+             * @description Why a FAILED instalment was not bought, e.g. insufficient_funds
+             */
+            failure_reason: string | null;
+            /** Order Id */
+            order_id: string | null;
+            /** Price Minor */
+            price_minor: number | null;
+            /**
+             * Run On
+             * Format: date
+             */
+            run_on: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "EXECUTED" | "FAILED";
+            /** Units Micro */
+            units_micro: number | null;
+        };
         /**
          * SpendingBreakdownResponse
          * @description Response containing categorized spending breakdown for an account.
@@ -10957,6 +11107,206 @@ export interface operations {
             };
             /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sips_api_v1_wealth_sips_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SipOut"][];
+                };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    create_sip_api_v1_wealth_sips_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical request; retrying with the same key never duplicates. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SipCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SipOut"];
+                };
+            };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such instrument, or the account is not mine (problem+json) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not a fund, below the fund's minimum, or invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_sip_api_v1_wealth_sips__sip_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sip_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SipOut"];
+                };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_sip_api_v1_wealth_sips__sip_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sip_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SipOut"];
+                };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

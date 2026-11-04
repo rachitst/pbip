@@ -39,6 +39,12 @@ celery_app.conf.update(
             "task": "pbip.wealth.pay_out_matured_deposits",
             "schedule": crontab(minute=5),
         },
+        # ADR-0058: fund SIP instalments, hourly at :50 (away from :05, :20 and :35), so one due
+        # on an IST bank day is bought within the hour; each run is exactly-once per (SIP, day).
+        "run-fund-sips": {
+            "task": "pbip.wealth.run_fund_sips",
+            "schedule": crontab(minute=50),
+        },
         # Issue #314 / ADR-0036: decline step-ups left unanswered past STEP_UP_EXPIRY_MINUTES.
         "expire-stale-step-ups": {
             "task": "pbip.transfers.expire_stale_step_ups",

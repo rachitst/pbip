@@ -272,3 +272,42 @@ class HoldingOut(BaseModel):
     cost_basis_minor: int = Field(description="Average cost of the units held")
     gain_minor: int = Field(description="Value minus cost basis (unrealised)")
     gain_bps: int | None = Field(description="Gain as basis points of the cost basis")
+
+
+# ------------------------------------------------------------------ fund SIPs (ADR-0058 s. 7)
+class SipCreateRequest(BaseModel):
+    """A monthly fund purchase. No date or price from the client: the first instalment is the
+    next ``day_of_month`` (today if it is today), at that day's simulated NAV."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    instrument_id: UUID = Field(description="A mutual fund from GET /wealth/instruments")
+    account_id: UUID = Field(description="One of MY accounts: pays every instalment")
+    amount_minor: int = Field(gt=0, le=MAX_AMOUNT_MINOR)
+    day_of_month: int = Field(ge=1, le=28, description="1 to 28, so every month has the day")
+
+
+class SipRunOut(BaseModel):
+    run_on: date
+    status: Literal["EXECUTED", "FAILED"]
+    order_id: UUID | None
+    units_micro: int | None
+    price_minor: int | None
+    failure_reason: str | None = Field(
+        description="Why a FAILED instalment was not bought, e.g. insufficient_funds"
+    )
+
+
+class SipOut(BaseModel):
+    id: UUID
+    instrument_id: UUID
+    instrument_code: str
+    instrument_name: str
+    account_id: UUID
+    amount_minor: int
+    day_of_month: int
+    status: Literal["ACTIVE", "CANCELLED"]
+    next_run_on: date | None = Field(description="Next instalment; None once cancelled")
+    created_at: datetime
+    cancelled_at: datetime | None
+    runs: list[SipRunOut] = Field(description="The latest instalments, newest first (up to 12)")

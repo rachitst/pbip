@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from pbip_api.core.errors import NotFoundError
-from pbip_api.modules.wealth.models import FixedDeposit, InvestmentHolding
+from pbip_api.modules.wealth.models import FixedDeposit, FundSip, InvestmentHolding
 
 
 def get_owned_fixed_deposit(
@@ -56,5 +56,26 @@ def list_owned_holdings(session: Session, customer_id: UUID) -> list[InvestmentH
         select(InvestmentHolding)
         .where(InvestmentHolding.customer_id == customer_id, InvestmentHolding.units_micro > 0)
         .order_by(InvestmentHolding.created_at, InvestmentHolding.id)
+    )
+    return list(session.execute(stmt).scalars())
+
+
+def get_owned_sip(
+    session: Session, customer_id: UUID, sip_id: UUID, *, for_update: bool = False
+) -> FundSip:
+    stmt = select(FundSip).where(FundSip.id == sip_id, FundSip.customer_id == customer_id)
+    if for_update:
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
+    sip = session.execute(stmt).scalar_one_or_none()
+    if sip is None:
+        raise NotFoundError("SIP not found")
+    return sip
+
+
+def list_owned_sips(session: Session, customer_id: UUID) -> list[FundSip]:
+    stmt = (
+        select(FundSip)
+        .where(FundSip.customer_id == customer_id)
+        .order_by(FundSip.created_at.desc(), FundSip.id.desc())
     )
     return list(session.execute(stmt).scalars())

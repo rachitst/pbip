@@ -92,6 +92,15 @@ def pay_out_matured_deposits_task() -> dict[str, int]:
     return process_matured_deposits()
 
 
+@celery_app.task(name="pbip.wealth.run_fund_sips")
+def run_fund_sips_task() -> dict[str, int]:
+    """Buy due fund SIP instalments (hourly beat; ADR-0058). Idempotent: one key per SIP and day,
+    the SIP row lock and UNIQUE (sip_id, run_on), so a re-delivered run never buys twice."""
+    from pbip_api.modules.wealth.sip_service import process_due_sips
+
+    return process_due_sips()
+
+
 @celery_app.task(name="pbip.transfers.expire_stale_step_ups")
 def expire_stale_step_ups_task() -> dict[str, int]:
     """Decline step-ups unanswered past the timeout (60s beat; ADR-0036). Idempotent: the user
