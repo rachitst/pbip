@@ -9,6 +9,7 @@ that the endpoint may add one low-balance notification per account and month.
 """
 
 import calendar
+import hashlib
 import time
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -20,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from pbip_api.core.db import utcnow
 from pbip_api.core.errors import NotFoundError, UnprocessableError
+from pbip_api.core.versioned_cache import VersionedCache
 from pbip_api.modules.accounts.models import Account
 from pbip_api.modules.accounts.service import mask_account_number
 from pbip_api.modules.analytics import behaviour, projection, repository, unusual
@@ -354,7 +356,10 @@ class CustomerFinancialProfile:
 
 
 def get_customer_financial_profile(
-    session: Session, customer_id: UUID, now: datetime
+    session: Session,
+    customer_id: UUID,
+    now: datetime,
+    accounts: list[Account] | None = None,
 ) -> CustomerFinancialProfile | None:
     """``get_financial_health_score`` and ``get_cash_flow_profile`` of the customer's first account
     in two queries (#343): the owned accounts, then one pass over their entries. None when the
@@ -362,9 +367,10 @@ def get_customer_financial_profile(
 
     The accounts come from the accounts policy with the authenticated customer id, so the first one
     is owned without a second ownership query, and their ids are exactly ``owned_account_ids`` (both
-    read ``account_holders`` for the customer, with no other filter).
+    read ``account_holders`` for the customer, with no other filter). A caller that has just read
+    them through the same policy for the same customer may pass them in (one query fewer).
     """
-    accounts = list_owned_accounts(session, customer_id)
+    accounts = list_owned_accounts(session, customer_id) if accounts is None else accounts
     if not accounts:
         return None
     primary = accounts[0]
@@ -482,6 +488,37 @@ def upcoming_obligations(
     return obligations
 
 
+# The model fit is the forecast's whole cost (AutoARIMA: about 1 s of CPU per call on the reference
+# laptop) and a pure function of its inputs, which change once a day: the history ends yesterday.
+# So the result is kept per account under a digest of exactly those inputs (ADR-0053). Each entry
+# is a few KB; the TTL only bounds memory.
+_MODEL_DAYS = VersionedCache[tuple[UUID, UUID], tuple[str, tuple[ModelDay, ...]]](
+    "balance_forecast_model", max_entries=2_000, ttl_seconds=6 * 3600
+)
+
+
+def clear_forecast_cache() -> None:
+    """For tests and benchmarks that need a cold cache."""
+    _MODEL_DAYS.clear()
+
+
+def _cached_model_days(
+    customer_id: UUID, account_id: UUID, history: list[int], horizon: int, first_day: date
+) -> tuple[str, list[ModelDay]]:
+    from pbip_ml.forecasting.model import MODEL_VERSION  # lazy: numba
+
+    digest = hashlib.sha256(
+        f"{MODEL_VERSION}|{first_day.isoformat()}|{horizon}|{','.join(map(str, history))}".encode()
+    ).hexdigest()
+    key = (customer_id, account_id)
+    cached = _MODEL_DAYS.get(key, digest)
+    if cached is None:
+        method, days = _model_days(history, horizon, first_day)
+        cached = (method, tuple(days))
+        _MODEL_DAYS.put(key, digest, cached)
+    return cached[0], list(cached[1])
+
+
 def _model_days(history: list[int], horizon: int, first_day: date) -> tuple[str, list[ModelDay]]:
     from pbip_ml.forecasting.model import forecast_daily_balance  # lazy: numba
 
@@ -567,7 +604,9 @@ def get_balance_forecast(
         history_start,
         repository.scheduled_debits_by_day(session, account.id, now, FORECAST_HISTORY_DAYS),
     )
-    method, model_days = _model_days(discretionary, model_horizon, today)
+    method, model_days = _cached_model_days(
+        customer_id, account.id, discretionary, model_horizon, today
+    )
     model_days = projection.anchor(model_days, account.ledger_balance + paid_in_history)
     obligations = upcoming_obligations(session, customer_id, account.id, today, until)
     days = projection.project(model_days, today, paid_in_history, obligations)
