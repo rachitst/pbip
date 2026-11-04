@@ -4,9 +4,9 @@ All notable changes to PBIP are listed here. The format follows [Keep a Changelo
 and the project uses [Semantic Versioning](https://semver.org/). Numbers in brackets are the pull requests that made
 each change. The plain-language summary of this release is in [`docs/release/v1.0.0.md`](docs/release/v1.0.0.md).
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-11-04
 
-The first release. The `v1.0.0` tag has **not** been created yet; it is created at the final review.
+The first release, tagged `v1.0.0` on `main` `9ffbfa8`.
 
 ### Features
 
