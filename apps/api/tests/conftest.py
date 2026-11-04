@@ -10,6 +10,21 @@ from pbip_test_support import build_app
 from sqlalchemy import create_engine, text
 
 
+@pytest.fixture(autouse=True)
+def _cold_read_caches() -> None:
+    """Every test starts with ADR-0054's in-process read caches empty.
+
+    They live as long as the process, so without this one test's entries could serve another test's
+    requests and change what it measures (statement counts, timings). Tests that exercise the caches
+    warm them on purpose.
+    """
+    from pbip_api.modules.analytics import service as analytics_service
+    from pbip_api.modules.recommendations import service as recommendations_service
+
+    recommendations_service.clear_context_cache()
+    analytics_service.clear_forecast_cache()
+
+
 @pytest.fixture
 def client() -> Iterator[TestClient]:
     with TestClient(build_app()) as test_client:

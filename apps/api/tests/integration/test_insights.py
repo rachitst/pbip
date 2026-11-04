@@ -23,6 +23,7 @@ from pbip_api.modules.insights.service import (
     compute_balance_decline_rate,
     compute_inactivity_days,
 )
+from pbip_api.modules.recommendations import service as recommendations_service
 from pbip_test_support import Actor, age_payee
 from sqlalchemy import Engine, event, text
 from sqlalchemy.orm import Session
@@ -168,6 +169,10 @@ def test_cost_does_not_grow_with_customers_outside_the_page(
     rm = make_staff(RoleName.RELATIONSHIP_MANAGER, mfa=True)
 
     def statements_for_one_row() -> int:
+        # Cold every time: this test is about the portfolio size, not ADR-0054's context cache. With
+        # a warm entry for the customer on the page (the same one both times when they tie) the
+        # second call needed 6 statements instead of 9 (main be12e84 CI).
+        recommendations_service.clear_context_cache()
         count = 0
 
         def counter(*_args: object) -> None:
