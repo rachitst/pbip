@@ -151,14 +151,14 @@ uv run python scripts/benchmark_structuring_scoring.py --database-url "$BENCH_DA
 uv run python scripts/benchmark_synthetic_load.py --database-url "$BENCH_DATABASE_URL" --runs 3
 ```
 
-Measured on 4 Nov 2026 on the 2-CPU Celeron team laptop, **with other jobs running** (load average 7-8.4 on 2 CPUs,
-so about four runnable tasks per core):
+Measured again on 4 Nov 2026 on the 2-CPU Celeron team laptop, one job at a time, each run started at a 1-minute
+load average below 4 (the runs themselves push it a little higher):
 
 | Benchmark | Load average (1 / 5 / 15 min) | Result | Budget |
 |---|---|---|---|
-| COPY load, seed 42, 1,000 customers × 12 months (391,800 transactions), 3 fresh loads | 7.09 / 8.14 / 8.33 before, 8.43 / 8.35 / 8.39 after | 11.21 / 13.97 / 14.82 s (median 13.97 s), 3 of 3 within | < 15 s |
-| Rules scoring with 1,000 near-threshold inbound transfers, 200 calls after 3 warm-up | 8.27 / 8.25 / 8.35 before, 8.00 / 8.19 / 8.33 after | p50 75.9, p95 176.3, p99 226.4, max 280.2 ms | p95 < 100 ms |
+| COPY load, seed 42, 1,000 customers × 12 months (391,800 transactions), 3 fresh loads (generation, 13.2 s, not timed) | 3.87 / 4.33 / 5.47 before, 4.86 / 4.52 / 5.50 after | 7.49 / 8.72 / 8.69 s (median 8.69 s), 3 of 3 within | < 15 s |
+| Rules scoring with 1,000 near-threshold inbound transfers, 200 calls after 3 warm-up | 3.44 / 4.13 / 5.26 before, 3.48 / 4.12 / 5.25 after | p50 26.4, p95 45.1, p99 52.7, max 58.3 ms | p95 < 100 ms |
 
-The scoring p95 is over 100 ms at this load, which is the CPU, not the query: the cost test shows the work does
-not grow with the number of credits, and the old test passed on an idle machine. Measure again on an idle machine
-before quoting a number against the budget.
+Both are within budget. An earlier pair taken with other jobs running (load 7-8.4) gave a COPY median of 13.97 s and a
+scoring p95 of 176.3 ms; that was the CPU, not the query (the cost test shows the work does not grow with the number
+of credits), and those numbers are not used. A scoring run that started at load 4.54 (p95 77.0 ms) was discarded.

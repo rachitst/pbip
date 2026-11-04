@@ -2,7 +2,45 @@
 
 All notable changes to PBIP are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project uses [Semantic Versioning](https://semver.org/). Numbers in brackets are the pull requests that made
-each change. The plain-language summary of this release is in [`docs/release/v1.0.0.md`](docs/release/v1.0.0.md).
+each change. The plain-language summaries are in [`docs/release/`](docs/release/).
+
+## [1.0.1] - 2026-11-04
+
+A patch release on top of 1.0.0, tagged `v1.0.1` on `main` on 4 November 2026. The plain-language summary is in
+[`docs/release/v1.0.1.md`](docs/release/v1.0.1.md).
+
+### Fixed
+
+- DORMANT_REACTIVATION measured 181 dormant days as 180, and the staff reason text could say "became active again -1
+  days ago", when the database clock ran ahead of the app clock (Docker Desktop). Transaction headers and account
+  openings are now stamped by the app clock, and the day count is never negative (#447, #442).
+
+### Added
+
+- A byte-reproducible, SHA-256-pinned bundle of the served fraud model `hybrid-lgbm-iforest-3`, attached to the
+  v1.0.0 release; `make fraud-model-release` installs it with its checksum, manifest and model version verified
+  (#444, TASK-084). The SHAP summary plot is logged to the champion's MLflow run.
+- Recommendation ranker trained on a behaviour-driven **simulation** of product uptake: the logistic regression
+  `sim-propensity-v2` passed its pre-registered gate against rules-v1 on held-out simulated months and re-orders the
+  eligible products when its model file is installed, with rules-v1 as the fallback and every response labelled as
+  simulated (#445, ADR-0053, TASK-054).
+- Playwright recorder for the fallback demo video, `demo/record/` (#443, TASK-093).
+- Fuzzing reaches owned resources and staff routes, and the contract documents every status code the fuzzer meets
+  (401, 403, 429, 400 and route-specific 404/409/423); `status_code_conformance` is on (#450, #175 M11).
+
+### Changed
+
+- The recommendation context and the balance-forecast fit are cached in process under a version re-read on every
+  request, so a cached value is never older than its inputs and never crosses customers (ADR-0054, #451, #343).
+- A clickstream batch is inserted with one fixed, compiled-once statement (#449, TASK-055); the Performance workflow
+  records event ingestion latency.
+- Wall-clock assertions in the structuring, COPY-load and mule-scoring tests are replaced by cost and query-shape
+  assertions; the timing moved to benchmark scripts (#446, #454).
+
+### Documentation
+
+- User-manual RM insights screenshots re-shot (#439); final batch docs and v1.0.0 marked as tagged (#440); plan,
+  traceability and these notes (the v1.0.1 docs update).
 
 ## [1.0.0] - 2026-11-04
 
