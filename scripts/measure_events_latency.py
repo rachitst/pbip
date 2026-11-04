@@ -112,6 +112,24 @@ def _timed(call: Callable[[], Any]) -> tuple[float, Any]:
 # --- http -------------------------------------------------------------------------------------
 
 
+def require_stored(status: int, body: object, sent: int) -> None:
+    """Stop the measurement when a 202 did not store the batch.
+
+    A batch the API discards (analytics consent off, ADR-0057) or skips as duplicates is answered
+    much faster than an insert, so timing it would report the wrong path as the insert latency.
+    """
+    if status != 202:
+        return  # counted in "statuses"; rate limiting and errors are reported, not hidden
+    accepted = body.get("accepted") if isinstance(body, dict) else None
+    if accepted != sent:
+        msg = (
+            f"a 202 stored {accepted} of {sent} events (not_recorded: "
+            f"{body.get('not_recorded') if isinstance(body, dict) else None}); is the customer's "
+            "analytics consent on? The insert path was not measured."
+        )
+        raise SystemExit(msg)
+
+
 def http_size(
     client: httpx.Client, headers: dict[str, str], size: int, args: argparse.Namespace
 ) -> dict[str, object]:
@@ -122,6 +140,11 @@ def http_size(
         body = {"events": make_events(size, session_id)}
         elapsed, response = _timed(
             partial(client.post, "/api/v1/events/batch", json=body, headers=headers)
+        )
+        require_stored(
+            response.status_code,
+            response.json() if response.status_code == 202 else None,
+            len(body["events"]),
         )
         if index >= args.warmup:
             samples.append(elapsed)

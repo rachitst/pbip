@@ -34,6 +34,15 @@ nothing. The ledger never back-dates before an account's latest entry (every run
 stays true), so a customer created by an older seed who has since transacted is skipped with a
 message: a database seeded from scratch is needed to give them a history.
 
+Usage analytics (ADR-0057): Alice, Bob and Carol turn analytics consent on through the audited
+customer service (``ANALYTICS_CUSTOMERS``), so the profile and the staff charts have data. Alice
+and Bob get a few weeks of app usage (``CLICKSTREAM``: page views, heartbeats, a loan calculator,
+recommendation cards opened) through the events service, sent only while they have no event yet,
+and the daily profile job runs once at the end. Carol consents but has no app history: the staff
+see a consenting customer without activity. The consent is the demo customers' own decision in a
+real bank; here it is seeded so the walkthrough shows the feature, and it can be withdrawn in
+Profile like any other.
+
 Neither the demo password nor any MFA secret is printed or written to a file.
 
 The password for every seeded user comes from ``PBIP_DEMO_PASSWORD``. Only APP_ENV=local may fall
@@ -48,19 +57,24 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid5
 
 import pyotp
 from pbip_api.core.calendar import BANK_TZ
-from pbip_api.core.config import get_settings
+from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.crypto import FieldCipher
 from pbip_api.core.db import get_engine, utcnow
 from pbip_api.core.errors import UnprocessableError
 from pbip_api.core.security import PasswordService
 from pbip_api.modules.accounts.service import list_accounts
+from pbip_api.modules.analytics.profile_job import run_behaviour_profile_job
 from pbip_api.modules.auth.models import RoleName, User
 from pbip_api.modules.auth.service import AuthService, RequestMeta
 from pbip_api.modules.customers.models import Customer
+from pbip_api.modules.customers.service import CustomerService
+from pbip_api.modules.events import service as events_service
+from pbip_api.modules.events.models import ClickstreamEvent
+from pbip_api.modules.events.schemas import EventBatchRequest, TelemetryEventIn, TelemetryEventType
 from pbip_api.modules.insights import service as insights_service
 from pbip_api.modules.ledger import service as ledger
 from pbip_api.modules.ledger.models import EntryDirection
@@ -153,6 +167,87 @@ STAFF = [
 RM_EMAIL = "rm@demo.pbip"
 ASSIGNING_ADMIN_EMAIL = "admin@demo.pbip"
 RM_PORTFOLIO = ("alice@demo.pbip",)
+
+
+# ADR-0057: demo customers who turn usage analytics on, and the app usage seeded for some of them.
+ANALYTICS_CUSTOMERS = ("alice@demo.pbip", "bob@demo.pbip", "carol@demo.pbip")
+_CREDIT_LINE = "00000000-0000-4000-a000-000000000003"  # pbip_ml catalogue: LOAN
+_INDEX_SIP = "00000000-0000-4000-a000-000000000005"  # INVESTMENT
+_FIXED_DEPOSIT = "00000000-0000-4000-a000-000000000002"  # SAVINGS
+# One visit = (days ago, minutes long, the product card opened or None, loan calculator used).
+CLICKSTREAM: dict[str, tuple[tuple[int, int, str | None, bool], ...]] = {
+    "alice@demo.pbip": (
+        (20, 6, None, False),
+        (14, 9, _FIXED_DEPOSIT, False),
+        (9, 12, _CREDIT_LINE, True),
+        (5, 4, None, True),
+        (2, 8, _INDEX_SIP, False),
+        (1, 15, _CREDIT_LINE, True),
+    ),
+    "bob@demo.pbip": ((11, 3, None, False), (3, 5, _INDEX_SIP, False)),
+}
+
+
+def _visit(
+    email: str, start: datetime, minutes: int, product: str | None, calculator: bool
+) -> list[TelemetryEventIn]:
+    """One session: pages at the start, a heartbeat a minute while in use, then the actions."""
+    session_id = f"seed-{uuid5(UUID(int=0), f'{email}-{start.isoformat()}').hex[:16]}"
+    plan: list[tuple[TelemetryEventType, int, str, dict[str, str | int | float | bool]]] = [
+        (TelemetryEventType.PAGE_VIEW, 0, "/accounts", {}),
+        (TelemetryEventType.ACCOUNT_VIEWED, 1, "/accounts", {"account_type": "SAVINGS"}),
+        (TelemetryEventType.PAGE_VIEW, 2, "/loans" if calculator else "/wealth", {}),
+    ]
+    if calculator:
+        plan.append((TelemetryEventType.LOAN_CALCULATOR_USED, 60, "/loans", {"loan_type": "HOME"}))
+    if product is not None:
+        plan.append((TelemetryEventType.PRODUCT_CLICKED, 90, "/accounts", {"product_id": product}))
+    plan += [
+        (TelemetryEventType.SESSION_HEARTBEAT, 60 * m, "/accounts", {}) for m in range(1, minutes)
+    ]
+    plan.append((TelemetryEventType.PAGE_VIEW, 60 * minutes, "/insights", {}))
+    return [
+        TelemetryEventIn(
+            event_id=uuid5(UUID(int=0), f"{session_id}-{n}"),
+            event_type=kind,
+            event_timestamp=start + timedelta(seconds=offset),
+            session_id=session_id,
+            page_url=page,
+            properties=props,
+        )
+        for n, (kind, offset, page, props) in enumerate(plan)
+    ]
+
+
+def _seed_analytics(session: Session, settings: Settings, now: datetime) -> None:
+    """Consent through the audited service, a usage history through the events service (only for
+    a customer with no event yet, so a re-run adds nothing), then one profile job run."""
+    service = CustomerService(session, settings)
+    meta = RequestMeta(ip="127.0.0.1", user_agent="seed-script")
+    for email in ANALYTICS_CUSTOMERS:
+        customer = session.execute(
+            select(Customer).join(User, User.id == Customer.user_id).where(User.email == email)
+        ).scalar_one_or_none()
+        if customer is None:  # not seeded in this database
+            continue
+        if not customer.analytics_consent:
+            service.set_analytics_consent(customer, True, now, meta)
+            sys.stdout.write(f"analytics {email}  consent on\n")
+        visits = CLICKSTREAM.get(email, ())
+        has_events = session.execute(
+            select(ClickstreamEvent.id).where(ClickstreamEvent.customer_id == customer.id).limit(1)
+        ).first()
+        if not visits or has_events is not None:
+            continue
+        for days_ago, minutes, product, calculator in visits:
+            start = (now - timedelta(days=days_ago)).replace(minute=0, second=0, microsecond=0)
+            events = _visit(email, start, minutes, product, calculator)
+            events_service.ingest_event_batch(
+                session, EventBatchRequest(events=events), customer.id, now
+            )
+        sys.stdout.write(f"analytics {email}  {len(visits)} app session(s)\n")
+    result = run_behaviour_profile_job(session, now)
+    sys.stdout.write(f"analytics profiles built for {result.profiled} customer(s)\n")
 
 
 def demo_password(app_env: str, environ: Mapping[str, str]) -> str | None:
@@ -448,6 +543,7 @@ def main(environ: Mapping[str, str] | None = None) -> int:
             sys.stdout.write("demo customers in MFA_CUSTOMERS: authenticator enrolled\n")
         _assign_demo_portfolio(session)
         _seed_history(session, settings.internal_bank_code, now)
+        _seed_analytics(session, settings, now)
 
     sys.stdout.write(
         "\nDemo password (all new users): PBIP_DEMO_PASSWORD if set, else (APP_ENV=local only)\n"

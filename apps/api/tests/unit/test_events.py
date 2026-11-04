@@ -15,7 +15,7 @@ from pbip_api.modules.events.schemas import (
 )
 from pydantic import ValidationError
 
-from scripts.measure_events_latency import API_MAX_BATCH
+from scripts.measure_events_latency import API_MAX_BATCH, require_stored
 
 pytestmark = pytest.mark.unit
 
@@ -168,3 +168,29 @@ def test_event_batch_response_model() -> None:
     assert resp.accepted == 5
     assert resp.batch_id == batch_id
     assert resp.received_at == now
+
+
+@pytest.mark.parametrize(
+    ("status", "body", "sent"),
+    [
+        (202, {"accepted": 0, "duplicates": 0, "not_recorded": 25}, 25),  # consent off: discarded
+        (202, {"accepted": 0, "duplicates": 25, "not_recorded": 0}, 25),  # replayed: no insert
+        (202, {"accepted": 24, "duplicates": 1, "not_recorded": 0}, 25),
+        (202, None, 25),
+    ],
+)
+def test_the_latency_measurement_stops_when_a_202_did_not_store_the_batch(
+    status: int, body: object, sent: int
+) -> None:
+    """ADR-0057: a discarded batch is answered fast; timing it would misreport the insert."""
+    with pytest.raises(SystemExit, match="insert path was not measured"):
+        require_stored(status, body, sent)
+
+
+@pytest.mark.parametrize(
+    ("status", "body"), [(202, {"accepted": 25, "duplicates": 0, "not_recorded": 0}), (429, None)]
+)
+def test_the_latency_measurement_accepts_a_stored_batch_and_reports_other_statuses(
+    status: int, body: object
+) -> None:
+    require_stored(status, body, 25)
