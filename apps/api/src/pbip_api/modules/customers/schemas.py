@@ -151,3 +151,26 @@ class DemographicsOut(BaseModel):
         description="Policy version the current consent was given under"
     )
     current_policy_version: str = Field(description="Policy version a new consent agrees to")
+
+
+class AnalyticsConsentIn(BaseModel):
+    """Turn analytics (clickstream and behavioural profiling, ADR-0057) on (true) or off (false)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    granted: bool = Field(strict=True)
+
+
+class AnalyticsConsentOut(BaseModel):
+    """The customer's own analytics consent decision. Returned to the owner only."""
+
+    granted: bool = Field(
+        description=(
+            "Whether in-app activity may be recorded and used to build a behavioural profile"
+        )
+    )
+    updated_at: datetime | None = Field(
+        description="When the latest decision (on or off) was made; null if never decided"
+    )
+    policy_version: str | None = Field(description="Policy version of the latest decision")
+    current_policy_version: str = Field(description="Policy version a new decision agrees to")

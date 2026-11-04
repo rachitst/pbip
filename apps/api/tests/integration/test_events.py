@@ -21,7 +21,7 @@ from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.events.models import ClickstreamEvent
 from pbip_api.modules.events.partitions import ensure_monthly_partitions
 from pbip_ml.recommendations import PRODUCT_CATALOGUE
-from pbip_test_support import Actor
+from pbip_test_support import Actor, grant_analytics_consent
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
@@ -34,7 +34,7 @@ def test_events_batch_happy_path(
     db: Session,
 ) -> None:
     """Customer submits batch of telemetry events and they are persisted in partitioned storage."""
-    alice = make_customer()
+    alice = grant_analytics_consent(client, make_customer())
     now_str = datetime.now(UTC).isoformat()
 
     batch_payload = {
@@ -96,7 +96,7 @@ def test_events_batch_validation_failure(
     make_customer: Callable[..., Actor],
 ) -> None:
     """Strict schema validation rejects empty batches and untyped event types."""
-    alice = make_customer()
+    alice = grant_analytics_consent(client, make_customer())
 
     # Empty events list rejected
     resp_empty = client.post(
@@ -159,7 +159,7 @@ def test_events_partition_routing_across_months(
     db: Session,
 ) -> None:
     """Events across different calendar months route cleanly to their monthly partitions."""
-    alice = make_customer()
+    alice = grant_analytics_consent(client, make_customer())
 
     # This month and last month: two monthly partitions, inside the 180-day window whenever it runs
     now = datetime.now(UTC)
@@ -222,7 +222,7 @@ def _event(**overrides: object) -> dict[str, object]:
 def test_events_reject_extra_fields_free_text_and_urls(
     client: TestClient, make_customer: Callable[..., Actor], bad_event: dict[str, object]
 ) -> None:
-    alice = make_customer()
+    alice = grant_analytics_consent(client, make_customer())
     resp = client.post(
         "/api/v1/events/batch", json={"events": [_event(**bad_event)]}, headers=alice.headers
     )
@@ -232,7 +232,7 @@ def test_events_reject_extra_fields_free_text_and_urls(
 def test_events_reject_unknown_top_level_fields(
     client: TestClient, make_customer: Callable[..., Actor]
 ) -> None:
-    alice = make_customer()
+    alice = grant_analytics_consent(client, make_customer())
     resp = client.post(
         "/api/v1/events/batch",
         json={"events": [_event()], "customer_id": "00000000-0000-0000-0000-000000000001"},
@@ -244,7 +244,7 @@ def test_events_reject_unknown_top_level_fields(
 def test_events_resend_is_idempotent_not_a_server_error(
     client: TestClient, make_customer: Callable[..., Actor], db: Session
 ) -> None:
-    alice = make_customer()
+    alice = grant_analytics_consent(client, make_customer())
     event = _event(event_id="7b0c1f3e-1111-4c1e-9d1e-2a2b2c2d2e2f")
     first = client.post("/api/v1/events/batch", json={"events": [event]}, headers=alice.headers)
     again = client.post("/api/v1/events/batch", json={"events": [event]}, headers=alice.headers)
@@ -261,7 +261,7 @@ def test_a_batch_at_the_cap_is_stored_and_one_over_it_is_refused_with_nothing_st
     client: TestClient, make_customer: Callable[..., Actor], db: Session
 ) -> None:
     """ADR-0055: at most 25 events per batch; a larger batch is a 422 naming the limit."""
-    alice = make_customer()
+    alice = grant_analytics_consent(client, make_customer())
     at_cap = {"events": [_event(session_id="sess-cap") for _ in range(25)]}
     resp = client.post("/api/v1/events/batch", json=at_cap, headers=alice.headers)
     assert resp.status_code == 202, resp.text
@@ -285,7 +285,7 @@ def test_a_batch_at_the_cap_is_stored_and_one_over_it_is_refused_with_nothing_st
 def test_events_are_rate_limited(
     app: FastAPI, client: TestClient, make_customer: Callable[..., Actor], settings: Settings
 ) -> None:
-    alice = make_customer()
+    alice = grant_analytics_consent(client, make_customer())
     tight = settings.model_copy(update={"rate_limit_events_per_minute": 2})
     app.dependency_overrides[get_settings] = lambda: tight
     body = {"events": [_event()]}
@@ -349,7 +349,7 @@ _CLIENT_BATCH = Path(__file__).resolve().parents[4] / "apps/web/src/telemetry/__
 def test_a_batch_built_by_the_web_tracker_is_accepted_and_stored_as_sent(
     client: TestClient, make_customer: Callable[..., Actor], db: Session
 ) -> None:
-    alice = make_customer()
+    alice = grant_analytics_consent(client, make_customer())
     batch = json.loads((_CLIENT_BATCH / "client-batch.json").read_text(encoding="utf-8"))
     now = datetime.now(UTC)
     for event in batch["events"]:  # fresh ids and a time inside the accepted window
@@ -379,7 +379,7 @@ def test_route_templates_are_accepted_as_the_page(
     client: TestClient, make_customer: Callable[..., Actor], page: str
 ) -> None:
     """TASK-112: the web app sends route templates, never the ids in the path."""
-    alice = make_customer()
+    alice = grant_analytics_consent(client, make_customer())
     resp = client.post(
         "/api/v1/events/batch", json={"events": [_event(page_url=page)]}, headers=alice.headers
     )

@@ -1,5 +1,5 @@
 # ADR 0056: Catalogue loan recommendations with balance and spending checks, and the risk band as a suitability rule
-- Status: Proposed (for the owner's review under the standing approval)
+- Status: Accepted (standing approval, 2026-11-05)
 - Date: 2026-11-04
 - Deciders: Architecture Team (UC-06, UC-07; FR-30, FR-31, FR-34, FR-12, FR-53)
 

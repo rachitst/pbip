@@ -13,9 +13,16 @@ page is the per-customer view, ADR-0027).
 * Product affinity: share of customers holding each product today (an ACTIVE savings or current
   account as holder or joint holder, an ACTIVE loan by type), and ``product_clicked`` clickstream
   events in the period whose ``product_id`` is a catalogue product (recommendation interactions).
-* Engagement in the period: clickstream events, sessions (one per customer and session id), active
-  customers, events per session, mean session length (last event minus first event of a session,
-  so a one-event session counts as 0 s), events by type and active customers per day (UTC).
+* Engagement in the period: clickstream events, sessions, active customers, events per session,
+  mean session length (last event minus first event of a session, so a one-event session counts
+  as 0 s), events by type, and active customers, sessions and session length per day (UTC). A
+  session is one session id split wherever 30 minutes pass without an event (ADR-0057, the same
+  rule as ``profiling.derive_sessions``); session heartbeats extend a session but are not counted
+  as events.
+* Product interest: categories in the stored behavioural profiles (ADR-0057).
+
+Only customers whose analytics consent is on contribute clickstream figures (ADR-0057); events
+stored before consent was recorded are left out with everyone else's who has not consented.
 """
 
 from dataclasses import dataclass
@@ -25,7 +32,19 @@ from uuid import UUID
 
 from pbip_ml.recommendations import PRODUCT_CATALOGUE
 from pbip_ml.segmentation.contract import CustomerSegmentName
-from sqlalchemy import Date, String, cast, distinct, exists, func, literal, select, union_all
+from sqlalchemy import (
+    Date,
+    String,
+    case,
+    cast,
+    distinct,
+    exists,
+    func,
+    literal,
+    or_,
+    select,
+    union_all,
+)
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql.selectable import Subquery
 
@@ -36,7 +55,12 @@ from pbip_api.modules.accounts.models import (
     AccountType,
     HolderRole,
 )
-from pbip_api.modules.analytics.models import CustomerSegment
+from pbip_api.modules.analytics.models import (
+    CustomerBehaviourProfile,
+    CustomerProductInterest,
+    CustomerSegment,
+)
+from pbip_api.modules.analytics.profiling import INACTIVITY_TIMEOUT
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.events.models import ClickstreamEvent
 from pbip_api.modules.events.schemas import TelemetryEventType
@@ -60,6 +84,7 @@ PRODUCTS: tuple[str, ...] = (
     "HOME_LOAN",
 )
 _CATALOGUE = {str(p.product_id): p for p in PRODUCT_CATALOGUE}
+_HEARTBEAT = TelemetryEventType.SESSION_HEARTBEAT.value
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,9 +101,11 @@ def share_pct(part: int, whole: int) -> float:
 def _scope(segment: str | None) -> Subquery:
     """(customer_id, segment) of every customer, narrowed to one segment when filtered."""
     label = func.coalesce(CustomerSegment.segment, literal(UNSEGMENTED, String))
-    query = select(Customer.id.label("customer_id"), label.label("segment")).outerjoin(
-        CustomerSegment, CustomerSegment.customer_id == Customer.id
-    )
+    query = select(
+        Customer.id.label("customer_id"),
+        label.label("segment"),
+        Customer.analytics_consent.label("consent"),
+    ).outerjoin(CustomerSegment, CustomerSegment.customer_id == Customer.id)
     if segment is not None:
         query = query.where(label == segment)
     return query.subquery("scope")
@@ -257,11 +284,52 @@ def affinity_panel(session: Session, scope: Subquery, period: Period) -> dict[st
         for segment in SEGMENTS
         if segment in sizes
     ]
+    profiled, interests = _interests(session, scope)
     return {
         "products": list(PRODUCTS),
         "segments": segments,
         "recommendation_clicks": _clicks(session, scope, period),
+        "profiled_customers": profiled,
+        "interests": interests,
     }
+
+
+def _interests(session: Session, scope: Subquery) -> tuple[int, list[dict[str, Any]]]:
+    """Profiled (consenting) customers in scope, and interest per category across them."""
+    profiled = int(
+        session.scalar(
+            select(func.count())
+            .select_from(CustomerBehaviourProfile)
+            .join(scope, scope.c.customer_id == CustomerBehaviourProfile.customer_id)
+            .where(scope.c.consent.is_(True))
+        )
+        or 0
+    )
+    rows = session.execute(
+        select(
+            CustomerProductInterest.category,
+            func.count(distinct(CustomerProductInterest.customer_id)),
+            func.avg(CustomerProductInterest.score),
+            func.sum(CustomerProductInterest.signals),
+        )
+        .join(scope, scope.c.customer_id == CustomerProductInterest.customer_id)
+        .where(scope.c.consent.is_(True))
+        .group_by(CustomerProductInterest.category)
+        .order_by(
+            func.count(distinct(CustomerProductInterest.customer_id)).desc(),
+            CustomerProductInterest.category,
+        )
+    ).all()
+    return profiled, [
+        {
+            "category": str(category),
+            "customers": int(n),
+            "share_pct": share_pct(int(n), profiled),
+            "avg_score": round(float(avg), 3),
+            "signals": int(signals),
+        }
+        for category, n, avg, signals in rows
+    ]
 
 
 def _clicks(session: Session, scope: Subquery, period: Period) -> list[dict[str, Any]]:
@@ -270,6 +338,7 @@ def _clicks(session: Session, scope: Subquery, period: Period) -> list[dict[str,
         select(product_id, func.count(), func.count(distinct(ClickstreamEvent.customer_id)))
         .join(scope, scope.c.customer_id == ClickstreamEvent.customer_id)
         .where(
+            scope.c.consent.is_(True),
             ClickstreamEvent.event_type == TelemetryEventType.PRODUCT_CLICKED.value,
             ClickstreamEvent.event_timestamp >= period.start,
             ClickstreamEvent.event_timestamp < period.end,
@@ -290,56 +359,84 @@ def _clicks(session: Session, scope: Subquery, period: Period) -> list[dict[str,
     ]
 
 
-def engagement_panel(session: Session, scope: Subquery, period: Period) -> dict[str, Any]:
-    """Clickstream engagement of the customers in scope over the period."""
-    in_period = (
-        ClickstreamEvent.event_timestamp >= period.start,
-        ClickstreamEvent.event_timestamp < period.end,
+def _events(scope: Subquery, period: Period) -> Subquery:
+    """Consenting customers' events in the period; ``starts`` is 1 where a session begins: the
+    first event of a session id, or one after more than ``INACTIVITY_TIMEOUT`` without an event."""
+    ts = ClickstreamEvent.event_timestamp
+    previous = func.lag(ts).over(
+        partition_by=(ClickstreamEvent.customer_id, ClickstreamEvent.session_id), order_by=ts
     )
-    events = (
+    starts = case((or_(previous.is_(None), ts - previous > INACTIVITY_TIMEOUT), 1), else_=0)
+    return (
         select(
             scope.c.segment,
             ClickstreamEvent.customer_id,
             ClickstreamEvent.session_id,
             ClickstreamEvent.event_type,
-            ClickstreamEvent.event_timestamp,
+            ts.label("at"),
+            starts.label("starts"),
         )
         .join(scope, scope.c.customer_id == ClickstreamEvent.customer_id)
-        .where(*in_period)
+        .where(scope.c.consent.is_(True), ts >= period.start, ts < period.end)
         .subquery("ev")
     )
-    sessions = (
+
+
+def _sessions(events: Subquery) -> Subquery:
+    """One row per session (``profiling.derive_sessions`` in SQL): start and length in seconds.
+    A run of heartbeats alone is not a session."""
+    keys = (events.c.customer_id, events.c.session_id)
+    numbered = select(
+        *keys,
+        events.c.event_type,
+        events.c.at,
+        func.sum(events.c.starts).over(partition_by=keys, order_by=events.c.at).label("seq"),
+    ).subquery("numbered")
+    return (
         select(
-            func.extract(
-                "epoch", func.max(events.c.event_timestamp) - func.min(events.c.event_timestamp)
-            ).label("seconds")
+            func.min(numbered.c.at).label("start"),
+            func.extract("epoch", func.max(numbered.c.at) - func.min(numbered.c.at)).label(
+                "seconds"
+            ),
         )
-        .group_by(events.c.customer_id, events.c.session_id)
+        .group_by(numbered.c.customer_id, numbered.c.session_id, numbered.c.seq)
+        .having(func.count().filter(numbered.c.event_type != _HEARTBEAT) > 0)
         .subquery("sessions")
     )
+
+
+def engagement_panel(session: Session, scope: Subquery, period: Period) -> dict[str, Any]:
+    """Clickstream engagement of the consenting customers in scope over the period."""
+    events = _events(scope, period)
+    interactions = select(events).where(events.c.event_type != _HEARTBEAT).subquery("interactions")
+    sessions = _sessions(events)
     n_events, active = session.execute(
-        select(func.count(), func.count(distinct(events.c.customer_id)))
+        select(func.count(), func.count(distinct(interactions.c.customer_id)))
     ).one()
     n_sessions, mean_seconds = session.execute(
         select(func.count(), func.avg(sessions.c.seconds))
     ).one()
-    customers = int(session.scalar(select(func.count()).select_from(scope)) or 0)
+    customers, consenting = session.execute(
+        select(func.count(), func.count().filter(scope.c.consent.is_(True)))
+    ).one()
+    customers = int(customers or 0)
     return {
         "events": int(n_events),
         "sessions": int(n_sessions),
         "active_customers": int(active),
         "customers": customers,
+        "consenting_customers": int(consenting or 0),
         "active_share_pct": share_pct(int(active), customers),
         "events_per_session": round(int(n_events) / int(n_sessions), 2) if n_sessions else 0.0,
         "avg_session_seconds": round(float(mean_seconds)) if mean_seconds is not None else 0,
-        "by_event_type": _by_event_type(session, events),
-        "by_segment": _active_by_segment(session, scope, events),
-        "daily": _daily(session, events),
+        "by_event_type": _by_event_type(session, interactions),
+        "by_segment": _active_by_segment(session, scope, interactions),
+        "daily": _daily(session, interactions, sessions),
     }
 
 
 def _by_event_type(session: Session, events: Subquery) -> list[dict[str, Any]]:
-    counts = dict.fromkeys((t.value for t in TelemetryEventType), 0)
+    counts = {t.value: 0 for t in TelemetryEventType if t.value != _HEARTBEAT}
     for event_type, n in session.execute(
         select(events.c.event_type, func.count()).group_by(events.c.event_type)
     ):
@@ -372,18 +469,35 @@ def _active_by_segment(session: Session, scope: Subquery, events: Subquery) -> l
     ]
 
 
-def _daily(session: Session, events: Subquery) -> list[dict[str, Any]]:
-    day = cast(func.timezone("UTC", events.c.event_timestamp), Date)
+def _utc_day(column: Any) -> Any:
+    return cast(func.timezone("UTC", column), Date)
+
+
+def _as_date(value: Any) -> date:
+    return value if isinstance(value, date) else date.fromisoformat(str(value))
+
+
+def _daily(session: Session, events: Subquery, sessions: Subquery) -> list[dict[str, Any]]:
+    day = _utc_day(events.c.at)
     rows = session.execute(
         select(day, func.count(distinct(events.c.customer_id)), func.count())
         .group_by(day)
         .order_by(day)
     ).all()
+    session_day = _utc_day(sessions.c.start)
+    by_day = {
+        _as_date(d): (int(n), round(float(seconds)))
+        for d, n, seconds in session.execute(
+            select(session_day, func.count(), func.avg(sessions.c.seconds)).group_by(session_day)
+        )
+    }
     return [
         {
-            "day": d if isinstance(d, date) else date.fromisoformat(str(d)),
+            "day": _as_date(d),
             "active_customers": int(a),
             "events": int(n),
+            "sessions": by_day.get(_as_date(d), (0, 0))[0],
+            "avg_session_seconds": by_day.get(_as_date(d), (0, 0))[1],
         }
         for d, a, n in rows
     ]

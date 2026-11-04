@@ -326,3 +326,24 @@ Peer review is pending on the PR.
 * `npm audit` reports 13 moderate advisories in build tooling (§6).
 * Windows-only test-environment failures (#371).
 * **[Not measured]** on staging: load, page load, restore drill, and runtime GeoIP / beat verification (#198, #101).
+
+## 12. Code review process
+
+Testing proves behaviour; review checks that the tests prove the right thing and that the change keeps the rules
+(AGENTS.md). Every change reaches `main` through these steps; the full procedure, including the configured rulesets,
+is in [CONTRIBUTING.md, "Review"](../../CONTRIBUTING.md#review).
+
+| Step | Who or what | What it catches |
+|---|---|---|
+| 1. CI on every PR | `CI` workflow: `API - lint, types, boundaries, contract`; `API - unit, integration, security tests`; `ML + data-gen tests (no database allowed)`; `Web - lint, types, tests, build`; `Docker images build`; `E2E - Playwright against the full stack`; `Workflow files - actionlint`; the security job (`Security - SAST, dependencies, secrets`) and `CI Gate`, which fails unless every job succeeded. Also `CodeQL` (Python, JavaScript/TypeScript), `PR title - Conventional Commit` and the GitGuardian secret scan (GitHub app) | Lint, format and strict typing errors; module-boundary violations; contract drift; failing unit, integration, security, ML, web and E2E tests; coverage below 80%; migration up/down/up or drift failures; Bandit, pip-audit, `npm audit` and detect-secrets findings; code-scanning alerts |
+| 2. AI-assisted review | An AI review pass over the diff | Likely correctness bugs, missing tests and AGENTS.md violations, as leads that a person verifies against the code before acting |
+| 3. Line-by-line review | The lead, before every merge | Whether the description's claims match the diff and the CI evidence; architecture, money and security rules; tests that would fail without the change |
+| 4. Squash merge | The maintainer, with an explicit Conventional Commit subject | No WIP or draft work on `main`; one readable commit per change |
+| 5. Batch PRs | The lead, for reviewed PRs in unrelated areas | One CI run on the combined head proves the PRs work together; the squash subject lists every PR |
+| 6. Merge-alone rule | PRs touching `ledger/`, `payments/`, `auth/`, `core/security.py` or `alembic/` | Never batched: reviewed and merged on their own with their own green CI and the concurrency and negative tests the money and auth paths require |
+| 7. Peer review by area | Each teammate, on recent merged PRs in their area | A second reviewer who knows the area besides the lead; the requests and checklists are in [peer-review-requests.md](peer-review-requests.md) |
+
+The rulesets in `.github/rulesets/` enforce what can be enforced: pull requests only, squash only, linear history,
+resolved review threads, required checks `CI Gate` and `PR title - Conventional Commit` on an up-to-date branch, and
+merges restricted to the maintainer. The required approval count in the ruleset is 0, so steps 2, 3 and 7 are team
+practice, recorded on each PR, rather than a GitHub setting.

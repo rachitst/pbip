@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from datetime import date, datetime
+from typing import Final
 from uuid import UUID
 
 from sqlalchemy import Boolean, func, literal_column, select
@@ -37,6 +38,7 @@ from pbip_api.modules.customers.risk import (
     score_answers,
 )
 from pbip_api.modules.customers.schemas import (
+    AnalyticsConsentOut,
     CustomerProfileOut,
     DemographicsOut,
     DeviceOut,
@@ -44,6 +46,46 @@ from pbip_api.modules.customers.schemas import (
     RiskQuestionnaire,
 )
 from pbip_api.modules.notifications import service as notifications
+
+# ADR-0057: recorded with every analytics consent decision so the evidence says which version of the
+# policy the customer agreed to or refused. Bump it when the purpose or the data collected changes.
+ANALYTICS_CONSENT_POLICY_VERSION: Final = "ADR-0057-v1"
+ANALYTICS_CONSENT_PURPOSE: Final = "behavioural_analytics"
+
+
+def analytics_recording_allowed(session: Session, customer_id: UUID) -> bool:
+    """Whether clickstream events of this customer may be stored now (ADR-0057).
+
+    ``FOR SHARE`` waits for a concurrent consent change of the same customer to commit and then
+    reads its result, so a batch can never be stored after the withdrawal that erased the events.
+    """
+    granted = session.execute(
+        select(Customer.analytics_consent)
+        .where(Customer.id == customer_id)
+        .with_for_update(read=True)
+    ).scalar_one_or_none()
+    return bool(granted)
+
+
+def analytics_consent_granted(session: Session, customer_id: UUID) -> bool:
+    """Whether the customer's analytics consent is on (read only; ``session.get`` reuses the row
+    already loaded for an authenticated customer)."""
+    customer = session.get(Customer, customer_id)
+    return customer is not None and customer.analytics_consent
+
+
+def analytics_consenting_customer_ids(session: Session) -> set[UUID]:
+    """Customers whose consent allows behavioural profiling now (the profile job's input)."""
+    return set(session.scalars(select(Customer.id).where(Customer.analytics_consent.is_(True))))
+
+
+def _analytics_consent_out(customer: Customer) -> AnalyticsConsentOut:
+    return AnalyticsConsentOut(
+        granted=customer.analytics_consent,
+        updated_at=customer.analytics_consent_updated_at,
+        policy_version=customer.analytics_consent_policy,
+        current_policy_version=ANALYTICS_CONSENT_POLICY_VERSION,
+    )
 
 
 def mask_phone_number(phone: str) -> str:
@@ -412,3 +454,46 @@ class CustomerService:
             )
         self.session.commit()
         return _demographics_out(row, bank_today(now))
+
+    def get_analytics_consent(self, customer: Customer) -> AnalyticsConsentOut:
+        return _analytics_consent_out(customer)
+
+    def set_analytics_consent(
+        self, customer: Customer, granted: bool, now: datetime, meta: RequestMeta
+    ) -> AnalyticsConsentOut:
+        """Record the customer's analytics decision (ADR-0057), audited in the same transaction.
+
+        Withdrawal erases the customer's clickstream events and stored behavioural profile in the
+        same transaction, so nothing collected under the consent outlives it. Repeating the
+        current decision under the current policy changes nothing and is not re-audited.
+        """
+        row = self._lock(customer)
+        if (
+            row.analytics_consent == granted
+            and row.analytics_consent_policy == ANALYTICS_CONSENT_POLICY_VERSION
+        ):
+            self.session.commit()
+            return _analytics_consent_out(row)
+        details: dict[str, object] = {
+            "policy_version": ANALYTICS_CONSENT_POLICY_VERSION,
+            "purpose": ANALYTICS_CONSENT_PURPOSE,
+        }
+        if not granted:
+            details.update(self._erase_analytics(row.id))
+        row.analytics_consent = granted
+        row.analytics_consent_updated_at = now
+        row.analytics_consent_policy = ANALYTICS_CONSENT_POLICY_VERSION
+        action = "GRANTED" if granted else "WITHDRAWN"
+        self._audit_customer(row, f"ANALYTICS_CONSENT_{action}", meta, details)
+        self.session.commit()
+        return _analytics_consent_out(row)
+
+    def _erase_analytics(self, customer_id: UUID) -> dict[str, object]:
+        # Lazy: the events and analytics services import this module (consent checks).
+        from pbip_api.modules.analytics import service as analytics_service
+        from pbip_api.modules.events import service as events_service
+
+        return {
+            "events_erased": events_service.erase_customer_events(self.session, customer_id),
+            "profile_erased": analytics_service.delete_behaviour_profile(self.session, customer_id),
+        }

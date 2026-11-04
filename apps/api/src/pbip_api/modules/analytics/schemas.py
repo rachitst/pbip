@@ -393,10 +393,38 @@ class ProductClicks(BaseModel):
     customers: int = Field(description="Distinct customers who clicked")
 
 
+InterestCategory = Literal["LOAN", "SAVINGS", "INVESTMENT", "INSURANCE"]
+
+
+class CategoryInterest(BaseModel):
+    """How many profiled customers show interest in a product category (ADR-0057)."""
+
+    category: InterestCategory
+    customers: int = Field(
+        description="Profiled customers with this category among their interests"
+    )
+    share_pct: float = Field(description="customers / profiled customers in scope, percent")
+    avg_score: float = Field(description="Mean interest score of those customers (3 decimals)")
+    signals: int = Field(
+        description="Interest signals behind the scores (clicks, calculator, pages)"
+    )
+
+
 class AffinityPanel(BaseModel):
     products: list[str]
     segments: list[SegmentAffinity]
     recommendation_clicks: list[ProductClicks]
+    profiled_customers: int = Field(
+        default=0,
+        description=(
+            "Customers in scope with a behavioural profile (analytics consent on), from the "
+            "latest daily profile run over its own 90-day window, not the period filter"
+        ),
+    )
+    interests: list[CategoryInterest] = Field(
+        default_factory=list,
+        description="Product interest by category across profiled customers, most customers first",
+    )
 
 
 class EventTypeCount(BaseModel):
@@ -415,13 +443,24 @@ class DailyEngagement(BaseModel):
     day: date_type
     active_customers: int
     events: int
+    sessions: int = Field(default=0, description="Sessions that started on this day (UTC)")
+    avg_session_seconds: int = Field(default=0, description="Mean length of those sessions")
 
 
 class EngagementPanel(BaseModel):
-    events: int
-    sessions: int = Field(description="Distinct (customer, session id) pairs in the period")
+    events: int = Field(description="Interactions in the period (session heartbeats not counted)")
+    sessions: int = Field(
+        description=(
+            "Sessions in the period: events of one session id, split where 30 minutes pass "
+            "without an event (ADR-0057)"
+        )
+    )
     active_customers: int = Field(description="Customers with at least one event in the period")
     customers: int = Field(description="Customers in scope (all, or the filtered segment)")
+    consenting_customers: int = Field(
+        default=0,
+        description="Customers in scope with analytics consent on; only their events count",
+    )
     active_share_pct: float
     events_per_session: float
     avg_session_seconds: int = Field(
@@ -445,3 +484,48 @@ class BehaviourAnalyticsResponse(BaseModel):
     spending: list[SegmentSpend]
     affinity: AffinityPanel
     engagement: EngagementPanel
+
+
+# --- Behavioural profile of one customer (UC-11, ADR-0057) ---
+
+
+class ProductInterestOut(BaseModel):
+    category: InterestCategory
+    score: float = Field(
+        description="Recency-weighted interest (signal weight halves every 14 days), 3 decimals"
+    )
+    signals: int = Field(description="Clicks, calculator uses and product-page visits counted")
+    last_signal_at: datetime
+
+
+class ProfileEngagement(BaseModel):
+    window_days: int = Field(description="Days of clickstream the profile covers")
+    sessions: int
+    avg_session_seconds: int = Field(description="Mean session length (first to last event)")
+    pages_per_session: float
+    interactions: int = Field(description="Events other than session heartbeats")
+    last_active_at: datetime | None
+
+
+class SpendIncomePattern(BaseModel):
+    currency: str
+    monthly_income_minor: int = Field(description="Average recurring monthly income (ADR-0043)")
+    monthly_spend_minor: int = Field(description="Average monthly spend")
+    discretionary_ratio: float = Field(description="Share of spend on lifestyle categories")
+
+
+class BehaviourProfile(BaseModel):
+    computed_at: datetime | None = Field(
+        description="When the daily job last built the engagement and interests; null before"
+    )
+    segment: BehaviourSegment = Field(description="Weekly segment, or UNSEGMENTED")
+    spend_income: SpendIncomePattern | None = Field(description="Null when no account is held")
+    engagement: ProfileEngagement | None = Field(description="Null until the daily job has run")
+    product_interests: list[ProductInterestOut] = Field(description="Highest score first")
+
+
+class BehaviourProfileResponse(BaseModel):
+    """UC-11 behavioural profile. Without analytics consent there is no profile at all."""
+
+    analytics_consent: bool
+    profile: BehaviourProfile | None = Field(description="Null when analytics consent is off")
