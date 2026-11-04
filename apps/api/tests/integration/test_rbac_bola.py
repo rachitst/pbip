@@ -659,7 +659,7 @@ def test_bola_investment_holdings_are_only_visible_to_their_owner(
     order cannot be paid from, read, sold or paid into someone else's account or holding."""
     alice = make_customer(funds=2_00_000_00)
     mallory = make_customer(funds=2_00_000_00)
-    stock = "30000000-0000-4000-a000-000000000004"  # STK-SIMINFRA (seeded)
+    stock = "50000000-0000-4000-a000-000000000004"  # STK-SIMINFRA (seeded, migration 0031)
 
     def buy(actor: Actor, account_id: str) -> Any:
         return client.post(

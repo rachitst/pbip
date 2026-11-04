@@ -59,7 +59,7 @@ def _instrument(
     notes: str,
 ) -> dict[str, object]:
     return {
-        "id": f"30000000-0000-4000-a000-{n:012d}",
+        "id": f"50000000-0000-4000-a000-{n:012d}",  # 30000000-... is the insurance catalogue
         "code": code,
         "kind": kind,
         "name": name,

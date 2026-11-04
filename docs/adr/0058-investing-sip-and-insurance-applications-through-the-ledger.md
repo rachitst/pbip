@@ -18,7 +18,8 @@ fund or bond purchases and insurance applications need their own ADR; this is it
 ## Decision
 
 ### 1. Investable instruments: a new reference table seeded by migration `0031`
-`investment_instruments` holds what can be bought. Eight rows, `catalogue_version = 2026-11-v2`, every one marked
+`investment_instruments` holds what can be bought. Eight rows (fixed ids `50000000-0000-4000-a000-00000000000N`; the
+`30000000-...` range is the insurance catalogue's), `catalogue_version = 2026-11-v2`, every one marked
 "simulated" in its notes:
 
 | Code | Kind | Risk | Linked catalogue row | Price on 2026-01-01 | Trend a year | Daily deviation up to |
