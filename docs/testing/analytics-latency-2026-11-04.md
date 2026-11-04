@@ -68,6 +68,17 @@ answers `INSUFFICIENT_HISTORY` without fitting, and the other analytics endpoint
 not exercise the forecast fit**, which was the analytics path that cost the most. That is a gap in the suite, not
 evidence that the fit was cheap.
 
+**CI Performance workflow (50 VUs, 2 min, two API replicas, nginx TLS, 4 vCPU), dispatched 2026-11-04.** GitHub
+assigned the two runs different CPU classes, so they show the runner more than the change:
+
+| Run | Commit | CPU | Requests | Errors | p95 accounts / analytics / assistant / transfers |
+|---|---|---|---|---|---|
+| 41784971903 | this change | Xeon Platinum 8573C | 13,853 | 0 | 59 / 76 / 152 / 297 ms |
+| 41785405003 | main (0c029f2) | EPYC 9V74 | 14,307 | 0 | 30 / 41 / 69 / 175 ms |
+
+In both runs analytics p95 is the accounts p95 plus 11-17 ms. On the fast EPYC 9V74 class, main already meets
+< 50 ms under concurrency (41 ms); on the slower classes (Xeon 8370C/8573C, EPYC 7763) it does not (73-100 ms).
+
 An earlier 50-VU pair on this laptop ran at a load of 20-37 (analytics p95 2.0-2.2 s for both variants). The
 machine was overloaded, so those numbers are not usable and are not reported as results.
 
@@ -75,7 +86,8 @@ machine was overloaded, so those numbers are not usable and are not reported as 
 
 - **Sequential: met.** Every analytics endpoint now meets < 50 ms p95 at a load below 4, including a repeat forecast.
   A forecast's first request of the day per account and API process still fits the model (0.5-2 s on this laptop).
-- **Under concurrency: not met**, and this change does not move it. The measured floor under load is the shared
+- **Under concurrency: met only on the fast CI CPU class** (EPYC 9V74: 41 ms), not on the slower ones (73-100 ms), and
+  this change does not move it. The measured floor under load is the shared
   per-request base that `GET /api/v1/accounts` also pays. In the same runs accounts p95 was 61-73 ms on CI (50 VUs)
   and 64-87 ms on the laptop (10 VUs). The analytics group cannot be faster than that floor while the API process is
   CPU-bound. Reaching < 50 ms p95 at 50 VUs needs more API CPU (replicas or faster cores; ADR-0045) or a lower base
