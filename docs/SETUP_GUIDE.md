@@ -388,6 +388,23 @@ make up-all
 - Prometheus: **http://localhost:9090**
 - MLflow: **http://localhost:5000**
 
+### Tracing: optional OpenTelemetry Collector (`otel` profile, ADR-0050)
+Tracing is off by default. To see traces from the API, worker and beat:
+
+1. In `.env`: `OTEL_ENABLED=true`, `OTEL_EXPORTER=otlp` (optionally `OTEL_SAMPLE_RATE=0.1`, and
+   `OTEL_COLLECTOR_VERBOSITY=detailed` to print every span with its attributes).
+2. `docker compose --profile otel up -d otel-collector`, then recreate the services that read the
+   variables: `docker compose up -d api worker beat` (or restart `make dev-api`, which sends to
+   `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318`, the collector's loopback port).
+3. `docker compose logs -f otel-collector` shows the spans: one SERVER span per request with its SQL
+   and Redis CLIENT children, and `apply_async/<task>` (service `pbip-api-beat`) followed by
+   `run/<task>` (service `pbip-api-worker`) in the same trace for every scheduled task.
+
+The collector keeps nothing and sends nothing on; it only logs (`infra/otel/collector.yml`). If it is
+stopped or unreachable, the API drops the spans after `OTEL_EXPORT_TIMEOUT_SECONDS` (default 2) on a
+background thread and logs `Failed to export spans batch`; requests are not slowed down. Turn it off
+again with `OTEL_ENABLED=false` and `docker compose --profile otel stop otel-collector`.
+
 ### Performance baseline (k6)
 With the API running (`make dev-api` or `make up`): `make perf` / `.\dev.ps1 perf`. Uses a native
 `k6` if installed, otherwise the `grafana/k6` Docker image. Thresholds, options and the recorded
