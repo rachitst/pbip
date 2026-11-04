@@ -23,7 +23,7 @@ the partition key is listed per table below.
 
 ## Operational schema (`public`): the bank, its ledger, security and analytics
 
-41 tables.
+43 tables.
 
 ```mermaid
 erDiagram
@@ -95,6 +95,29 @@ erDiagram
         jsonb properties "not null"
         timestamptz created_at "not null"
     }
+    customer_behaviour_profiles {
+        uuid id PK
+        uuid customer_id FK,UK "not null"
+        smallint window_days "not null"
+        integer sessions "not null"
+        integer avg_session_seconds "not null"
+        integer page_views "not null"
+        integer interactions "not null"
+        timestamptz last_active_at
+        timestamptz computed_at "not null"
+        timestamptz created_at "not null"
+        timestamptz updated_at "not null"
+    }
+    customer_product_interests {
+        uuid id PK
+        uuid customer_id FK "not null"
+        varchar category "not null"
+        double_precision score "not null"
+        integer signals "not null"
+        timestamptz last_signal_at "not null"
+        timestamptz computed_at "not null"
+        timestamptz created_at "not null"
+    }
     customer_segments {
         uuid id PK
         uuid customer_id FK,UK "not null"
@@ -125,6 +148,9 @@ erDiagram
         timestamptz risk_assessed_at
         timestamptz recommendations_consent_at
         varchar recommendations_consent_policy
+        boolean analytics_consent "not null"
+        timestamptz analytics_consent_updated_at
+        varchar analytics_consent_policy
     }
     devices {
         uuid id PK
@@ -543,6 +569,8 @@ erDiagram
     customers ||--o{ bill_payments : "customer_id"
     transactions ||--o| bill_payments : "transaction_id"
     customers |o--o{ clickstream_events : "customer_id"
+    customers ||--o| customer_behaviour_profiles : "customer_id"
+    customers ||--o{ customer_product_interests : "customer_id"
     customers ||--o| customer_segments : "customer_id"
     users ||--o| customers : "user_id"
     customers ||--o{ devices : "customer_id"
@@ -629,8 +657,10 @@ erDiagram
 | `bill_payments` | id | account_id -> accounts(id), NO ACTION<br>biller_id -> billers(id), NO ACTION<br>customer_id -> customers(id), NO ACTION<br>transaction_id -> transactions(id), NO ACTION | ck_bill_payments_amount_positive<br>ck_bill_payments_status_valid | - | - |
 | `billers` | id | - | ck_billers_category_valid<br>ck_billers_status_valid | - | - |
 | `clickstream_events` | id, event_timestamp | customer_id -> customers(id), SET NULL | - | - | RANGE (event_timestamp) |
+| `customer_behaviour_profiles` | id | customer_id -> customers(id), CASCADE | ck_customer_behaviour_profiles_avg_session_seconds_non_negative<br>ck_customer_behaviour_profiles_interactions_cover_sessions<br>ck_customer_behaviour_profiles_last_active_iff_sessions<br>ck_customer_behaviour_profiles_page_views_range<br>ck_customer_behaviour_profiles_sessions_non_negative<br>ck_customer_behaviour_profiles_window_days_range | - | - |
+| `customer_product_interests` | id | customer_id -> customers(id), CASCADE | ck_customer_product_interests_category_valid<br>ck_customer_product_interests_score_non_negative<br>ck_customer_product_interests_signals_positive | - | - |
 | `customer_segments` | id | customer_id -> customers(id), CASCADE | ck_customer_segments_confidence_score_range<br>ck_customer_segments_discretionary_ratio_range<br>ck_customer_segments_frequency_non_negative<br>ck_customer_segments_monetary_minor_non_negative<br>ck_customer_segments_recency_days_non_negative<br>ck_customer_segments_segment_valid | - | - |
-| `customers` | id | user_id -> users(id), RESTRICT | ck_customers_kyc_status_valid<br>ck_customers_recommendations_consent_complete<br>ck_customers_risk_assessment_complete<br>ck_customers_risk_profile_valid<br>ck_customers_risk_score_range | - | - |
+| `customers` | id | user_id -> users(id), RESTRICT | ck_customers_analytics_consent_decision_complete<br>ck_customers_analytics_consent_granted_has_time<br>ck_customers_kyc_status_valid<br>ck_customers_recommendations_consent_complete<br>ck_customers_risk_assessment_complete<br>ck_customers_risk_profile_valid<br>ck_customers_risk_score_range | - | - |
 | `devices` | id | customer_id -> customers(id), NO ACTION | - | - | - |
 | `fixed_deposits` | id | account_id -> accounts(id), RESTRICT<br>booking_transaction_id -> transactions(id), RESTRICT<br>closure_transaction_id -> transactions(id), RESTRICT<br>customer_id -> customers(id), RESTRICT<br>interest_transaction_id -> transactions(id), RESTRICT<br>product_id -> wealth_products(id), RESTRICT<br>user_id -> users(id), RESTRICT | ck_fixed_deposits_closed_has_payout<br>ck_fixed_deposits_closure_kind_valid<br>ck_fixed_deposits_interest_transaction_only_for_interest<br>ck_fixed_deposits_lock_in_non_negative<br>ck_fixed_deposits_matures_after_start<br>ck_fixed_deposits_maturity_amount_is_principal_plus_interest<br>ck_fixed_deposits_maturity_interest_non_negative<br>ck_fixed_deposits_paid_interest_non_negative<br>ck_fixed_deposits_payout_held_only_while_open<br>ck_fixed_deposits_penalty_non_negative<br>ck_fixed_deposits_principal_positive<br>ck_fixed_deposits_rate_non_negative<br>ck_fixed_deposits_status_valid<br>ck_fixed_deposits_tenure_in_quarters | - | - |
 | `fraud_alerts` | id | assigned_to_user_id -> users(id), NO ACTION<br>fraud_event_id -> fraud_events(id), NO ACTION<br>transaction_id -> transactions(id), NO ACTION | ck_fraud_alerts_severity_valid<br>ck_fraud_alerts_status_valid | - | - |

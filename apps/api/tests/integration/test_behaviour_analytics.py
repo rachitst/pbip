@@ -20,7 +20,7 @@ from pbip_api.modules.loans.catalogue import PRODUCTS, LoanType
 from pbip_ml.fraud.contract import FraudDecision
 from pbip_ml.fraud.testing import FixedDecisionScorer
 from pbip_ml.recommendations.engine import FIXED_DEPOSIT_ID, SAVINGS_ACCOUNT_ID
-from pbip_test_support import Actor, age_payee
+from pbip_test_support import Actor, age_payee, grant_analytics_consent
 from sqlalchemy import Engine, text
 
 pytestmark = pytest.mark.integration
@@ -54,6 +54,7 @@ def transfer(client: TestClient, sender: Actor, payee: dict[str, Any], amount: i
 
 
 def events(client: TestClient, actor: Actor, batch: list[tuple[str, datetime, str, dict[str, str]]]) -> None:  # fmt: skip
+    grant_analytics_consent(client, actor)  # nothing is stored without it (ADR-0057)
     payload = {
         "events": [
             {"event_type": t, "event_timestamp": at.isoformat(), "session_id": s,
@@ -200,7 +201,11 @@ def test_engagement_from_clickstream_with_period_and_segment_filters(
     assert [(s["segment"], s["active_customers"], s["active_share_pct"]) for s in eng["by_segment"]] == [
         ("HIGH_NET_WORTH", 1, 50.0), ("BUDGET_CONSCIOUS", 1, 100.0), ("UNSEGMENTED", 1, 100.0)
     ]  # fmt: skip
-    assert eng["daily"] == [{"day": population["day"], "active_customers": 3, "events": 6}]
+    assert eng["consenting_customers"] == 3  # A, C and D turned analytics on; B never did
+    assert eng["daily"] == [
+        {"day": population["day"], "active_customers": 3, "events": 6, "sessions": 3,
+         "avg_session_seconds": 50}
+    ]  # fmt: skip
 
     wide = get(client, rm, "?days=90")["engagement"]  # A's session 40 days ago comes in
     assert (wide["events"], wide["sessions"], wide["avg_session_seconds"]) == (7, 4, 38)  # 150/4

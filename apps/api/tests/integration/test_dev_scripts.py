@@ -41,7 +41,7 @@ from sqlalchemy import func, select, text, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-from scripts import e2e_fund, seed_dev, totp
+from scripts import e2e_fund, seed_dev, seed_load, totp
 
 pytestmark = pytest.mark.integration
 
@@ -557,3 +557,71 @@ def test_the_seed_writes_money_only_through_the_ledger_service() -> None:
     ):
         assert forbidden not in source, forbidden
     assert "ledger.deposit(" in source and "ledger.seed_payment(" in source
+
+
+def test_seed_turns_analytics_on_for_the_demo_customers_with_a_usage_history_and_profiles(
+    migrated_engine: Engine,
+    db: Session,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR-0057 demo readiness: consent recorded and audited through the customer service, app
+    usage stored through the events service, the profile job run, and nothing added on a re-run."""
+    environ = {"PBIP_DEMO_PASSWORD": ENV_PASSWORD}
+    assert _seed_with(settings, migrated_engine, monkeypatch, environ) == 0
+
+    def counts() -> dict[str, tuple[bool, int, int, int]]:
+        rows = db.execute(
+            text(
+                "SELECT u.email, c.analytics_consent,"
+                " (SELECT count(*) FROM clickstream_events e WHERE e.customer_id = c.id),"
+                " (SELECT coalesce(max(p.sessions), -1) FROM customer_behaviour_profiles p"
+                "  WHERE p.customer_id = c.id),"
+                " (SELECT count(*) FROM audit_logs a WHERE a.action = 'ANALYTICS_CONSENT_GRANTED'"
+                "  AND a.resource_id = c.id::text)"
+                " FROM customers c JOIN users u ON u.id = c.user_id"
+            )
+        ).all()
+        return {email: (consent, events, sessions, audits) for email, consent, events, sessions, audits in rows}  # fmt: skip
+
+    first = counts()
+    assert {e: v[0] for e, v in first.items()} == dict.fromkeys(seed_dev.ANALYTICS_CUSTOMERS, True)
+    assert first["alice@demo.pbip"][2] == len(seed_dev.CLICKSTREAM["alice@demo.pbip"])  # sessions
+    assert first["bob@demo.pbip"][2] == len(seed_dev.CLICKSTREAM["bob@demo.pbip"])
+    assert first["carol@demo.pbip"][1:3] == (0, 0)  # consents, no app history: profiled as idle
+    assert all(v[3] == 1 for v in first.values())  # one audited grant each
+    interests = (
+        db.execute(
+            text(
+                "SELECT i.category FROM customer_product_interests i JOIN customers c"
+                " ON c.id = i.customer_id JOIN users u ON u.id = c.user_id"
+                " WHERE u.email = 'alice@demo.pbip' ORDER BY i.score DESC"
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert interests[0] == "LOAN" and set(interests) == {"LOAN", "INVESTMENT", "SAVINGS"}
+
+    assert _seed_with(settings, migrated_engine, monkeypatch, environ) == 0  # re-run
+    db.expire_all()
+    assert counts() == first
+
+
+def test_seed_load_turns_analytics_on_so_the_load_test_times_the_insert(
+    migrated_engine: Engine, db: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0057: without consent the events API discards every batch, which k6 and
+    measure_events_latency.py would otherwise time as the insert (TASK-055, ADR-0055)."""
+    monkeypatch.setattr(seed_load, "get_settings", lambda: settings)
+    monkeypatch.setattr(seed_load, "get_engine", lambda: migrated_engine)
+    assert seed_load.main(["--users", "2", "--funds-minor", "1000"]) == 0
+    assert seed_load.main(["--users", "2", "--funds-minor", "1000"]) == 0  # re-run: no new grant
+    rows = db.execute(
+        text(
+            "SELECT c.analytics_consent, c.analytics_consent_policy,"
+            " (SELECT count(*) FROM audit_logs a WHERE a.action = 'ANALYTICS_CONSENT_GRANTED'"
+            "  AND a.resource_id = c.id::text) FROM customers c"
+        )
+    ).all()
+    assert [tuple(r) for r in rows] == [(True, "ADR-0057-v1", 1)] * 2

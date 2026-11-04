@@ -1,11 +1,14 @@
 """Database repository for clickstream and telemetry events (TASK-055)."""
 
 from typing import Any
+from uuid import UUID
 
-from sqlalchemy import DateTime, String, bindparam, text
+from sqlalchemy import DateTime, String, bindparam, delete, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Session
+
+from pbip_api.modules.events.models import ClickstreamEvent
 
 # One INSERT ... SELECT FROM unnest(...) per batch: a fixed statement with one array parameter per
 # column, so SQLAlchemy compiles it once and caches it. The previous ``insert().values(records)``
@@ -37,3 +40,11 @@ def insert_events_batch(session: Session, records: list[dict[str, Any]]) -> int:
         return 0
     params = {name: [record[name] for record in records] for name, _ in _COLUMNS}
     return len(session.execute(_INSERT_BATCH, params).all())
+
+
+def delete_customer_events(session: Session, customer_id: UUID) -> int:
+    """Delete all of one customer's events (every partition; the customer index finds them)."""
+    result = session.execute(
+        delete(ClickstreamEvent).where(ClickstreamEvent.customer_id == customer_id)
+    )
+    return int(result.rowcount or 0)  # type: ignore[attr-defined]  # DELETE results have rowcount

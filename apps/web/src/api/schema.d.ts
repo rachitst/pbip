@@ -213,6 +213,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/analytics/behaviour-profile/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My behavioural profile: segment, spend and income, engagement, product interests
+         * @description UC-11 profile of the authenticated customer only; no profile while analytics consent is off
+         *     (ADR-0057).
+         */
+        get: operations["get_my_behaviour_profile_api_v1_analytics_behaviour_profile_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/analytics/forecast": {
         parameters: {
             query?: never;
@@ -730,6 +751,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/customers/me/analytics-consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get my analytics consent (clickstream and behavioural profile, ADR-0057) */
+        get: operations["get_my_analytics_consent_api_v1_customers_me_analytics_consent_get"];
+        /** Turn analytics on or off; turning it off erases my activity data and profile */
+        put: operations["put_my_analytics_consent_api_v1_customers_me_analytics_consent_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/customers/me/date-of-birth": {
         parameters: {
             query?: never;
@@ -1041,6 +1080,26 @@ export interface paths {
         post?: never;
         /** End a customer's relationship-manager assignment (ADMIN with MFA, audited) */
         delete: operations["unassign_relationship_manager_api_v1_insights_customers__customer_id__assignment_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/insights/customers/{customer_id}/behaviour-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One customer's behavioural profile (UC-11); empty while analytics consent is off
+         * @description RM: assigned customers only; admin: any (ADR-0032). Consent decides content (ADR-0057).
+         */
+        get: operations["get_customer_behaviour_profile_api_v1_insights_customers__customer_id__behaviour_profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1720,8 +1779,19 @@ export interface components {
         };
         /** AffinityPanel */
         AffinityPanel: {
+            /**
+             * Interests
+             * @description Product interest by category across profiled customers, most customers first
+             */
+            interests?: components["schemas"]["CategoryInterest"][];
             /** Products */
             products: string[];
+            /**
+             * Profiled Customers
+             * @description Customers in scope with a behavioural profile (analytics consent on), from the latest daily profile run over its own 90-day window, not the period filter
+             * @default 0
+             */
+            profiled_customers: number;
             /** Recommendation Clicks */
             recommendation_clicks: components["schemas"]["ProductClicks"][];
             /** Segments */
@@ -1888,6 +1958,40 @@ export interface components {
             share_bps: number;
             /** Value Minor */
             value_minor: number;
+        };
+        /**
+         * AnalyticsConsentIn
+         * @description Turn analytics (clickstream and behavioural profiling, ADR-0057) on (true) or off (false).
+         */
+        AnalyticsConsentIn: {
+            /** Granted */
+            granted: boolean;
+        };
+        /**
+         * AnalyticsConsentOut
+         * @description The customer's own analytics consent decision. Returned to the owner only.
+         */
+        AnalyticsConsentOut: {
+            /**
+             * Current Policy Version
+             * @description Policy version a new decision agrees to
+             */
+            current_policy_version: string;
+            /**
+             * Granted
+             * @description Whether in-app activity may be recorded and used to build a behavioural profile
+             */
+            granted: boolean;
+            /**
+             * Policy Version
+             * @description Policy version of the latest decision
+             */
+            policy_version: string | null;
+            /**
+             * Updated At
+             * @description When the latest decision (on or off) was made; null if never decided
+             */
+            updated_at: string | null;
         };
         /**
          * AssignedRm
@@ -2116,6 +2220,39 @@ export interface components {
             /** Spending */
             spending: components["schemas"]["SegmentSpend"][];
         };
+        /** BehaviourProfile */
+        BehaviourProfile: {
+            /**
+             * Computed At
+             * @description When the daily job last built the engagement and interests; null before
+             */
+            computed_at: string | null;
+            /** @description Null until the daily job has run */
+            engagement: components["schemas"]["ProfileEngagement"] | null;
+            /**
+             * Product Interests
+             * @description Highest score first
+             */
+            product_interests: components["schemas"]["ProductInterestOut"][];
+            /**
+             * Segment
+             * @description Weekly segment, or UNSEGMENTED
+             * @enum {string}
+             */
+            segment: "HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER" | "UNSEGMENTED";
+            /** @description Null when no account is held */
+            spend_income: components["schemas"]["SpendIncomePattern"] | null;
+        };
+        /**
+         * BehaviourProfileResponse
+         * @description UC-11 behavioural profile. Without analytics consent there is no profile at all.
+         */
+        BehaviourProfileResponse: {
+            /** Analytics Consent */
+            analytics_consent: boolean;
+            /** @description Null when analytics consent is off */
+            profile: components["schemas"]["BehaviourProfile"] | null;
+        };
         /** BillPaymentOut */
         BillPaymentOut: {
             /**
@@ -2223,6 +2360,37 @@ export interface components {
             instrument_id: string;
             /** Units */
             units?: number | null;
+        };
+        /**
+         * CategoryInterest
+         * @description How many profiled customers show interest in a product category (ADR-0057).
+         */
+        CategoryInterest: {
+            /**
+             * Avg Score
+             * @description Mean interest score of those customers (3 decimals)
+             */
+            avg_score: number;
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "LOAN" | "SAVINGS" | "INVESTMENT" | "INSURANCE";
+            /**
+             * Customers
+             * @description Profiled customers with this category among their interests
+             */
+            customers: number;
+            /**
+             * Share Pct
+             * @description customers / profiled customers in scope, percent
+             */
+            share_pct: number;
+            /**
+             * Signals
+             * @description Interest signals behind the scores (clicks, calculator, pages)
+             */
+            signals: number;
         };
         /**
          * CategoryShiftItem
@@ -2599,12 +2767,24 @@ export interface components {
             /** Active Customers */
             active_customers: number;
             /**
+             * Avg Session Seconds
+             * @description Mean length of those sessions
+             * @default 0
+             */
+            avg_session_seconds: number;
+            /**
              * Day
              * Format: date
              */
             day: string;
             /** Events */
             events: number;
+            /**
+             * Sessions
+             * @description Sessions that started on this day (UTC)
+             * @default 0
+             */
+            sessions: number;
         };
         /**
          * DateOfBirthIn
@@ -2952,6 +3132,12 @@ export interface components {
             /** By Segment */
             by_segment: components["schemas"]["SegmentEngagement"][];
             /**
+             * Consenting Customers
+             * @description Customers in scope with analytics consent on; only their events count
+             * @default 0
+             */
+            consenting_customers: number;
+            /**
              * Customers
              * @description Customers in scope (all, or the filtered segment)
              */
@@ -2961,13 +3147,16 @@ export interface components {
              * @description Days (UTC) with at least one event
              */
             daily: components["schemas"]["DailyEngagement"][];
-            /** Events */
+            /**
+             * Events
+             * @description Interactions in the period (session heartbeats not counted)
+             */
             events: number;
             /** Events Per Session */
             events_per_session: number;
             /**
              * Sessions
-             * @description Distinct (customer, session id) pairs in the period
+             * @description Sessions in the period: events of one session id, split where 30 minutes pass without an event (ADR-0057)
              */
             sessions: number;
         };
@@ -3047,6 +3236,12 @@ export interface components {
              * @description Events already stored (same event_id and timestamp), skipped
              */
             duplicates: number;
+            /**
+             * Not Recorded
+             * @description Events discarded unstored because the customer's analytics consent is off
+             * @default 0
+             */
+            not_recorded: number;
             /**
              * Received At
              * Format: date-time
@@ -4594,6 +4789,29 @@ export interface components {
              */
             share_pct: number;
         };
+        /** ProductInterestOut */
+        ProductInterestOut: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "LOAN" | "SAVINGS" | "INVESTMENT" | "INSURANCE";
+            /**
+             * Last Signal At
+             * Format: date-time
+             */
+            last_signal_at: string;
+            /**
+             * Score
+             * @description Recency-weighted interest (signal weight halves every 14 days), 3 decimals
+             */
+            score: number;
+            /**
+             * Signals
+             * @description Clicks, calculator uses and product-page visits counted
+             */
+            signals: number;
+        };
         /**
          * ProductRecommendationItem
          * @description A single personalized product recommendation with explainable reasons.
@@ -4640,6 +4858,30 @@ export interface components {
              * @description Human-readable product title
              */
             title: string;
+        };
+        /** ProfileEngagement */
+        ProfileEngagement: {
+            /**
+             * Avg Session Seconds
+             * @description Mean session length (first to last event)
+             */
+            avg_session_seconds: number;
+            /**
+             * Interactions
+             * @description Events other than session heartbeats
+             */
+            interactions: number;
+            /** Last Active At */
+            last_active_at: string | null;
+            /** Pages Per Session */
+            pages_per_session: number;
+            /** Sessions */
+            sessions: number;
+            /**
+             * Window Days
+             * @description Days of clickstream the profile covers
+             */
+            window_days: number;
         };
         /** ReadyResponse */
         ReadyResponse: {
@@ -5211,6 +5453,26 @@ export interface components {
          * @enum {string}
          */
         SettingUnit: "MINOR_UNITS" | "COUNT";
+        /** SpendIncomePattern */
+        SpendIncomePattern: {
+            /** Currency */
+            currency: string;
+            /**
+             * Discretionary Ratio
+             * @description Share of spend on lifestyle categories
+             */
+            discretionary_ratio: number;
+            /**
+             * Monthly Income Minor
+             * @description Average recurring monthly income (ADR-0043)
+             */
+            monthly_income_minor: number;
+            /**
+             * Monthly Spend Minor
+             * @description Average monthly spend
+             */
+            monthly_spend_minor: number;
+        };
         /**
          * SpendingBreakdownResponse
          * @description Response containing categorized spending breakdown for an account.
@@ -5401,7 +5663,7 @@ export interface components {
          * @description Supported telemetry event types.
          * @enum {string}
          */
-        TelemetryEventType: "page_view" | "loan_calculator_used" | "transfer_initiated" | "account_viewed" | "product_clicked" | "search_performed";
+        TelemetryEventType: "page_view" | "loan_calculator_used" | "transfer_initiated" | "account_viewed" | "product_clicked" | "search_performed" | "session_heartbeat";
         /** TenorOption */
         TenorOption: {
             /** Emi At Max Minor */
@@ -6264,6 +6526,47 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    get_my_behaviour_profile_api_v1_analytics_behaviour_profile_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BehaviourProfileResponse"];
+                };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such account of mine, or no segment yet (problem+json) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -7801,6 +8104,94 @@ export interface operations {
             };
         };
     };
+    get_my_analytics_consent_api_v1_customers_me_analytics_consent_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsConsentOut"];
+                };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    put_my_analytics_consent_api_v1_customers_me_analytics_consent_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalyticsConsentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsConsentOut"];
+                };
+            };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     put_my_date_of_birth_api_v1_customers_me_date_of_birth_put: {
         parameters: {
             query?: never;
@@ -8829,6 +9220,58 @@ export interface operations {
                 content?: never;
             };
             /** @description No such customer */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_customer_behaviour_profile_api_v1_insights_customers__customer_id__behaviour_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BehaviourProfileResponse"];
+                };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such customer, or not assigned to the calling RM */
             404: {
                 headers: {
                     [name: string]: unknown;
