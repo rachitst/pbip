@@ -5,8 +5,12 @@
   sMAPE 10.3% vs 12.5% for AutoETS and 15.1% for seasonal naive, and the best-calibrated 80%
   interval (86.6% coverage vs AutoETS's over-wide 93.3%). It costs about 0.9 s per fit on a laptop
   (AutoETS about 0.2 s).
-* 14-27 days: seasonal naive (weekly): too little history to fit a model honestly.
-* Under 14 days: naive (last balance). Intervals still come from statsforecast's residual model.
+* Under 28 days: naive (last balance), with statsforecast's residual-based intervals. Weekly
+  seasonal naive used to serve 14-27 days, but it repeats last week's balance LEVELS, so a one-off
+  debit was projected to come back every week (#384). The short-history backtest
+  (``backtest.py --short-history``; the same 59 series, 14/21/27-day windows, 235 forecasts each)
+  agrees: naive sMAPE 12.4-12.5% vs 15.1-15.2%, 80% coverage 80.1-85.0% vs 74.1-76.1%. Naive's 95%
+  interval is slightly narrow on 14-21 days (85.7-86.9% coverage; seasonal naive 87.1-89.0%).
 
 statsforecast is imported lazily: it JIT-compiles with numba (about 2 s per process once cached),
 which must not slow API start-up or unrelated tests.
@@ -19,17 +23,14 @@ import numpy as np
 
 from pbip_ml.forecasting.contract import Forecast, ForecastKind, ForecastPoint
 
-MODEL_VERSION = "forecast-arima-1"
+MODEL_VERSION = "forecast-arima-2"
 SEASON = 7
 MIN_MODEL_DAYS = 28
-MIN_SEASONAL_DAYS = 14
 
 
 def method_for(history_days: int) -> str:
     if history_days >= MIN_MODEL_DAYS:
         return "auto_arima"
-    if history_days >= MIN_SEASONAL_DAYS:
-        return "seasonal_naive"
     return "naive"
 
 
