@@ -305,7 +305,7 @@ class BalanceForecastResponse(BaseModel):
     account_id: UUID
     currency: str
     method: str = Field(
-        description="auto_arima, seasonal_naive or naive (by history length); none when status "
+        description="auto_arima or naive (by history length); none when status "
         "is INSUFFICIENT_HISTORY"
     )
     model_version: str

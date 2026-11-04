@@ -20,6 +20,7 @@ from pbip_api.core.geoip import GeoPoint, MmdbLocationResolver
 from pbip_api.modules.auth.dependencies import get_request_meta
 from pbip_api.modules.auth.models import SecurityEvent, SecurityEventType
 from pbip_api.modules.auth.service import RequestMeta
+from pbip_api.modules.fraud import service as fraud_service
 from pbip_api.modules.fraud.baseline import BaselineRulesScorer
 from pbip_api.modules.fraud.dependencies import get_location_resolver
 from pbip_api.modules.fraud.models import FraudEvent
@@ -372,6 +373,36 @@ def test_transfer_flow_fills_the_location_and_persists_the_travel_snapshot(
     assert second.risk_score == 70 and second.decision == "REVIEW"
     speed = second.features["travel_speed_kmh"]
     assert speed is None or (isinstance(speed, float) and not math.isnan(speed) and speed > 900)
+
+
+def test_a_recorded_payment_is_stamped_by_the_clock_the_next_payment_reads(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_verified_payee: Callable[..., dict[str, Any]],
+    migrated_engine: Engine,
+    located_transfers: Callable[[str], None],
+) -> None:
+    """#371: ``fraud_events.created_at`` came from the database's ``now()`` (its transaction start,
+    on the database host's clock) while the next payment's ``occurred_at`` is the app's clock.
+    With the database clock ahead (Docker Desktop's VM drifts by hundreds of ms) a payment made a
+    moment earlier was "in the future" and travel scoring skipped it as the prior location."""
+    alice, bob = make_customer(funds=1_000_000), make_customer()
+    payee = make_verified_payee(alice, bob)
+    age_payee(migrated_engine, payee["id"], 48)
+    located_transfers(MUMBAI_IP)
+    transaction_id = _transfer(client, alice, payee)
+    result = FraudScoreResult(
+        risk_score=0, decision=FraudDecision.ALLOW, reasons=[], features={},
+        model_version="rules-v1", latency_ms=1.0,
+    )  # fmt: skip
+
+    with Session(migrated_engine) as session:
+        session.execute(select(1))  # opens the transaction: the database's now() is fixed here
+        before = utcnow()
+        event = fraud_service.record_event(session, transaction_id, alice.customer_id, result)
+        session.commit()
+        after = utcnow()
+        assert before <= event.created_at <= after
 
 
 def test_bill_payment_fills_the_location_and_is_scored_for_travel(

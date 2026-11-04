@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     rate_limit_register_per_hour: int = 10
     rate_limit_password_change_per_minute: int = 5
     rate_limit_events_per_minute: int = 120
+    rate_limit_phone_change_per_hour: int = Field(default=10, ge=1, le=600)
     rate_limit_assistant_per_minute: int = Field(default=10, ge=1, le=600)
     allow_self_registration: bool = True
     # The readiness probe is public; caching its DB+Redis result bounds the load anyone can push
@@ -71,11 +72,20 @@ class Settings(BaseSettings):
 
     # OpenTelemetry tracing (TASK-085 spike, ADR 0017). Off by default. "none" creates spans
     # (trace ids in logs) without exporting; "console" prints spans to stdout (development);
-    # "memory" keeps every span in memory and is for tests only (refused when deployed).
+    # "memory" keeps every span in memory and is for tests only (refused when deployed);
+    # "otlp" sends batches over OTLP/HTTP to a collector (issue #209, ADR-0050).
     otel_enabled: bool = False
     otel_service_name: str = Field(default="pbip-api", min_length=1, max_length=64)
     otel_sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
-    otel_exporter: Literal["none", "console", "memory"] = "none"
+    otel_exporter: Literal["none", "console", "memory", "otlp"] = "none"
+    # The collector's OTLP/HTTP base URL (the exporter appends /v1/traces). Fixed configuration:
+    # scheme, host and port only, no credentials, path or query.
+    otel_exporter_otlp_endpoint: str = Field(
+        default="http://127.0.0.1:4318", pattern=r"^https?://[A-Za-z0-9.\-]+(:[0-9]{1,5})?/?$"
+    )
+    # One export (retries included) gives up after this; the batch is then dropped, never retried
+    # on the request path. Spans wait in a bounded queue (core/tracing.py) and overflow is dropped.
+    otel_export_timeout_seconds: float = Field(default=2.0, gt=0, le=10)
 
     # AI assistant (Blueprint section 10). The LLM endpoint is fixed configuration: never a
     # model-chosen or user-supplied URL (SSRF). Scheme, host and port only - no path.

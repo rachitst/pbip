@@ -118,3 +118,34 @@ def test_host_script_is_shipped_and_syntactically_valid() -> None:
     assert "--wait" in text and "rollback)" in text
     copy = next(s for s in _steps("deploy") if s.get("name", "").startswith("Copy"))
     assert "infra/deploy/deploy.sh" in copy["run"] and "docker-compose.prod.yml" in copy["run"]
+
+
+def _image_builds(workflow: Path, job: str) -> list[dict[str, Any]]:
+    loaded = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+    steps: list[dict[str, Any]] = loaded["jobs"][job]["steps"]
+    uses = [step.get("uses", "") for step in steps]
+    qemu = next(i for i, u in enumerate(uses) if u.startswith("docker/setup-qemu-action@"))
+    buildx = next(i for i, u in enumerate(uses) if u.startswith("docker/setup-buildx-action@"))
+    assert qemu < buildx, f"{workflow.name}/{job}: QEMU must be registered before buildx starts"
+    # The emulator image is pinned by digest (ADR-0006), not the action's default ":latest".
+    assert "@sha256:" in steps[qemu]["with"]["image"]
+    return [s for s in steps if s.get("uses", "").startswith("docker/build-push-action@")]
+
+
+@pytest.mark.parametrize(
+    ("workflow", "job"),
+    [(WORKFLOW, "package"), (ROOT / ".github" / "workflows" / "ci.yml", "docker")],
+)
+def test_images_are_built_for_amd64_and_arm64(workflow: Path, job: str) -> None:
+    """The staging host is an Arm64 VM (docs/operations/deploy-oracle-cloud-arm.md): a release must
+    publish both platforms, and the PR build proves both still build before anything is tagged."""
+    builds = _image_builds(workflow, job)
+    assert {b["with"]["file"] for b in builds} == {"apps/api/Dockerfile", "apps/web/Dockerfile"}
+    for build in builds:
+        assert build["with"]["platforms"] == "linux/amd64,linux/arm64", build["with"]["file"]
+
+
+def test_web_bundle_is_built_on_the_native_platform() -> None:
+    """The static bundle is platform-independent: building it under emulation only costs time."""
+    dockerfile = (ROOT / "apps" / "web" / "Dockerfile").read_text(encoding="utf-8")
+    assert "FROM --platform=$BUILDPLATFORM node:" in dockerfile

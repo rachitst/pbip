@@ -27,7 +27,7 @@ def test_forecast_is_labelled_with_intervals_from_the_account_history(
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["label"] == "Predicted, not exact" and body["status"] == "OK"
-    assert body["method"] == "seasonal_naive" and body["history_days"] >= 19
+    assert body["method"] == "naive" and body["history_days"] >= 19
     assert len(body["points"]) == 30
     for p in body["points"]:
         assert p["lower_95_minor"] <= p["lower_80_minor"] <= p["predicted_minor"]
@@ -58,11 +58,11 @@ def test_the_first_point_starts_from_the_balance_the_account_has_now(
     clock: FakeClock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Regression (TASK-089 bug bash): with 14-27 days of history the weekly seasonal-naive model
-    repeats last week's LEVELS, so after a step down six days ago the first point was the balance
-    of a week ago (Alice: INR 2,50,000 against a ledger balance of INR 2,00,072). The ledger
-    cannot be backdated (entries are immutable, stamped by the database), so the history is
-    stubbed; the ledger balance is the real one."""
+    """Regression (TASK-089 bug bash, #384): with 14-27 days of history the weekly seasonal-naive
+    model repeated last week's LEVELS, so after a step down six days ago the first point was the
+    balance of a week ago and every later week swung back to it (Alice: INR 2,50,000 in 30 days
+    against a ledger balance of INR 2,00,072). The ledger cannot be backdated (entries are
+    immutable, stamped by the database), so the history is stubbed; the ledger balance is real."""
     alice = make_customer(funds=2_00_072_00)
     clock.advance(25 * 24 * 3600)
     stepped = [2_50_000_00] * 19 + [2_00_072_00] * 6  # 25 days, the step six days ago
@@ -72,7 +72,9 @@ def test_the_first_point_starts_from_the_balance_the_account_has_now(
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["method"] == "seasonal_naive"
+    assert body["method"] == "naive"
+    # No income and no obligations: the one-off debit does not come back on any day (#384).
+    assert {p["predicted_minor"] for p in body["points"]} == {2_00_072_00}
     first = body["points"][0]
     assert first["predicted_minor"] == 2_00_072_00
     assert first["lower_95_minor"] <= first["lower_80_minor"] <= first["predicted_minor"]
