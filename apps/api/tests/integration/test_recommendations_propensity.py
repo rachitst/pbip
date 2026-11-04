@@ -74,11 +74,11 @@ def test_with_the_model_the_response_says_it_was_trained_on_simulated_uptake(
 
     data = client.get("/api/v1/recommendations", headers=alice.headers).json()
 
-    assert data["model_version"] == "sim-propensity-v1"
+    assert data["model_version"] == "sim-propensity-v2"
     assert data["score_from_simulated_data"] is True
     assert "simulated uptake" in data["score_version"]
     assert data["recommendations"][0]["product_id"] == str(FAMILY_COVER_ID)
-    assert {item["model_version"] for item in data["recommendations"]} == {"sim-propensity-v1"}
+    assert {item["model_version"] for item in data["recommendations"]} == {"sim-propensity-v2"}
     # Same offers as the rules allow, only re-ordered, with the same reasons.
     everything = recommendations_service.get_customer_recommendations(
         db, alice.customer_id, top_k=len(PRODUCT_CATALOGUE)

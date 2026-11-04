@@ -70,3 +70,11 @@ def test_a_model_that_did_not_pass_the_gate_means_rules_v1(tmp_path: Path) -> No
 def test_a_promoted_intact_model_is_loaded(tmp_path: Path) -> None:
     model = _write_model(tmp_path, promoted=True)
     assert load_propensity(_settings(str(tmp_path))) == model
+
+
+def test_a_missing_model_file_means_rules_v1(tmp_path: Path) -> None:
+    """ADR-0053: the directory is mounted (docker-compose) before any model exists, or after a
+    run whose model failed the gate; the report and manifest alone must not load anything."""
+    _write_model(tmp_path, promoted=True)
+    (tmp_path / MODEL_FILE).unlink()
+    assert load_propensity(_settings(str(tmp_path))) is None

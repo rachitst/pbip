@@ -50,7 +50,7 @@ datagen: ## Generate + COPY-load the synthetic ML dataset (seed 42, 1,000 custom
 fraud-model: ## Train the fraud models into models/fraud (needed for FRAUD_SCORER=hybrid)
 	@$(PYTHON) scripts/dev.py fraud-model
 
-recommendation-model: ## Train the simulated-uptake recommendation model into models/recommendations (used only if it beats rules-v1)
+recommendation-model: ## Train the recommendation rankers on simulated uptake into models/recommendations (served only if gated)
 	@$(PYTHON) scripts/dev.py recommendation-model
 
 promote-model: ## Measure the newest fraud run on data/fraud; promote to MLflow 'champion' if it passes
