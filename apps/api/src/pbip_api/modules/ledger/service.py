@@ -152,8 +152,11 @@ def create_transaction(
         channel=channel,
         reversal_of_id=reversal_of_id,
     )
-    if at is not None:  # a back-dated deposit (``deposit(posted_at=...)``); else the DB's now()
-        transaction.created_at = at
+    # ``at`` back-dates a deposit (``deposit(posted_at=...)``). Otherwise the app clock stamps the
+    # header, not the database's ``now()``: fraud rules compare ``created_at`` with the scorer's
+    # app-clock ``now``, and the database host's clock can run ahead of it (Docker Desktop's VM
+    # drifts by hundreds of ms), which read 181 dormant days as 180 (#442, as #426 for #371).
+    transaction.created_at = at if at is not None else utcnow()
     session.add(transaction)
     session.flush()
     return transaction

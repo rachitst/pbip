@@ -9,6 +9,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from pbip_api.core.calendar import day_start
+from pbip_api.core.db import utcnow
 from pbip_api.core.errors import ConflictError, UnprocessableError
 from pbip_api.core.pagination import PageDirection, decode_cursor, encode_cursor
 from pbip_api.modules.accounts import policy
@@ -106,6 +107,9 @@ def open_account(
             is None
         ):
             account = Account(
+                # The app clock, which DORMANT_REACTIVATION's ``now`` reads, not the database's
+                # now(): the two can differ by hundreds of ms (#442).
+                created_at=utcnow(),
                 account_number=number,
                 account_type=account_type,
                 currency=currency,
