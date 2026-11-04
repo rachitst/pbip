@@ -321,20 +321,31 @@ def test_recommendation_context_is_six_queries_and_the_request_seven(
     """#343 budget: 14 statements per context before #395, 10 after it, 6 now: accounts, one pass
     over the entries, segment, age band, loans, fixed deposits. Over HTTP the age band reads the
     customer that authentication has just loaded, so the request is 7: token check, customer, then
-    the five. A new query here is a latency budget decision."""
+    the five. A new query here is a latency budget decision.
+
+    ADR-0054: that is the cold build. While the accounts' row versions are unchanged, the entries,
+    loans and deposits come from the cache: 3 for the service (accounts, segment, age band) and 4
+    over HTTP (test_recommendation_context_cache.py has the invalidation cases)."""
     alice = make_customer(funds=200_000_00)
     assert alice.customer_id is not None
     with sessionmaker(bind=migrated_engine)() as session:
         recommendations_service.get_customer_recommendations(session, alice.customer_id)
         session.rollback()
+        recommendations_service.clear_context_cache()
         with count_statements(migrated_engine) as service:
             recommendations_service.get_customer_recommendations(session, alice.customer_id)
-    assert len(service) == 6, service
-    client.get("/api/v1/recommendations", headers=alice.headers)
+        session.rollback()
+        with count_statements(migrated_engine) as service_warm:
+            recommendations_service.get_customer_recommendations(session, alice.customer_id)
+    assert (len(service), len(service_warm)) == (6, 3), (service, service_warm)
+    recommendations_service.clear_context_cache()
     with count_statements(migrated_engine) as http:
         assert client.get("/api/v1/recommendations", headers=alice.headers).status_code == 200
-    assert len(http) == 7, http
-    assert not any("FROM customers" in sql for sql in http[2:]), http  # no second customer read
+    with count_statements(migrated_engine) as http_warm:
+        assert client.get("/api/v1/recommendations", headers=alice.headers).status_code == 200
+    assert (len(http), len(http_warm)) == (7, 4), (http, http_warm)
+    for sent in (http, http_warm):  # no second customer read
+        assert not any("FROM customers" in sql for sql in sent[2:]), sent
 
 
 def test_a_customer_with_a_loan_adds_only_the_instalments_query(
@@ -360,6 +371,7 @@ def test_a_customer_with_a_loan_adds_only_the_instalments_query(
     with sessionmaker(bind=migrated_engine)() as session:
         recommendations_service.get_customer_recommendations(session, alice.customer_id)
         session.rollback()
+        recommendations_service.clear_context_cache()  # the cold build (ADR-0054)
         with count_statements(migrated_engine) as sent:
             recommendations_service.get_customer_recommendations(session, alice.customer_id)
     assert len(sent) == 7, sent
