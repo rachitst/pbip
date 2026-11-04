@@ -98,6 +98,9 @@ def test_same_seed_reproduces_the_inputs_and_every_operation_is_fuzzed_in_both_m
     assert first.is_success and first.authenticated is False
 
 
+# Hang guard, not a speed bar (as #446, #454): two fuzz passes over the whole contract take about
+# 37 s on an idle 2-CPU laptop and passed pytest-timeout's 60 s default only without other load.
+@pytest.mark.timeout(240)
 def test_a_short_first_pass_is_topped_up_to_the_floor_not_repeated_in_full() -> None:
     """#175: a floor just above one pass made the old loop run a second full pass (about twice the
     budget). The top-up pass stops once the floor is reached."""

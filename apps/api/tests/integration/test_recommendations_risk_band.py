@@ -120,14 +120,14 @@ def test_a_new_answer_shows_on_the_next_request_with_the_cached_part_reused(
     client: TestClient, make_customer: Callable[..., Actor], migrated_engine: Engine
 ) -> None:
     """The band is read live from the customer row the request already loaded: the warm request
-    after a new answer sends the same 4 statements as any warm request and reads no entries."""
+    after a new answer sends the same 5 statements as any warm request and reads no entries."""
     saver = _saver(make_customer, migrated_engine)
     _assess(client, saver, BOLD, "HIGH")
     assert _sip(client, saver) is not None  # cold: builds and caches the context
     _assess(client, saver, CAUTIOUS, "LOW")
     with count_statements(migrated_engine) as sent:
         assert _sip(client, saver) is None
-    assert len(sent) == 4, sent
+    assert len(sent) == 5, sent
     assert not any("FROM transaction_entries" in sql for sql in sent)
 
 

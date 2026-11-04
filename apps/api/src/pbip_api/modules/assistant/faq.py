@@ -18,7 +18,7 @@ from pbip_api.core.config import Settings
 from pbip_api.core.money import format_minor
 from pbip_api.modules.assistant.sanitize import untrusted_block
 from pbip_api.modules.loans.catalogue import PRODUCTS as LOAN_PRODUCTS
-from pbip_api.modules.loans.service import LOCKOUT_LOOKBACK, MAX_DTI
+from pbip_api.modules.loans.service import LOCKOUT_LOOKBACK, MAX_DTI, MAX_SPENDING_PERCENT
 from pbip_api.modules.payments.service import (
     SCHEDULE_MAX_LEAD_DAYS,
     STEP_UP_MAX_FAILURES,
@@ -169,9 +169,11 @@ def _loans(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAnswer
     offered = "; ".join(_loan_line(i) for i in range(len(LOAN_PRODUCTS)))
     return FaqAnswer(
         f"PBIP offers a {offered}. Rates are indicative and subject to eligibility. Eligibility "
-        "uses your own account history: your regular monthly income and the loan repayments you "
-        f"already make. All repayments, including the new EMI, must stay within "
-        f"{MAX_DTI:.0%} of your income, and a sign-in lockout in the last "
+        "uses your own account history: your regular monthly income, your spending, your balance "
+        f"and the loan repayments you already make. All repayments, including the new EMI, must "
+        f"stay within {MAX_DTI:.0%} of your income, your spending plus the new EMI within "
+        f"{MAX_SPENDING_PERCENT}% of it, your balance must cover the first EMI, and a sign-in "
+        f"lockout in the last "
         f"{LOCKOUT_LOOKBACK.days} days pauses loan checks. An approved loan is paid into your "
         "account and repaid by a monthly instruction that is set up for you.",
         "/loans",

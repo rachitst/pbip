@@ -5,6 +5,9 @@
 Creates ``load0000@perf.pbip`` ... with one funded account each and one VERIFIED internal payee:
 user i pays user i+1 (wrapping around), so every transfer in the load test moves money between two
 seeded accounts through the real ledger. Funding uses ``ledger.deposit`` like ``seed_dev.py``.
+Every load user's analytics consent is turned on through the audited customer service (ADR-0057):
+without it the events API discards each batch unstored, and the clickstream load test and
+``measure_events_latency.py`` would time the discard path instead of the insert.
 Safe to re-run: existing users are skipped. Refuses to run against staging/production.
 
 The password is a local-only constant shared with ``infra/k6/load.js`` (never a real credential).
@@ -15,14 +18,15 @@ from __future__ import annotations
 import argparse
 import sys
 
-from pbip_api.core.config import get_settings
+from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.crypto import FieldCipher
-from pbip_api.core.db import get_engine
+from pbip_api.core.db import get_engine, utcnow
 from pbip_api.core.security import PasswordService
 from pbip_api.modules.accounts.service import list_accounts
 from pbip_api.modules.auth.models import User
 from pbip_api.modules.auth.service import AuthService, RequestMeta
 from pbip_api.modules.customers.models import Customer
+from pbip_api.modules.customers.service import CustomerService
 from pbip_api.modules.ledger import service as ledger
 from pbip_api.modules.payees.models import Payee
 from pbip_api.modules.payees.service import PayeeService
@@ -48,6 +52,20 @@ def _ensure_user(session: Session, service: AuthService, email: str, name: str, 
     ledger.deposit(session, list_accounts(session, customer.id)[0].id, funds, reference="Load test")
     session.commit()
     return True
+
+
+def _grant_analytics_consent(session: Session, settings: Settings, users: int) -> int:
+    """Consent on for every load user (ADR-0057); an existing grant is left as it is."""
+    service = CustomerService(session, settings)
+    meta = RequestMeta("127.0.0.1", "seed")
+    granted = 0
+    for i in range(users):
+        customer, _ = _customer_and_account(session, EMAIL.format(i))
+        if customer.analytics_consent:
+            continue
+        service.set_analytics_consent(customer, True, utcnow(), meta)
+        granted += 1
+    return granted
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -92,8 +110,10 @@ def main(argv: list[str] | None = None) -> int:
             )
             if payees.verify(payee) == "MATCH":
                 verified += 1
+        consented = _grant_analytics_consent(session, settings, args.users)
     sys.stdout.write(
-        f"load users: {created} created, {verified} payees verified ({args.users} total)\n"
+        f"load users: {created} created, {verified} payees verified, analytics consent turned on "
+        f"for {consented} ({args.users} total)\n"
     )
     return 0
 

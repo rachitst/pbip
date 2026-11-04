@@ -2,8 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { useNavigate } from "react-router";
 import { api } from "../api/client";
-import type { ProductRecommendationItem } from "../api/client";
+import type { ProductRecommendationItem, RecommendedLoanOut } from "../api/client";
 import { errorMessage } from "../lib/errors";
+import { formatMinor } from "../lib/money";
 import {
   SIMULATED_ORDER_NOTE,
   productTypeLabel,
@@ -11,6 +12,8 @@ import {
 } from "../lib/recommendations";
 import { Button } from "../ui/Button";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
+import { StatusBadge } from "../ui/StatusBadge";
+import { formatRate } from "./Loans";
 
 interface ProductRecommendationsProps {
   /** Called when the customer follows a product's action, before navigating. The clickstream
@@ -83,6 +86,7 @@ function RecommendationCard({ item, onProductAction }: RecommendationCardProps) 
         {item.title}
       </h3>
       <p className="recommendation__description">{item.description}</p>
+      {item.loan && <LoanFigures loan={item.loan} />}
       <Button
         variant="link"
         size="sm"
@@ -119,5 +123,34 @@ function RecommendationCard({ item, onProductAction }: RecommendationCardProps) 
         )}
       </div>
     </li>
+  );
+}
+
+/** UC-06 (ADR-0056): a recommended catalogue loan's own assessment, exactly as the API sent it.
+ * The engine recommends only loans the eligibility rules allow, so the badge is always eligible. */
+function LoanFigures({ loan }: { loan: RecommendedLoanOut }) {
+  return (
+    <>
+      <StatusBadge status={{ label: "Eligible", tone: "success" }} />
+      <dl className="details">
+        <div className="details__row">
+          <dt>You could borrow</dt>
+          <dd>
+            {formatMinor(loan.suggested_min_amount_minor, "INR")} to{" "}
+            {formatMinor(loan.suggested_max_amount_minor, "INR")}
+          </dd>
+        </div>
+        <div className="details__row">
+          <dt>EMI at the top of the range</dt>
+          <dd>
+            {formatMinor(loan.emi_at_max_minor, "INR")} over {loan.tenure_months} months
+          </dd>
+        </div>
+        <div className="details__row">
+          <dt>Interest rate</dt>
+          <dd>from {formatRate(loan.annual_rate_bps)}</dd>
+        </div>
+      </dl>
+    </>
   );
 }

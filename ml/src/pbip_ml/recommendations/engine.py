@@ -19,10 +19,14 @@
    a product riskier than the band is not offered (the assistant's TASK-105 rule). Without a band
    the product is offered as before and its last reason says the band was not considered. The
    band is never a ranking weight, so the model in step 6 still only re-orders what is allowed.
+8. ADR-0056 (UC-06): when the API passes the loans module's assessment of each catalogue loan,
+   the eligible ones the customer does not hold replace the abstract credit line, with the score
+   the credit line would have had. Loan eligibility is the loans module's, never re-decided here.
 """
 
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
@@ -31,6 +35,7 @@ from pbip_ml.recommendations.contract import (
     CustomerRecommendationContext,
     HeldProduct,
     HeldProductKind,
+    LoanOffer,
     ProductType,
     Recommendation,
     RiskLevel,
@@ -340,6 +345,101 @@ def risk_band_rule(
     )
 
 
+# UC-06 (ADR-0056): the held kind that means the customer already has a catalogue loan of a type.
+# One loan of each type at a time, as one unsecured borrowing product at a time (ADR-0030).
+_LOAN_HELD: dict[str, HeldProductKind] = {
+    "PERSONAL": HeldProductKind.PERSONAL_LOAN,
+    "AUTO": HeldProductKind.AUTO_LOAN,
+    "HOME": HeldProductKind.HOME_LOAN,
+}
+LOAN_CTA_LABEL = "See this loan"
+
+
+@dataclass(frozen=True, slots=True)
+class _Candidate:
+    """One offer the rules allow, with its ordering score."""
+
+    product_id: UUID
+    product_type: ProductType
+    title: str
+    description: str
+    cta_label: str
+    reasons: list[str]
+    score: float
+    loan: LoanOffer | None = None
+
+
+def _ordering_score(
+    product: BankingProduct, ctx: CustomerRecommendationContext, propensity: OrderingModel | None
+) -> float:
+    if propensity is None:
+        return relevance_score(product, ctx)
+    return round(propensity.score(product.product_id, ctx), 4)
+
+
+def _catalogue_candidates(
+    ctx: CustomerRecommendationContext,
+    catalogue: tuple[BankingProduct, ...],
+    propensity: OrderingModel | None,
+    apply_risk_band: bool,
+) -> list[_Candidate]:
+    """Steps 1, 5 and 7: eligibility, then the risk band and held-product rules."""
+    found: list[_Candidate] = []
+    for product in catalogue:
+        if ctx.loan_offers and product.product_id == CREDIT_LINE_ID:
+            continue  # ADR-0056: superseded by the catalogue loans
+        if not evaluate_eligibility(product, ctx):
+            continue
+        suitable, band_reason = risk_band_rule(product, ctx) if apply_risk_band else (True, None)
+        offer, top_up_reason = held_product_rule(product, ctx)
+        if not (suitable and offer):
+            continue
+        reasons = [top_up_reason] if top_up_reason else []
+        reasons += _REASONS[product.product_id](ctx)[:3]
+        reasons += [band_reason] if band_reason else []
+        found.append(
+            _Candidate(
+                product.product_id,
+                product.product_type,
+                product.title,
+                product.description,
+                product.cta_label,
+                reasons,
+                _ordering_score(product, ctx, propensity),
+            )
+        )
+    return found
+
+
+def _loan_candidates(
+    ctx: CustomerRecommendationContext,
+    catalogue: tuple[BankingProduct, ...],
+    propensity: OrderingModel | None,
+) -> list[_Candidate]:
+    """UC-06: the loans module's eligible catalogue loans the customer does not hold, each with the
+    credit line's score (the borrowing score rules-v1 or the model already has), in catalogue
+    order. The loans module decided eligibility; nothing is re-decided here."""
+    credit_line = next((p for p in catalogue if p.product_id == CREDIT_LINE_ID), None)
+    if credit_line is None or not ctx.loan_offers:
+        return []
+    score = _ordering_score(credit_line, ctx, propensity)
+    held = {item.kind for item in ctx.held_products}
+    return [
+        _Candidate(
+            offer.product_id,
+            ProductType.LOAN,
+            offer.title,
+            offer.description,
+            LOAN_CTA_LABEL,
+            list(offer.reasons[:3]),
+            score,
+            offer,
+        )
+        for offer in ctx.loan_offers
+        if offer.eligible and _LOAN_HELD[offer.loan_type] not in held
+    ]
+
+
 def generate_recommendations(
     ctx: CustomerRecommendationContext,
     catalogue: tuple[BankingProduct, ...] = PRODUCT_CATALOGUE,
@@ -357,42 +457,28 @@ def generate_recommendations(
     decide which. The band reason comes last, after the eligibility figures (ADR-0056).
     ``apply_risk_band=False`` skips the band rule entirely (no exclusion, no band reason): only for
     the assistant, which applies the same rule itself and names what it left out (TASK-105).
+
+    UC-06 (ADR-0056): with ``ctx.loan_offers`` the catalogue loans replace the credit line. Only
+    the first eligible loan competes for the top places; the other loans follow every other
+    product, so a top 3 holds at most one loan unless nothing else is eligible.
     """
-    offers: list[tuple[BankingProduct, list[str], list[str]]] = []
-    for product in catalogue:
-        if not evaluate_eligibility(product, ctx):
-            continue
-        suitable, band_reason = risk_band_rule(product, ctx) if apply_risk_band else (True, None)
-        offer, top_up_reason = held_product_rule(product, ctx)
-        if suitable and offer:
-            offers.append(
-                (
-                    product,
-                    [top_up_reason] if top_up_reason else [],
-                    [band_reason] if band_reason else [],
-                )
-            )
-    scores = {
-        product.product_id: (
-            relevance_score(product, ctx)
-            if propensity is None
-            else round(propensity.score(product.product_id, ctx), 4)
-        )
-        for product, _, _ in offers
-    }
+    candidates = _catalogue_candidates(ctx, catalogue, propensity, apply_risk_band)
+    loans = _loan_candidates(ctx, catalogue, propensity)
     if propensity is not None:
         model_version = propensity.version
-    ranked = sorted(offers, key=lambda pair: scores[pair[0].product_id], reverse=True)
+    ranked = sorted([*candidates, *loans[:1]], key=lambda c: c.score, reverse=True)
+    ranked += loans[1:]
     return [
         Recommendation(
-            product_id=product.product_id,
-            product_type=product.product_type,
-            score=scores[product.product_id],
-            reasons=[*held_reasons, *_REASONS[product.product_id](ctx)[:3], *band_reasons],
+            product_id=c.product_id,
+            product_type=c.product_type,
+            score=c.score,
+            reasons=c.reasons,
             model_version=model_version,
-            title=product.title,
-            description=product.description,
-            cta_label=product.cta_label,
+            title=c.title,
+            description=c.description,
+            cta_label=c.cta_label,
+            loan=c.loan,
         )
-        for product, held_reasons, band_reasons in ranked[:top_k]
+        for c in ranked[:top_k]
     ]

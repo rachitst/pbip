@@ -29,9 +29,11 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from pbip_ml.recommendations import (
+    PRODUCT_CATALOGUE,
     CustomerRecommendationContext,
     HeldProduct,
     HeldProductKind,
+    LoanOffer,
     RiskLevel,
     generate_recommendations,
 )
@@ -43,18 +45,25 @@ from sqlalchemy.orm import Session
 from pbip_api.core.calendar import bank_today
 from pbip_api.core.db import utcnow
 from pbip_api.core.errors import NotFoundError
+from pbip_api.core.money import format_minor
 from pbip_api.core.versioned_cache import VersionedCache
 from pbip_api.modules.accounts.models import Account, AccountStatus, AccountType
 from pbip_api.modules.accounts.policy import list_owned_accounts_with_versions
 from pbip_api.modules.analytics import service as analytics_service
 from pbip_api.modules.customers import service as customers_service
+from pbip_api.modules.customers.demographics import AgeBand
 from pbip_api.modules.loans import service as loans_service
 from pbip_api.modules.recommendations.schemas import (
     ProductRecommendationItem,
     RecommendationsResponse,
+    RecommendedLoanOut,
 )
 from pbip_api.modules.recommendations.scorer import active_propensity
 from pbip_api.modules.wealth import service as wealth_service
+
+# Every product a customer could be offered: the engine catalogue (whose credit line the catalogue
+# loans replace, ADR-0056) plus the catalogue loans. For callers that want the whole list.
+EVERY_PRODUCT = len(PRODUCT_CATALOGUE) + len(loans_service.list_products())
 
 NO_SEGMENT = "UNSEGMENTED"  # targeted by no product: segment matching simply does not apply
 
@@ -88,17 +97,19 @@ def _held_accounts(accounts: list[Account]) -> list[HeldProduct]:
 
 def _held_loans_and_deposits(
     session: Session, customer_id: UUID, now: datetime
-) -> tuple[HeldProduct, ...]:
-    held = [  # list_loans returns ACTIVE loans only
+) -> tuple[tuple[HeldProduct, ...], int]:
+    """The held loans and deposits, and the EMIs of the active PBIP loans (UC-06 rule inputs)."""
+    loans = loans_service.list_loans(session, customer_id)  # ACTIVE loans only
+    held = [
         HeldProduct(kind=_LOAN_KINDS[loan.loan_type], amount_minor=loan.outstanding_principal_minor)
-        for loan in loans_service.list_loans(session, customer_id)
+        for loan in loans
     ]
     held += [  # MATURED is still held until the customer withdraws it
         HeldProduct(kind=HeldProductKind.FIXED_DEPOSIT, amount_minor=deposit.principal_minor)
         for deposit in wealth_service.list_fixed_deposits(session, customer_id, now)
         if deposit.status != "CLOSED"
     ]
-    return tuple(held)
+    return tuple(held), sum(loan.emi_minor for loan in loans)
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +124,7 @@ class _DerivedInputs:
     buffer_months: float
     emi_ratio: float
     loans_and_deposits: tuple[HeldProduct, ...]
+    active_loan_emi_minor: int  # ADR-0056: a new or repaid PBIP loan posts to an owned account
 
 
 # ~1 KB per customer; the TTL only bounds memory, correctness comes from the version (ADR-0054).
@@ -154,6 +166,7 @@ def _derived_inputs(
         msg = "a financial profile needs at least one account"
         raise ValueError(msg)
     health, cash = profile.health, profile.cash_flow
+    held, active_emis = _held_loans_and_deposits(session, customer_id, now)
     return _DerivedInputs(
         health_score=health.overall_score,
         monthly_inflow_minor=cash.monthly_income_minor,
@@ -162,7 +175,8 @@ def _derived_inputs(
         discretionary_ratio=cash.discretionary_ratio,
         buffer_months=health.components.buffer_months.metric_value,
         emi_ratio=health.components.emi_to_income.metric_value,
-        loans_and_deposits=_held_loans_and_deposits(session, customer_id, now),
+        loans_and_deposits=held,
+        active_loan_emi_minor=active_emis,
     )
 
 
@@ -178,7 +192,8 @@ def _context(
     if derived is None:
         derived = _derived_inputs(session, customer_id, accounts, now)
         _DERIVED.put(customer_id, version, derived)
-    age, risk = customers_service.recommendation_bands(session, customer_id, bank_today(now))
+    subject = customers_service.recommendation_subject(session, customer_id, bank_today(now))
+    balance = sum(account.available_balance for account in accounts)
     return CustomerRecommendationContext(
         customer_id=customer_id,
         segment=_segment(session, customer_id),
@@ -189,12 +204,61 @@ def _context(
         discretionary_ratio=derived.discretionary_ratio,
         buffer_months=derived.buffer_months,
         emi_ratio=derived.emi_ratio,
-        total_balance_minor=sum(account.available_balance for account in accounts),
+        total_balance_minor=balance,
         # ADR-0015: the band only, and "unknown" without a date of birth AND consent. Never cached.
-        age_band=age.value,
+        age_band=AgeBand.UNKNOWN.value if subject is None else subject.age_band.value,
         held_products=(*_held_accounts(accounts), *derived.loans_and_deposits),
         # ADR-0056: the RTQ-1 band, read live with the age band (one customer read), never cached.
-        risk_band=None if risk is None else RiskLevel(risk.value),
+        risk_band=_risk_level(subject),
+        loan_offers=(
+            () if subject is None else _loan_offers(session, subject, derived, balance, now)
+        ),
+    )
+
+
+def _risk_level(subject: customers_service.RecommendationSubject | None) -> RiskLevel | None:
+    if subject is None or subject.risk_band is None:
+        return None
+    return RiskLevel(subject.risk_band.value)
+
+
+def _loan_offers(
+    session: Session,
+    subject: customers_service.RecommendationSubject,
+    derived: _DerivedInputs,
+    balance: int,
+    now: datetime,
+) -> tuple[LoanOffer, ...]:
+    """UC-06 (ADR-0056): the loans module's own assessment of every catalogue loan, from the
+    cached figures, the live balance and the live lockout count (a lockout touches no account)."""
+    figures = loans_service.figures_from(
+        income_minor=derived.monthly_inflow_minor,
+        emi_to_income=derived.emi_ratio,
+        monthly_spend_minor=derived.monthly_spend_minor,
+        active_loan_emi_minor=derived.active_loan_emi_minor,
+        available_balance_minor=balance,
+    )
+    lockouts = loans_service.recent_lockout_count(session, subject.user_id, now)
+    return tuple(
+        LoanOffer(
+            product_id=offer.product_id,
+            loan_type=offer.loan_type,
+            title=offer.name,
+            # No rate in the text (the catalogue descriptions never state one); it is in ``loan``.
+            description=(
+                f"You could borrow {format_minor(offer.suggested_min_amount_minor, 'INR')} to "
+                f"{format_minor(offer.suggested_max_amount_minor, 'INR')} over "
+                f"{offer.tenure_months} months, subject to the final check when you apply."
+            ),
+            eligible=offer.status == "ELIGIBLE",
+            min_amount_minor=offer.suggested_min_amount_minor,
+            max_amount_minor=offer.suggested_max_amount_minor,
+            tenure_months=offer.tenure_months,
+            emi_minor=offer.emi_at_max_minor,
+            annual_rate_bps=offer.annual_rate_bps,
+            reasons=tuple(offer.reasons),
+        )
+        for offer in loans_service.offers_from(figures, lockouts).offers
     )
 
 
@@ -240,6 +304,7 @@ def get_customer_recommendations(
                 reasons=rec.reasons,
                 model_version=rec.model_version,
                 cta_label=rec.cta_label,
+                loan=_loan_out(rec.loan),
             )
             for rec in recommendations
         ],
@@ -247,4 +312,18 @@ def get_customer_recommendations(
         score_version=SCORE_LABEL if model is None else SIMULATED_SCORE_LABEL,
         score_from_simulated_data=model is not None,
         evaluated_at=eval_time,
+    )
+
+
+def _loan_out(offer: LoanOffer | None) -> RecommendedLoanOut | None:
+    if offer is None:
+        return None
+    return RecommendedLoanOut(
+        loan_type=offer.loan_type,
+        eligibility_status="ELIGIBLE",  # the engine offers eligible loans only
+        suggested_min_amount_minor=offer.min_amount_minor,
+        suggested_max_amount_minor=offer.max_amount_minor,
+        tenure_months=offer.tenure_months,
+        emi_at_max_minor=offer.emi_minor,
+        annual_rate_bps=offer.annual_rate_bps,
     )

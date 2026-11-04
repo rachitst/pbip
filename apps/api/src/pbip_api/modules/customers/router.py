@@ -22,6 +22,8 @@ from pbip_api.modules.customers import policy
 from pbip_api.modules.customers.dependencies import get_current_customer, get_customer_service
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.customers.schemas import (
+    AnalyticsConsentIn,
+    AnalyticsConsentOut,
     CustomerProfileOut,
     DateOfBirthIn,
     DemographicsOut,
@@ -173,6 +175,33 @@ def put_my_recommendations_consent(
     clock: Callable[[], float] = Depends(get_clock),
 ) -> DemographicsOut:
     return service.set_recommendations_consent(customer, body.granted, _now(clock), meta)
+
+
+@router.get(
+    "/me/analytics-consent",
+    response_model=AnalyticsConsentOut,
+    summary="Get my analytics consent (clickstream and behavioural profile, ADR-0057)",
+)
+def get_my_analytics_consent(
+    customer: Customer = Depends(get_current_customer),
+    service: CustomerService = Depends(get_customer_service),
+) -> AnalyticsConsentOut:
+    return service.get_analytics_consent(customer)
+
+
+@router.put(
+    "/me/analytics-consent",
+    response_model=AnalyticsConsentOut,
+    summary="Turn analytics on or off; turning it off erases my activity data and profile",
+)
+def put_my_analytics_consent(
+    body: AnalyticsConsentIn,
+    customer: Customer = Depends(get_current_customer),
+    service: CustomerService = Depends(get_customer_service),
+    meta: RequestMeta = Depends(get_request_meta),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> AnalyticsConsentOut:
+    return service.set_analytics_consent(customer, body.granted, _now(clock), meta)
 
 
 @router.post(
