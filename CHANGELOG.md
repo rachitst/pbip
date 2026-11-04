@@ -4,9 +4,9 @@ All notable changes to PBIP are listed here. The format follows [Keep a Changelo
 and the project uses [Semantic Versioning](https://semver.org/). Numbers in brackets are the pull requests that made
 each change. The plain-language summary of this release is in [`docs/release/v1.0.0.md`](docs/release/v1.0.0.md).
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-11-04
 
-The first release. The `v1.0.0` tag has **not** been created yet; it is created at the final review.
+The first release, tagged `v1.0.0` on `main` `9ffbfa8`.
 
 ### Features
 
@@ -18,6 +18,7 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
   (#36).
 - Transaction filter and search on the keyset cursor (#303).
 - Total balance overview per currency on the customer dashboard (#330).
+- Customers can set and delete a mobile number, stored encrypted and shown masked (#428, #398).
 - Customer notifications inbox with read status, a real-time notification bell, link targets and security
   notifications (#149, #224, #227).
 - Risk-tolerance profile and consented date of birth stored as an age band (#326).
@@ -83,7 +84,10 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
 - k6 load suite, page-load budgets and hot-path indexes (#288); the API runs as two replicas, which the Performance
   workflow measures (ADR-0045, #419); provisioned Grafana dashboards, alert rules,
   availability probes and error tracking (#289); OpenTelemetry tracing (#205, #210).
-- Release-tag verification and a health-gated staging deploy with rollback (#155).
+- Release-tag verification and a health-gated staging deploy with rollback (#155); linux/amd64 and linux/arm64
+  images (#432) and a staging guide for an Oracle Cloud Always Free Arm VM with a smoke test and availability probe
+  (#433).
+- Optional OTLP export to a local collector, with Celery and Redis tracing (ADR-0050, #430).
 - Encrypted backups and a verified restore drill (#293).
 - Scheduled Schemathesis API fuzzing (#154, #159, #168), Playwright critical-journey suite (#319, #340, #351, #359),
   mutation testing of the ledger and payments at 96.7% (#297).
@@ -109,6 +113,7 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
 - PII field-encryption policy: email, name and date of birth are not field-encrypted, with the baseline verified
   (ADR-0042, #402).
 - CI hardening: SHA-pinned third-party actions, PR-title check, admin-only merges (#117, #123, #125).
+- `minimatch` forced to 11 under ESLint and typescript-eslint in the web build tooling (#434, #232).
 - Dependency advisories fixed: dnspython CVE-2026-114605 (#141), pyasn1 (#207), and Dependabot updates (#31, #34,
   #229, #234, #241, #269).
 
@@ -137,13 +142,23 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
 - Cheaper scoring: the Isolation Forest is scored without scikit-learn's per-call overhead, and LightGBM and TreeSHAP
   share one float64 matrix on one thread, with identical decisions; the share of transfers scored by rules only at a
   50 ms budget fell from 47.5% to 0.05% under load (#417, #422).
-- Rules STRUCTURING (F7) and DORMANT_REACTIVATION (F8), `baseline-rules-0.6` (ADR-0046, #424).
+- Rules STRUCTURING (F7) and DORMANT_REACTIVATION (F8), `baseline-rules-0.6` (ADR-0046, #424), and an hourly
+  deposit-side structuring monitor that opens REVIEW analyst alerts (`STRUCTURED_DEPOSITS`, ADR-0052, #436).
+- Fraud feature contract 2 with `near_threshold_72h` and `days_since_last_activity`, and generator v2.4 with
+  legitimate inbound transfers; the retrained `hybrid-lgbm-iforest-4` failed the champion gate on PR-AUC, so `-3`
+  stays the champion; each model is served with its own columns (ADR-0051, #437).
 - Product propensity model trained on a documented simulation of uptake; it failed its pre-registered gate, so
   `rules-v1` is still served (ADR-0049, #427).
 
 ### Fixes
 - Payments and transfers: a fraud block on a standing order's final run completes it without a pause reason (#313).
 - Loans: no instalment above the EMI when interest rounds a paisa over it (#242).
+- Auth: a password change whose session was revoked in flight is refused with 401 (#423, closes #403).
+- Ledger: the never-used FEE transaction type is removed (migration 0029, #431).
+- Forecast: under 28 days of history the balance forecast uses a naive model, not weekly seasonal naive, so a
+  one-off debit is not projected to recur (#425, #384).
+- Clock: outbox due times and fraud event times use the app clock that reads them, which fixes failures on hosts
+  whose database clock drifts (Docker Desktop on Windows); the assistant benchmark guards `os.getloadavg` (#426, #371).
 - Analytics: re-materialise the posting month of reversed transfers (#171); exclude transfers between a customer's
   own accounts from segmentation features (#192); month-end analytics tests (#207); audit follow-ups with one-pass
   segmentation features, exact shares and burn rate, and documented 404s (#394 via #397); the recommendation context
@@ -184,6 +199,6 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
 - Testing: local verification run (#191), test strategy and verification report (#373).
 - Demo: live demo script with verified amounts and a fallback plan (#377).
 - User manual with customer, staff and compliance guides (#374).
-- 48 ADRs (0001-0049; the number 0026 is not used) and the team execution plan with batch status updates (#118, #119, #121, #122, #126, #139, #142,
+- ADRs 0001-0052 (0026 is not used) and the team execution plan with batch status updates (#118, #119, #121, #122, #126, #139, #142,
   #146, #151, #153, #157, #163-#166, #190, #195, #197, #199, #203, #208, #225, #226, #230, #240, #270, #291, #294,
   #298, #308, #320, #338, #355, #357, #361, #408).
