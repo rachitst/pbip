@@ -14,7 +14,8 @@ synchronously, inside the request:
 1. It authenticates the request: it decodes the JWT, then runs one query for the token version and one for the
    customer row.
 2. It applies the per-IP rate limit with a Redis `INCR`, plus an `EXPIRE` on the first call of a window.
-3. Pydantic validates the body: 1 to 100 events, with enums, regexes, bounded properties and a timestamp window.
+3. Pydantic validates the body: 1 to 25 events (100 before ADR-0055, see the last section), with enums, regexes,
+   bounded properties and a timestamp window.
 4. It inserts the whole batch with **one** statement, `INSERT ... ON CONFLICT (id, event_timestamp) DO NOTHING
    RETURNING id`. PostgreSQL routes each row to its monthly partition.
 5. It commits (a normal, synchronous commit), then returns 202 with `accepted` and `duplicates`.
@@ -166,7 +167,9 @@ that is 132-188 µs before and 78-82 µs after. The new figure is the same as Po
 measured on the laptop, so almost nothing is left on the Python side. For 1 and 10 events, the old and new code are
 within the CPU difference: there was little statement-building cost to remove.
 
-## Where the 15 ms criterion stands
+## Where the 15 ms criterion stood after #449
+
+Superseded by the batch cap in the next section; kept as the record of what the owner decided on.
 
 - **Batches of 1 and 10 events: met** on an idle runner, through nginx TLS. The p95 was 6.4-9.1 ms and the p99
   7.0-11.0 ms, before and after this change. The web tracker sends small batches, so these sizes are its normal
@@ -185,6 +188,80 @@ within the CPU difference: there was little statement-building cost to remove.
   needs. That is an owner decision for an ADR (AGENTS.md rule 5), so it is not made in this PR.
 - **Laptop numbers are not evidence for the 15 ms criterion.** They were taken at a 1-minute load average of 8-13
   on 2 CPUs. They show the relative improvement only.
+
+## The batch cap (ADR-0055)
+
+The owner approved an asynchronous insert only if no event can be lost, and otherwise a cap on the batch size
+that keeps p95 under 15 ms. [ADR-0055](../adr/0055-clickstream-batch-cap-instead-of-asynchronous-insert.md) has
+the analysis. In short: a PostgreSQL outbox row is the same durable insert and saves nothing; a Redis stream with
+`appendfsync always` was fast enough but would make PBIP's Redis, which is not backed up and is documented as safe
+to lose, the only durable copy of acknowledged events, and it cannot report `duplicates`. So the batch is capped at
+**25 events**, the web tracker's own batch size; 26 or more gets a 422.
+
+### Choosing the cap: two diagnostic runs (branch `diag/events-async-floor`, never merged)
+
+That branch added two endpoints with the same auth, rate limit and validation as the real one: one that stores
+nothing (the floor of any design) and one that does a single Redis `XADD` of the batch after `CONFIG SET
+appendfsync always`. `measure_events_latency.py http` ran against all three through nginx TLS, sequential, 300
+requests per size after 20 warm-up requests; the direct insert ran twice per run (before and after the
+diagnostic endpoints). Both runs were on GitHub-hosted 4-vCPU runners; the runner's 1-minute load average was
+0.9-1.5 during the steps.
+
+**p50 / p95 / p99 (ms), run 41840655330, AMD EPYC 7763**
+
+| Batch | Direct insert, pass 1 | Direct insert, pass 2 | Validate only | Redis XADD (fsync always) |
+|---|---|---|---|---|
+| 1 | 8.28 / 9.27 / 15.37 | 8.67 / 11.32 / 16.62 | 6.55 / 7.35 / 8.07 | 7.48 / 8.42 / 10.85 |
+| 10 | 9.34 / 11.46 / 13.64 | 9.46 / 10.87 / 14.49 | 6.59 / 7.85 / 9.50 | 8.25 / 10.81 / 13.75 |
+| 25 | 10.26 / **12.73** / 14.81 | 10.65 / **13.39** / 15.20 | 6.85 / 7.84 / 8.30 | 8.40 / 9.55 / 14.31 |
+| 40 | 11.96 / 13.78 / 15.80 | 12.50 / **15.61** / 18.31 | 7.63 / 9.60 / 10.46 | 8.58 / 10.59 / 12.66 |
+| 50 | 12.80 / **15.06** / 18.53 | 13.31 / **16.05** / 18.45 | 7.69 / 8.55 / 10.46 | 9.06 / 10.19 / 13.02 |
+| 75 | 15.31 / 17.29 / 22.90 | 15.85 / 17.86 / 21.23 | 7.93 / 9.08 / 10.26 | 9.90 / 12.09 / 14.14 |
+| 100 | 17.59 / 21.58 / 23.92 | 18.03 / 22.90 / 29.30 | 8.39 / 9.32 / 11.22 | 10.49 / 13.86 / 16.00 |
+
+**p50 / p95 / p99 (ms), run 41842521457, Intel Xeon Platinum 8573C**
+
+| Batch | Direct insert, pass 1 | Direct insert, pass 2 | Validate only | Redis XADD (fsync always) |
+|---|---|---|---|---|
+| 1 | 6.33 / 7.07 / 7.64 | 7.15 / 8.12 / 8.71 | 5.20 / 5.94 / 7.06 | 6.47 / 7.14 / 7.60 |
+| 10 | 7.08 / 8.09 / 10.13 | 7.72 / 9.31 / 17.37 | 5.21 / 5.92 / 6.25 | 6.75 / 8.01 / 10.24 |
+| 25 | 8.29 / **9.40** / 10.02 | 8.90 / **10.23** / 13.38 | 5.46 / 6.35 / 7.93 | 7.08 / 8.04 / 9.77 |
+| 40 | 9.70 / 12.09 / 13.35 | 10.06 / 12.69 / 14.54 | 5.84 / 6.69 / 7.47 | 7.30 / 8.31 / 9.88 |
+| 50 | 10.77 / 13.21 / 15.06 | 11.33 / 13.35 / 14.59 | 5.85 / 6.79 / 8.12 | 7.79 / 8.62 / 9.13 |
+| 75 | 12.60 / 13.82 / 19.59 | 13.07 / **15.20** / 18.25 | 6.30 / 7.46 / 9.61 | 8.45 / 10.55 / 12.32 |
+| 100 | 15.15 / 17.99 / 20.16 | 15.14 / 18.55 / 21.61 | 6.97 / 8.49 / 9.23 | 8.62 / 9.61 / 10.98 |
+
+Insert plus commit at the database (`measure_events_latency.py db`, p50, 7763 / 8573C): 3.58 / 3.17 ms at 25
+events, 4.86 / 3.92 at 40, 5.49 / 4.53 at 50, 7.41 / 6.00 at 75 and 9.32 / 7.40 at 100.
+
+Readings:
+
+- **25 is the largest measured size under 15 ms in all four direct passes** (p95 9.40-13.39 ms). 40 crossed it
+  once (15.61 ms) and 50 twice (15.06 and 16.05 ms), both on the slower EPYC 7763.
+- The validate-only floor at 100 events is 8.5-9.3 ms: about half the 100-event request is not the write at all.
+- The durable Redis enqueue met 15 ms at every size (13.86 ms at 100 on the 7763). It was rejected for durability
+  scope and the response contract, not for latency (ADR-0055, option 2).
+- Single requests show rare outliers of 55-155 ms (the max column of the raw output) at most sizes and in every
+  variant, the direct insert included; they are below the p99 and come from the runner, not the write path.
+
+### After the cap: run 41844113321 on this branch (AMD EPYC 7763)
+
+| Measurement | p50 | p95 | p99 |
+|---|---|---|---|
+| HTTP, 1 event (300 requests, all 202) | 7.66 | 9.08 | 10.87 |
+| HTTP, 10 events | 8.04 | 9.42 | 10.41 |
+| HTTP, 25 events (the cap) | 9.88 | **11.57** | 13.21 |
+| Database insert plus commit, 25 events | 3.57 | 3.98 | 4.96 |
+| k6 `events.js`, 500 events/s in batches of 25, 2 minutes | 9.31 | **11.44** | 13.72 |
+
+Load average 1.41-1.48 during the HTTP step. The k6 run sent 2,401 batches of 25 (60,025 events, all stored), with
+0 failed requests, 0 dropped batches and every check passing. Its summary reports 471 events/s because the rate
+is averaged over the whole test, including the setup that logs in 100 users; the scheduled rate was 20 batches of
+25 per second. Under that concurrent load a batch of 25 had a p95 of 11.4 ms, against 18.7-20.6 ms for batches of
+100 in the diagnostic runs.
+
+**Criterion 3 now:** p95 under 15 ms at every batch size the API accepts, on an idle CI runner through nginx TLS.
+The insert is still synchronous and committed before the 202; "asynchronous" is not met, by the owner's decision.
 
 ## Commands
 
@@ -206,7 +283,8 @@ python scripts/measure_events_latency.py db --email bob@demo.pbip --batches 300
 # against the running stack (default events limit 120/min per IP: pace the requests)
 python scripts/measure_events_latency.py http --base-url https://localhost:8443 --ca infra/certs/ca.crt \
        --email bob@demo.pbip --requests 100 --pace 0.5
-# CI (idle runner): the Performance workflow runs all three on demand
+# CI (idle runner): the Performance workflow runs all three on demand (HTTP sizes 1, 10 and 25 since ADR-0055;
+# the db mode still accepts up to 100, e.g. --sizes 25 40 50 75 100)
 gh workflow run perf.yml --ref perf/events-batch-latency
 gh run download <run id> -n perf-results   # events-latency.txt, events-insert.txt, k6-events-summary.json
 ```
