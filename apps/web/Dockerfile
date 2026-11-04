@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1
 # Build context is apps/web/ ... but nginx config lives in infra/, so use the REPO ROOT as context:
 #   docker build -f apps/web/Dockerfile .
-FROM node:22-alpine AS build
+# The bundle is plain static files, so it is built once on the build machine's own platform (no
+# emulation) and copied into each target platform's nginx image.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS build
 WORKDIR /app/apps/web
 COPY apps/web/package.json apps/web/package-lock.json ./
 RUN npm ci

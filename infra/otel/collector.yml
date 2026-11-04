@@ -1,0 +1,29 @@
+# OpenTelemetry Collector for the optional `otel` compose profile (issue #209, ADR-0050).
+# Receives OTLP/HTTP from the API, worker and beat and prints the spans to the collector's own log
+# (`docker compose logs otel-collector`). Nothing leaves the machine: there is no remote exporter.
+# For a trace UI, add a local Jaeger/Tempo exporter here; tail sampling of errors also goes here.
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Refuse data before the collector runs out of memory; the API then drops the batch (bounded).
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 200
+    spike_limit_mib: 50
+  batch: {}
+
+exporters:
+  debug:
+    # basic: one line per batch; detailed: every span with its attributes.
+    verbosity: ${env:OTEL_COLLECTOR_VERBOSITY}
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug]

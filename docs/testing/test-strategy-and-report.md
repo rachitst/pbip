@@ -179,6 +179,12 @@ deadlocks in every load run.
 
 ## 5. Performance
 
+Performance NFRs (section 8): `.github/workflows/perf.yml` runs the k6 load suite (`infra/k6/load.js`, p95 < 500 ms
+per route group, login < 3 s, errors < 0.5%) and the browser page-load budgets (`apps/web/e2e/perf.spec.ts`, page
+< 2 s, login < 3 s) on the compose stack with 2 API replicas (ADR-0045). It runs nightly and on demand. Results and
+the runner hardware are uploaded as the `perf-results` artifact, and a crossed budget fails the job. Latest results:
+[performance-2026-11-04.md](performance-2026-11-04.md) (PR #419). §5.2 below describes the red runs before that fix.
+
 ### 5.1 Latest green run **[CI]**, run 41593030523
 
 Runner: GitHub-hosted Linux, 4 vCPU (AMD EPYC 9V45), 15 GiB RAM (`environment.txt` in the `perf-results`
@@ -197,7 +203,7 @@ artifact).
 Page load in the same run (Playwright `perf.spec.ts`, one user): `/` 154 ms, login 133 ms, `/accounts` 119 ms,
 `/insights` 368 ms, `/profile` 99 ms. The budgets are 2 s per page and 3 s for login.
 
-### 5.2 The Performance job is red on the latest `main` commits **[CI]**
+### 5.2 The Performance job was red on `main` before #419 **[CI]**
 
 The Performance workflow is not part of `CI Gate` (it runs nightly and on pushes to `main`). Five of the 8 runs on
 3 Nov failed, all on the transfers p95 threshold, and run 41598754434 also failed on assistant (603.1 ms):
@@ -315,7 +321,8 @@ Peer review is pending on the PR.
 ## 11. Known gaps and follow-ups
 
 * ~~Auth branch coverage is 89.58%, 1 branch short of 90%.~~ Fixed by #410: 95.83% in CI run 41689113122.
-* The Performance job is red on `main`, depending on the runner hardware (§5.2).
+* ~~The Performance job is red on `main`, depending on the runner hardware (§5.2).~~ Fixed by #419 (2 API replicas,
+  ADR-0045): two green runs on the slower CPU class, see [performance-2026-11-04.md](performance-2026-11-04.md).
 * `npm audit` reports 13 moderate advisories in build tooling (§6).
 * Windows-only test-environment failures (#371).
 * **[Not measured]** on staging: load, page load, restore drill, and runtime GeoIP / beat verification (#198, #101).

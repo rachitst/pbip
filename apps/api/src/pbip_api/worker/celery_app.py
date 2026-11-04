@@ -2,6 +2,7 @@
 
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import beat_init, worker_process_init
 
 from pbip_api.core.config import get_settings
 
@@ -81,3 +82,21 @@ celery_app.conf.update(
         },
     },
 )
+
+
+def _trace_worker_process(**_signal_kwargs: object) -> None:
+    """OpenTelemetry for each worker process, after the prefork fork (ADR-0050); no-op when off."""
+    from pbip_api.core.tracing import setup_celery_tracing
+
+    setup_celery_tracing("worker")
+
+
+def _trace_beat(**_signal_kwargs: object) -> None:
+    """Beat publishes the scheduled tasks: tracing it puts traceparent in their headers."""
+    from pbip_api.core.tracing import setup_celery_tracing
+
+    setup_celery_tracing("beat")
+
+
+worker_process_init.connect(_trace_worker_process, weak=False)
+beat_init.connect(_trace_beat, weak=False)
