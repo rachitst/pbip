@@ -4,7 +4,7 @@
 |---|---|
 | Task | TASK-104 (#187) |
 | Source | *PBIP Use Case Document v0.2*: sections 5 (scope), 6 (actors), 7 (UC-01 to UC-13), 8 (non-functional), 9 to 11 (deliverables, practices, success criteria) |
-| Status checked against | `main` at `e9026ad` (5 Nov 2026) plus the v1.1.0 pull requests in review: batch I #471 (#461, #464, documentation), #465, #466, #470 and #472. A row whose evidence is only in one of those PRs names it |
+| Status checked against | `main` at `775ec1a` (5 Nov 2026), plus #474 (in review, batch L #481) and the wealth scope: investing API (#465), insurance and web (PR pending), fund SIPs (PR pending). A row whose evidence is only in one of those PRs names it |
 | Companion documents | [Use cases as built](use-cases.md) (flows, screens and tests per use case), [user stories](user-stories.md) (acceptance criteria and tests per story), [traceability](traceability.md) (requirement to code, tests and gaps), [HLD](../architecture/HLD.md) |
 
 Every requirement below is derived from a sentence in the use-case document. Its **Source** column says which one.
@@ -86,12 +86,12 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | ID | Requirement | Source | Status | Tasks | Gap |
 |---|---|---|---|---|---|
 | FR-29 | The system shall provide a loan catalogue and an EMI calculator with a repayment schedule. | Section 5 "loan catalogue, EMI calculator" | Implemented | TASK-045, TASK-051 | Web `/loans` (`Loans.tsx`) |
-| FR-30 | The system shall assess loan eligibility from the customer's own balances, income, spending and existing repayments, with the reasons explained. | UC-06 "generates eligibility assessment" | Implemented | TASK-046; #470 | Five rules (ADR-0056): regular income, debt-to-income at most 50%, spending plus EMIs at most 90% of income, available balance covers the first EMI, no lockout in 90 days; reasons quote the customer's figures. Without #470: income and EMIs only |
-| FR-31 | The system shall display personalised loan suggestions. | UC-06 "displays recommendations" | Implemented | TASK-054, TASK-062; #470 | `GET /api/v1/loans/offers` and "Loans for you" on `/loans`; eligible catalogue loans with a suggested range on the carousel (#470). Without #470: an abstract credit line |
+| FR-30 | The system shall assess loan eligibility from the customer's own balances, income, spending and existing repayments, with the reasons explained. | UC-06 "generates eligibility assessment" | Implemented | TASK-046; #470 | Five rules (ADR-0056): regular income, debt-to-income at most 50%, spending plus EMIs at most 90% of income, available balance covers the first EMI, no lockout in 90 days; reasons quote the customer's figures |
+| FR-31 | The system shall display personalised loan suggestions. | UC-06 "displays recommendations" | Implemented | TASK-054, TASK-062; #470 | `GET /api/v1/loans/offers` and "Loans for you" on `/loans`; eligible catalogue loans with a suggested range on the carousel |
 | FR-32 | The customer shall apply for a loan and track it. | Section 5 "loan applications, loan tracking" | Implemented | TASK-047, TASK-051 | API and web `/loans` (application, disbursal receipt, amortisation progress; ADR-0024) |
 | FR-33 | The system shall record the customer's risk tolerance. | UC-07 input | Implemented | TASK-097 | Five-question questionnaire, deterministic LOW/MODERATE/HIGH band, answers and assessment time stored and audited (`/api/v1/customers/me/risk-profile`) |
 | FR-34 | The system shall suggest investment products using risk tolerance, savings behaviour, income and available funds. | UC-07 | Implemented | TASK-054, TASK-097, TASK-105; #461 | Income, savings ratio, buffer and balance decide eligibility; the risk band is a suitability rule in the ranking (#461, ADR-0056) and in the assistant |
-| FR-35 | The customer shall browse fixed deposits, mutual funds, stocks and bonds, and insurance products. | Section 5 wealth | Partial | TASK-063, TASK-064, TASK-065, TASK-096; #465 | Catalogues and fixed deposits (with automatic payout) are implemented; with #465 funds, stocks and bonds can be bought and sold at a simulated daily price through the ledger (API only, ADR-0058). Missing: the buy and sell screens and fund SIPs (ADR-0058 PRs (b) and (d)); insurance is listed but cannot be applied for (PR (c)) |
+| FR-35 | The customer shall browse fixed deposits, mutual funds, stocks and bonds, and insurance products. | Section 5 wealth | Partial | TASK-063, TASK-064, TASK-065, TASK-096; #465 | Catalogues, fixed deposits (with automatic payout) and comparison are implemented. In review: investing API (#465: buy and sell funds, stocks and bonds at a simulated daily price through the ledger, ADR-0058); insurance quote and application and the web screens (PR pending); fund SIPs (PR pending) |
 | FR-36 | The customer shall compare wealth and insurance products. | Section 5 "product comparison" | Implemented | TASK-098 (merged #337) | `/wealth/compare`: two to four products side by side, "Not applicable" where a field does not apply |
 
 ### 2.5 AI assistant (UC-08, section 5)
@@ -101,7 +101,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | FR-37 | The customer shall ask natural-language questions about their own balances, transactions, spending and forecast, in a chat drawer with streamed answers. | UC-08, section 5 "natural language queries", "spending analysis explanations" | Implemented | TASK-057 to TASK-061 | |
 | FR-38 | The assistant shall answer "Can I afford a personal loan?" | UC-08 example | Implemented | TASK-057, TASK-046, TASK-110 (#284, merged #331) | Without an amount the assistant suggests the largest eligible amount or asks for one and says why (#331) |
 | FR-39 | The assistant shall answer "Show unusual expenses." | UC-08 example | Implemented | TASK-110 (#284, merged #331) | |
-| FR-40 | The assistant shall suggest investment options, support product discovery and answer FAQs. | UC-08 example, section 5 | Implemented | TASK-105 (#188, merged #335) | `get_faq_answer` (8 curated topics), `list_products` (loan and wealth catalogues) and `get_investment_suggestions` (risk band and engine output); insurance is not listed by the assistant |
+| FR-40 | The assistant shall suggest investment options, support product discovery and answer FAQs. | UC-08 example, section 5 | Implemented | TASK-105 (#335); #474 | `get_faq_answer`, `list_products` and `get_investment_suggestions` (risk band and engine output). With #474 (in review): FAQ-2 covers every customer feature and `list_products` lists the simulated insurance plans |
 | FR-41 | The assistant shall be read-only, act only on the authenticated customer's data, refuse money movement, other-customer, SQL and instruction-override requests, and audit every tool call. | Section 8 security (applied to UC-08) | Implemented | TASK-059, TASK-067, TASK-076 | |
 
 ### 2.6 Fraud (UC-09, UC-10, section 5)
@@ -122,7 +122,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | ID | Requirement | Source | Status | Tasks | Gap |
 |---|---|---|---|---|---|
 | FR-50 | The system shall capture page visits and clickstream events. | UC-11 data captured | Implemented | TASK-055; TASK-112 (#286, merged #333) | The ingestion API stores typed events in monthly partitions, at most 25 per batch with request p95 under 15 ms (ADR-0055, #458); the web app sends page visits as route templates and five allow-listed interactions (`docs/analytics/clickstream-events.md`) |
-| FR-51 | The system shall capture session duration and product interests. | UC-11 data captured | Implemented | #463 | Sessions split after 30 minutes of inactivity, durations and decayed product interests in a daily profile, for consenting customers only (ADR-0057). The customer-facing consent switch in the web app is not built yet (API only) |
+| FR-51 | The system shall capture session duration and product interests. | UC-11 data captured | Implemented | #463, #477 | Sessions split after 30 minutes of inactivity, durations and decayed product interests in a daily profile, for consenting customers only (ADR-0057); the customer sets consent on the Profile page (#477) |
 | FR-52 | The system shall analyse spend and income patterns and assign each customer a behavioural segment. | UC-11, section 5 "customer segmentation" | Implemented | TASK-040, TASK-044, TASK-052 | |
 | FR-53 | The system shall recommend loan, savings, investment and insurance products with reasons, using the behaviour profile and spending patterns. | UC-12 | Implemented | TASK-054, TASK-062; #461, #470 | `rules-v1` with segment, spending, income and held products; a ranker trained on simulated uptake re-orders only what the rules allow (ADR-0053, gate on simulated data only) |
 | FR-54 | Recommendations shall use demographics. | UC-12 input | Implemented | TASK-107 | Limited by ADR-0015 to a consented age band derived from an optional date of birth; `unknown` without both |
@@ -148,7 +148,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | NFR-04 | Audit logs | Implemented | Hash-chained append-only `audit_logs`; `test_audit_and_outbox.py` | | |
 | NFR-05 | Protection against OWASP Top 10 | Implemented | Threat-model mapping, Bandit, CodeQL, dependency and secret scans, nightly Schemathesis, nightly OWASP ZAP baseline against the HTTPS stack | TASK-090 | The ZAP scan is passive and has not run against a deployed environment (#198) |
 | NFR-06 | Page load < 2 s | Implemented | `apps/web/e2e/perf.spec.ts` in `perf.yml`: pages 110-451 ms in CI with 2 API replicas (#419); 313-1,600 ms on the Windows laptop (2026-11-04) | TASK-102 | Not measured on a deployed environment (#198) |
-| NFR-07 | API response < 500 ms | Partial | k6 in CI with 2 API replicas: every route group p95 under 500 ms; fraud scoring p95 24.7 ms; clear assistant questions under 0.1 s | TASK-078, TASK-102 | Not met by the assistant's model path for unclear questions (12-50 s on CPU, ADR-0018); 500-user load and the host run wait for staging (TASK-078, TASK-079) |
+| NFR-07 | API response < 500 ms | Partial | k6 in CI with 2 API replicas: every route group p95 under 500 ms; fraud scoring p95 24.7 ms; assistant questions answered by the rules in under 0.1 s | TASK-078, TASK-102 | The assistant's model path for unclear questions takes 0.65-0.75 s with Groq on the demo stack (`engine=llm`, live runs on 5 Nov 2026) and 12-50 s with Ollama on CPU, the fallback (ADR-0018, ADR-0037); 500-user load and the host run wait for staging (TASK-078, TASK-079) |
 | NFR-08 | Login < 3 s | Implemented | k6 login p95 340-406 ms and browser login 251-277 ms in CI (#419); browser login 2,133 ms on the Windows laptop (2026-11-04) | TASK-102 | Not measured on a deployed environment (#198) |
 | NFR-09 | 99% availability in the test environment | Planned | Probes, availability ratio and alert, staging probe and report scripts exist | TASK-103, #186, #198 | Needs the staging host |
 | NFR-10 | Horizontal scaling, stateless APIs, containerised deployment | Implemented | Stateless API, one process per container; two API replicas exercised in CI by `perf.yml` (#419, ADR-0045) | TASK-079 | Not yet run on the staging host |
@@ -158,8 +158,8 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 
 | ID | Requirement | Status | Tasks | Gap |
 |---|---|---|---|---|
-| ER-01 | Responsive web application | Implemented | | Screens for every use case (`apps/web/src/shell/routes.tsx`). Not yet built: investing screens (ADR-0058 PR (d)) and the analytics consent setting (#463's web half) |
-| ER-02 | Backend API and database implementation | Implemented | | 105 operations on `main` (111 with #465 and #470); migrations 0001-0030 (0031 with #465); [ER diagram](../architecture/er-diagram.md) |
+| ER-01 | Responsive web application | Implemented | | Screens for every use case (`apps/web/src/shell/routes.tsx`). Investing, insurance-application and SIP screens wait for the wealth PRs |
+| ER-02 | Backend API and database implementation | Implemented | | 106 operations on `main` (111 with #465); migrations 0001-0030 (0031 with #465); [ER diagram](../architecture/er-diagram.md) |
 | ER-03 | API documentation | Implemented | | `docs/api/openapi.json`, drift-checked in CI |
 | ER-04 | Automated tests, ≥ 70% coverage | Implemented | TASK-087 (report, #373; auth branch coverage 95.83% after #410) | CI coverage gate is 80% (backend); 96.71% in CI run 41689113122, 96.53% in run 41600683787 ([test strategy and report](../testing/test-strategy-and-report.md)) |
 | ER-05 | CI: build, test, quality scan, security scan | Implemented | | |
@@ -176,10 +176,9 @@ Requirements that are not fully met, and what they wait for.
 
 | Requirement | Missing part | Waits for |
 |---|---|---|
-| FR-35, ER-01 | Investing screens and fund SIPs; insurance application | ADR-0058 PRs (b), (c), (d), not open |
-| FR-51, ER-01 | The customer's analytics consent switch in the web app | #463's web half, not open |
+| FR-35, ER-01 | Investing API, insurance application and the web screens, fund SIPs | #465 (in review), wealth insurance and web PR (pending), SIP PR (pending) |
 | NFR-02 | At-rest encryption evidence on the deployment host | #399, #145 |
-| NFR-06, NFR-07, NFR-08 | Budgets measured on staging; load at 500 users; the model path of the assistant (12-50 s on CPU) | TASK-102 (#185), TASK-078 (#101); ADR-0018 records the assistant limit |
+| NFR-06, NFR-07, NFR-08 | Budgets measured on staging; load at 500 users; the assistant's model path (0.65-0.75 s with Groq, 12-50 s with Ollama on CPU) | TASK-102 (#185), TASK-078 (#101); ADR-0018 and ADR-0037 record the assistant figures |
 | NFR-09 | A month of availability on staging | TASK-103 (#186), #198 |
 | NFR-10 | Scaling run on the host | TASK-079 |
 | NFR-11 | An alert notification channel | owner decision |

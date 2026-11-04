@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Source | *PBIP Use Case Document v0.2*, section 7 (UC-01 to UC-13), with the actors of section 6 |
-| Describes | `main` plus the v1.1.0 pull requests in review: #461 (risk band), #463 (behavioural profile and consent, merged), #464 (fraud dashboard), #465 (investing), #466 (compliance system exceptions), #470 (catalogue loan recommendations), #472 (E2E journeys). A use case that depends on an unmerged PR says which one |
+| Describes | `main` at `775ec1a` (5 Nov 2026), which includes #461 (risk band), #463 and #477 (behavioural profile and analytics consent), #464 (fraud dashboard), #466 (compliance system exceptions), #470 (catalogue loan recommendations) and #472 (E2E journeys); plus, in review, #474 (assistant FAQ for every feature and insurance discovery, batch L #481) and the wealth scope: investing API (#465), insurance and web (PR pending), fund SIPs (PR pending). A use case that depends on an unmerged PR says which one |
 | Companion documents | [Requirements specification](requirements-specification.md) (numbered FR/NFR), [traceability](traceability.md) (requirement to code, tests and gaps), [user stories](user-stories.md), [diagrams](../diagrams/README.md), [user manual](../user-manual/README.md) |
 
 Each use case below gives the objective from the use-case document, the actors, the preconditions, the main and
@@ -220,7 +220,7 @@ mismatch without revealing the name", "removes a payee after confirmation").
 **Actors.** Retail customer; AI assistant (affordability tool). **Preconditions.** Signed in; for an eligible
 outcome, regular income in the ledger (ADR-0043).
 
-**Main flow** (with #470).
+**Main flow** (#470).
 1. `/loans` shows "Loans for you": `GET /loans/offers` assesses every catalogue loan (personal, car, home) with the
    loans module's rules and a suggested amount range at a reference tenure.
 2. The carousel on `/accounts` shows eligible catalogue loans with their figures (`GET /recommendations`, `loan` object).
@@ -240,7 +240,7 @@ decides through the same rules.
 **Tests.** `integration/test_loans.py`: `test_eligible_with_explained_figures`,
 `test_rejected_when_dti_would_exceed_half_of_income`; `integration/test_loan_applications.py`:
 `test_apply_disburses_books_the_schedule_and_links_repayments`,
-`test_not_eligible_is_refused_with_plain_reasons_and_leaves_no_state`; #470: `integration/test_loan_offers.py`:
+`test_not_eligible_is_refused_with_plain_reasons_and_leaves_no_state`; `integration/test_loan_offers.py`:
 `test_offers_assess_every_catalogue_loan_with_a_suggested_range`,
 `test_spending_refuses_a_loan_the_debt_ratio_alone_allows_and_apply_follows`,
 `test_recommendations_offer_catalogue_loans_with_their_assessment_not_the_credit_line`,
@@ -265,30 +265,30 @@ Loans for you **(to capture)**: `docs/user-manual/images/22b-loans-for-you.png`.
 1. Risk tolerance: the five-question questionnaire on Profile & security, `PUT /customers/me/risk-profile`, scored
    to LOW, MODERATE or HIGH, stored and audited.
 2. `GET /recommendations` suggests a fixed deposit or an index-fund SIP from income, savings ratio, buffer and
-   balance; with #461 the risk band is a suitability rule: a band below HIGH excludes the high-risk SIP, and the
+   balance; the risk band is a suitability rule (#461): a band below HIGH excludes the high-risk SIP, and the
    last reason names the band (or says it was not considered).
 3. `/wealth` lists the catalogue (`GET /wealth/products`) and insurance (`GET /wealth/insurance`); `/wealth/compare`
    compares two to four products.
 4. Fixed deposits: `POST /wealth/fixed-deposits/quote`, `/book`, `/{id}/close`; automatic payout at maturity.
-5. With #465: funds, stocks and bonds at a simulated daily price: `GET /wealth/instruments`,
+5. Investing API (#465, in review): funds, stocks and bonds at a simulated daily price: `GET /wealth/instruments`,
    `POST /wealth/investments/buy`, `GET /wealth/holdings`, `POST /wealth/holdings/{id}/sell`; the portfolio
    (`GET /wealth/portfolio`) shows value and gain.
 
 **Alternative flows.** Insufficient funds or units: 422, nothing persists. A deposit inside its lock-in cannot be
 closed. Another customer's deposit or holding: 404.
 
-**Not built yet.** Fund SIPs, the insurance quote and application, and the web screens to buy and sell are ADR-0058
-PRs (b) to (d), not open when this was written: insurance is listed, not sold, and investing is API-only.
+**Wealth scope in review.** Investing API (#465); insurance quote and application and the web screens to buy and sell
+(PR pending); fund SIPs (PR pending). Until they merge, insurance is listed, not sold, and investing has no screen.
 
 **Diagrams.** [Fixed deposit booking and payout](../diagrams/activity.md#7-fixed-deposit-booking-and-maturity-payout),
 [fixed deposit lifecycle](../diagrams/state.md#4-fixed-deposit-lifecycle).
 
 **Tests.** `integration/test_risk_profile.py`: `test_questionnaire_produces_the_band_at_each_boundary`;
-#461: `integration/test_recommendations_risk_band.py`: `test_a_band_below_high_removes_the_high_risk_sip`,
+`integration/test_recommendations_risk_band.py`: `test_a_band_below_high_removes_the_high_risk_sip`,
 `test_a_high_band_keeps_the_sip_and_names_the_band_after_the_eligibility_figures`; `integration/test_wealth.py`:
 `test_catalogue_lists_deposits_funds_and_the_gold_bond_with_yield_and_lock_in`; `integration/test_fd_maturity_payout.py`:
-`test_a_matured_deposit_is_paid_once_to_its_account_audited_and_notified`; #465: `integration/test_investing.py`:
-`test_buying_a_fund_debits_the_amount_and_credits_rounded_down_units`,
+`test_a_matured_deposit_is_paid_once_to_its_account_audited_and_notified`; `integration/test_investing.py`
+(#465): `test_buying_a_fund_debits_the_amount_and_credits_rounded_down_units`,
 `test_insufficient_funds_is_422_and_leaves_no_partial_state`, `test_idempotent_retry_replays_and_debits_once`,
 `test_concurrent_purchases_against_one_balance_never_overdraw`; E2E `journey-compare.spec.ts`.
 
@@ -314,6 +314,9 @@ PRs (b) to (d), not open when this was written: insurance is listed, not sold, a
    redacts account numbers, tokens and e-mails. Examples from the use-case document: spending last month
    (`get_spend`), "Can I afford a personal loan?" (`get_loan_affordability`), "Show unusual expenses"
    (`get_unusual_expenses`), "Suggest investment options" (`get_investment_suggestions`).
+4. With #474 (batch L, in review): FAQ-2 answers how every customer feature works (`get_faq_answer`), and product
+   discovery (`list_products`) also lists the simulated insurance plans with their indicative premiums, saying they
+   are not quotes.
 
 **Alternative flows.** Money movement, other customers' data, SQL and instruction overrides are refused before any
 model; a model that fails, times out or answers badly falls back to the rules; 429 after
@@ -326,7 +329,9 @@ model; a model that fails, times out or answers badly falls back to the rules; 4
 `integration/test_assistant_adversarial.py`: `test_direct_jailbreaks_are_refused_before_the_model`,
 `test_indirect_injection_in_a_transaction_reference_cannot_steer_anything`,
 `test_cross_customer_probes_never_return_the_victims_data`; `integration/test_assistant_groq.py`:
-`test_when_both_models_fail_the_rules_still_answer`; E2E `journey-assistant.spec.ts`.
+`test_when_both_models_fail_the_rules_still_answer`; `unit/test_assistant_faq.py`; with #474:
+`test_every_customer_feature_has_an_faq_entry`, `test_every_page_in_the_customer_menu_is_explained_by_some_answer`,
+`unit/test_assistant_discovery.py` (insurance listing); E2E `journey-assistant.spec.ts`.
 
 **Screenshots.**
 
@@ -416,22 +421,22 @@ spend and income.
 **Actors.** Retail customer (data subject); relationship manager; administrator. **Preconditions.** For clickstream
 and the profile, the customer has turned analytics consent on (ADR-0057).
 
-**Main flow** (#463).
-1. Consent: `GET`/`PUT /customers/me/analytics-consent`, off by default, recorded with the policy version and audited.
-2. The web app sends page views (route templates), allow-listed clicks and heartbeats: `POST /events/batch` (at most
-   25 per batch). Without consent the API acknowledges them and stores nothing.
+**Main flow** (#463 backend, #477 web).
+1. Consent: "App usage analytics" on the Profile page, `GET`/`PUT /customers/me/analytics-consent`, off by default,
+   recorded with the policy version and audited; turning it off asks for confirmation and says the data is erased.
+   The browser's Global Privacy Control signal overrides it in that browser.
+2. Only with consent, the web app sends page views (route templates), allow-listed clicks and a session heartbeat
+   every 60 s while the page is in use: `POST /events/batch` (at most 25 per batch). Without consent the API
+   acknowledges batches and stores nothing.
 3. The daily beat job `pbip.analytics.build_behaviour_profiles` (03:40 UTC) splits sessions after 30 minutes of
    inactivity and computes session counts and durations and decayed product interests for consenting customers only.
 4. Spend and income patterns come from the ledger (`/analytics/*`); segments from the weekly RFM job.
 5. The customer reads `GET /analytics/behaviour-profile/me`; an assigned RM or an admin reads
-   `GET /insights/customers/{id}/behaviour-profile`; staff see aggregates on `/staff/behaviour`
-   (`GET /insights/behaviour`).
+   `GET /insights/customers/{id}/behaviour-profile`, shown in the RM flyout on `/staff/insights`; staff see aggregates
+   on `/staff/behaviour` (`GET /insights/behaviour`) with product-interest and sessions-per-day charts.
 
 **Alternative flows.** Withdrawing consent erases the customer's events and profile in the same transaction. An
 unassigned customer is 404 for an RM; fraud analysts and compliance officers are refused.
-
-**Not built yet.** The customer-facing consent setting in the web app (#463's web half) was not open when this was
-written; consent is set through the API, and the demo seed turns it on for Alice, Bob and Carol.
 
 **Diagrams.** [Data flow level 1](../diagrams/data-flow.md#level-1-processes-and-data-stores) (process 10).
 
@@ -441,13 +446,14 @@ written; consent is set through the API, and the demo seed turns it on for Alice
 `test_staff_access_needs_rm_or_admin_with_mfa_and_an_rm_sees_assigned_customers_only`; `unit/test_behaviour_profiling.py`;
 `integration/test_events.py`: `test_events_batch_happy_path`; `integration/test_behaviour_analytics.py`:
 `test_engagement_from_clickstream_with_period_and_segment_filters`; `integration/test_segmentation.py`;
-Vitest `telemetry/tracker.test.ts`, `pages/staff/BehaviourAnalytics.test.tsx`.
+Vitest `pages/AnalyticsConsentSection.test.tsx`, `telemetry/tracker.test.ts`, `telemetry/PageViews.test.tsx`,
+`pages/staff/BehaviourAnalytics.test.tsx`, `pages/staff/RMInsights.test.tsx`.
 
 **Screenshots.**
 
 ![Behavioural analytics](../user-manual/images/62-behavioural-analytics.png)
 
-Analytics consent and a customer's profile **(to capture)**: `docs/user-manual/images/30b-analytics-consent.png`,
+Analytics consent setting and the RM flyout profile **(to capture)**: `docs/user-manual/images/30b-analytics-consent.png`,
 `docs/user-manual/images/61b-rm-behaviour-profile.png`.
 
 ---
@@ -464,7 +470,7 @@ Analytics consent and a customer's profile **(to capture)**: `docs/user-manual/i
 2. `rules-v1` applies eligibility and ranks savings, loan, investment and insurance products with reasons from the
    customer's own figures; when the gated `sim-propensity-v2` model is installed it only re-orders what the rules allow
    (ADR-0053).
-3. With #470, eligible catalogue loans replace the abstract credit line, each with its assessment.
+3. Eligible catalogue loans (#470) replace the abstract credit line, each with its assessment.
 4. The carousel on `/accounts` shows the cards with reasons and actions; RMs see every eligible product in the
    customer detail on `/staff/insights`.
 
@@ -473,7 +479,7 @@ Analytics consent and a customer's profile **(to capture)**: `docs/user-manual/i
 
 **Tests.** `integration/test_recommendations.py`: `test_recommendations_use_the_customers_real_figures_and_ignore_date_of_birth_without_consent`,
 `test_engine_gets_the_age_band_only_with_consent_and_never_the_date`; `integration/test_recommendations_held_products.py`;
-`integration/test_recommendations_risk_band.py`; #470 `integration/test_loan_offers.py`; `integration/test_rm_insights_ui_api.py`:
+`integration/test_recommendations_risk_band.py`; `integration/test_loan_offers.py`; `integration/test_rm_insights_ui_api.py`:
 `test_propensity_order_ranks_by_product_score_within_the_rm_scope`; `ml/tests/test_recommendations.py`; Vitest
 `pages/ProductRecommendations.test.tsx`.
 
@@ -495,10 +501,10 @@ Carousel with a catalogue loan **(to capture)**: `docs/user-manual/images/27b-re
 **Main flow.**
 1. `/staff/monitoring` (`GET /fraud/monitoring`): high-risk customers, open alerts by severity with the oldest wait,
    login anomalies (failure bursts, lockouts), recent fraud events, open investigations with links to each alert.
-2. `/staff/fraud-dashboard` (#464, `GET /fraud/stats`): decisions per day, hold and block rate, risk-score bands, top
+2. `/staff/fraud-dashboard` (`GET /fraud/stats`, #464): decisions per day, hold and block rate, risk-score bands, top
    reasons, alert outcomes, masked risky destinations.
 3. Compliance (`/staff/compliance`, `GET /compliance/exceptions`): blocked payments, lockouts, audit-chain failures
-   and, with #466, undelivered notifications and failed standing orders; acknowledge and resolve with an audited
+   undelivered notifications and failed standing orders (#466); acknowledge and resolve with an audited
    reason; regulatory indicators against the 24 h service levels. Audit history on `/staff/audit-log` with hash-chain
    verification.
 
@@ -508,7 +514,7 @@ Carousel with a catalogue loan **(to capture)**: `docs/user-manual/images/27b-re
 `test_oldest_open_age_follows_the_injected_clock`; `integration/test_fraud_stats.py`:
 `test_stats_report_the_risk_score_distribution_and_alert_outcomes`, `test_stats_are_staff_only_and_need_mfa`;
 `integration/test_compliance_exceptions.py`: `test_acknowledge_then_resolve_is_audited_with_actor_and_reason`;
-#466: `test_dead_lettered_notifications_are_exceptions_without_their_payload`,
+`test_dead_lettered_notifications_are_exceptions_without_their_payload`,
 `test_missed_and_auto_paused_scheduled_transfers_are_exceptions`; Vitest `pages/staff/SecurityMonitoring.test.tsx`,
 `pages/staff/FraudDashboard.test.tsx`, `pages/staff/ComplianceDashboard.test.tsx`; E2E `shell.spec.ts`.
 
@@ -532,9 +538,13 @@ demo users, and save them under these names so the slots above need no edit beyo
 |---|---|---|
 | `docs/user-manual/images/22b-loans-for-you.png` | `/loans`, "Loans for you" with eligible and not-eligible offers | UC-06 |
 | `docs/user-manual/images/27b-recommendations-loan-offer.png` | `/accounts` carousel showing a catalogue loan card with its figures | UC-06, UC-12 |
-| `docs/user-manual/images/23b-wealth-invest.png` | `/wealth` buying a fund, stock or bond (needs the ADR-0058 web PR) | UC-07 |
-| `docs/user-manual/images/23c-wealth-holdings.png` | `/wealth` holdings with gain and the sell action (needs the ADR-0058 web PR) | UC-07 |
-| `docs/user-manual/images/30b-analytics-consent.png` | Profile & security, analytics consent (needs #463's web half) | UC-11 |
+| `docs/user-manual/images/23b-wealth-invest.png` | `/wealth` buying a fund, stock or bond (needs the wealth web PR) | UC-07 |
+| `docs/user-manual/images/23c-wealth-holdings.png` | `/wealth` holdings with gain and the sell action (needs the wealth web PR) | UC-07 |
+| `docs/user-manual/images/23d-insurance-apply.png` | Insurance quote and application (needs the wealth insurance PR) | UC-07 |
+| `docs/user-manual/images/23e-fund-sip.png` | Setting up a fund SIP (needs the SIP PR) | UC-07 |
+| `docs/user-manual/images/28b-assistant-insurance.png` | The assistant listing insurance plans (#474) | UC-08 |
+| `docs/user-manual/images/62c-behaviour-interest-chart.png` | `/staff/behaviour` product-interest and sessions charts | UC-11 |
+| `docs/user-manual/images/30b-analytics-consent.png` | Profile page, "App usage analytics" setting | UC-11 |
 | `docs/user-manual/images/61b-rm-behaviour-profile.png` | `/staff/insights` customer detail with the behaviour profile | UC-11 |
 | `docs/user-manual/images/42b-fraud-dashboard.png` | `/staff/fraud-dashboard` | UC-13 |
 | `docs/user-manual/images/50b-compliance-system-exceptions.png` | `/staff/compliance` filtered to undelivered notifications and failed standing orders | UC-13 |
