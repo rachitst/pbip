@@ -172,7 +172,15 @@ class HybridFraudScorer:
                 FraudEvent.features["device_id"].astext,  # the device of each earlier transfer
                 _IS_ACTIVITY,
             )
-            .outerjoin(FraudEvent, FraudEvent.transaction_id == Transaction.id)
+            # The customer's own event only: a structuring-monitor alert (ADR-0052) may add a
+            # second event on a transfer this customer sent, and must not duplicate the debit.
+            .outerjoin(
+                FraudEvent,
+                and_(
+                    FraudEvent.transaction_id == Transaction.id,
+                    FraudEvent.customer_id == context.customer_id,
+                ),
+            )
             .where(Transaction.debit_account_id.in_(accounts), *window)
         ).all()
         # Money received, from anyone but the customer's own accounts (a move between them is

@@ -148,8 +148,8 @@ def test_structuring_inputs_match_the_offline_pipeline(
     client: TestClient, stub: StubEngine, make_customer: Callable[..., Actor],
     known_payee: Callable[..., dict[str, Any]], migrated_engine: Engine, db: Session,
 ) -> None:  # fmt: skip
-    """#274: deposits just under the threshold in 72 h reach the model; older ones, a fee of the
-    same size and an amount at the threshold do not."""
+    """#274: deposits just under the threshold in 72 h reach the model; older ones, a loan instalment of
+    the same size and an amount at the threshold do not."""
     alice, bob = make_customer(funds=1_000_000), make_customer(funds=20_000_000)
     now = utcnow()
     for hours in (10, 30, 60, 80):  # 80 h is outside the window
@@ -157,7 +157,11 @@ def test_structuring_inputs_match_the_offline_pipeline(
             migrated_engine, alice.account_id, JUST_UNDER, "Cash", now - timedelta(hours=hours)
         )
     post_at(
-        migrated_engine, alice.account_id, TransactionType.FEE, JUST_UNDER, now - timedelta(hours=5)
+        migrated_engine,
+        alice.account_id,
+        TransactionType.LOAN_REPAYMENT,
+        JUST_UNDER,
+        now - timedelta(hours=5),
     )
     post_deposit_at(migrated_engine, alice.account_id, 10_000_000, "At", now - timedelta(hours=4))
     assert pay(client, bob, known_payee(bob, alice), 9_900_000)["status"] == "POSTED"
@@ -171,15 +175,19 @@ def test_dormant_account_inputs_match_the_offline_pipeline(
     client: TestClient, stub: StubEngine, make_customer: Callable[..., Actor],
     known_payee: Callable[..., dict[str, Any]], migrated_engine: Engine, db: Session,
 ) -> None:  # fmt: skip
-    """#275: the last customer activity was 200 days ago; a fee 10 days ago does not wake the
-    account, and the scorer looks past its 30-day history to find that activity."""
+    """#275: the last customer activity was 200 days ago; a loan instalment the bank collected
+    10 days ago does not wake the account, and the scorer looks past its 30-day history to find that activity."""
     alice = make_customer()
     now = utcnow()
     post_deposit_at(
         migrated_engine, alice.account_id, 20_000_000, "Old", now - timedelta(days=200, hours=1)
     )
     post_at(
-        migrated_engine, alice.account_id, TransactionType.FEE, 50_000, now - timedelta(days=10)
+        migrated_engine,
+        alice.account_id,
+        TransactionType.LOAN_REPAYMENT,
+        50_000,
+        now - timedelta(days=10),
     )
     body = pay(client, alice, known_payee(alice), 5_000_000)
     served = assert_parity(stub, db, alice, body)
@@ -187,7 +195,7 @@ def test_dormant_account_inputs_match_the_offline_pipeline(
     assert served["near_threshold_72h"] == 0
 
 
-def test_an_active_account_is_zero_days_and_its_fees_are_ignored(
+def test_an_active_account_is_zero_days_and_bank_postings_are_ignored(
     client: TestClient, stub: StubEngine, make_customer: Callable[..., Actor],
     known_payee: Callable[..., dict[str, Any]], migrated_engine: Engine, db: Session,
 ) -> None:  # fmt: skip
@@ -197,11 +205,17 @@ def test_an_active_account_is_zero_days_and_its_fees_are_ignored(
         migrated_engine, alice.account_id, 5_000_000, "Pay", now - timedelta(days=3, hours=2)
     )
     post_at(
-        migrated_engine, alice.account_id, TransactionType.FEE, 10_000, now - timedelta(hours=1)
+        migrated_engine,
+        alice.account_id,
+        TransactionType.LOAN_REPAYMENT,
+        10_000,
+        now - timedelta(hours=1),
     )
     payee = known_payee(alice)
     body = pay(client, alice, payee, 100_000)
     served = assert_parity(stub, db, alice, body)
-    assert served["days_since_last_activity"] == 3  # the fee an hour ago is not activity
+    assert (
+        served["days_since_last_activity"] == 3
+    )  # the bank's collection an hour ago is not activity
     body = pay(client, alice, payee, 100_000)
     assert assert_parity(stub, db, alice, body)["days_since_last_activity"] == 0
