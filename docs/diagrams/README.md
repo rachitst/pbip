@@ -64,7 +64,9 @@ production artefact, and nothing in CI installs it.
 1. Edit the Mermaid block in the Markdown file. Each block is preceded by a marker comment,
    `<!-- diagram: <name> -->`, which names its export files; a new diagram needs a new, unique name.
 2. Take every state, route and job name from the code, and name the source files in the section text.
-3. Run `bash scripts/render_diagrams.sh <name>` and commit the Markdown together with the new SVG and PNG.
+3. Run `bash scripts/render_diagrams.sh <name>` and commit the Markdown together with the new SVG and PNG. Render only
+   the diagrams you changed: the exports are not byte-for-byte reproducible (Mermaid generates element ids), so
+   re-rendering an unchanged diagram only adds noise to the diff.
 4. Add a row to the index above.
 
 Every file ends with an **extension point** paragraph that says where a new use case, flow, state, module or service
