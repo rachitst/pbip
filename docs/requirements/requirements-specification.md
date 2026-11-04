@@ -4,7 +4,7 @@
 |---|---|
 | Task | TASK-104 (#187) |
 | Source | *PBIP Use Case Document v0.2*: sections 5 (scope), 6 (actors), 7 (UC-01 to UC-13), 8 (non-functional), 9 to 11 (deliverables, practices, success criteria) |
-| Status checked against | `main` at `2e65b87` (1 Nov 2026): the code and the tests, not earlier documents; rows changed by the batch docs PRs since then were checked against `main` at the time, most recently `3c911ab` (4 Nov 2026, batch docs 7) |
+| Status checked against | `main` at `2e65b87` (1 Nov 2026): the code and the tests, not earlier documents; rows changed by the batch docs PRs since then were checked against `main` at the time, most recently `7c21858` (4 Nov 2026, final batch docs) |
 | Companion documents | [User stories](user-stories.md) (acceptance criteria and tests per story), [traceability](traceability.md) (requirement to code, tests and gaps), [HLD](../architecture/HLD.md) |
 
 Every requirement below is derived from a sentence in the use-case document. Its **Source** column says which one.
@@ -143,7 +143,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | ID | Requirement | Status | Evidence | Tasks | Gap |
 |---|---|---|---|---|---|
 | NFR-01 | Secure authentication | Implemented | Argon2id, TOTP, rotating refresh, lockout; `test_auth.py` | TASK-006 | |
-| NFR-02 | Encrypt sensitive data | Partial | MultiFernet field encryption with key rotation; `test_crypto.py`, `test_rotate_field_key.py`; TLS in nginx and to PostgreSQL (#280, `scripts/verify_tls.sh`); field-encryption policy for PII, ADR-0042 (#402) | TASK-075 | Certbot issuance on a real host (#198); #145 waits for #398 and #399 |
+| NFR-02 | Encrypt sensitive data | Partial | MultiFernet field encryption with key rotation; `test_crypto.py`, `test_rotate_field_key.py`; TLS in nginx and to PostgreSQL (#280, `scripts/verify_tls.sh`); field-encryption policy for PII, ADR-0042 (#402) | TASK-075 | Certbot issuance on a real host (#198); #145 waits for #399 (the mobile number is field-encrypted since #428, closing #398) |
 | NFR-03 | Role-based access control | Implemented | `require_roles`, policy functions; `test_rbac_bola.py`, route-policy registry test | | |
 | NFR-04 | Audit logs | Implemented | Hash-chained append-only `audit_logs`; `test_audit_and_outbox.py` | | |
 | NFR-05 | Protection against OWASP Top 10 | Partial | Threat-model mapping, Bandit, CodeQL, nightly Schemathesis | TASK-090 | No DAST against a deployed environment |
