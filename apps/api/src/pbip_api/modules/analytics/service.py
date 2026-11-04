@@ -24,7 +24,13 @@ from pbip_api.core.errors import NotFoundError, UnprocessableError
 from pbip_api.core.versioned_cache import VersionedCache
 from pbip_api.modules.accounts.models import Account
 from pbip_api.modules.accounts.service import mask_account_number
-from pbip_api.modules.analytics import behaviour, projection, repository, unusual
+from pbip_api.modules.analytics import (
+    behaviour,
+    profile_repository,
+    projection,
+    repository,
+    unusual,
+)
 from pbip_api.modules.analytics.health import compute_financial_health_score
 from pbip_api.modules.analytics.policy import list_owned_accounts, verify_account_ownership
 from pbip_api.modules.analytics.projection import ModelDay
@@ -33,6 +39,8 @@ from pbip_api.modules.analytics.schemas import (
     BalanceForecastResponse,
     BalanceHistoryPoint,
     BehaviourAnalyticsResponse,
+    BehaviourProfile,
+    BehaviourProfileResponse,
     CategoryShiftItem,
     CategorySpendingItem,
     CustomerSegmentResponse,
@@ -40,9 +48,13 @@ from pbip_api.modules.analytics.schemas import (
     FinancialHealthScoreResponse,
     ForecastObligation,
     MonthlySpendingSummary,
+    ProductInterestOut,
+    ProfileEngagement,
+    SpendIncomePattern,
     SpendingBreakdownResponse,
     SpendingTrendsResponse,
 )
+from pbip_api.modules.customers import service as customers_service
 from pbip_api.modules.notifications import service as notifications_service
 from pbip_api.modules.payments import service as payments_service
 
@@ -747,3 +759,70 @@ def get_behaviour_analytics(
     return BehaviourAnalyticsResponse.model_validate(
         behaviour.behaviour_analytics(session, now, days, segment)
     )
+
+
+def _profile_engagement(
+    stored: profile_repository.StoredProfile | None,
+) -> ProfileEngagement | None:
+    if stored is None:
+        return None
+    p = stored.profile
+    return ProfileEngagement(
+        window_days=p.window_days,
+        sessions=p.sessions,
+        avg_session_seconds=p.avg_session_seconds,
+        pages_per_session=round(p.page_views / p.sessions, 2) if p.sessions else 0.0,
+        interactions=p.interactions,
+        last_active_at=p.last_active_at,
+    )
+
+
+def _spend_income(session: Session, customer_id: UUID, now: datetime) -> SpendIncomePattern | None:
+    financial = get_customer_financial_profile(session, customer_id, now)
+    if financial is None:
+        return None
+    flow = financial.cash_flow
+    return SpendIncomePattern(
+        currency=financial.accounts[0].currency,
+        monthly_income_minor=flow.monthly_income_minor,
+        monthly_spend_minor=flow.monthly_spend_minor,
+        discretionary_ratio=round(flow.discretionary_ratio, 3),
+    )
+
+
+def get_behaviour_profile(
+    session: Session, customer_id: UUID, now: datetime
+) -> BehaviourProfileResponse:
+    """UC-11 profile of a customer the caller is already authorised for (the customer's own id,
+    or one the RM policy let through). Without analytics consent nothing is read or returned.
+
+    Engagement and interests come from the daily job; segment, spend and income are read now from
+    the segmentation table and the ledger, so they are as fresh as the rest of the analytics.
+    """
+    if not customers_service.analytics_consent_granted(session, customer_id):
+        return BehaviourProfileResponse(analytics_consent=False, profile=None)
+    stored = profile_repository.get_profile(session, customer_id)
+    segment = repository.get_customer_segment(session, customer_id)
+    return BehaviourProfileResponse(
+        analytics_consent=True,
+        profile=BehaviourProfile(
+            computed_at=stored.profile.computed_at if stored else None,
+            segment=segment.segment if segment else behaviour.UNSEGMENTED,
+            spend_income=_spend_income(session, customer_id, now),
+            engagement=_profile_engagement(stored),
+            product_interests=[
+                ProductInterestOut(
+                    category=i.category,
+                    score=i.score,
+                    signals=i.signals,
+                    last_signal_at=i.last_signal_at,
+                )
+                for i in (stored.interests if stored else [])
+            ],
+        ),
+    )
+
+
+def delete_behaviour_profile(session: Session, customer_id: UUID) -> bool:
+    """Erase the customer's stored profile (consent withdrawn); the caller commits."""
+    return profile_repository.delete_profile(session, customer_id)

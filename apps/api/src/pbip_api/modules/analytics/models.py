@@ -3,6 +3,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
+from pbip_ml.recommendations import ProductType
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
@@ -19,7 +20,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from pbip_api.core.db import Base, created_at_col, utcnow
+from pbip_api.core.db import Base, created_at_col, in_check, utcnow, uuid_pk
 
 
 class MonthlyCategorySpending(Base):
@@ -119,3 +120,73 @@ class CustomerSegment(Base):
         server_default=func.now(),
         nullable=False,
     )
+
+
+class CustomerBehaviourProfile(Base):
+    """A consenting customer's engagement over the last ``window_days`` (UC-11, ADR-0057).
+
+    Written only by the daily profile job; deleted with the customer, and at once when the
+    customer withdraws analytics consent. Segment, spend and income are not copied here: the
+    profile API reads them from their own sources so they are never stale twice.
+    """
+
+    __tablename__ = "customer_behaviour_profiles"
+    __table_args__ = (
+        UniqueConstraint("customer_id"),
+        CheckConstraint("window_days BETWEEN 1 AND 180", name="window_days_range"),
+        CheckConstraint("sessions >= 0", name="sessions_non_negative"),
+        CheckConstraint("avg_session_seconds >= 0", name="avg_session_seconds_non_negative"),
+        CheckConstraint("interactions >= sessions", name="interactions_cover_sessions"),
+        CheckConstraint("page_views >= 0 AND page_views <= interactions", name="page_views_range"),
+        CheckConstraint(
+            "(sessions = 0) = (last_active_at IS NULL)", name="last_active_iff_sessions"
+        ),
+    )
+
+    id: Mapped[UUID] = uuid_pk()
+    customer_id: Mapped[UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="CASCADE"), nullable=False
+    )
+    window_days: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    sessions: Mapped[int] = mapped_column(Integer, nullable=False)
+    avg_session_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    page_views: Mapped[int] = mapped_column(Integer, nullable=False)
+    interactions: Mapped[int] = mapped_column(Integer, nullable=False)
+    last_active_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = created_at_col()
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        server_default=func.now(),
+        nullable=False,
+    )
+
+
+class CustomerProductInterest(Base):
+    """One product category a consenting customer showed interest in (UC-11, ADR-0057).
+
+    Replaced for the customer on every profile job run; ``score`` is the recency-weighted sum of
+    the signals (``profiling.score_interests``), so only categories with a signal have a row.
+    """
+
+    __tablename__ = "customer_product_interests"
+    __table_args__ = (
+        UniqueConstraint("customer_id", "category"),
+        Index("ix_customer_product_interests_category", "category"),
+        in_check("category", ProductType, "category_valid"),
+        CheckConstraint("score >= 0.0", name="score_non_negative"),
+        CheckConstraint("signals >= 1", name="signals_positive"),
+    )
+
+    id: Mapped[UUID] = uuid_pk()
+    customer_id: Mapped[UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="CASCADE"), nullable=False
+    )
+    category: Mapped[str] = mapped_column(String(16), nullable=False)
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    signals: Mapped[int] = mapped_column(Integer, nullable=False)
+    last_signal_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = created_at_col()

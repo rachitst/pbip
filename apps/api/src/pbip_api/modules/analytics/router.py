@@ -11,6 +11,7 @@ from pbip_api.core.db import get_session
 from pbip_api.modules.analytics import service
 from pbip_api.modules.analytics.schemas import (
     BalanceForecastResponse,
+    BehaviourProfileResponse,
     CustomerSegmentResponse,
     FinancialHealthScoreResponse,
     SpendingBreakdownResponse,
@@ -108,6 +109,24 @@ def get_customer_segment(
 ) -> CustomerSegmentResponse:
     """Segment, confidence and the RFM features it was derived from; the principal's own only."""
     return service.get_customer_segment(session=session, customer_id=customer.id)
+
+
+@router.get(
+    "/behaviour-profile/me",
+    response_model=BehaviourProfileResponse,
+    status_code=status.HTTP_200_OK,
+    summary="My behavioural profile: segment, spend and income, engagement, product interests",
+)
+def get_my_behaviour_profile(
+    customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> BehaviourProfileResponse:
+    """UC-11 profile of the authenticated customer only; no profile while analytics consent is off
+    (ADR-0057)."""
+    return service.get_behaviour_profile(
+        session, customer.id, datetime.fromtimestamp(clock(), tz=UTC)
+    )
 
 
 @router.get(
