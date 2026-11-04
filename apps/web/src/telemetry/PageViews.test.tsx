@@ -1,8 +1,10 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render } from "@testing-library/react";
 import { RouterProvider, createMemoryRouter } from "react-router";
 import type { RouteObject } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setAccessToken } from "../api/client";
+import { json, urlOf } from "../test-utils";
 import { routes } from "../shell/routes";
 import { pageUrlAllowed } from "./catalogue";
 import { ClickstreamPageViews, routeTemplate } from "./PageViews";
@@ -48,13 +50,37 @@ describe("ClickstreamPageViews", () => {
     },
   ];
 
+  let granted: boolean | "error" = true;
+
   beforeEach(() => {
     vi.useFakeTimers();
+    granted = true;
     fetchMock.mockReset();
-    fetchMock.mockResolvedValue(new Response("{}", { status: 202 }));
+    fetchMock.mockImplementation((input) => {
+      if (urlOf(input).endsWith("/customers/me/analytics-consent")) {
+        if (granted === "error") return Promise.resolve(json(500, { code: "error" }));
+        return Promise.resolve(json(200, { granted, updated_at: null, policy_version: null }));
+      }
+      return Promise.resolve(new Response("{}", { status: 202 }));
+    });
     vi.stubGlobal("fetch", fetchMock);
     setAccessToken("token");
   });
+
+  function mount(path: string) {
+    const router = createMemoryRouter(app, { initialEntries: [path] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+    return { router, ...view };
+  }
+
+  function batches() {
+    return fetchMock.mock.calls.filter(([input]) => urlOf(input).endsWith("/events/batch"));
+  }
   afterEach(() => {
     setAccessToken(null);
     vi.unstubAllGlobals();
@@ -62,8 +88,7 @@ describe("ClickstreamPageViews", () => {
   });
 
   it("sends one page_view per visited template and stops collecting when unmounted", async () => {
-    const router = createMemoryRouter(app, { initialEntries: ["/things/42?email=a@b.c#x"] });
-    const { unmount } = render(<RouterProvider router={router} />);
+    const { router, unmount } = mount("/things/42?email=a@b.c#x");
     await act(async () => {
       await router.navigate("/list");
     });
@@ -73,8 +98,8 @@ describe("ClickstreamPageViews", () => {
     act(() => {
       vi.advanceTimersByTime(FLUSH_INTERVAL_MS);
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string) as {
+    expect(batches()).toHaveLength(1);
+    const body = JSON.parse(batches()[0]?.[1]?.body as string) as {
       events: { event_type: string; page_url?: string }[];
     };
     expect(body.events.map((e) => [e.event_type, e.page_url])).toEqual([
@@ -86,4 +111,21 @@ describe("ClickstreamPageViews", () => {
     clickstream.track("page_view");
     expect(clickstream.pending()).toEqual([]);
   });
+
+  it.each([false, "error"] as const)(
+    "sends nothing when the recorded consent is %s, and drops what it held",
+    async (answer) => {
+      granted = answer;
+      const { unmount } = mount("/list");
+      await act(async () => {
+        await Promise.resolve();
+      });
+      act(() => {
+        vi.advanceTimersByTime(FLUSH_INTERVAL_MS * 2);
+      });
+      expect(batches()).toEqual([]);
+      expect(clickstream.pending()).toEqual([]);
+      unmount();
+    },
+  );
 });

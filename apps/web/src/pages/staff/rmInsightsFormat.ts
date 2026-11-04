@@ -74,3 +74,10 @@ export function inactivityText(days: number): string {
 export function declineText(rate: number): string {
   return rate === 0 ? "No decline" : `${String(Math.round(rate * 100))}%`;
 }
+
+/** A session length in whole minutes and seconds ("0 s", "2 min 5 s"). */
+export function durationText(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return minutes === 0 ? `${String(rest)} s` : `${String(minutes)} min ${String(rest)} s`;
+}

@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
+  BehaviourProfileResponse,
   CustomerInsightDetail,
   CustomerInsightItem,
   CustomerInsightsListResponse,
@@ -119,6 +120,7 @@ interface Routes {
   post?: (body: unknown) => Response;
   rms?: () => Response;
   assign?: (method: string, body: unknown) => Response;
+  profile?: () => Response;
 }
 
 /** Answers the insights endpoints by path and method; records every call for assertions. */
@@ -132,6 +134,11 @@ function mockApi(routes: Routes) {
     if (url.pathname.endsWith("/assignment")) {
       const body: unknown = typeof init?.body === "string" ? JSON.parse(init.body) : null;
       return Promise.resolve(routes.assign ? routes.assign(method, body) : json(500, {}));
+    }
+    if (url.pathname.endsWith("/behaviour-profile")) {
+      return Promise.resolve(
+        routes.profile ? routes.profile() : json(200, { analytics_consent: false, profile: null }),
+      );
     }
     if (url.pathname.endsWith("/interactions")) {
       if (method === "POST") {
@@ -388,6 +395,51 @@ describe("customer flyout (TASK-066)", () => {
     expect(await within(dialog).findByText("1 transaction")).toBeInTheDocument();
     expect(within(dialog).getByText(/no health score/)).toBeInTheDocument();
     expect(within(dialog).getByText(/No product passes the eligibility rules/)).toBeVisible();
+  });
+
+  it("shows the behavioural profile when the customer turned analytics on (ADR-0057)", async () => {
+    const profile: BehaviourProfileResponse = {
+      analytics_consent: true,
+      profile: {
+        computed_at: "2026-11-04T03:40:00Z",
+        segment: "HIGH_NET_WORTH",
+        spend_income: {
+          currency: "INR",
+          monthly_income_minor: 75_000_00,
+          monthly_spend_minor: 32_000_00,
+          discretionary_ratio: 0.3,
+        },
+        engagement: {
+          window_days: 90,
+          sessions: 3,
+          avg_session_seconds: 125,
+          pages_per_session: 1.67,
+          interactions: 9,
+          last_active_at: "2026-11-03T10:00:00Z",
+        },
+        product_interests: [
+          { category: "LOAN", score: 5.434, signals: 3, last_signal_at: "2026-11-02T10:02:00Z" },
+        ],
+      },
+    };
+    const { dialog, fetchMock } = await openAsha({ profile: () => json(200, profile) });
+    const section = await within(dialog).findByRole("region", { name: "Behavioural profile" });
+    expect(await within(section).findByText("2 min 5 s")).toBeInTheDocument();
+    expect(within(section).getByText("INR 75,000.00")).toBeInTheDocument();
+    expect(within(section).getByText("1.67")).toBeInTheDocument();
+    expect(within(section).getByText("Loan or credit")).toBeInTheDocument();
+    expect(within(section).getByText(/score 5\.43 · 3 signals/)).toBeInTheDocument();
+    const urls = fetchMock.mock.calls.map(([input]) => urlOf(input));
+    expect(urls).toContain(`/api/v1/insights/customers/${ASHA}/behaviour-profile`);
+  });
+
+  it("says there is no behavioural profile without the customer's consent", async () => {
+    const { dialog } = await openAsha({});
+    const section = await within(dialog).findByRole("region", { name: "Behavioural profile" });
+    expect(
+      await within(section).findByText(/has not turned on usage analytics/),
+    ).toBeInTheDocument();
+    expect(within(section).queryByText("Product interests")).toBeNull();
   });
 
   it("shows an error when the detail cannot load", async () => {
