@@ -404,6 +404,11 @@ class BaselineRulesScorer:
         account's opening, if there was none) to that wake-up, so a small first transfer does
         not hide a large second one. Read-only: four index range scans on
         ix_transactions_{debit,credit}_account_id_created_at, each stopping at its first row.
+
+        One clock (#442): ``now`` and every ``created_at`` read here (transactions, the account's
+        opening) come from the app clock; the ledger and account opening stamp them with it. The gap
+        cannot be negative (the last activity is before the window, the wake-up in it or now); the
+        days since waking are floored at 0, so a clock stepped back never shows "-1 days ago".
         """
         cfg = self.settings
         since = now - timedelta(days=cfg.fraud_dormant_reactivation_days)
@@ -455,7 +460,7 @@ class BaselineRulesScorer:
         if fires:
             woke_text = "until this transfer"
             if woke_at is not None:
-                days_ago = int((now - woke_at).total_seconds() // 86_400)
+                days_ago = max(0, int((now - woke_at).total_seconds() // 86_400))
                 woke_text = f"until it became active again {days_ago} days ago"
             check.reason = FraudReason(
                 code="DORMANT_REACTIVATION",
