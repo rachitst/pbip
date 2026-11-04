@@ -37,6 +37,8 @@ const ASSET_LABEL: Record<AllocationSlice["asset_class"], string> = {
   CASH: "Cash",
   DEPOSITS: "Fixed deposits",
   FUNDS: "Funds",
+  STOCKS: "Stocks",
+  BONDS: "Bonds",
 };
 const RISK: Record<RiskLevel, StatusView> = {
   LOW: { label: "Low risk", tone: "success" },

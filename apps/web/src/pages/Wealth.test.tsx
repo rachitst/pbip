@@ -136,12 +136,18 @@ const portfolio: PortfolioOut = {
   deposits_value_minor: 10_412_345,
   projected_maturity_value_minor: 10_729_128,
   funds_minor: 0,
+  stocks_minor: 0,
+  bonds_minor: 0,
+  investments_cost_minor: 0,
+  investments_gain_minor: 0,
   total_minor: 20_412_345,
   open_deposits: 1,
   allocation: [
     { asset_class: "CASH", value_minor: 10_000_000, share_bps: 4899 },
     { asset_class: "DEPOSITS", value_minor: 10_412_345, share_bps: 5101 },
     { asset_class: "FUNDS", value_minor: 0, share_bps: 0 },
+    { asset_class: "STOCKS", value_minor: 0, share_bps: 0 },
+    { asset_class: "BONDS", value_minor: 0, share_bps: 0 },
   ],
 };
 const emptyPortfolio: PortfolioOut = {
@@ -291,6 +297,8 @@ describe("Wealth (TASK-065)", () => {
       "CashINR 1,00,000.0048.99%",
       "Fixed depositsINR 1,04,123.4551.01%",
       "FundsINR 0.000.00%",
+      "StocksINR 0.000.00%",
+      "BondsINR 0.000.00%",
     ]);
   });
 

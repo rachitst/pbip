@@ -643,7 +643,7 @@ def test_portfolio_totals_and_allocation(
     assert p["funds_minor"] == 0
     assert p["total_minor"] == p["cash_minor"] + p["deposits_value_minor"]
     shares = {s["asset_class"]: s for s in p["allocation"]}
-    assert set(shares) == {"CASH", "DEPOSITS", "FUNDS"}
+    assert set(shares) == {"CASH", "DEPOSITS", "FUNDS", "STOCKS", "BONDS"}  # ADR-0058
     assert sum(s["share_bps"] for s in p["allocation"]) == 10_000
     assert shares["DEPOSITS"]["value_minor"] == p["deposits_value_minor"]
 
