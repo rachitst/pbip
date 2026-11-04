@@ -328,7 +328,8 @@ DEMO_VIDEO_DIR=~/.local/share/pbip-lead/video \
   - Start on a fresh seed, or at least 60 minutes after the last rehearsal (section 8).
   - Leave a minute after any other sign-ins. The script keeps under the limit of 10 sign-ins a minute per IP
     on its own, but it cannot see sign-ins from other tools.
-  - It signs in 16 times in about 9 minutes; Bob and Carol sign in with a password only.
+  - A run takes about 6 minutes, with about 5 minutes of video. On the path where Bob's payment is held,
+    it makes 14 sign-in and code requests. Bob and Carol sign in with a password only.
 - **Password:** the script uses `PBIP_DEMO_PASSWORD` when it is set. Otherwise it reads the `DEMO_PASSWORD`
   constant from `scripts/seed_dev.py` (for `APP_ENV=local` only). Codes come from `scripts/totp.py --unused`
   through `docker compose exec`, run in the repository root. When you run from a worktree, set

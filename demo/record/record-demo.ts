@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
@@ -173,17 +173,20 @@ class Recorder {
         el.id = id;
         el.setAttribute("aria-hidden", "true");
         Object.assign(el.style, {
+          // Centred over the app header, whose middle is empty: never over a form or a button.
           position: "fixed",
-          left: "24px",
-          bottom: "24px",
-          maxWidth: "62vw",
+          top: "4px",
+          left: "50%",
+          transform: "translateX(-50%)",
+          maxWidth: "54vw",
+          textAlign: "center",
           zIndex: "2147483647",
           pointerEvents: "none",
-          background: "rgba(15, 23, 42, 0.9)",
+          background: "rgba(15, 23, 42, 0.92)",
           color: "#ffffff",
-          font: "600 22px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif",
-          padding: "12px 20px",
-          borderRadius: "10px",
+          font: "600 19px/1.3 system-ui, -apple-system, 'Segoe UI', sans-serif",
+          padding: "8px 18px",
+          borderRadius: "8px",
           boxShadow: "0 6px 24px rgba(0, 0, 0, 0.35)",
         });
         document.body.appendChild(el);
@@ -379,7 +382,7 @@ test("PBIP fallback demo recording (TASK-093)", async ({ browser }) => {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const context = await browser.newContext({
     viewport: VIDEO_SIZE,
-    recordVideo: { dir: join(outDir, "raw"), size: VIDEO_SIZE },
+    recordVideo: { dir: join(outDir, `.raw-${stamp}`), size: VIDEO_SIZE },
   });
   const page = await context.newPage();
   const r = new Recorder(page, demoPassword());
@@ -663,7 +666,8 @@ test("PBIP fallback demo recording (TASK-093)", async ({ browser }) => {
     const webm = join(outDir, `${name}.webm`);
     if (video) {
       await video.saveAs(webm);
-      await video.delete(); // the copy under raw/ with Playwright's random name
+      await video.delete(); // the copy under .raw-<stamp>/ with Playwright's random name
+      rmSync(join(outDir, `.raw-${stamp}`), { recursive: true, force: true });
     }
     const mp4 = toMp4(webm);
     writeFileSync(
