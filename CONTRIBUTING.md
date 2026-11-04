@@ -148,8 +148,9 @@ How a change is reviewed and merged, as practised on this repository:
    | `Workflow files - actionlint` | The workflow files themselves |
    | `CI Gate` | Passes only if every job above succeeded (a skipped job fails it) |
 
-   Also on every PR: **CodeQL** (`codeql.yml`, Python and JavaScript/TypeScript; weekly too) and **PR title**
-   (`pr-title.yml`, Conventional Commit format). Scheduled, not per PR: nightly Schemathesis fuzzing (`fuzz.yml`), the
+   Also on every PR: **CodeQL** (`codeql.yml`, Python and JavaScript/TypeScript; weekly too), **PR title**
+   (`pr-title.yml`, Conventional Commit format) and **GitGuardian Security Checks** (a GitHub app that scans the
+   pushed commits for secrets). Scheduled, not per PR: nightly Schemathesis fuzzing (`fuzz.yml`), the
    OWASP ZAP baseline (`dast.yml`) and the k6 load suite with page-load budgets (`perf.yml`, also on pushes to `main`).
 2. **AI-assisted review.** Before the human review, the diff gets an AI-assisted review pass for correctness bugs and
    AGENTS.md violations (layering, ledger and lock-order rules, the security checklist, missing tests). Its findings
