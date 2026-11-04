@@ -3,10 +3,13 @@
 import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from typing import Any
 
+import psycopg
 import pytest
-from pbip_datagen.generator import GeneratorConfig, generate
+from pbip_datagen.generator import GeneratorConfig, SyntheticDataset, generate
 from pbip_datagen.loader import load_dataset
+from psycopg import sql
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import DBAPIError
 
@@ -29,17 +32,77 @@ def _scalar(engine: Engine, sql: str, **params: object) -> object:
         return connection.execute(text(sql), params).scalar_one()
 
 
-def test_copy_loads_1000_customers_in_under_15_seconds(
-    synthetic: Engine, test_database_url: str
-) -> None:
-    dataset = generate(GeneratorConfig(seed=42, customers=1000, months=12))
-    report = load_dataset(dataset, test_database_url)
+def _load_and_record(
+    dataset: SyntheticDataset, database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> list[str]:
+    """Load ``dataset``; return each statement the loader's psycopg cursor sent, COPYs included."""
+    sent: list[str] = []
+    execute, copy = psycopg.Cursor.execute, psycopg.Cursor.copy
 
-    assert report.seconds < 15, f"COPY load took {report.seconds:.1f}s"
-    assert (report.customers, report.transactions) == (1000, len(dataset.transactions))
-    assert _scalar(synthetic, "SELECT count(*) FROM synthetic.customers") == 1000
-    assert _scalar(synthetic, "SELECT count(*) FROM synthetic.transactions") == report.transactions
-    loaded_total = _scalar(synthetic, "SELECT sum(amount_minor) FROM synthetic.transactions")
+    def text_of(cursor: psycopg.Cursor[Any], query: Any) -> str:
+        return query.as_string(cursor) if isinstance(query, sql.Composable) else str(query)
+
+    def spy_execute(cursor: psycopg.Cursor[Any], query: Any, *args: Any, **kwargs: Any) -> Any:
+        sent.append(text_of(cursor, query))
+        return execute(cursor, query, *args, **kwargs)
+
+    def spy_copy(cursor: psycopg.Cursor[Any], statement: Any, *args: Any, **kwargs: Any) -> Any:
+        sent.append(text_of(cursor, statement))
+        return copy(cursor, statement, *args, **kwargs)
+
+    with monkeypatch.context() as patched:
+        patched.setattr(psycopg.Cursor, "execute", spy_execute)
+        patched.setattr(psycopg.Cursor, "copy", spy_copy)
+        report = load_dataset(dataset, database_url)
+    assert (report.customers, report.transactions) == (
+        len(dataset.customers),
+        len(dataset.transactions),
+    )
+    return sent
+
+
+# Hang guard, not a speed bar (as #362): generating and loading ~400k rows takes 15-25 s on a
+# 2-CPU Windows laptop (#135), so 60 s left little margin under load.
+@pytest.mark.timeout(300)
+def test_copy_loads_1000_customers_with_one_copy_per_table(
+    synthetic: Engine, test_database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0009's 15 s budget rests on the load's shape, asserted here as cost, not time.
+
+    1,000 customers (~400k transactions) are sent as the same five statements as 10: one COPY per
+    table (no per-row INSERT), ANALYZE before the transactions COPY (the integrity trigger then
+    hash-joins, #135) and a statement-level, set-based integrity trigger (a row-level one would run
+    once per row). Row counts and the amount total are exact. A wall-clock bound failed on 2-CPU
+    laptops (#135); the real time is measured by scripts/benchmark_synthetic_load.py.
+    """
+    small = _load_and_record(
+        generate(GeneratorConfig(seed=41, customers=10, months=12)), test_database_url, monkeypatch
+    )
+    dataset = generate(GeneratorConfig(seed=42, customers=1000, months=12))
+    sent = _load_and_record(dataset, test_database_url, monkeypatch)
+
+    assert sent == small, "the loader's statements grow with the dataset"
+    assert [statement.split(" (")[0].replace('"', "") for statement in sent] == [
+        "DELETE FROM synthetic.generation_runs WHERE id = %s",
+        "INSERT INTO synthetic.generation_runs",
+        "COPY synthetic.customers",
+        "ANALYZE synthetic.customers",
+        "COPY synthetic.transactions",
+    ]
+    assert all(s.endswith("FROM STDIN (FORMAT BINARY)") for s in sent if s.startswith("COPY"))
+    row_triggers = _scalar(
+        synthetic,
+        "SELECT count(*) FROM pg_trigger WHERE tgrelid = 'synthetic.transactions'::regclass "
+        "AND NOT tgisinternal AND tgtype & 4 = 4 AND tgtype & 1 = 1",  # INSERT, FOR EACH ROW
+    )
+    assert row_triggers == 0
+    run = {"run": dataset.run_id}
+    count = "SELECT count(*) FROM synthetic.{} WHERE run_id = :run"
+    assert _scalar(synthetic, count.format("customers"), **run) == 1000
+    assert _scalar(synthetic, count.format("transactions"), **run) == len(dataset.transactions)
+    loaded_total = _scalar(
+        synthetic, "SELECT sum(amount_minor) FROM synthetic.transactions WHERE run_id = :run", **run
+    )
     assert loaded_total == sum(t.amount_minor for t in dataset.transactions)
     # The operational ledger is never touched by the synthetic loader (ADR 0009).
     assert _scalar(synthetic, "SELECT count(*) FROM transaction_entries") == 0

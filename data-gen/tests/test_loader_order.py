@@ -1,8 +1,9 @@
 """The loader COPYs transactions in index-key order without changing the data (#135).
 
 Key order appends at the right edge of ix_transactions_customer_id_occurred_at instead of splitting
-pages across it; the 1,000-customer COPY budget is checked by the integration test
-test_copy_loads_1000_customers_in_under_15_seconds.
+pages across it. The 1,000-customer load's shape is checked by the integration test
+test_copy_loads_1000_customers_with_one_copy_per_table, its time by
+scripts/benchmark_synthetic_load.py.
 """
 
 from collections import Counter
