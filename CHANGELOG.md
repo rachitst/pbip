@@ -18,6 +18,7 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
   (#36).
 - Transaction filter and search on the keyset cursor (#303).
 - Total balance overview per currency on the customer dashboard (#330).
+- Customers can set and delete a mobile number, stored encrypted and shown masked (#428, #398).
 - Customer notifications inbox with read status, a real-time notification bell, link targets and security
   notifications (#149, #224, #227).
 - Risk-tolerance profile and consented date of birth stored as an age band (#326).
@@ -83,7 +84,10 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
 - k6 load suite, page-load budgets and hot-path indexes (#288); the API runs as two replicas, which the Performance
   workflow measures (ADR-0045, #419); provisioned Grafana dashboards, alert rules,
   availability probes and error tracking (#289); OpenTelemetry tracing (#205, #210).
-- Release-tag verification and a health-gated staging deploy with rollback (#155).
+- Release-tag verification and a health-gated staging deploy with rollback (#155); linux/amd64 and linux/arm64
+  images (#432) and a staging guide for an Oracle Cloud Always Free Arm VM with a smoke test and availability probe
+  (#433).
+- Optional OTLP export to a local collector, with Celery and Redis tracing (ADR-0050, #430).
 - Encrypted backups and a verified restore drill (#293).
 - Scheduled Schemathesis API fuzzing (#154, #159, #168), Playwright critical-journey suite (#319, #340, #351, #359),
   mutation testing of the ledger and payments at 96.7% (#297).
@@ -147,6 +151,10 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
 - Loans: no instalment above the EMI when interest rounds a paisa over it (#242).
 - Auth: a password change whose session was revoked in flight is refused with 401 (#423, closes #403).
 - Ledger: the never-used FEE transaction type is removed (migration 0029, #431).
+- Forecast: under 28 days of history the balance forecast uses a naive model, not weekly seasonal naive, so a
+  one-off debit is not projected to recur (#425, #384).
+- Clock: outbox due times and fraud event times use the app clock that reads them, which fixes failures on hosts
+  whose database clock drifts (Docker Desktop on Windows); the assistant benchmark guards `os.getloadavg` (#426, #371).
 - Analytics: re-materialise the posting month of reversed transfers (#171); exclude transfers between a customer's
   own accounts from segmentation features (#192); month-end analytics tests (#207); audit follow-ups with one-pass
   segmentation features, exact shares and burn rate, and documented 404s (#394 via #397); the recommendation context
