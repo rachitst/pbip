@@ -101,6 +101,26 @@ jobs:
           uv run python scripts/measure_events_latency.py http --base-url https://localhost:8443
           --ca infra/certs/ca.crt --email load0001@perf.pbip --requests 300
           --json perf-results/events-latency.json | tee perf-results/events-latency.txt
+      - name: DIAG async floor, validate only (no write)
+        run: >-
+          uv run python scripts/measure_events_latency.py http --base-url https://localhost:8443
+          --ca infra/certs/ca.crt --email load0001@perf.pbip --requests 300
+          --path /api/v1/events/batch-noop-diag
+          --json perf-results/diag-noop.json | tee perf-results/diag-noop.txt
+      - name: DIAG async floor, durable Redis XADD (appendfsync always)
+        run: |
+          docker compose exec -T redis redis-cli CONFIG SET appendfsync always
+          docker compose exec -T redis redis-cli CONFIG GET appendfsync | tee perf-results/diag-redis-config.txt
+          uv run python scripts/measure_events_latency.py http --base-url https://localhost:8443 \
+            --ca infra/certs/ca.crt --email load0001@perf.pbip --requests 300 \
+            --path /api/v1/events/batch-redis-diag \
+            --json perf-results/diag-redis.json | tee perf-results/diag-redis.txt
+          docker compose exec -T redis redis-cli XLEN pbip:diag:events | tee -a perf-results/diag-redis-config.txt
+      - name: DIAG direct insert again after the Redis run (same order effects)
+        run: >-
+          uv run python scripts/measure_events_latency.py http --base-url https://localhost:8443
+          --ca infra/certs/ca.crt --email load0001@perf.pbip --requests 300
+          --json perf-results/diag-direct-2.json | tee perf-results/diag-direct-2.txt
       - name: Clickstream insert cost at the database (per batch and per event)
         run: >-
           uv run python scripts/measure_events_latency.py db --email load0001@perf.pbip

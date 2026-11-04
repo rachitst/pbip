@@ -40,7 +40,7 @@ from typing import Any
 
 import httpx
 
-DEFAULT_SIZES = (1, 10, 100)
+DEFAULT_SIZES = (1, 10, 25, 40, 50, 75, 100)
 
 
 def percentile(samples: list[float], pct: float) -> float:
@@ -116,9 +116,7 @@ def http_size(
     samples: list[float] = []
     for index in range(args.warmup + args.requests):
         body = {"events": make_events(size, session_id)}
-        elapsed, response = _timed(
-            partial(client.post, "/api/v1/events/batch", json=body, headers=headers)
-        )
+        elapsed, response = _timed(partial(client.post, args.path, json=body, headers=headers))
         if index >= args.warmup:
             samples.append(elapsed)
             statuses[response.status_code] += 1
@@ -235,6 +233,7 @@ def main() -> int:
     http_parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     http_parser.add_argument("--ca", default=None, help="CA bundle, e.g. infra/certs/ca.crt")
     http_parser.add_argument("--requests", type=int, default=500)
+    http_parser.add_argument("--path", default="/api/v1/events/batch")
     http_parser.add_argument("--pace", type=float, default=0.0, help="Seconds between requests")
     sub.choices["db"].add_argument("--batches", type=int, default=300)
     args = parser.parse_args()
