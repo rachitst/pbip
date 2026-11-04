@@ -26,6 +26,7 @@ from pbip_api.core.db import utcnow
 from pbip_api.core.errors import NotFoundError, UnprocessableError
 from pbip_api.modules.accounts import service as accounts_service
 from pbip_api.modules.analytics import service as analytics_service
+from pbip_api.modules.analytics.schemas import BehaviourProfileResponse
 from pbip_api.modules.compliance.service import AuditService
 from pbip_api.modules.insights import policy, repository
 from pbip_api.modules.insights.policy import RmScope
@@ -233,6 +234,14 @@ def get_customer_insights(
     if order is InsightOrder.PROPENSITY:
         matching.sort(key=propensity_key)
     return _response(matching[offset : offset + limit], len(matching), eval_time, listed, order)
+
+
+def get_customer_behaviour_profile(
+    session: Session, scope: RmScope, customer_id: UUID, now: datetime
+) -> BehaviourProfileResponse:
+    """UC-11 profile for the RM flyout; 404 when the customer does not exist or is out of scope."""
+    policy.require_visible_customer(session, scope, customer_id)
+    return analytics_service.get_behaviour_profile(session, customer_id, now)
 
 
 def get_customer_insight_detail(

@@ -88,3 +88,14 @@ def test_beat_monitors_structured_deposits_hourly_through_a_registered_task() ->
     assert len(entries) == 1
     assert entries[0]["schedule"] == crontab(minute=35)
     assert "pbip.fraud.monitor_structuring_deposits" in celery_app.tasks
+
+
+def test_beat_builds_behaviour_profiles_daily_through_a_registered_task() -> None:
+    """UC-11 / ADR-0057: one daily entry at 03:40, after the nightly and weekly analytics jobs."""
+    schedule = celery_app.conf.beat_schedule
+    entries = [
+        e for e in schedule.values() if e["task"] == "pbip.analytics.build_behaviour_profiles"
+    ]
+    assert len(entries) == 1
+    assert entries[0]["schedule"] == crontab(hour=3, minute=40)
+    assert "pbip.analytics.build_behaviour_profiles" in celery_app.tasks

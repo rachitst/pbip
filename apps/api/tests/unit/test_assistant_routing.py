@@ -435,16 +435,23 @@ def test_untrusted_text_is_stripped_and_capped() -> None:
 
 
 def _fallback_seconds(message: str) -> float:
-    """Best of five runs: the minimum discards the time this process was descheduled."""
-    best = float("inf")
+    """One timed block: five passes of the three fallback paths over ``message``."""
+    started = time.perf_counter()
     for _ in range(5):
-        started = time.perf_counter()
-        for _ in range(5):
-            fallback.route(message)
-            fallback.parse_rupees(message)
-            guard.check(message)
-        best = min(best, time.perf_counter() - started)
-    return best
+        fallback.route(message)
+        fallback.parse_rupees(message)
+        guard.check(message)
+    return time.perf_counter() - started
+
+
+def _best_interleaved(small: str, large: str, rounds: int = 9) -> tuple[float, float]:
+    """Best time of each input over ``rounds``, measured alternately: a burst of load lands on both
+    sizes alike instead of on one block, so the ratio reflects the matching, not the scheduler."""
+    best_small = best_large = float("inf")
+    for _ in range(rounds):
+        best_small = min(best_small, _fallback_seconds(small))
+        best_large = min(best_large, _fallback_seconds(large))
+    return best_small, best_large
 
 
 @pytest.mark.parametrize(
@@ -467,12 +474,13 @@ def test_fallback_regexes_stay_fast_on_adversarial_input(
     Asserted as growth, not as a wall-clock limit (which failed under load, #317): sixteen times
     the input may cost at most 3x linear. Linear matching grows ~16x; a quadratic backtracking
     pattern grows towards 256x and an exponential one never finishes. Both sizes are timed in the
-    same process moments apart, so machine speed and load cancel out of the ratio.
+    same process, alternately and best-of-nine, so machine speed and load cancel out of the ratio.
     """
     small = head + unit * repeats + tail
     large = head + unit * (repeats * 16) + tail
     assert len(small) <= MAX_MESSAGE_CHARS  # the real worst case at the cap is still exercised
-    ratio = _fallback_seconds(large) / _fallback_seconds(small)
+    small_s, large_s = _best_interleaved(small, large)
+    ratio = large_s / small_s
     assert ratio < 48, f"16x input took {ratio:.0f}x as long: super-linear backtracking"
 
 

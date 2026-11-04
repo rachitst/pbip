@@ -700,9 +700,14 @@ def _assess(client: TestClient, actor: Actor, answers: dict[str, str]) -> str:
 
 
 def _engine_reasons(db: Session, actor: Actor, clock: FakeClock) -> dict[str, str]:
-    """Every eligible product's reasons, straight from the TASK-054 engine (not just the top 3)."""
+    """Every eligible product's reasons, straight from the TASK-054 engine (not just the top 3),
+    as the assistant asks for them: before the band rule, which it applies itself (ADR-0056)."""
     found = recommendations_service.get_customer_recommendations(
-        db, actor.customer_id, datetime.fromtimestamp(clock.now, UTC), top_k=len(PRODUCT_CATALOGUE)
+        db,
+        actor.customer_id,
+        datetime.fromtimestamp(clock.now, UTC),
+        top_k=len(PRODUCT_CATALOGUE),
+        apply_risk_band=False,
     )
     db.rollback()
     return {r.title: " ".join(r.reasons) for r in found.recommendations}

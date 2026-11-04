@@ -10,7 +10,11 @@ from sqlalchemy.orm import Session
 
 from pbip_api.core.db import get_session
 from pbip_api.modules.analytics import service as analytics_service
-from pbip_api.modules.analytics.schemas import BehaviourAnalyticsResponse, BehaviourSegment
+from pbip_api.modules.analytics.schemas import (
+    BehaviourAnalyticsResponse,
+    BehaviourProfileResponse,
+    BehaviourSegment,
+)
 from pbip_api.modules.auth.dependencies import (
     Principal,
     get_clock,
@@ -129,6 +133,24 @@ def get_customer_insight_detail(
 ) -> CustomerInsightDetail:
     """Detail behind the RM flyout (RM: assigned customers only; admin: any)."""
     return service.get_customer_insight_detail(session, _scope(principal), customer_id)
+
+
+@router.get(
+    "/customers/{customer_id}/behaviour-profile",
+    response_model=BehaviourProfileResponse,
+    summary="One customer's behavioural profile (UC-11); empty while analytics consent is off",
+    responses={404: {"description": "No such customer, or not assigned to the calling RM"}},
+)
+def get_customer_behaviour_profile(
+    customer_id: UUID,
+    principal: Principal = Depends(rm_gate),
+    session: Session = Depends(get_session),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> BehaviourProfileResponse:
+    """RM: assigned customers only; admin: any (ADR-0032). Consent decides content (ADR-0057)."""
+    return service.get_customer_behaviour_profile(
+        session, _scope(principal), customer_id, _now(clock)
+    )
 
 
 @router.get(

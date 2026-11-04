@@ -5,7 +5,7 @@
 | Task | TASK-053 (GitHub issue #76) |
 | Scope | System boundaries, C4 context and container views, components, data stores, API and ML inference contracts, security, scalability, observability, production roadmap |
 | Verified against | `main` at `2e65b87` (1 Nov 2026): code, compose files, workflows and tests, not earlier documents |
-| Related | [Blueprint](../PROJECT_BLUEPRINT.md) (engineering rules), [LLD](LLD.md) (tables, state machines, lock order), [ER diagram](er-diagram.md) (generated from the schema), [threat model](../security/threat-model.md), [AI assistant security](../security/ai-assistant-security.md), [runbook](../operations/runbook.md), [traceability](../requirements/traceability.md) |
+| Related | [Blueprint](../PROJECT_BLUEPRINT.md) (engineering rules), [LLD](LLD.md) (tables, state machines, lock order), [ER diagram](er-diagram.md) (generated from the schema), [threat model](../security/threat-model.md), [AI assistant security](../security/ai-assistant-security.md), [runbook](../operations/runbook.md), [traceability](../requirements/traceability.md), [diagrams](../diagrams/README.md) (use case, activity, sequence, state, module, component, deployment and data flow) |
 
 **Status labels used throughout.** Each capability is marked with one of three labels:
 
@@ -370,6 +370,13 @@ arguments: the customer's risk band and the recommendation engine's eligible pro
 The details and the adversarial suite are in [ai-assistant-security.md](../security/ai-assistant-security.md).
 
 ## 8. Key runtime flows
+
+The flows below are summaries. The full set, drawn from the code, is in [`docs/diagrams/`](../diagrams/README.md):
+[use cases](../diagrams/use-case.md), [activity diagrams](../diagrams/activity.md) (login with MFA, transfer,
+fraud alert management, loan, bill payment, scheduled run, fixed deposit), [sequence diagrams](../diagrams/sequence.md)
+(hybrid fraud scoring, step-up, assistant, statement download, token refresh), [state diagrams](../diagrams/state.md),
+[module diagrams](../diagrams/module.md), the [component diagram](../diagrams/component.md), the
+[deployment diagrams](../diagrams/deployment.md) and the [data flow diagrams](../diagrams/data-flow.md).
 
 ### 8.1 Transfer
 
