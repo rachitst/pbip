@@ -8,7 +8,7 @@ for 180 days before it woke up in the last 7 days; small amounts, active account
 bank-initiated postings (fees) do not count. Scorer clocks are injected; nothing sleeps.
 """
 
-import statistics
+import json
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timedelta
@@ -18,7 +18,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pbip_api.core.config import Settings
 from pbip_api.core.db import utcnow
-from pbip_api.modules.fraud.baseline import BaselineRulesScorer
+from pbip_api.modules.fraud.baseline import STRUCTURING_SNAPSHOT_IDS, BaselineRulesScorer
 from pbip_api.modules.fraud.models import FraudEvent
 from pbip_api.modules.ledger import service as ledger
 from pbip_api.modules.ledger.models import TransactionType
@@ -26,6 +26,7 @@ from pbip_ml.fraud.contract import FraudDecision, FraudScoreResult, TransactionC
 from pbip_test_support import Actor, _redate_transaction, age_payee, post_deposit_at
 from pydantic import ValidationError
 from sqlalchemy import Engine, select
+from sqlalchemy import event as sql_event
 from sqlalchemy.orm import Session, sessionmaker
 
 pytestmark = pytest.mark.integration
@@ -199,33 +200,104 @@ def test_moves_between_the_customers_own_accounts_are_not_counted(
     assert e.features["structuring_received_count"] == 0
 
 
-def test_scoring_stays_fast_with_1000_near_threshold_inbound_transfers(
-    make_customer: Callable[..., Actor], migrated_engine: Engine, settings: Settings
-) -> None:
-    a, b = make_customer(funds=1_000 * JUST_UNDER), make_customer()
-    with sessionmaker(bind=migrated_engine)() as session:
-        for _ in range(1_000):
+def _receive_near_threshold(engine: Engine, sender: Actor, receiver: Actor, count: int) -> None:
+    with sessionmaker(bind=engine)() as session:
+        for _ in range(count):
             txn = ledger.create_transaction(
                 session,
                 type_=TransactionType.TRANSFER,
                 amount=JUST_UNDER,
                 currency="INR",
-                debit_account_id=a.account_id,
-                credit_account_id=b.account_id,
+                debit_account_id=sender.account_id,
+                credit_account_id=receiver.account_id,
             )
             ledger.post_transaction(session, txn, ledger.transfer_legs(txn))
         session.commit()
+
+
+Sent = list[tuple[str, Any, int]]  # (statement, parameters, rows returned)
+
+
+def _scoring_cost(engine: Engine, settings: Settings, actor: Actor,
+                  now: datetime) -> tuple[FraudScoreResult, Sent]:  # fmt: skip
+    """Score once; record every SQL statement sent, its parameters and the rows it returned."""
+    sent: Sent = []
+
+    def record(*args: Any) -> None:  # (conn, cursor, statement, parameters, context, many)
+        sent.append((str(args[2]), args[3], int(args[1].rowcount)))
+
+    sql_event.listen(engine, "after_cursor_execute", record)
+    try:
+        result = score_now(engine, settings, actor, 500_000, at=lambda: now)
+    finally:
+        sql_event.remove(engine, "after_cursor_execute", record)
+    return result, sent
+
+
+def _plan_nodes(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    return [plan, *(node for child in plan.get("Plans", []) for node in _plan_nodes(child))]
+
+
+def _transaction_scans(engine: Engine, statement: str, parameters: Any) -> set[str]:
+    """How PostgreSQL reads ``transactions`` for this statement on fresh statistics: the name of
+    each ``ix_transactions_*`` index it scans, and ``Seq Scan`` if it reads the whole table."""
+    with engine.connect() as connection:
+        connection.exec_driver_sql("ANALYZE transactions")  # what autovacuum would leave
+        raw = connection.exec_driver_sql(f"EXPLAIN (FORMAT JSON) {statement}", parameters)
+        plan = raw.scalar_one()
+        connection.rollback()
+    root = (json.loads(plan) if isinstance(plan, str) else plan)[0]["Plan"]
+    scans: set[str] = set()
+    for node in _plan_nodes(root):
+        index = str(node.get("Index Name", ""))
+        if index.startswith("ix_transactions_"):
+            scans.add(index)
+        elif node.get("Relation Name") == "transactions" and node["Node Type"] == "Seq Scan":
+            scans.add("Seq Scan")
+    return scans
+
+
+# Hang guard, not a speed bar (as #362): posting 1,000 ledger transfers takes 20-40 s on a busy
+# 2-CPU laptop, near pytest-timeout's 60 s default.
+@pytest.mark.timeout(300)
+def test_scoring_cost_does_not_grow_with_1000_near_threshold_inbound_transfers(
+    make_customer: Callable[..., Actor], migrated_engine: Engine, settings: Settings
+) -> None:
+    """p95 < 100 ms (AGENTS.md section 8) rests on bounded work, asserted here as cost, not time.
+
+    STRUCTURING counts and sums in PostgreSQL and fetches at most STRUCTURING_SNAPSHOT_IDS ids, so
+    1,000 near-threshold credits cost the same SQL statements as 3, none returns more than 20 rows,
+    and both look-ups can be served by the account/created_at indexes (a regression to fetching
+    every row, an N+1 or an unindexable predicate fails here). A wall-clock p95 failed under load;
+    the real latency is measured by scripts/benchmark_structuring_scoring.py (#317, #379, #412).
+    """
+    sender = make_customer(funds=1_003 * JUST_UNDER)
+    few, many = make_customer(), make_customer()
+    _receive_near_threshold(migrated_engine, sender, few, 3)
+    _receive_near_threshold(migrated_engine, sender, many, 1_000)
     fixed = utcnow() + timedelta(minutes=5)
-    latencies = []
-    for call in range(43):  # the first 3 warm the connection pool and the plan cache
-        result = score_now(migrated_engine, settings, b, 500_000, at=lambda: fixed)
-        if call >= 3:
-            latencies.append(result.latency_ms)
+
+    few_result, few_sent = _scoring_cost(migrated_engine, settings, few, fixed)
+    result, sent = _scoring_cost(migrated_engine, settings, many, fixed)
+
+    assert few_result.features["structuring_received_count"] == 3
+    assert reason(few_result, "STRUCTURING") is not None
     assert result.features["structuring_received_count"] == 1_000
+    assert result.features["structuring_total_minor"] == 1_000 * JUST_UNDER
     assert str(result.features["structuring_transaction_ids"]).count(",") == 19  # capped at 20
     assert reason(result, "STRUCTURING") is not None
-    p95 = statistics.quantiles(latencies, n=20)[-1]
-    assert p95 < 100, latencies  # AGENTS.md §8: p95 < 100 ms, DB look-ups included
+    assert [s for s, _, _ in sent] == [s for s, _, _ in few_sent], "statements grow with N"
+    assert max(rows for _, _, rows in sent) <= STRUCTURING_SNAPSHOT_IDS
+    # The plan is read for the 3-credit account: on a test-sized table the 1,000-credit account
+    # holds most rows, where a sequential scan is the planner's right choice; on a real ledger
+    # every account is a small share of the table, as this one is here.
+    structuring = [(s, p) for s, p, _ in few_sent if "transactions.amount * " in s]
+    assert len(structuring) == 2  # the count/sum and the capped id list
+    for statement, parameters in structuring:
+        assert _transaction_scans(migrated_engine, statement, parameters) == {
+            "ix_transactions_credit_account_id_created_at",
+            "ix_transactions_debit_account_id_created_at",
+        }
 
 
 # --- DORMANT_REACTIVATION (F8) -------------------------------------------------------------
