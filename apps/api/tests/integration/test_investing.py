@@ -13,7 +13,7 @@ from pbip_api.core.calendar import bank_today
 from pbip_api.core.config import Settings
 from pbip_api.core.db import utcnow
 from pbip_api.core.errors import DomainError
-from pbip_api.modules.accounts.models import Account
+from pbip_api.modules.accounts.models import Account, AccountType
 from pbip_api.modules.analytics import repository as analytics_repository
 from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.auth.service import RequestMeta
@@ -566,3 +566,29 @@ def test_investing_is_neither_spending_nor_income_in_analytics(
         db, alice.account_id, owned, utcnow()
     )
     assert (metrics.income_minor, metrics.spend_minor) == (FUNDS, 0)
+
+
+def test_a_sale_at_a_gain_posts_and_the_settlement_account_may_go_below_zero(
+    client: TestClient, make_customer: Callable[..., Actor], clock: FakeClock, db: Session
+) -> None:
+    """SYS-INVESTMENTS is a SYSTEM account (migration 0031), the only type the accounts CHECK lets
+    go below zero: the simulated market pays the gain (ADR-0058 section 4)."""
+    settlement = db.get(Account, INVESTMENTS)
+    assert settlement is not None and settlement.account_type == AccountType.SYSTEM
+    alice = make_customer(funds=FUNDS)
+    bought = _buy(client, alice, STK_SIMINFRA, amount=None, units=10).json()
+    # The price is deterministic: walk forward to the first day it is above the purchase price.
+    for _ in range(366):
+        clock.advance(86_400)
+        if _price(db, STK_SIMINFRA, _today(clock)) > bought["price_minor"]:
+            break
+    else:
+        pytest.fail("the simulated price never rose above the purchase price within a year")
+    resp = _sell(client, alice, bought["holding_id"], 10 * MICRO)
+    assert resp.status_code == 200, resp.text
+    sale = resp.json()
+    assert sale["realised_gain_minor"] > 0
+    assert sale["amount_minor"] == bought["amount_minor"] + sale["realised_gain_minor"]
+    assert _balance(db, alice.account_id) == FUNDS + sale["realised_gain_minor"]
+    assert _balance(db, INVESTMENTS) == -sale["realised_gain_minor"] < 0
+    _assert_ledger_consistent(db)
