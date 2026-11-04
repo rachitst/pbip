@@ -1,8 +1,21 @@
+from pathlib import Path
+
 import pytest
 from pbip_api.core.config import Settings
 from pydantic import SecretStr, ValidationError
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.fixture(autouse=True)
+def _no_developer_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Settings reads ``.env`` from the working directory and the process environment. Run every case
+    from an empty directory without the LLM variables, so a developer's ``.env`` (for example the
+    demo stack's Groq key and model) cannot fill in a field a case deliberately leaves out."""
+    monkeypatch.chdir(tmp_path)
+    for name in ("LLM_PROVIDER", "GROQ_API_KEY", "GROQ_MODEL", "GROQ_REASONING_EFFORT"):
+        monkeypatch.delenv(name, raising=False)
+
 
 GOOD_SECRET = SecretStr("x" * 48)
 GOOD_KEY = SecretStr("some-fernet-key")
