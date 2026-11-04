@@ -564,7 +564,7 @@ vm$ export PATH="$HOME/.local/bin:$PATH"       # uv, installed in section 15
 vm$ uv sync --all-packages --frozen
 vm$ python3 scripts/init_env.py                             # local-only .env with fresh secrets
 vm$ uv run python scripts/dev_certs.py
-vm$ uv run python scripts/dev.py fraud-model   # the hybrid scorer the suite measures
+vm$ uv run python scripts/dev.py fraud-model-release   # the pinned champion bundle (TASK-084), verified by SHA-256
 vm$ export API_REPLICAS=2                                    # production topology (ADR-0045)
 vm$ docker compose -f docker-compose.yml -f infra/k6/compose.load.yml up -d --build
 vm$ curl --fail --silent --retry 60 --retry-delay 2 --retry-all-errors --cacert infra/certs/ca.crt https://localhost:8443/api/health/ready

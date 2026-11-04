@@ -440,6 +440,26 @@ def cmd_fraud_champion(args: list[str]) -> int:
     return _run(["uv", "run", "python", "-m", "pbip_ml.fraud.promotion", "export-champion", *rest])
 
 
+def cmd_fraud_bundle(args: list[str]) -> int:
+    """Pack ``models/fraud`` into a byte-reproducible bundle for a GitHub release (TASK-084)."""
+    rest = args or [
+        "--model-dir",
+        str(ROOT / "models" / "fraud"),
+        "--out",
+        str(ROOT / "dist" / "pbip-fraud-bundle.tar.gz"),
+    ]
+    (ROOT / "dist").mkdir(exist_ok=True)
+    return _run(["uv", "run", "python", "-m", "pbip_ml.fraud.bundle", "pack", *rest])
+
+
+def cmd_fraud_model_release(args: list[str]) -> int:
+    """Download the release bundle pinned by ``ml/models/fraud-champion.lock.json``, verify it and
+    install it into ``models/fraud`` (TASK-084): no training and no MLflow registry needed."""
+    lock = ["--lock", str(ROOT / "ml" / "models" / "fraud-champion.lock.json")]
+    rest = args or ["--out", str(ROOT / "models" / "fraud")]
+    return _run(["uv", "run", "python", "-m", "pbip_ml.fraud.bundle", "install", *lock, *rest])
+
+
 def cmd_recommendation_model(args: list[str]) -> int:
     """Train the simulated-uptake propensity model into ``models/recommendations`` (ADR-0049).
 
@@ -940,6 +960,8 @@ COMMANDS = {
     "recommendation-model": "Train the simulated-uptake recommendation model (used if it wins)",
     "promote-model": "Measure the newest fraud run; promote it to MLflow 'champion' if it passes",
     "fraud-champion": "Export the MLflow 'champion' fraud model into models/fraud (for the API)",
+    "fraud-bundle": "Pack models/fraud into a reproducible release bundle in dist/",
+    "fraud-model-release": "Install the pinned, checksummed release fraud model into models/fraud",
     "dev-api": "Run FastAPI backend on :8000 with auto-reload",
     "dev-worker": "Run Celery worker + beat (Windows: solo pool, beat as a second process)",
     "dev-web": "Run Vite React frontend on :5173",
