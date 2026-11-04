@@ -143,6 +143,9 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
   50 ms budget fell from 47.5% to 0.05% under load (#417, #422).
 - Rules STRUCTURING (F7) and DORMANT_REACTIVATION (F8), `baseline-rules-0.6` (ADR-0046, #424), and an hourly
   deposit-side structuring monitor that opens REVIEW analyst alerts (`STRUCTURED_DEPOSITS`, ADR-0052, #436).
+- Fraud feature contract 2 with `near_threshold_72h` and `days_since_last_activity`, and generator v2.4 with
+  legitimate inbound transfers; the retrained `hybrid-lgbm-iforest-4` failed the champion gate on PR-AUC, so `-3`
+  stays the champion; each model is served with its own columns (ADR-0051, #437).
 - Product propensity model trained on a documented simulation of uptake; it failed its pre-registered gate, so
   `rules-v1` is still served (ADR-0049, #427).
 
