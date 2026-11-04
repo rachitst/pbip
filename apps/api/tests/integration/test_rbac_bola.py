@@ -79,6 +79,9 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("get", f"/api/v1/analytics/health-score?account_id={uuid.uuid4()}"),
         ("get", f"/api/v1/analytics/forecast?account_id={uuid.uuid4()}"),
         ("get", "/api/v1/analytics/segment"),
+        ("get", "/api/v1/analytics/behaviour-profile/me"),
+        ("get", "/api/v1/customers/me/analytics-consent"),
+        ("put", "/api/v1/customers/me/analytics-consent"),
         ("post", "/api/v1/assistant/chat"),
         ("post", "/api/v1/assistant/chat/stream"),
         ("get", "/api/v1/assistant/messages"),
@@ -88,6 +91,7 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("get", "/api/v1/insights/behaviour"),
         ("get", f"/api/v1/insights/customers/{uuid.uuid4()}"),
         ("get", f"/api/v1/insights/customers/{uuid.uuid4()}/interactions"),
+        ("get", f"/api/v1/insights/customers/{uuid.uuid4()}/behaviour-profile"),
         ("post", f"/api/v1/insights/customers/{uuid.uuid4()}/interactions"),
         ("get", "/api/v1/insights/relationship-managers"),
         ("put", f"/api/v1/insights/customers/{uuid.uuid4()}/assignment"),
@@ -117,6 +121,7 @@ def test_customer_cannot_use_staff_endpoints(
     own = f"/api/v1/insights/customers/{alice.customer_id}"
     assert client.get(own, headers=alice.headers).status_code == 403
     assert client.get(f"{own}/interactions", headers=alice.headers).status_code == 403
+    assert client.get(f"{own}/behaviour-profile", headers=alice.headers).status_code == 403
     assign = {"rm_user_id": str(alice.user_id)}
     assert client.put(f"{own}/assignment", headers=alice.headers, json=assign).status_code == 403
     assert client.delete(f"{own}/assignment", headers=alice.headers).status_code == 403
@@ -799,6 +804,7 @@ def test_bola_rm_only_reaches_assigned_customers(
             "detail": client.get(base, headers=h),
             "list log": client.get(f"{base}/interactions", headers=h),
             "write log": client.post(f"{base}/interactions", headers=h, json=note),
+            "behaviour profile": client.get(f"{base}/behaviour-profile", headers=h),
         }
         for name, response in attempts.items():
             assert response.status_code == 404, f"{name} {target}: got {response.status_code}"
@@ -814,3 +820,4 @@ def test_bola_rm_only_reaches_assigned_customers(
     base = f"/api/v1/insights/customers/{victim.customer_id}"
     assert client.get(base, headers=owner_rm.headers).status_code == 200
     assert client.get(f"{base}/interactions", headers=owner_rm.headers).json()["total"] == 0
+    assert client.get(f"{base}/behaviour-profile", headers=owner_rm.headers).status_code == 200

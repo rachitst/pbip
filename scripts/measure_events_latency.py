@@ -143,6 +143,12 @@ def run_http(args: argparse.Namespace) -> dict[str, object]:
             msg = "login did not return an access token (MFA user?); use a customer without MFA"
             raise SystemExit(msg)
         headers = {"Authorization": f"Bearer {token}"}
+        # Events are stored only with the customer's analytics consent (ADR-0057); without it the
+        # batch is discarded unstored and the insert this script measures would never run.
+        consent = client.put(
+            "/api/v1/customers/me/analytics-consent", json={"granted": True}, headers=headers
+        )
+        consent.raise_for_status()
         return {f"batch {size}": http_size(client, headers, size, args) for size in args.sizes}
 
 

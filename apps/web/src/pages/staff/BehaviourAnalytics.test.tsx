@@ -56,12 +56,19 @@ const empty: Analytics = {
     items: SEGMENTS.map((segment) => ({ segment, ...emptyItem })),
   },
   spending: [],
-  affinity: { products: ["SAVINGS_ACCOUNT"], segments: [], recommendation_clicks: [] },
+  affinity: {
+    products: ["SAVINGS_ACCOUNT"],
+    segments: [],
+    recommendation_clicks: [],
+    profiled_customers: 0,
+    interests: [],
+  },
   engagement: {
     events: 0,
     sessions: 0,
     active_customers: 0,
     customers: 0,
+    consenting_customers: 0,
     active_share_pct: 0,
     events_per_session: 0,
     avg_session_seconds: 0,
@@ -122,12 +129,15 @@ const full: Analytics = {
         customers: 2,
       },
     ],
+    profiled_customers: 0,
+    interests: [],
   },
   engagement: {
     events: 6,
     sessions: 3,
     active_customers: 3,
     customers: 4,
+    consenting_customers: 3,
     active_share_pct: 75,
     events_per_session: 2,
     avg_session_seconds: 50,
@@ -135,7 +145,9 @@ const full: Analytics = {
     by_segment: [
       { segment: "HIGH_NET_WORTH", customers: 2, active_customers: 1, active_share_pct: 50 },
     ],
-    daily: [{ day: "2026-10-31", active_customers: 3, events: 6 }],
+    daily: [
+      { day: "2026-10-31", active_customers: 3, events: 6, sessions: 3, avg_session_seconds: 50 },
+    ],
   },
 };
 
