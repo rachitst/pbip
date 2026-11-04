@@ -397,6 +397,30 @@
         "title": "AlertDetail",
         "type": "object"
       },
+      "AlertOutcomes": {
+        "description": "Alerts raised in the window, by their status now.",
+        "properties": {
+          "CONFIRMED_FRAUD": {
+            "title": "Confirmed Fraud",
+            "type": "integer"
+          },
+          "FALSE_POSITIVE": {
+            "title": "False Positive",
+            "type": "integer"
+          },
+          "OPEN": {
+            "title": "Open",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "OPEN",
+          "CONFIRMED_FRAUD",
+          "FALSE_POSITIVE"
+        ],
+        "title": "AlertOutcomes",
+        "type": "object"
+      },
       "AlertStatus": {
         "enum": [
           "OPEN",
@@ -3476,6 +3500,9 @@
       },
       "FraudStats": {
         "properties": {
+          "alerts": {
+            "$ref": "#/components/schemas/AlertOutcomes"
+          },
           "block_rate": {
             "title": "Block Rate",
             "type": "number"
@@ -3512,6 +3539,14 @@
             "description": "Decisions served by the rules because the model failed",
             "title": "Model Fallbacks",
             "type": "integer"
+          },
+          "risk_bands": {
+            "description": "Risk-score distribution of the window's payment decisions, ten bands",
+            "items": {
+              "$ref": "#/components/schemas/pbip_api__modules__fraud__router__RiskBand"
+            },
+            "title": "Risk Bands",
+            "type": "array"
           },
           "risky_payees": {
             "items": {
@@ -3554,7 +3589,9 @@
           "top_rules",
           "risky_payees",
           "model_fallbacks",
-          "latency_p95_ms"
+          "latency_p95_ms",
+          "risk_bands",
+          "alerts"
         ],
         "title": "FraudStats",
         "type": "object"
@@ -5776,15 +5813,6 @@
         "title": "RelationshipManagerOut",
         "type": "object"
       },
-      "RiskBand": {
-        "enum": [
-          "LOW",
-          "MODERATE",
-          "HIGH"
-        ],
-        "title": "RiskBand",
-        "type": "string"
-      },
       "RiskLevel": {
         "enum": [
           "LOW",
@@ -5823,7 +5851,7 @@
           "band": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/RiskBand"
+                "$ref": "#/components/schemas/pbip_api__modules__customers__risk__RiskBand"
               },
               {
                 "type": "null"
@@ -7772,6 +7800,41 @@
           "catalogue_version"
         ],
         "title": "WealthProductOut",
+        "type": "object"
+      },
+      "pbip_api__modules__customers__risk__RiskBand": {
+        "enum": [
+          "LOW",
+          "MODERATE",
+          "HIGH"
+        ],
+        "title": "RiskBand",
+        "type": "string"
+      },
+      "pbip_api__modules__fraud__router__RiskBand": {
+        "properties": {
+          "count": {
+            "description": "Payment decisions in the window with a score in the band",
+            "title": "Count",
+            "type": "integer"
+          },
+          "high": {
+            "description": "Highest risk score in the band (inclusive)",
+            "title": "High",
+            "type": "integer"
+          },
+          "low": {
+            "description": "Lowest risk score in the band (inclusive)",
+            "title": "Low",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "low",
+          "high",
+          "count"
+        ],
+        "title": "RiskBand",
         "type": "object"
       }
     },
@@ -11266,7 +11329,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Fraud telemetry: decisions over time, hold rate, top reasons, risky payees",
+        "summary": "Fraud telemetry: decisions over time, hold rate, top reasons, risky payees, risk-score distribution and alert outcomes",
         "tags": [
           "fraud"
         ]

@@ -163,6 +163,27 @@ describe("routing, roles and the application shell (ADR-0016)", () => {
       expect(requested("/fraud/monitoring")).toBe(1);
     });
 
+    it("links the fraud dashboard for analysts only; other staff are refused", async () => {
+      me = analystMe;
+      const user = userEvent.setup();
+      const first = renderApp();
+      const nav = await screen.findByRole("navigation", { name: "Main" });
+      await user.click(within(nav).getByRole("link", { name: "Fraud dashboard" }));
+      expect(await screen.findByRole("heading", { name: "Fraud dashboard" })).toBeInTheDocument();
+      expect(window.location.pathname).toBe("/staff/fraud-dashboard");
+      await waitFor(() => {
+        expect(requested("/fraud/stats?days=7")).toBe(1);
+      });
+      first.unmount();
+
+      me = { ...analystMe, roles: ["RELATIONSHIP_MANAGER"] };
+      renderApp();
+      await screen.findByRole("heading", { name: "Fraud dashboard" });
+      expect(screen.queryByRole("link", { name: "Fraud dashboard" })).not.toBeInTheDocument();
+      expect(screen.getByText(/needs the Fraud Analyst or Administrator role/)).toBeVisible();
+      expect(requested("/fraud/stats?days=7")).toBe(1);
+    });
+
     it("links customer insights for relationship managers only (TASK-066)", async () => {
       me = { ...analystMe, roles: ["RELATIONSHIP_MANAGER"] };
       const insightCalls = () =>
