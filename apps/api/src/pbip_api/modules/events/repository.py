@@ -2,20 +2,38 @@
 
 from typing import Any
 
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import DateTime, String, bindparam, text
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Session
 
 from pbip_api.modules.events.models import ClickstreamEvent
+
+# One INSERT ... SELECT FROM unnest(...) per batch: a fixed statement with one array parameter per
+# column, so SQLAlchemy compiles it once and caches it. The previous ``insert().values(records)``
+# compiled a new statement with 8 x N parameters on every call, which made a 100-event insert
+# several times slower than the database's own work (docs/testing/events-latency-2026-11-04.md).
+# ON CONFLICT DO NOTHING still skips an event repeated inside the same batch, as before.
+_COLUMNS = (
+    ("id", ARRAY(PG_UUID(as_uuid=True))),
+    ("event_timestamp", ARRAY(DateTime(timezone=True))),
+    ("event_type", ARRAY(String)),
+    ("customer_id", ARRAY(PG_UUID(as_uuid=True))),
+    ("session_id", ARRAY(String)),
+    ("page_url", ARRAY(String)),
+    ("properties", ARRAY(JSONB)),
+    ("created_at", ARRAY(DateTime(timezone=True))),
+)
+_INSERT_BATCH = text(
+    f"INSERT INTO {ClickstreamEvent.__tablename__} ({', '.join(name for name, _ in _COLUMNS)}) "  # noqa: S608 - fixed names, no input
+    f"SELECT * FROM unnest({', '.join(f':{name}' for name, _ in _COLUMNS)}) "
+    "ON CONFLICT (id, event_timestamp) DO NOTHING RETURNING id"
+).bindparams(*(bindparam(name, type_=type_) for name, type_ in _COLUMNS))
 
 
 def insert_events_batch(session: Session, records: list[dict[str, Any]]) -> int:
     """Bulk insert; rows whose (id, event_timestamp) already exist are skipped. Returns inserted."""
     if not records:
         return 0
-    stmt = (
-        insert(ClickstreamEvent)
-        .values(records)
-        .on_conflict_do_nothing(index_elements=["id", "event_timestamp"])
-        .returning(ClickstreamEvent.id)
-    )
-    return len(session.execute(stmt).all())
+    params = {name: [record[name] for record in records] for name, _ in _COLUMNS}
+    return len(session.execute(_INSERT_BATCH, params).all())
