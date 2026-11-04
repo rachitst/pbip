@@ -5,7 +5,7 @@
 | Task | TASK-027 (GitHub issue #50) |
 | Scope | Every table (columns that matter, keys, `ON DELETE`, CHECK constraints, indexes, triggers, owning module); state machines for transfers, holds, fraud alerts, bill payments, scheduled transfers and loans; the lock-order and idempotency sequences |
 | Verified against | `main` at `da9a8fd` (2 Nov 2026): Alembic migrations `0001` to `0016`, the SQLAlchemy models and services, and the tests cited. Earlier documents were not used as evidence |
-| Related | [HLD](HLD.md) (system context, containers, contracts), [ER diagram](er-diagram.md) (generated from the migrated schema, CI-checked), [Blueprint section 7](../PROJECT_BLUEPRINT.md#7-transaction-and-ledger-architecture), [ADR-0002](../adr/0002-double-entry-ledger.md), [ADR-0003](../adr/0003-idempotency-in-postgresql.md), [ADR-0023](../adr/0023-scheduled-transfers.md), [ADR-0024](../adr/0024-loan-disbursal-and-repayments.md) |
+| Related | [HLD](HLD.md) (system context, containers, contracts), [ER diagram](er-diagram.md) (generated from the migrated schema, CI-checked), [Blueprint section 7](../PROJECT_BLUEPRINT.md#7-transaction-and-ledger-architecture), [ADR-0002](../adr/0002-double-entry-ledger.md), [ADR-0003](../adr/0003-idempotency-in-postgresql.md), [ADR-0023](../adr/0023-scheduled-transfers.md), [ADR-0024](../adr/0024-loan-disbursal-and-repayments.md), [diagrams](../diagrams/README.md) (activity, sequence, state, module and data flow views of the same code) |
 
 **How to read this document.** Every statement points at the file that proves it. Paths are relative to the
 repository root; `api/` below is short for `apps/api/src/pbip_api/`, `versions/` for `apps/api/alembic/versions/`
@@ -587,6 +587,11 @@ Facts found while writing this reference. Items 1, 2, 4 and 5 were fixed by migr
 
 ## 4. State machines
 
+Rendered views of these machines (plus the fixed deposit lifecycle) are in
+[`docs/diagrams/state.md`](../diagrams/state.md); the flows that drive them are in
+[`docs/diagrams/activity.md`](../diagrams/activity.md). The module layering and import contracts are drawn in
+[`docs/diagrams/module.md`](../diagrams/module.md).
+
 ### 4.1 Transfer lifecycle (`transactions.status`)
 
 Statuses are `TransactionStatus` in `api/modules/ledger/models.py`. Transitions are made in
@@ -777,6 +782,9 @@ stateDiagram-v2
 ---
 
 ## 5. Sequences
+
+More sequences (hybrid fraud scoring, step-up, assistant, statement download, token refresh) are in
+[`docs/diagrams/sequence.md`](../diagrams/sequence.md).
 
 ### 5.1 The lock-order contract
 
