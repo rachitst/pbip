@@ -157,6 +157,24 @@ describe("AssistantDrawer", () => {
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
+  it("links the payees and bill pages the FAQ answers point to", async () => {
+    const stream = controlledStream([
+      frame("done", done("Add a payee under Payees.", { tool: "get_faq_answer", link: "/payees" })),
+    ]);
+    streamResponse = () => stream.response;
+    renderDrawer();
+    await userEvent.click(screen.getByRole("button", { name: "Ask the PBIP assistant" }));
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Message" }),
+      "how do I add a payee{Enter}",
+    );
+    stream.finish();
+    expect(await screen.findByRole("link", { name: "Open payees" })).toHaveAttribute(
+      "href",
+      "/payees",
+    );
+  });
+
   it("TASK-105: shows the tool label, the catalogue as plain text and a link to Wealth", async () => {
     const reply = [
       "Funds and bonds:",

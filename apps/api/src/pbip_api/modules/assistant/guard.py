@@ -65,7 +65,7 @@ _OTHER = re.compile(
     r"(?:\s{1,3}(?!(?:my|your|our|the|this|that)\b)[a-z]+){0,2}?\s{1,3}"
     r"(balance|account|accounts|transactions|spending|spend"
     r"|expenses?|payments?|loans?|statements?|investments?|suggestions?|recommendations?"
-    r"|portfolio|risk\s{1,3}profile)\b",
+    r"|portfolio|risk\s{1,3}profile|insurance|polic(y|ies))\b",
     _I,
 )
 _SQL = re.compile(
