@@ -51,9 +51,10 @@ def engine_inputs(monkeypatch: pytest.MonkeyPatch) -> list[CustomerRecommendatio
         ctx: CustomerRecommendationContext,
         top_k: int = 3,
         propensity: PropensityModel | None = None,
+        apply_risk_band: bool = True,
     ) -> list[Recommendation]:
         seen.append(ctx)
-        return real(ctx, top_k=top_k, propensity=propensity)
+        return real(ctx, top_k=top_k, propensity=propensity, apply_risk_band=apply_risk_band)
 
     monkeypatch.setattr(recommendations_service, "generate_recommendations", spy)
     return seen

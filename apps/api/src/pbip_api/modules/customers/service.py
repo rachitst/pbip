@@ -75,10 +75,23 @@ def recommendation_age_band(session: Session, customer_id: UUID, today: date) ->
     ``session.get``: on a customer request the row is already in the session (the authenticated
     customer was just loaded), so this costs no query (#343).
     """
+    return recommendation_bands(session, customer_id, today)[0]
+
+
+def recommendation_bands(
+    session: Session, customer_id: UUID, today: date
+) -> tuple[AgeBand, RiskBand | None]:
+    """The age band (rules of :func:`recommendation_age_band`) and the RTQ-1 risk band (TASK-097,
+    ``None`` until assessed) from ONE read of the customer row, for the recommendation engine
+    (ADR-0056). One read matters off the HTTP path: nothing else holds the row there, so two
+    separate ``session.get`` calls would each load it."""
     customer = session.get(Customer, customer_id)
-    if customer is None or customer.recommendations_consent_at is None:
-        return AgeBand.UNKNOWN
-    return age_band(customer.date_of_birth, today)
+    if customer is None:
+        return AgeBand.UNKNOWN, None
+    risk = RiskBand(customer.risk_profile) if customer.risk_profile else None
+    if customer.recommendations_consent_at is None:
+        return AgeBand.UNKNOWN, risk
+    return age_band(customer.date_of_birth, today), risk
 
 
 def risk_profile(session: Session, customer_id: UUID) -> RiskProfileOut:
