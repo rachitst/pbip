@@ -7,11 +7,15 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Response, status
+from redis import Redis
 from sqlalchemy.orm import Session
 
 from pbip_api.core.calendar import bank_today
+from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.db import get_session
 from pbip_api.core.errors import UnprocessableError
+from pbip_api.core.ratelimit import consume
+from pbip_api.core.redis import get_redis
 from pbip_api.modules.auth.dependencies import get_clock, get_request_meta
 from pbip_api.modules.auth.service import RequestMeta
 from pbip_api.modules.customers import policy
@@ -23,6 +27,7 @@ from pbip_api.modules.customers.schemas import (
     DemographicsOut,
     DeviceOut,
     DeviceRegisterRequest,
+    PhoneIn,
     RecommendationsConsentIn,
     RiskProfileOut,
     RiskQuestionnaire,
@@ -42,6 +47,51 @@ def get_my_profile(
 
 def _now(clock: Callable[[], float]) -> datetime:
     return datetime.fromtimestamp(clock(), tz=UTC)
+
+
+_PHONE_WINDOW_SECONDS = 3600
+
+
+def phone_change_rate_limit(
+    customer: Customer = Depends(get_current_customer),
+    redis_client: Redis = Depends(get_redis),
+    settings: Settings = Depends(get_settings),
+) -> None:
+    """Per customer, not per IP: one account must not be able to churn its number."""
+    consume(
+        redis_client,
+        "phone_change",
+        f"user:{customer.user_id}",
+        settings.rate_limit_phone_change_per_hour,
+        _PHONE_WINDOW_SECONDS,
+    )
+
+
+@router.put(
+    "/me/phone",
+    response_model=CustomerProfileOut,
+    summary="Set my mobile number (E.164); stored encrypted, returned masked",
+)
+def put_my_phone(
+    body: PhoneIn,
+    _limited: None = Depends(phone_change_rate_limit),
+    customer: Customer = Depends(get_current_customer),
+    service: CustomerService = Depends(get_customer_service),
+    meta: RequestMeta = Depends(get_request_meta),
+) -> CustomerProfileOut:
+    return service.set_phone(customer, body.phone, meta)
+
+
+@router.delete(
+    "/me/phone", status_code=status.HTTP_204_NO_CONTENT, summary="Delete my mobile number"
+)
+def delete_my_phone(
+    _limited: None = Depends(phone_change_rate_limit),
+    customer: Customer = Depends(get_current_customer),
+    service: CustomerService = Depends(get_customer_service),
+    meta: RequestMeta = Depends(get_request_meta),
+) -> None:
+    service.delete_phone(customer, meta)
 
 
 @router.get(

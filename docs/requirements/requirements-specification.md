@@ -4,7 +4,7 @@
 |---|---|
 | Task | TASK-104 (#187) |
 | Source | *PBIP Use Case Document v0.2*: sections 5 (scope), 6 (actors), 7 (UC-01 to UC-13), 8 (non-functional), 9 to 11 (deliverables, practices, success criteria) |
-| Status checked against | `main` at `2e65b87` (1 Nov 2026): the code and the tests, not earlier documents; rows changed by the batch docs PRs since then were checked against `main` at the time, most recently `bae2580` (3 Nov 2026, batch docs 5) |
+| Status checked against | `main` at `2e65b87` (1 Nov 2026): the code and the tests, not earlier documents; rows changed by the batch docs PRs since then were checked against `main` at the time, most recently `3c911ab` (4 Nov 2026, batch docs 7) |
 | Companion documents | [User stories](user-stories.md) (acceptance criteria and tests per story), [traceability](traceability.md) (requirement to code, tests and gaps), [HLD](../architecture/HLD.md) |
 
 Every requirement below is derived from a sentence in the use-case document. Its **Source** column says which one.
@@ -86,7 +86,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | ID | Requirement | Source | Status | Tasks | Gap |
 |---|---|---|---|---|---|
 | FR-29 | The system shall provide a loan catalogue and an EMI calculator with a repayment schedule. | Section 5 "loan catalogue, EMI calculator" | Implemented | TASK-045, TASK-051 | Web `/loans` (`Loans.tsx`) |
-| FR-30 | The system shall assess loan eligibility from the customer's own income and existing repayments, with the reasons explained. | UC-06 "generates eligibility assessment" | Partial | TASK-046 | Uses income and EMIs (DTI ≤ 50%), not balances or spending patterns as UC-06 lists |
+| FR-30 | The system shall assess loan eligibility from the customer's own income and existing repayments, with the reasons explained. | UC-06 "generates eligibility assessment" | Partial | TASK-046 | Uses income and EMIs (DTI ≤ 50%), not balances or spending patterns as UC-06 lists. Income counts only recurring credits (#404, ADR-0043), so a customer with no salary history gets no income-based offer |
 | FR-31 | The system shall display personalised loan suggestions. | UC-06 "displays recommendations" | Partial | TASK-054, TASK-062 | The recommendation engine suggests a credit line and a rewards card, not the catalogue loans; the carousel (TASK-062, PR #328) links the credit line to `/loans` without preselecting a catalogue loan |
 | FR-32 | The customer shall apply for a loan and track it. | Section 5 "loan applications, loan tracking" | Implemented | TASK-047, TASK-051 | API and web `/loans` (application, disbursal receipt, amortisation progress; ADR-0024) |
 | FR-33 | The system shall record the customer's risk tolerance. | UC-07 input | Implemented | TASK-097 | Five-question questionnaire, deterministic LOW/MODERATE/HIGH band, answers and assessment time stored and audited (`/api/v1/customers/me/risk-profile`) |
@@ -143,16 +143,16 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | ID | Requirement | Status | Evidence | Tasks | Gap |
 |---|---|---|---|---|---|
 | NFR-01 | Secure authentication | Implemented | Argon2id, TOTP, rotating refresh, lockout; `test_auth.py` | TASK-006 | |
-| NFR-02 | Encrypt sensitive data | Partial | MultiFernet field encryption with key rotation; `test_crypto.py`, `test_rotate_field_key.py` | TASK-075 | TLS is terminated outside the repo (runbook section 1.4); no task |
+| NFR-02 | Encrypt sensitive data | Partial | MultiFernet field encryption with key rotation; `test_crypto.py`, `test_rotate_field_key.py`; TLS in nginx and to PostgreSQL (#280, `scripts/verify_tls.sh`); field-encryption policy for PII, ADR-0042 (#402) | TASK-075 | Certbot issuance on a real host (#198); #145 waits for #398 and #399 |
 | NFR-03 | Role-based access control | Implemented | `require_roles`, policy functions; `test_rbac_bola.py`, route-policy registry test | | |
 | NFR-04 | Audit logs | Implemented | Hash-chained append-only `audit_logs`; `test_audit_and_outbox.py` | | |
 | NFR-05 | Protection against OWASP Top 10 | Partial | Threat-model mapping, Bandit, CodeQL, nightly Schemathesis | TASK-090 | No DAST against a deployed environment |
-| NFR-06 | Page load < 2 s | Planned | Not measured | TASK-102 | |
-| NFR-07 | API response < 500 ms | Partial | Analytics endpoints p95 12-19 ms (local, sequential); fraud scoring p95 24.7 ms; the assistant's LLM path for unclear questions takes 12-50 s on CPU | TASK-078, TASK-102 | Not measured under load; LLM path misses the target (documented in ADR-0018) |
-| NFR-08 | Login < 3 s | Planned | Not measured | TASK-102 | |
+| NFR-06 | Page load < 2 s | Implemented | `apps/web/e2e/perf.spec.ts` in `perf.yml`: pages 110-451 ms in CI with 2 API replicas (#419); 313-1,600 ms on the Windows laptop (2026-11-04) | TASK-102 | Not measured on a deployed environment (#198) |
+| NFR-07 | API response < 500 ms | Partial | Analytics endpoints p95 12-19 ms (local, sequential); fraud scoring p95 24.7 ms; the assistant's LLM path for unclear questions takes 12-50 s on CPU | TASK-078, TASK-102 | Under load (k6, 50 VUs, 2 API replicas, #419): every route group p95 under 500 ms in two CI runs (transfers 287 / 347 ms); not met on laptops with one replica; LLM path misses the target (documented in ADR-0018) |
+| NFR-08 | Login < 3 s | Implemented | k6 login p95 340-406 ms and browser login 251-277 ms in CI (#419); browser login 2,133 ms on the Windows laptop (2026-11-04) | TASK-102 | Not measured on a deployed environment (#198) |
 | NFR-09 | 99% availability in the test environment | Planned | No environment deployed | TASK-103, #198 | |
 | NFR-10 | Horizontal scaling, stateless APIs, containerised deployment | Partial | Stateless API, one worker per container, Docker images and compose | TASK-079 | Multi-replica deployment never exercised |
-| NFR-11 | Centralised logging, error tracking, health monitoring, performance metrics | Partial | structlog → Alloy → Loki, Prometheus metrics and alert rules, Grafana, health probes (dev compose) | TASK-069, TASK-103 | No error tracking; no Alertmanager; not deployed |
+| NFR-11 | Centralised logging, error tracking, health monitoring, performance metrics | Partial | structlog → Alloy → Loki, Prometheus metrics and alert rules, Grafana, health probes (dev compose); `unhandled_exception` events and `unhandled_errors_total` (#289); Celery worker metrics through Redis and the API `/metrics` (#380, ADR-0039) | TASK-069, TASK-103 | No Alertmanager; not deployed; worker metrics not yet checked against a live Prometheus (#378) |
 
 ## 4. Engineering and documentation requirements (sections 9 to 11)
 
@@ -161,7 +161,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | ER-01 | Responsive web application | Partial | Remaining UI tasks above | Customer and staff screens exist for the journeys above (`apps/web/src/shell/routes.tsx`); the fraud statistics are not charted (FR-49) |
 | ER-02 | Backend API and database implementation | Implemented | | 57 operations, migrations 0001-0010, [ER diagram](../architecture/er-diagram.md) |
 | ER-03 | API documentation | Implemented | | `docs/api/openapi.json`, drift-checked in CI |
-| ER-04 | Automated tests, ≥ 70% coverage | Implemented | TASK-087 (report, #373) | CI coverage gate is 80% (backend); 96.53% in CI ([test strategy and report](../testing/test-strategy-and-report.md)) |
+| ER-04 | Automated tests, ≥ 70% coverage | Implemented | TASK-087 (report, #373; auth branch coverage 95.83% after #410) | CI coverage gate is 80% (backend); 96.71% in CI run 41689113122, 96.53% in run 41600683787 ([test strategy and report](../testing/test-strategy-and-report.md)) |
 | ER-05 | CI: build, test, quality scan, security scan | Implemented | | |
 | ER-06 | CI: package, deploy, smoke test | Partial | #198, TASK-091 | Deploy workflow exists but is gated off; no staging host |
 | ER-07 | Requirements specification, user stories, use case document | Implemented | TASK-104 | This document and [user-stories.md](user-stories.md) |

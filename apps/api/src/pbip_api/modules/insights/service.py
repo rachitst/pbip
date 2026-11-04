@@ -108,9 +108,14 @@ def _score(activity: analytics_service.CustomerActivity, now: datetime) -> _Scor
 def _ranked_products(
     session: Session, customer_id: UUID, now: datetime
 ) -> list[ProductRecommendationItem]:
-    """Every eligible product, best first (the customer route only shows the top 3)."""
+    """Every eligible product, best first (the customer route only shows the top 3).
+
+    Always rules-v1, even when the customer route uses the simulated-uptake model (ADR-0049): the
+    RM order, the loan filter's thresholds and the "rule-based" labels are defined on the rule
+    score (ADR-0041), and a simulated probability must not rank real customers against each other.
+    """
     return recommendations_service.get_customer_recommendations(
-        session, customer_id, now, top_k=len(PRODUCT_CATALOGUE)
+        session, customer_id, now, top_k=len(PRODUCT_CATALOGUE), propensity=None
     ).recommendations
 
 

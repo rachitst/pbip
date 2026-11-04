@@ -4,7 +4,7 @@
 |---|---|
 | Code | `ml/src/pbip_ml/fraud/training.py` (fit), `ml/src/pbip_ml/fraud/train.py` (CLI and MLflow logging), `ml/src/pbip_ml/fraud/inference.py` (load) |
 | Artifact | `models/fraud/lightgbm.txt`, checksummed in `manifest.json` |
-| `model_version` | not served alone; part of the hybrid `hybrid-lgbm-iforest-2` (`HYBRID_VERSION` in `train.py`; `-1` = the v2.1/v2.2 models) |
+| `model_version` | not served alone; part of the hybrid `hybrid-lgbm-iforest-3` (`HYBRID_VERSION` in `train.py`; `-1` = the v2.1/v2.2 models; `-2` and `-3` share this booster, `-3` recalibrates it, ADR-0047) |
 | Owner | `rachitst` (`.github/CODEOWNERS`, rule `*`) |
 | Tasks | TASK-029, TASK-033, TASK-038, TASK-039, TASK-071 |
 

@@ -9,8 +9,13 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from pbip_api.core.config import Settings
-from pbip_api.core.errors import ConflictError, NotFoundError, UnprocessableError
-from pbip_api.core.security import encode_token
+from pbip_api.core.errors import (
+    ConflictError,
+    NotFoundError,
+    UnauthorizedError,
+    UnprocessableError,
+)
+from pbip_api.core.security import PasswordService, encode_token
 from pbip_api.modules.auth.models import RefreshToken, SecurityEvent, SecurityEventType, User
 from pbip_api.modules.auth.service import RequestMeta
 from pbip_api.modules.compliance.models import AuditLog
@@ -496,7 +501,7 @@ def test_password_change_rate_limited(
 
 
 def test_concurrent_password_change_requests(
-    client: TestClient, make_customer: Callable[..., Actor]
+    client: TestClient, make_customer: Callable[..., Actor], db: Session, settings: Settings
 ) -> None:
     alice = make_customer("alice.concur@example.com")
     new_pwd_1 = "Concurrent-Pass-1!"  # pragma: allowlist secret
@@ -515,7 +520,49 @@ def test_concurrent_password_change_requests(
         f2 = executor.submit(do_change, new_pwd_2)
         statuses = sorted([f1.result(), f2.result()])
 
-    assert statuses == [204, 403]  # the loser's current password is no longer valid
+    # Exactly one change wins. The winner revokes the shared session (ADR-0021), so the loser is
+    # always rejected as that revoked session (401) - whether it authenticated before or after
+    # the winner committed - and never reaches the current-password check (#403).
+    assert statuses == [204, 401]
+    db.expire_all()
+    user = db.get(User, alice.user_id)
+    assert user is not None
+    passwords = PasswordService.from_settings(settings)
+    winners = [p for p in (new_pwd_1, new_pwd_2) if passwords.verify(user.password_hash, p)]
+    assert len(winners) == 1
+    assert user.failed_login_count == 0  # the loser counted no failure towards lockout
+    assert user.token_version == 1
+
+
+def test_password_change_on_a_session_revoked_in_flight_is_401_and_counts_no_failure(
+    db: Session,
+    auth_service_factory: Callable[[Session], Any],
+    make_customer: Callable[..., Actor],
+    settings: Settings,
+) -> None:
+    """The interleaving behind #403, made deterministic: request B authenticated with token
+    version 0, then request A changed the password (version -> 1) before B took the row lock."""
+    alice = make_customer("alice.inflight@example.com")
+    service = auth_service_factory(db)
+    service.change_password(alice.user_id, PASSWORD, NEW_PASSWORD, RequestMeta(), token_version=0)
+
+    with pytest.raises(UnauthorizedError):
+        service.change_password(
+            alice.user_id, PASSWORD, "Another-Strong-Pass-7!", RequestMeta(), token_version=0
+        )
+
+    db.expire_all()
+    user = db.get(User, alice.user_id)
+    assert user is not None
+    assert PasswordService.from_settings(settings).verify(user.password_hash, NEW_PASSWORD)
+    assert user.failed_login_count == 0
+    failures = db.execute(
+        select(SecurityEvent).where(
+            SecurityEvent.user_id == alice.user_id,
+            SecurityEvent.event_type == SecurityEventType.LOGIN_FAILURE,
+        )
+    ).all()
+    assert failures == []
 
 
 def test_self_registration_disabled(client: TestClient, settings: Settings) -> None:

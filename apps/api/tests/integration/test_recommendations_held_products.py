@@ -30,6 +30,7 @@ from pbip_ml.recommendations.engine import (
     PRODUCT_CATALOGUE,
     SAVINGS_ACCOUNT_ID,
 )
+from pbip_ml.recommendations.propensity import PropensityModel
 from pbip_test_support import Actor, age_payee, post_deposit_at
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
@@ -48,9 +49,13 @@ def engine_inputs(monkeypatch: pytest.MonkeyPatch) -> list[CustomerRecommendatio
     seen: list[CustomerRecommendationContext] = []
     real = recommendations_service.generate_recommendations
 
-    def spy(ctx: CustomerRecommendationContext, top_k: int = 3) -> list[Recommendation]:
+    def spy(
+        ctx: CustomerRecommendationContext,
+        top_k: int = 3,
+        propensity: PropensityModel | None = None,
+    ) -> list[Recommendation]:
         seen.append(ctx)
-        return real(ctx, top_k=top_k)
+        return real(ctx, top_k=top_k, propensity=propensity)
 
     monkeypatch.setattr(recommendations_service, "generate_recommendations", spy)
     return seen

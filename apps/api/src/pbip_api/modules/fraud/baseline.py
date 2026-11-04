@@ -10,6 +10,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from uuid import UUID
 
 from pbip_ml.fraud.contract import (
     FraudDecision,
@@ -18,14 +19,15 @@ from pbip_ml.fraud.contract import (
     ReasonSource,
     TransactionContext,
 )
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.orm import InstrumentedAttribute, Session
+from sqlalchemy.sql.selectable import ScalarSelect
 
 from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.db import utcnow
 from pbip_api.core.money import format_minor
 from pbip_api.core.velocity import VelocityCounters
-from pbip_api.modules.accounts.models import AccountHolder
+from pbip_api.modules.accounts.models import Account, AccountHolder
 from pbip_api.modules.auth.models import SecurityEvent, SecurityEventType
 from pbip_api.modules.customers.models import Customer, Device
 from pbip_api.modules.fraud.models import FraudEvent
@@ -34,8 +36,9 @@ from pbip_api.modules.fraud.travel import TravelPolicy, impossible_travel
 from pbip_api.modules.ledger.models import Transaction, TransactionStatus, TransactionType
 from pbip_api.modules.payees.models import Payee
 
-MODEL_VERSION = "baseline-rules-0.5"  # 0.2: NEW_COUNTRY (ADR-0014); 0.3: TASK-095 signals;
-# 0.4: IMPOSSIBLE_TRAVEL (ADR-0034); 0.5: MULE_PASS_THROUGH (#144, ADR-0035)
+MODEL_VERSION = "baseline-rules-0.6"  # 0.2: NEW_COUNTRY (ADR-0014); 0.3: TASK-095 signals;
+# 0.4: IMPOSSIBLE_TRAVEL (ADR-0034); 0.5: MULE_PASS_THROUGH (#144, ADR-0035);
+# 0.6: STRUCTURING (#274) and DORMANT_REACTIVATION (#275), ADR-0046
 
 NEW_PAYEE_WINDOW = timedelta(hours=24)
 NEW_PAYEE_LARGE_MINOR = 2_500_000  # 25,000.00
@@ -56,6 +59,19 @@ MULE_POINTS = 45
 MULE_REPEAT_POINTS = 60
 MULE_REPEAT_WINDOW = timedelta(days=30)
 MULE_SNAPSHOT_IDS = 20  # inbound ids kept in the snapshot; the count and total are always complete
+# STRUCTURING and DORMANT_REACTIVATION (ADR-0046): each alone STEP_UP; with NEW_PAYEE_LARGE_AMOUNT
+# (+45) REVIEW (80), not BLOCK.
+STRUCTURING_POINTS = 35
+STRUCTURING_SNAPSHOT_IDS = 20
+DORMANT_POINTS = 35
+# Customer-induced activity wakes an account; bank-initiated postings (fees, deposit interest,
+# maturity payouts, reversals, loan disbursals and collections) do not (ADR-0046).
+ACTIVITY_TYPES = (
+    TransactionType.TRANSFER,
+    TransactionType.DEPOSIT,
+    TransactionType.BILL_PAYMENT,
+    TransactionType.FD_BOOKING,
+)
 
 STEP_UP_AT = 30
 REVIEW_AT = 60
@@ -179,7 +195,9 @@ class BaselineRulesScorer:
         new_device, new_network = self._new_device_or_network(context, now)
         travel_reason, travel_features = impossible_travel(self.session, context, self.travel)
         mule = self._mule_pass_through(context, now)
-        late_rules = (travel_reason, mule.reason)
+        structuring = self._structuring(context, now)
+        dormant = self._dormant_reactivation(context, now)
+        late_rules = (travel_reason, mule.reason, structuring.reason, dormant.reason)
         for reason in [
             *_session_signals(failures, new_device, new_network, context.ip_network),
             *(rule for rule in late_rules if rule is not None),
@@ -211,14 +229,16 @@ class BaselineRulesScorer:
                 "geo_lon": context.geo_lon,
                 **travel_features,
                 **mule.features,
+                **structuring.features,
+                **dormant.features,
             },
         )
 
-    def _mule_pass_through(self, context: TransactionContext, now: datetime) -> "_MuleCheck":
+    def _mule_pass_through(self, context: TransactionContext, now: datetime) -> "_RuleCheck":
         """F6: money received from other customers in the window, most of it now sent on.
 
         Inbound is POSTED TRANSFER credits from accounts held by other customers only: DEPOSIT
-        (the funding path), REVERSAL, FEE and moves between this customer's own accounts are not
+        (the funding path), REVERSAL and moves between this customer's own accounts are not
         someone else's money passing through. Read-only: no lock, no write.
         """
         cfg = self.settings
@@ -255,7 +275,7 @@ class BaselineRulesScorer:
             if count
             else ()
         )
-        check = _MuleCheck(
+        check = _RuleCheck(
             features={
                 "mule_window_minutes": cfg.fraud_mule_window_minutes,
                 "mule_inbound_total_minor": total,
@@ -291,6 +311,161 @@ class BaselineRulesScorer:
             source=ReasonSource.RULE,
             contribution=points,
         )
+        return check
+
+    def _structuring(self, context: TransactionContext, now: datetime) -> "_RuleCheck":
+        """F7: several movements, each just under the threshold, on this account in the window.
+
+        Counted: POSTED TRANSFER or DEPOSIT credits from accounts this customer does not hold,
+        POSTED TRANSFER debits to accounts this customer does not hold, and this transfer if it is
+        just under the threshold too. Moves between the customer's own accounts are not counted.
+        Read-only: no lock, no write (ix_transactions_{debit,credit}_account_id_created_at).
+        """
+        cfg = self.settings
+        threshold = cfg.fraud_structuring_threshold_minor
+        floor_x100 = threshold * (100 - cfg.fraud_structuring_band_percent)  # exact, no float
+        own = select(AccountHolder.account_id).where(
+            AccountHolder.customer_id == context.customer_id
+        )
+        received = and_(
+            Transaction.credit_account_id == context.account_id,
+            Transaction.type.in_((TransactionType.TRANSFER, TransactionType.DEPOSIT)),
+            or_(Transaction.debit_account_id.is_(None), Transaction.debit_account_id.not_in(own)),
+        )
+        sent = and_(
+            Transaction.debit_account_id == context.account_id,
+            Transaction.type == TransactionType.TRANSFER,
+            or_(Transaction.credit_account_id.is_(None), Transaction.credit_account_id.not_in(own)),
+        )
+        near = (
+            Transaction.status == TransactionStatus.POSTED,
+            Transaction.id != context.transaction_id,
+            Transaction.created_at >= now - timedelta(hours=cfg.fraud_structuring_window_hours),
+            Transaction.amount * 100 >= floor_x100,
+            Transaction.amount < threshold,
+            or_(received, sent),
+        )
+        received_count, sent_count, summed = self.session.execute(
+            select(
+                func.count().filter(Transaction.credit_account_id == context.account_id),
+                func.count().filter(Transaction.debit_account_id == context.account_id),
+                func.coalesce(func.sum(Transaction.amount), 0),
+            ).where(*near)
+        ).one()
+        this_near = context.amount_minor * 100 >= floor_x100 and context.amount_minor < threshold
+        count = int(received_count) + int(sent_count) + int(this_near)
+        total = int(summed) + (context.amount_minor if this_near else 0)
+        ids = (
+            self.session.execute(
+                select(Transaction.id)
+                .where(*near)
+                .order_by(Transaction.created_at)
+                .limit(STRUCTURING_SNAPSHOT_IDS)
+            ).scalars()
+            if count > int(this_near)
+            else ()
+        )
+        fires = count >= cfg.fraud_structuring_min_count
+        check = _RuleCheck(
+            features={
+                "structuring_window_hours": cfg.fraud_structuring_window_hours,
+                "structuring_threshold_minor": threshold,
+                "structuring_band_percent": cfg.fraud_structuring_band_percent,
+                "structuring_received_count": int(received_count),
+                "structuring_sent_count": int(sent_count),
+                "structuring_this_transfer": this_near,
+                "structuring_total_minor": total,
+                # staff-only (fraud queue); the snapshot holds scalars, so ids are comma-joined
+                "structuring_transaction_ids": ",".join(str(i) for i in ids),
+                "structuring": fires,
+            }
+        )
+        if fires:
+            check.reason = FraudReason(
+                code="STRUCTURING",
+                message=(
+                    f"{count} movements just under {format_minor(threshold, context.currency)} "
+                    f"(at least {100 - cfg.fraud_structuring_band_percent}% of it) in "
+                    f"{cfg.fraud_structuring_window_hours} h: {int(received_count)} received, "
+                    f"{int(sent_count) + int(this_near)} sent"
+                    f"{' including this transfer' if this_near else ''}; together "
+                    f"{format_minor(total, context.currency)}"
+                ),
+                source=ReasonSource.RULE,
+                contribution=STRUCTURING_POINTS,
+            )
+        return check
+
+    def _dormant_reactivation(self, context: TransactionContext, now: datetime) -> "_RuleCheck":
+        """F8: a large transfer from an account that was dormant until it woke up recently.
+
+        The account woke at its first customer-induced activity in the reactivation window (or
+        now, with this transfer). The gap is from the last activity before the window (or the
+        account's opening, if there was none) to that wake-up, so a small first transfer does
+        not hide a large second one. Read-only: four index range scans on
+        ix_transactions_{debit,credit}_account_id_created_at, each stopping at its first row.
+        """
+        cfg = self.settings
+        since = now - timedelta(days=cfg.fraud_dormant_reactivation_days)
+        activity = (
+            Transaction.status == TransactionStatus.POSTED,
+            Transaction.type.in_(ACTIVITY_TYPES),
+            Transaction.id != context.transaction_id,
+        )
+
+        def edge(
+            column: InstrumentedAttribute[UUID | None], newest: bool
+        ) -> ScalarSelect[datetime]:
+            aggregate = func.max if newest else func.min
+            window = Transaction.created_at < since if newest else Transaction.created_at >= since
+            return (
+                select(aggregate(Transaction.created_at))
+                .where(column == context.account_id, window, *activity)
+                .scalar_subquery()
+            )
+
+        sides = (Transaction.debit_account_id, Transaction.credit_account_id)
+        woke_at, last_at, opened_at = self.session.execute(
+            select(
+                func.least(*(edge(side, newest=False) for side in sides)),
+                func.greatest(*(edge(side, newest=True) for side in sides)),
+                select(Account.created_at).where(Account.id == context.account_id)
+                .scalar_subquery(),
+            )
+        ).one()  # fmt: skip
+        if last_at is None and opened_at is not None and opened_at < since:
+            last_at = opened_at  # never used before the window: dormant since it was opened
+        woke = woke_at if woke_at is not None else now
+        gap_days = None if last_at is None else int((woke - last_at).total_seconds() // 86_400)
+        fires = (
+            gap_days is not None
+            and gap_days >= cfg.fraud_dormancy_days
+            and context.amount_minor >= cfg.fraud_dormant_min_amount_minor
+        )
+        check = _RuleCheck(
+            features={
+                "dormancy_days": cfg.fraud_dormancy_days,
+                "dormant_reactivation_days": cfg.fraud_dormant_reactivation_days,
+                "dormant_gap_days": gap_days,
+                "dormant_last_activity_at": last_at.isoformat() if last_at else None,
+                "dormant_woke_at": woke_at.isoformat() if woke_at else None,
+                "dormant_reactivation": fires,
+            }
+        )
+        if fires:
+            woke_text = "until this transfer"
+            if woke_at is not None:
+                days_ago = int((now - woke_at).total_seconds() // 86_400)
+                woke_text = f"until it became active again {days_ago} days ago"
+            check.reason = FraudReason(
+                code="DORMANT_REACTIVATION",
+                message=(
+                    f"No customer activity on this account for {gap_days} days {woke_text}; "
+                    f"sending {format_minor(context.amount_minor, context.currency)}"
+                ),
+                source=ReasonSource.RULE,
+                contribution=DORMANT_POINTS,
+            )
         return check
 
     def _mule_episodes(self, context: TransactionContext, now: datetime) -> int:
@@ -432,7 +607,7 @@ class BaselineRulesScorer:
 
 
 @dataclass
-class _MuleCheck:
+class _RuleCheck:
     features: dict[str, float | int | str | bool | None]
     reason: FraudReason | None = field(default=None)
 

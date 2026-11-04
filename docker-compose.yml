@@ -32,6 +32,12 @@ x-api-env: &api-env
   FRAUD_MODEL_DIR: /models/fraud
   # Model step budget, 5-100 ms (#362): set it in .env for a slow demo machine (docs/SETUP_GUIDE.md section 12).
   FRAUD_MODEL_BUDGET_MS: ${FRAUD_MODEL_BUDGET_MS:-50}
+  # Tracing (ADR 0017, ADR-0050): off unless .env says so. With OTEL_EXPORTER=otlp, start the `otel`
+  # profile; if the collector is not running, spans are dropped and requests are unaffected.
+  OTEL_ENABLED: ${OTEL_ENABLED:-false}
+  OTEL_EXPORTER: ${OTEL_EXPORTER:-none}
+  OTEL_SAMPLE_RATE: ${OTEL_SAMPLE_RATE:-1.0}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_COLLECTOR_CONTAINER_URL:-http://otel-collector:4318}
 
 x-dev-ca: &dev-ca ./infra/certs/ca.crt:/etc/pbip-ca/ca.crt:ro
 
@@ -91,7 +97,12 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
-    ports: ["127.0.0.1:8000:8000"]
+    # One uvicorn process per container (Dockerfile), so CPU-bound work scales with replicas
+    # (ADR-0045). nginx and Prometheus find every replica through Docker's DNS name "api". Each
+    # replica takes the next free host port from the range: the first one gets 8000.
+    deploy:
+      replicas: ${API_REPLICAS:-1}
+    ports: ["127.0.0.1:8000-8003:8000"]
     extra_hosts: ["host.docker.internal:host-gateway"]  # Linux; Docker Desktop provides it already
     # Read-only: the API must never be able to rewrite the models it loads (threat model T34).
     volumes: ["./models/fraud:/models/fraud:ro", *dev-ca]
@@ -133,7 +144,8 @@ services:
     ports: ["8080:8080", "8443:8443"]
     restart: unless-stopped
 
-  # ---- optional profiles: `docker compose --profile ml up -d`, `--profile monitoring up -d` ----
+  # ---- optional profiles: `docker compose --profile ml up -d`, `--profile monitoring up -d`,
+  # `--profile otel up -d` ----
   # Tracking + registry with a SQLite backend. Artifacts are PROXIED by the server
   # (--artifacts-destination), so clients upload over HTTP instead of writing to a
   # container-only path. Host allow-list covers the host port and the compose network.
@@ -221,6 +233,19 @@ services:
     volumes:
       - ./infra/alloy/config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  # OpenTelemetry Collector (issue #209, ADR-0050): OTLP/HTTP in, spans printed to its log. Apache-2.0,
+  # the core distribution, pinned by digest. Enable with OTEL_ENABLED=true and OTEL_EXPORTER=otlp.
+  otel-collector:
+    profiles: [otel]
+    image: otel/opentelemetry-collector:0.164.0@sha256:28b6d41ac51bff6b41ba5e8fe503569ffb9d6a1ea90f7a78419e86f34e44f750
+    command: ["--config=/etc/otelcol/collector.yml"]
+    environment:
+      OTEL_COLLECTOR_VERBOSITY: ${OTEL_COLLECTOR_VERBOSITY:-basic}
+    volumes: ["./infra/otel/collector.yml:/etc/otelcol/collector.yml:ro"]
+    # Host port for `make dev-api` (OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318); loopback only.
+    ports: ["127.0.0.1:4318:4318"]
+    restart: unless-stopped
 
 volumes:
   prometheus:

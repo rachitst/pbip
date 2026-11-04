@@ -6,6 +6,7 @@ from pbip_ml.fraud.contract import FraudScoreResult
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from pbip_api.core.db import utcnow
 from pbip_api.core.errors import NotFoundError
 from pbip_api.modules.customers.models import Customer
 from pbip_api.modules.fraud.models import AlertSeverity, AlertStatus, FraudAlert, FraudEvent
@@ -17,7 +18,12 @@ _HIGH_SEVERITY_SCORE = 85
 def record_event(
     session: Session, transaction_id: UUID, customer_id: UUID, result: FraudScoreResult
 ) -> FraudEvent:
+    """Persist one decision. ``created_at`` is stamped by the app clock, the clock the next
+    payment's ``occurred_at`` uses when travel scoring looks for this one as its prior location:
+    the database's ``now()`` can run ahead of the app host (Docker Desktop's VM clock drifts by
+    hundreds of ms, #371), which hid a payment made a moment earlier."""
     event = FraudEvent(
+        created_at=utcnow(),
         transaction_id=transaction_id,
         customer_id=customer_id,
         risk_score=result.risk_score,

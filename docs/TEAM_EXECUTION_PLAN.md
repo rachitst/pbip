@@ -893,7 +893,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #49 | **Sprint:** 2 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Sujal (`SUJALGPM`)
-- **Start:** Mon 26 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (7.6 days of slack)
+- **Start:** Mon 26 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** Tue 03 Nov (#393, 67429dc, with #390 and #315: outbox relay retries with exponential backoff, dead letters (audited), daily purge and exactly-once delivery, ADR-0040, migrations 0027-0028) | **Status:** Done (criterion 1: the relay claims rows with `FOR UPDATE SKIP LOCKED`, `test_concurrent_relays_deliver_each_event_exactly_once`; criterion 2: `test_failing_event_is_retried_with_backoff_and_does_not_block_the_batch`, `test_outbox_retry_policy.py`; criterion 3: `test_purge_deletes_only_processed_events_past_retention_in_batches`; criterion 4 and the DoD: `test_worker_killed_between_dispatch_and_commit_delivers_exactly_once_on_restart`, `test_crash_after_some_handlers_ran_loses_and_duplicates_nothing`. Two recorded deviations, both in ADR-0040: there is no external webhook consumer in PBIP, so only notifications are dispatched; processed rows past `OUTBOX_RETENTION_DAYS` are deleted, not archived) | **Risk:** Low
 - **Depends on:** TASK-018 (#41, Abbas). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-018
 - **Goal:** Background Celery worker polling outbox_events table and dispatching notifications.
@@ -906,10 +906,10 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   6. Implement and make the tests pass for: Zero event loss even under forced process termination
   7. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #49`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Polls outbox_events with SELECT ... FOR UPDATE SKIP LOCKED
-  - [ ] Dispatches notifications and external webhooks with exponential backoff retry
-  - [ ] Marks processed events and archives rows older than retention threshold
-  - [ ] Zero event loss even under forced process termination
+  - [x] Polls outbox_events with SELECT ... FOR UPDATE SKIP LOCKED
+  - [x] Dispatches notifications and external webhooks with exponential backoff retry
+  - [x] Marks processed events and archives rows older than retention threshold
+  - [x] Zero event loss even under forced process termination
 - **Definition of done (evidence):** Integration tests simulate worker crash and verify exactly-once outbox dispatch.
 - **Required checks:**
   - Automated: CI job or `scripts/dev.py` command exercised in tests; works from a fresh clone; pytest integration tests against PostgreSQL: happy path, 422 validation, 401/403 auth, 404 for non-owned objects (add the endpoint to `tests/integration/test_rbac_bola.py`); idempotency/concurrency tests for money paths
@@ -1720,7 +1720,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #77 | **Sprint:** 5 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (partially delivered in #204 on Sat 31 Oct: eligibility first, top 3 with reasons from real figures, p95 35 ms measured on a laptop; the score is a documented rule-based ranking, a trained model needs product take-up data first, see #77; #345, 45fa764, merged Tue 03 Nov: decision to keep `rules-v1` and train no propensity model, `docs/ml/recommendation-propensity-decision.md`) | **Status:** In Progress (criterion 2 Not Met on purpose: the synthetic data has no product adoption, so any LR/GBM labels would be invented and circular; criterion 4 is met by the engine (CPU p95 0.13-0.17 ms) but not demonstrated for the endpoint (p95 143-173 ms on a loaded 2-CPU laptop), follow-up #343. A propensity model is deferred until an impression log, TASK-112 clicks and conversions from TASK-064 and TASK-047 exist) | **Risk:** Medium (criterion 2 needs data that does not exist yet)
+- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (partially delivered in #204 on Sat 31 Oct: eligibility first, top 3 with reasons from real figures, p95 35 ms measured on a laptop; the score is a documented rule-based ranking, a trained model needs product take-up data first, see #77; #345, 45fa764, merged Tue 03 Nov: decision to keep `rules-v1` and train no propensity model, `docs/ml/recommendation-propensity-decision.md`; #427 in batch #429, ADR-0049: a per-product logistic-regression propensity model trained on a documented simulation of product uptake (`uptake-sim-1`), compared with `rules-v1` on a time split; it fails its own pre-registered gate (macro PR-AUC gain +0.014 < 0.02, SIP worse), so it is not promoted and `rules-v1` is still served; #416: recommendations context in 6 queries, HTTP p95 51-57 ms on a loaded laptop) | **Status:** In Progress (criterion 2 Not Met on purpose: the synthetic data has no product adoption, so any LR/GBM labels would be invented and circular; criterion 4 is met by the engine (CPU p95 0.13-0.17 ms) but not demonstrated for the endpoint (p95 143-173 ms on a loaded 2-CPU laptop), follow-up #343. A propensity model is deferred until an impression log, TASK-112 clicks and conversions from TASK-064 and TASK-047 exist) | **Risk:** Medium (criterion 2 needs data that does not exist yet)
 - **Depends on:** TASK-041 (#64, Krishna), TASK-044 (#67, Krishna). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-041, TASK-044
 - **Goal:** Recommendation engine scoring customer eligibility and propensity for banking products.
@@ -1750,7 +1750,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #78 | **Sprint:** 5 | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Analytics & Insights
 - **Owner:** Krishna (`LetRock1`)
-- **Start:** Fri 30 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** - (partially delivered in #222 on Sat 31 Oct: authenticated batch endpoint, monthly partitions with a daily job creating future months, strict validation; the insert is synchronous and committed before the 202, the < 15 ms target is not measured; 500 events/s load test deferred to #101, see #78) | **Status:** In Progress | **Risk:** Low
+- **Start:** Fri 30 Oct | **Target deadline:** Sat 31 Oct | **Actual completion:** - (partially delivered in #222 on Sat 31 Oct: authenticated batch endpoint, monthly partitions with a daily job creating future months, strict validation; the insert is synchronous and committed before the 202, the < 15 ms target is not measured; 500 events/s load test deferred to #101, see #78; #415 in batch #420, 4886dbb: the k6 scenario `infra/k6/events.js` (`make load-events`) with the load-only rate limit, not yet run on a stack; Windows run 2026-11-04 (#317, i5-6300U 2C/4T, one API replica, whole stack on the laptop): 500 events/s sustained in 4 of 4 runs, 0 failures, 0 dropped batches, batch p95 267-481 ms) | **Status:** In Progress (the DoD's 500 events/s load test is now met; criterion 3, an asynchronous insert under 15 ms, is not: the insert is synchronous and not measured per event) | **Risk:** Low
 - **Depends on:** none
 - **Mode:** Parallel: can start immediately
 - **Goal:** High-throughput clickstream event ingestion API writing to monthly partitioned PostgreSQL tables.
@@ -2403,7 +2403,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #101 | **Sprint:** 6 | **Priority:** must | **Size:** L (3.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (suite merged in #288, 4c5d2d5; laptop: 0% errors, 0 deadlocks/overdrafts, money conserved; NOT met: p95 within budget and 10,000 requests in one run on the 2-CPU laptop, staging #198; GitHub runner run 41378616211 after #295, 6843893: 13,666 requests, 0% errors, all p95 under 500 ms (transfers 348 ms, 537 ms on an earlier runner), invariants clean) | **Status:** In Progress | **Risk:** High (needs staging hardware)
+- **Start:** Thu 29 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (suite merged in #288, 4c5d2d5; laptop: 0% errors, 0 deadlocks/overdrafts, money conserved; NOT met: p95 within budget and 10,000 requests in one run on the 2-CPU laptop, staging #198; GitHub runner run 41378616211 after #295, 6843893: 13,666 requests, 0% errors, all p95 under 500 ms (transfers 348 ms, 537 ms on an earlier runner), invariants clean; #419 in batch #429: 13,773 and 13,954 requests in the two green CI runs, 0% errors, all p95 within budget, invariants clean (0 deadlocks, 0 overdrafts) over 1,332 and 1,214 concurrent transfers; Windows laptop 2026-11-04: 0 violations over 1,287 transfers, p95 over budget with one replica) | **Status:** In Progress | **Risk:** High (needs staging hardware)
 - **Depends on:** TASK-012 (#23, Rachit), TASK-033 (#56, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-033
 - **Goal:** Load testing suite verifying p95 latency < 500ms under 500 concurrent virtual users.
@@ -2432,7 +2432,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #102 | **Sprint:** 6 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Fri 30 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (indexes + pool settings merged in #288, 4c5d2d5; fraud-feature query 4.46 -> 0.54 ms under load, 76.6 -> 0.26 ms at 500k rows; NOT met: DB p95 < 15 ms at 200 connections, not measurable on the laptop) | **Status:** In Progress | **Risk:** High (needs staging hardware)
+- **Start:** Fri 30 Oct | **Target deadline:** Fri 30 Oct | **Actual completion:** - (indexes + pool settings merged in #288, 4c5d2d5; fraud-feature query 4.46 -> 0.54 ms under load, 76.6 -> 0.26 ms at 500k rows; NOT met: DB p95 < 15 ms at 200 connections, not measurable on the laptop; #429 / `performance-2026-11-04.md`: EXPLAIN ANALYZE at 1M transactions, 2M entries and 1M fraud events shows index scans on every hot query (CI run 41713131717); pgbench at 200 connections on a CI runner: p95 1.7 ms at 400 queries/s and 1.8 ms at 1,000 queries/s (target 15 ms)) | **Status:** In Progress | **Risk:** High (needs staging hardware)
 - **Depends on:** TASK-078 (#101, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-078
 - **Goal:** PostgreSQL query profiling and connection pool tuning eliminating slow queries.
@@ -2582,7 +2582,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #107 | **Sprint:** 6 | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Data Generation & ML
 - **Owner:** Pranay (`pranaysanap`)
-- **Start:** Sat 31 Oct | **Target deadline:** Sun 01 Nov | **Actual completion:** - (set when merged) | **Status:** Todo | **Risk:** Low (1.5 days of slack)
+- **Start:** Sat 31 Oct | **Target deadline:** Sun 01 Nov | **Actual completion:** - (#405 with #392 in batch #407, fc4279a: data-gen v2.3, retrained `hybrid-lgbm-iforest-2`, Optuna study, SHAP summary; #421 in batch #429, 3c911ab, ADR-0047, closes #396: `hybrid-lgbm-iforest-3` with out-of-time isotonic calibration, PR-AUC 0.945 / 0.887, recall at REVIEW 0.923 / 0.894, all four bars pass; the TASK-038 gate passed on the Ubuntu laptop in an idle window (p95 20.2 ms) and promoted it to `champion` in that laptop's registry; a second machine (Windows i5-6300U 2C/4T, 2026-11-04, #107) reproduced the training exactly and measured gate p95 6.82-8.31 ms (median 7.58 ms, PASS 3/3) and 0 of 1,500 calls falling back to rules at 50 and 100 ms budgets) | **Status:** In Progress (criterion 1 met by #405; criterion 2 partly met, the SHAP plot is committed but not logged to MLflow; criterion 3 partly met: promoted in a local registry, but the export to `models/fraud` is an operator step after merge and the DoD's frozen bundle in `ml/models/` is not committed, as `models/` is git-ignored) | **Risk:** Medium
 - **Depends on:** TASK-029 (#52, Rachit), TASK-038 (#61, Pranay). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-029, TASK-038
 - **Goal:** Final hyperparameter tuning run (Optuna) producing production frozen model weights.
@@ -2665,7 +2665,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #110 | **Sprint:** 6 | **Priority:** should | **Size:** M (1.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Mon 02 Nov | **Target deadline:** Tue 03 Nov | **Actual completion:** - (#373, 10a26fe, merged Tue 03 Nov: `docs/testing/test-strategy-and-report.md`; criterion 2 not met) | **Status:** In Progress (criteria 1 and 3 are met: test distribution from CI run 41600683787, and the lock-order argument with real-thread tests and 0 deadlocks in 8 CI k6 runs; criterion 2 is not: ledger branch coverage 98.08%, but **auth branch coverage is 89.58% (86/96), below 90%**) | **Risk:** Medium
+- **Start:** Mon 02 Nov | **Target deadline:** Tue 03 Nov | **Actual completion:** Tue 03 Nov (#373, 10a26fe: `docs/testing/test-strategy-and-report.md`; #410 in batch #407, fc4279a: 5 auth edge-case tests) | **Status:** Done (criteria 1 and 3 since #373; criterion 2 since #410: in CI run 41689113122 (PR #407, the commit merged as fc4279a) auth branch coverage is 92/96 = 95.83% and ledger 54/56 = 96.43%, total coverage 96.71%. The plan's manual check, a teammate following the report end to end, was not done) | **Risk:** Low
 - **Depends on:** TASK-077 (#100, Rachit), TASK-078 (#101, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-077, TASK-078
 - **Goal:** Formal verification report summarizing test pyramid counts, coverage, and concurrency results.
@@ -2677,9 +2677,9 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   5. Implement and make the tests pass for: Documents concurrency stress test outcomes and deadlock prevention proof
   6. Update the contract/docs this task touches, run `python scripts/dev.py check`, open the PR (`Closes #110`) and request review.
 - **Expected end result / acceptance criteria:**
-  - [ ] Details test distribution: unit tests, integration tests, security tests, and E2E journeys
-  - [ ] Reports branch coverage across core modules (ledger >= 90%, auth >= 90%)
-  - [ ] Documents concurrency stress test outcomes and deadlock prevention proof
+  - [x] Details test distribution: unit tests, integration tests, security tests, and E2E journeys
+  - [x] Reports branch coverage across core modules (ledger >= 90%, auth >= 90%)
+  - [x] Documents concurrency stress test outcomes and deadlock prevention proof
 - **Definition of done (evidence):** Committed to docs/testing/test-strategy-and-report.md, peer-reviewed and approved.
 - **Required checks:**
   - Automated: document builds/renders, links valid, content matches the code and backlog
@@ -2721,7 +2721,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #112 | **Sprint:** 7 | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Tue 03 Nov | **Target deadline:** Tue 03 Nov | **Actual completion:** - (fixes merging: #386 web layout in batch #397, bae2580; #388, 2c6230d: demo fixes for #383 and the forecast starting at the balance) | **Status:** In Progress | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
+- **Start:** Tue 03 Nov | **Target deadline:** Tue 03 Nov | **Actual completion:** - (fixes merged: #386 in #397, bae2580; #388, 2c6230d; #387; #406, 0dc2315, ADR-0044: expected states log no console errors; #401, #411 and #412 in #407, fc4279a) | **Status:** In Progress (defects found in the bug bash are triaged, and most are fixed with regression tests, but #384, #396, #398, #399 and #403 are still open, so criterion 2 is not met; no written record of the pair-testing session (criterion 1) is linked yet) | **Risk:** High (on the longest dependency chain; a slip here moves Nov 3 work)
 - **Depends on:** TASK-077 (#100, Rachit), TASK-081 (#104, Abbas). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-077, TASK-081
 - **Goal:** Full team defect hunting session identifying and resolving edge-case bugs and UI glitches.
@@ -2832,7 +2832,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #116 | **Sprint:** 7 | **Priority:** must | **Size:** S (0.5 person-days estimate) | **Epic:** Documentation & Governance
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Tue 03 Nov | **Target deadline:** Tue 03 Nov | **Actual completion:** - (#377 open) | **Status:** In Progress | **Risk:** High (0.1 day(s) of slack; a slip here moves Nov 3 work)
+- **Start:** Tue 03 Nov | **Target deadline:** Tue 03 Nov | **Actual completion:** - (#377 in batch #407, fc4279a: live demo script with verified amounts and the fallback plan) | **Status:** In Progress (#377 adds the minute-by-minute script; the rehearsal, the slide deck and the fallback video (criteria 3-4 and the DoD) are the owner's, and the live demo was cancelled on Tue 03 Nov) | **Risk:** High (0.1 day(s) of slack; a slip here moves Nov 3 work)
 - **Depends on:** TASK-081 (#104, Abbas), TASK-092 (#115, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Sequential: waits for TASK-081, TASK-092
 - **Goal:** Rehearsed 18-minute presentation script with deterministic demo data and fallback video.
@@ -3091,7 +3091,7 @@ decision in ADR-0015.
 
 - **Issue:** #185 | **Sprint:** unscheduled | **Priority:** must | **Size:** M (1.5 person-days estimate) | **Epic:** Quality & Verification
 - **Owner:** Unassigned
-- **Start:** - | **Target deadline:** - | **Actual completion:** - (merged in #288, 4c5d2d5; laptop browser: page loads 913-1,665 ms, login 2,102 ms, all within budget; API p95 budget not met under 50 VUs on the laptop; GitHub runner run 41378616211 after #295: every API p95 under 500 ms (transfers 348 ms; 537 ms on an earlier runner, so not yet stable), browser budgets passed) | **Status:** In Progress | **Risk:** Medium
+- **Start:** - | **Target deadline:** - | **Actual completion:** - (merged in #288, 4c5d2d5; laptop browser: page loads 913-1,665 ms, login 2,102 ms, all within budget; API p95 budget not met under 50 VUs on the laptop; GitHub runner run 41378616211 after #295: every API p95 under 500 ms (transfers 348 ms; 537 ms on an earlier runner, so not yet stable), browser budgets passed; #419 in batch #429, 3c911ab: the workflow runs 2 API replicas (ADR-0045), green twice on the slower runner class (runs 41707736252 and 41709572444: transfers p95 287 and 347 ms, login 340 and 406 ms, pages 110-451 ms), report `docs/testing/performance-2026-11-04.md`, linked from the test strategy §5 in batch docs 7; Windows laptop, one replica, 2026-11-04: page loads 313-1,600 ms and login 2,133 ms within budget, API p95 over budget at 28 req/s) | **Status:** In Progress (all three criteria and the DoD now have evidence: `perf.spec.ts`, the k6 thresholds in `load.js`, and the `perf-results` artifact with `environment.txt` from a job that fails on a crossed budget; left for the owner's final review, as TASK-102 is on the owner's list) | **Risk:** Medium
 - **Depends on:** TASK-012 (#23, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Unscheduled
 - **Goal:** Measured evidence for the section 8 targets: page load < 2 s, API response < 500 ms, login < 3 s.

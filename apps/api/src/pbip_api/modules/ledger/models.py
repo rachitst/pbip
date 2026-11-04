@@ -26,7 +26,7 @@ class TransactionType(StrEnum):
     TRANSFER = "TRANSFER"
     DEPOSIT = "DEPOSIT"
     REVERSAL = "REVERSAL"
-    FEE = "FEE"
+    # No FEE: there is no fees engine, and no code ever created one (#175, migration 0029).
     BILL_PAYMENT = "BILL_PAYMENT"
     LOAN_DISBURSAL = "LOAN_DISBURSAL"  # clearing -> customer (ADR-0024); never counted as income
     LOAN_REPAYMENT = "LOAN_REPAYMENT"  # customer -> clearing, collected by the scheduler (ADR-0024)

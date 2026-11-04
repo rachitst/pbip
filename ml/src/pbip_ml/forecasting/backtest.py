@@ -6,6 +6,9 @@ values inside the 80% / 95% intervals (coverage). Series come from the determini
 dataset (data-gen v1), so the numbers are reproducible:
 
     uv run python -m pbip_ml.forecasting.backtest --customers 60 --months 12 [--json out.json]
+
+``--short-history`` instead compares the methods for accounts with under 28 days of history: each
+forecast sees only a fixed 14, 21 or 27-day window before its origin (#384).
 """
 
 import argparse
@@ -53,6 +56,36 @@ def rolling_origin(
     return results
 
 
+def short_window(
+    series: Sequence[float], method: str, horizon: int, window: int, origins: int, step: int
+) -> list[dict[str, float]]:
+    """Rolling origin where each forecast sees only the ``window`` days before its origin."""
+    results = []
+    last_origin = len(series) - horizon
+    first_origin = max(window, last_origin - step * (origins - 1))
+    for origin in range(first_origin, last_origin + 1, step):
+        raw = predict(series[origin - window : origin], horizon, method, (80, 95))
+        actual = series[origin : origin + horizon]
+        results.append(
+            {
+                "smape": smape(actual, raw["mean"]),
+                "coverage_80": coverage(actual, raw["lo-80"], raw["hi-80"]),
+                "coverage_95": coverage(actual, raw["lo-95"], raw["hi-95"]),
+            }
+        )
+    return results
+
+
+def summarise(rows: Sequence[dict[str, float]]) -> dict[str, float]:
+    return {
+        "forecasts": len(rows),
+        "smape_mean": round(float(np.mean([r["smape"] for r in rows])), 2),
+        "smape_median": round(float(np.median([r["smape"] for r in rows])), 2),
+        "coverage_80": round(float(np.mean([r["coverage_80"] for r in rows])), 1),
+        "coverage_95": round(float(np.mean([r["coverage_95"] for r in rows])), 1),
+    }
+
+
 def synthetic_balance_series(customers: int, months: int, seed: int) -> list[list[float]]:
     """End-of-day balances (rupees) per customer from data-gen v1, opening at two months' income."""
     from pbip_datagen.generator import GeneratorConfig, customer_transactions, iter_customers
@@ -89,14 +122,28 @@ def run(customers: int, months: int, seed: int, horizon: int) -> dict[str, objec
     }
     for method in ("auto_ets", "auto_arima", "seasonal_naive"):
         rows = [r for s in series for r in rolling_origin(s, method, horizon, 4, 30, 60)]
-        report["methods"][method] = {  # type: ignore[index]
-            "forecasts": len(rows),
-            "smape_mean": round(float(np.mean([r["smape"] for r in rows])), 2),
-            "smape_median": round(float(np.median([r["smape"] for r in rows])), 2),
-            "coverage_80": round(float(np.mean([r["coverage_80"] for r in rows])), 1),
-            "coverage_95": round(float(np.mean([r["coverage_95"] for r in rows])), 1),
-        }
+        report["methods"][method] = summarise(rows)  # type: ignore[index]
     return report
+
+
+def run_short_history(customers: int, months: int, seed: int, horizon: int) -> dict[str, object]:
+    """The methods for under 28 days of history, per window length (#384)."""
+    series = [s for s in synthetic_balance_series(customers, months, seed) if len(s) >= 120]
+    windows: dict[str, dict[str, dict[str, float]]] = {}
+    for window in (14, 21, 27):
+        windows[str(window)] = {
+            method: summarise(
+                [r for s in series for r in short_window(s, method, horizon, window, 4, 30)]
+            )
+            for method in ("seasonal_naive", "naive")
+        }
+    return {
+        "series": len(series),
+        "horizon_days": horizon,
+        "origins_per_series": 4,
+        "seed": seed,
+        "windows": windows,
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -106,8 +153,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--horizon", type=int, default=30)
     parser.add_argument("--json", type=Path)
+    parser.add_argument("--short-history", action="store_true")
     args = parser.parse_args(argv)
-    report = run(args.customers, args.months, args.seed, args.horizon)
+    runner = run_short_history if args.short_history else run
+    report = runner(args.customers, args.months, args.seed, args.horizon)
     sys.stdout.write(json.dumps(report, indent=2) + "\n")
     if args.json:
         args.json.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

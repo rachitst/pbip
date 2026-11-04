@@ -178,11 +178,16 @@ def reset_tracing() -> None:
     its private once-flag. Production code never does this (`core/tracing.py` is idempotent).
     """
     from opentelemetry import trace
+    from opentelemetry.instrumentation.celery import CeleryInstrumentor
     from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
     from pbip_api.core import tracing
+    from pbip_api.core.redis import get_redis
 
     if SQLAlchemyInstrumentor().is_instrumented_by_opentelemetry:
         SQLAlchemyInstrumentor().uninstrument()
+    if CeleryInstrumentor().is_instrumented_by_opentelemetry:  # type: ignore[no-untyped-call]
+        CeleryInstrumentor().uninstrument()  # type: ignore[no-untyped-call]
+    get_redis.cache_clear()  # a cached client may carry an instrumented execute_command
     if tracing._tracer_provider is not None:
         tracing._tracer_provider.shutdown()
     tracing._tracer_provider = None

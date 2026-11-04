@@ -2,10 +2,12 @@
 
 TASK-031 (combiner and thresholds) and TASK-032 (reason codes). Pure scoring: no I/O, no database.
 
-How a score is made (all parameters are fitted on the VALIDATION split and stored as JSON in
-:class:`HybridParams`, so the decision is reproducible and auditable):
+How a score is made (all parameters are fitted on the training and validation periods, never on
+test data, and stored as JSON in :class:`HybridParams`, so the decision is reproducible and
+auditable):
 
-1. ``p`` = LightGBM probability, **calibrated** with isotonic regression (a lookup table).
+1. ``p`` = LightGBM probability, **calibrated** with isotonic regression (a lookup table) fitted on
+   validation scores plus out-of-time scores from the training period (ADR-0047, #396).
 2. ``a`` = Isolation Forest anomaly score in 0-1.
 3. ``r`` = rule points from the TASK-025 registry (0-100).
 4. Stacked probability ``sigmoid(b0 + b1*p + b2*a + b3*r/100)`` - a logistic regression fitted on
@@ -34,12 +36,18 @@ import numpy as np
 import pandas as pd
 
 from pbip_ml.fraud.artifacts import MODEL_FEATURES, AnomalyModel
+from pbip_ml.fraud.compiled_forest import CompiledForest
 from pbip_ml.fraud.contract import FraudDecision, FraudReason, ReasonSource
 from pbip_ml.fraud.features import FraudFeatures
 from pbip_ml.fraud.rules import RuleContext, RuleRegistry, default_registry
 
 STEP_UP_AT, REVIEW_AT, BLOCK_AT = 30, 60, 85
 ANOMALY_REASON_AT = 0.5
+# Inverse L2 strength of the stacked logistic regression (ADR-0047). sklearn's default 1.0 shrank
+# the model weight with ~40-100 validation positives, so a fraud the model was sure of could not
+# reach BLOCK. 10 had the lowest forward-in-time log-loss (stack fitted on the first half of
+# validation, scored on the second half) for both the 1,500- and 3,000-customer recipes.
+STACK_C = 10.0
 TOP_SHAP = 3
 # Rule floors: these rules are bank policy, so a model trained on synthetic data can never score
 # them below their floor. VELOCITY_BURST joined in TASK-080: without it the stacked weights scored
@@ -109,9 +117,32 @@ _TEMPLATES: dict[str, Callable[[float], str]] = {
 }
 
 
-def shap_reasons(booster: lgb.Booster, row: pd.DataFrame, top: int = TOP_SHAP) -> list[FraudReason]:
-    """Top positive TreeSHAP contributors (log-odds) for ONE row, as MODEL reasons."""
-    contrib = np.asarray(booster.predict(row[list(MODEL_FEATURES)], pred_contrib=True))[0]
+def model_matrix(row: pd.DataFrame) -> np.ndarray:
+    """The LightGBM input for ``row``: exactly what ``booster.predict(DataFrame)`` builds itself.
+
+    LightGBM converts a DataFrame with ``np.result_type(*column dtypes, float32)``, float64 for
+    these int64/float64 columns, so passing this matrix gives identical predictions while skipping
+    its pandas conversion (about half a millisecond per call). Built once, shared by predict and
+    TreeSHAP.
+    """
+    matrix: np.ndarray = row[list(MODEL_FEATURES)].to_numpy(dtype=np.float64)
+    return matrix
+
+
+def shap_reasons(
+    booster: lgb.Booster,
+    row: pd.DataFrame,
+    top: int = TOP_SHAP,
+    matrix: np.ndarray | None = None,
+) -> list[FraudReason]:
+    """Top positive TreeSHAP contributors (log-odds) for ONE row, as MODEL reasons.
+
+    ``matrix`` is ``model_matrix(row)`` when the caller has built it already. ``num_threads=1``:
+    one row needs no OpenMP pool, and on the 2-CPU laptop an idle-spinning second thread competes
+    with the API under load (#379). A row's arithmetic is sequential either way: same values.
+    """
+    data = model_matrix(row) if matrix is None else matrix
+    contrib = np.asarray(booster.predict(data, pred_contrib=True, num_threads=1))[0]
     values = contrib[:-1]  # last column is the expected value (bias)
     order = np.argsort(-values)
     reasons = []
@@ -147,6 +178,8 @@ class HybridScorer:
     booster: lgb.Booster | None
     anomaly: AnomalyModel | None
     rules: RuleRegistry = field(default_factory=default_registry)
+    # The anomaly forest compiled for one-row scoring (``compiled_forest``); None = scikit-learn's.
+    compiled_anomaly: CompiledForest | None = None
 
     def score(self, row: pd.DataFrame, context: RuleContext) -> HybridResult:
         outcome = self.rules.evaluate(context)
@@ -158,9 +191,10 @@ class HybridScorer:
         try:
             if self.booster is None or self.anomaly is None:
                 raise RuntimeError("model unavailable")
-            raw = float(np.asarray(self.booster.predict(row[list(MODEL_FEATURES)]))[0])
+            matrix = model_matrix(row)
+            raw = float(np.asarray(self.booster.predict(matrix, num_threads=1))[0])
             p = float(self.params.calibrate(np.array([raw]))[0])
-            a = float(self.anomaly.score(row)[0])
+            a = float(self.anomaly.score(row, self.compiled_anomaly)[0])
         except Exception as exc:  # fail safe: rules only, never ALLOW-all
             reasons.append(
                 FraudReason(
@@ -181,7 +215,7 @@ class HybridScorer:
             )
             risk = round(100 * _sigmoid(z))
             snapshot.update(model_probability=round(p, 4), anomaly_score=round(a, 4))
-            reasons.extend(shap_reasons(self.booster, row))
+            reasons.extend(shap_reasons(self.booster, row, matrix=matrix))
             if a >= ANOMALY_REASON_AT:
                 reasons.append(
                     FraudReason(
@@ -226,18 +260,31 @@ def fit_params(
     anomaly: AnomalyModel,
     rules: RuleRegistry,
     model_version: str,
+    out_of_time: tuple[np.ndarray, np.ndarray] | None = None,
 ) -> HybridParams:
-    """Isotonic calibration + stacked logistic weights, both fitted on validation only."""
+    """Isotonic calibration + stacked logistic weights (ADR-0047, #396).
+
+    The calibration is fitted on the final model's validation scores PLUS ``out_of_time``
+    (``training.out_of_time_scores``: earlier-period scores from fold models that never saw those
+    rows), so it rests on several times more positives than validation alone. The stack is fitted
+    on validation only (the anomaly model was trained on the training period). Test and held-out
+    data are never used.
+    """
     from sklearn.isotonic import IsotonicRegression
     from sklearn.linear_model import LogisticRegression
 
     y = validation["label"].to_numpy()
     raw = np.asarray(booster.predict(validation[list(MODEL_FEATURES)]))
-    iso = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0).fit(raw, y)
+    cal_raw, cal_y = (
+        (raw, y)
+        if out_of_time is None
+        else (np.concatenate([out_of_time[0], raw]), np.concatenate([out_of_time[1], y]))
+    )
+    iso = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0).fit(cal_raw, cal_y)
     p = iso.predict(raw)
     a = anomaly.score(validation)
     r = np.array([rules.evaluate(rule_context(row)).score for _, row in validation.iterrows()])
-    stack = LogisticRegression(C=1.0, max_iter=1000).fit(np.column_stack([p, a, r / 100]), y)
+    stack = LogisticRegression(C=STACK_C, max_iter=1000).fit(np.column_stack([p, a, r / 100]), y)
     return HybridParams(
         model_version=model_version,
         calibration_x=[float(v) for v in iso.X_thresholds_],

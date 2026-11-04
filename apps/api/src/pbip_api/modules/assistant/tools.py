@@ -76,7 +76,6 @@ class SpendCategory(StrEnum):
     EDUCATION = "education"
     HOUSING = "housing"
     TRANSFERS = "transfers"
-    FEES = "fees"
     OTHER = "other"
 
 
@@ -472,7 +471,10 @@ def investment_suggestions(ctx: ToolContext, raw: Mapping[str, object]) -> ToolR
         for item in engine.recommendations
     ]
     wealth = wealth_service.list_products(ctx.session, None)
-    text = discovery.investment_suggestions(profile, suggestions, engine.model_version, wealth)
+    version = engine.model_version  # ADR-0049: a simulated-data model says so in the reply too
+    if engine.score_from_simulated_data:
+        version += ", a model trained on simulated uptake, not real customer behaviour"
+    text = discovery.investment_suggestions(profile, suggestions, version, wealth)
     return ToolReply(text, "/wealth")
 
 

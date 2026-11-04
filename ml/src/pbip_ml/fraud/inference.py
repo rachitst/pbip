@@ -27,6 +27,7 @@ import lightgbm as lgb
 import pandas as pd
 
 from pbip_ml.fraud.artifacts import load_anomaly_model
+from pbip_ml.fraud.compiled_forest import compile_forest
 from pbip_ml.fraud.features import CurrentTransfer, PastTransfer, online_features
 from pbip_ml.fraud.hybrid import HybridParams, HybridResult, HybridScorer
 from pbip_ml.fraud.rules import RuleContext, default_registry
@@ -74,7 +75,12 @@ def load(directory: Path) -> HybridScorer:
         lgb.basic.LightGBMError,
     ) as exc:
         raise ModelLoadError(type(exc).__name__) from exc
-    return HybridScorer(params, booster, anomaly, default_registry())
+    # The request path scores one transfer at a time: the compiled forest gives scikit-learn's
+    # exact scores without its ~15 ms per-call overhead, and is None (scikit-learn is used) if
+    # it cannot reproduce them.
+    return HybridScorer(
+        params, booster, anomaly, default_registry(), compile_forest(anomaly.forest)
+    )
 
 
 @dataclass(frozen=True, slots=True)

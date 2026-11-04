@@ -867,7 +867,7 @@
             "type": "string"
           },
           "method": {
-            "description": "auto_arima, seasonal_naive or naive (by history length); none when status is INSUFFICIENT_HISTORY",
+            "description": "auto_arima or naive (by history length); none when status is INSUFFICIENT_HISTORY",
             "title": "Method",
             "type": "string"
           },
@@ -5286,6 +5286,25 @@
         "title": "PayeeVerificationOut",
         "type": "object"
       },
+      "PhoneIn": {
+        "additionalProperties": false,
+        "description": "A mobile number in E.164 form (#398). Stored only encrypted; responses show it masked.",
+        "properties": {
+          "phone": {
+            "description": "E.164: a plus sign, the country code and the number, digits only (for example +919812345678)",
+            "maxLength": 16,
+            "minLength": 9,
+            "pattern": "^\\+[1-9][0-9]{7,14}$",
+            "title": "Phone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "phone"
+        ],
+        "title": "PhoneIn",
+        "type": "object"
+      },
       "PortfolioOut": {
         "properties": {
           "accrued_interest_minor": {
@@ -5458,7 +5477,7 @@
             "type": "array"
           },
           "score": {
-            "description": "Rule-based relevance, for ordering only; not a probability",
+            "description": "Ordering score. rules-v1: rule-based relevance, not a probability. sim-propensity-v1: probability of uptake next month under a SIMULATION of product uptake, not real customer behaviour (ADR-0049)",
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Score",
@@ -5543,7 +5562,7 @@
             "type": "string"
           },
           "model_version": {
-            "description": "Recommendation engine version",
+            "description": "Ordering version: rules-v1 or sim-propensity-v1 (ADR-0049)",
             "title": "Model Version",
             "type": "string"
           },
@@ -5554,11 +5573,23 @@
             },
             "title": "Recommendations",
             "type": "array"
+          },
+          "score_from_simulated_data": {
+            "description": "True when a model trained on SIMULATED product uptake ordered the list; its measured performance is on simulated data only",
+            "title": "Score From Simulated Data",
+            "type": "boolean"
+          },
+          "score_version": {
+            "description": "Human-readable label of what ordered the list, e.g. 'sim-propensity-v1 (trained on simulated uptake, not real customer behaviour)'",
+            "title": "Score Version",
+            "type": "string"
           }
         },
         "required": [
           "customer_id",
           "model_version",
+          "score_version",
+          "score_from_simulated_data",
           "evaluated_at"
         ],
         "title": "RecommendationsResponse",
@@ -10180,6 +10211,69 @@
           }
         ],
         "summary": "Get my date of birth, derived age band and recommendations consent",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/api/v1/customers/me/phone": {
+      "delete": {
+        "operationId": "delete_my_phone_api_v1_customers_me_phone_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete my mobile number",
+        "tags": [
+          "customers"
+        ]
+      },
+      "put": {
+        "operationId": "put_my_phone_api_v1_customers_me_phone_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhoneIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set my mobile number (E.164); stored encrypted, returned masked",
         "tags": [
           "customers"
         ]
