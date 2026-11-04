@@ -7,12 +7,14 @@ from pbip_ml.recommendations.contract import (
     HeldProductKind,
     ProductType,
     Recommendation,
+    RiskLevel,
 )
 from pbip_ml.recommendations.engine import (
     PRODUCT_CATALOGUE,
     evaluate_eligibility,
     generate_recommendations,
     held_product_rule,
+    risk_band_rule,
 )
 
 __all__ = [
@@ -23,7 +25,9 @@ __all__ = [
     "HeldProductKind",
     "ProductType",
     "Recommendation",
+    "RiskLevel",
     "evaluate_eligibility",
     "generate_recommendations",
     "held_product_rule",
+    "risk_band_rule",
 ]

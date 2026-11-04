@@ -16,8 +16,11 @@ cache. The version is read on every request in the same query as the accounts: e
 row version, balance, hold and status, plus the dates the figures depend on. A posting, a hold, a
 loan or deposit payment (each moves money on one of the accounts), or a new or closed account
 changes it. The segment, the balances and the age band (date of birth AND consent) are read live
-on every request, so withdrawing consent shows on the next response. A future change to loans or
-deposits that does not post to one of the customer's accounts must add itself to ``_version``.
+on every request, so withdrawing consent shows on the next response. ADR-0056: the RTQ-1 risk
+band is read live as well, in the same customer read as the age band (on the customer route that
+row is already loaded, so it costs no statement), and a new questionnaire answer shows at once.
+A future change to loans or deposits that does not post to one of the customer's accounts must add
+itself to ``_version``.
 """
 
 from collections.abc import Hashable
@@ -29,6 +32,7 @@ from pbip_ml.recommendations import (
     CustomerRecommendationContext,
     HeldProduct,
     HeldProductKind,
+    RiskLevel,
     generate_recommendations,
 )
 from pbip_ml.recommendations.engine import MODEL_VERSION, SCORE_LABEL
@@ -174,6 +178,7 @@ def _context(
     if derived is None:
         derived = _derived_inputs(session, customer_id, accounts, now)
         _DERIVED.put(customer_id, version, derived)
+    age, risk = customers_service.recommendation_bands(session, customer_id, bank_today(now))
     return CustomerRecommendationContext(
         customer_id=customer_id,
         segment=_segment(session, customer_id),
@@ -186,10 +191,10 @@ def _context(
         emi_ratio=derived.emi_ratio,
         total_balance_minor=sum(account.available_balance for account in accounts),
         # ADR-0015: the band only, and "unknown" without a date of birth AND consent. Never cached.
-        age_band=customers_service.recommendation_age_band(
-            session, customer_id, bank_today(now)
-        ).value,
+        age_band=age.value,
         held_products=(*_held_accounts(accounts), *derived.loans_and_deposits),
+        # ADR-0056: the RTQ-1 band, read live with the age band (one customer read), never cached.
+        risk_band=None if risk is None else RiskLevel(risk.value),
     )
 
 
@@ -202,19 +207,26 @@ def get_customer_recommendations(
     now: datetime | None = None,
     top_k: int = 3,
     propensity: PropensityModel | object | None = _ACTIVE,
+    apply_risk_band: bool = True,
 ) -> RecommendationsResponse:
     """Top ``top_k`` eligible products for the customer, ordered by rules-v1, or by the promoted
     simulated-uptake model when one is loaded (ADR-0049). The rules always decide eligibility.
 
     The customer route keeps the default of 3; the RM insights view (TASK-066) asks for every
     eligible product so it can find the best loan product even when it is not in the top 3.
+    ``apply_risk_band=False`` is for the assistant only (ADR-0056): it applies the same band rule
+    itself and tells the customer which products it left out as too risky (TASK-105).
     """
     eval_time = now or utcnow()
     model = active_propensity() if propensity is _ACTIVE else propensity
     model = model if isinstance(model, PropensityModel) else None
     ctx = _context(session, customer_id, eval_time)
     recommendations = (
-        [] if ctx is None else generate_recommendations(ctx, top_k=top_k, propensity=model)
+        []
+        if ctx is None
+        else generate_recommendations(
+            ctx, top_k=top_k, propensity=model, apply_risk_band=apply_risk_band
+        )
     )
     return RecommendationsResponse(
         customer_id=customer_id,
