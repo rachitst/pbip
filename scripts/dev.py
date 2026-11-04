@@ -441,17 +441,32 @@ def cmd_fraud_champion(args: list[str]) -> int:
 
 
 def cmd_recommendation_model(args: list[str]) -> int:
-    """Train the simulated-uptake propensity model into ``models/recommendations`` (ADR-0049).
+    """Train the recommendation rankers on SIMULATED uptake into ``models/recommendations``.
 
-    Seed 42, 3,000 simulated customers x 24 months; a few seconds of CPU. The model files are
-    written only if it beats rules-v1 on the simulated test months; ``report.json`` always is.
-    The API uses it when ``RECOMMENDATION_MODEL_DIR`` points there (docker-compose does), and
-    serves rules-v1 otherwise. Extra arguments go to the training CLI.
+    Exports the uptake panel (data-gen ``uptake``: seed 42, 3,000 customers x 24 months) and a
+    perturbed held-out variant (seed 1042, 1,000 customers, effects x0.7, base logits +0.3) into
+    ``data/recommendations``, then trains the logistic regression and the LightGBM ranker and gates
+    them against rules-v1 (ADR-0053). The model files are written only if the gate passes;
+    ``report.json`` always is. The API uses them when ``RECOMMENDATION_MODEL_DIR`` points there
+    (docker-compose does) and serves rules-v1 otherwise. Extra arguments go to the training CLI.
     """
+    data = ROOT / "data" / "recommendations"
+    for name, extra in (
+        ("panel", ["--seed", "42", "--customers", "3000"]),
+        ("perturbed", ["--seed", "1042", "--customers", "1000", "--effect-scale", "0.7",
+                       "--base-shift", "0.3"]),
+    ):  # fmt: skip
+        status = _run(
+            ["uv", "run", "python", "-m", "pbip_datagen", "uptake", "--months", "24", *extra,
+             "--out", str(data / name)]
+        )  # fmt: skip
+        if status != 0:
+            return status
     out = ROOT / "models" / "recommendations"
     return _run(
-        ["uv", "run", "python", "-m", "pbip_ml.recommendations.train", "--out", str(out), *args]
-    )
+        ["uv", "run", "python", "-m", "pbip_ml.recommendations.train", "--data",
+         str(data / "panel"), "--sensitivity", str(data / "perturbed"), "--out", str(out), *args]
+    )  # fmt: skip
 
 
 def cmd_notebooks(args: list[str]) -> int:
@@ -937,7 +952,7 @@ COMMANDS = {
     "notebooks": "Execute the EDA notebooks head-to-tail (--check: verify only)",
     "datagen": "Generate + COPY-load the synthetic ML dataset (seed 42, 1,000 customers)",
     "fraud-model": "Train the fraud models into models/fraud (needed for FRAUD_SCORER=hybrid)",
-    "recommendation-model": "Train the simulated-uptake recommendation model (used if it wins)",
+    "recommendation-model": "Train recommendation rankers on simulated uptake (served if gated)",
     "promote-model": "Measure the newest fraud run; promote it to MLflow 'champion' if it passes",
     "fraud-champion": "Export the MLflow 'champion' fraud model into models/fraud (for the API)",
     "dev-api": "Run FastAPI backend on :8000 with auto-reload",

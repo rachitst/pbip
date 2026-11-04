@@ -1,8 +1,10 @@
-"""Command line: ``python -m pbip_datagen {load,export} --seed 42 --customers 1000 --months 12``.
+"""Command line: ``python -m pbip_datagen {load,export,uptake} --seed 42 --customers 1000 ...``.
 
 ``load`` generates a dataset and COPYs it into the ``synthetic`` schema; ``export`` writes the same
-dataset as CSV files for offline analysis. The database URL comes from ``--database-url`` or the
-``DATABASE_URL`` environment variable (developer tooling only; never logged).
+dataset as CSV files for offline analysis; ``uptake`` writes the SIMULATED product-uptake panel
+(``uptake.py``, uptake-sim-2) that the recommendation ranker experiment trains on. The database
+URL comes from ``--database-url`` or the ``DATABASE_URL`` environment variable (developer
+tooling only; never logged).
 """
 
 import argparse
@@ -24,6 +26,14 @@ from pbip_datagen.generator import (
     generate,
 )
 from pbip_datagen.loader import load_dataset
+from pbip_datagen.uptake import (
+    PRODUCTS,
+    PanelRow,
+    UptakeAssumptions,
+    perturbed,
+    simulate_panel,
+)
+from pbip_datagen.uptake import summary as uptake_summary
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -37,7 +47,52 @@ def _parser() -> argparse.ArgumentParser:
         command.add_argument("--start", type=date.fromisoformat, default=date(2025, 1, 1))
     sub.choices["load"].add_argument("--database-url", default=None)
     sub.choices["export"].add_argument("--out", type=Path, required=True)
+    uptake = sub.add_parser("uptake", help="write the simulated product-uptake panel (CSV)")
+    uptake.add_argument("--seed", type=int, default=42)
+    uptake.add_argument("--customers", type=int, default=3000)
+    uptake.add_argument("--months", type=int, default=24)
+    uptake.add_argument("--out", type=Path, required=True)
+    uptake.add_argument("--effect-scale", type=float, default=1.0, help="held-out variant")
+    uptake.add_argument("--base-shift", type=float, default=0.0, help="held-out variant")
     return parser
+
+
+UPTAKE_PANEL_FILE = "uptake_panel.csv"
+UPTAKE_SUMMARY_FILE = "uptake_summary.json"
+
+
+def _panel_columns() -> list[str]:
+    scalar = [f.name for f in fields(PanelRow) if f.name not in ("clicks", "took")]
+    return [*scalar, *(f"clicks_{p}" for p in PRODUCTS), *(f"took_{p}" for p in PRODUCTS)]
+
+
+def export_uptake(
+    seed: int,
+    customers: int,
+    months: int,
+    out: Path,
+    effect_scale: float = 1.0,
+    base_shift: float = 0.0,
+) -> dict[str, object]:
+    """The panel as CSV (money in paise) and its summary. Labels are SIMULATED (uptake.py)."""
+    assumptions = perturbed(UptakeAssumptions(), effect_scale, base_shift)
+    rows = simulate_panel(seed, customers, months, assumptions)
+    out.mkdir(parents=True, exist_ok=True)
+    _write_csv(
+        out / UPTAKE_PANEL_FILE,
+        _panel_columns(),
+        [(*astuple(row)[:-2], *row.clicks, *row.took) for row in rows],
+    )
+    summary = {
+        "seed": seed,
+        "customers": customers,
+        "months": months,
+        "effect_scale": effect_scale,
+        "base_shift": base_shift,
+        **uptake_summary(rows),
+    }
+    (out / UPTAKE_SUMMARY_FILE).write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    return summary
 
 
 def _write_csv(path: Path, header: list[str], rows: list[tuple[object, ...]]) -> None:
@@ -81,6 +136,22 @@ def _export(dataset: SyntheticDataset, out: Path) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    if args.command == "uptake":
+        if args.customers < 1 or args.months < 2:
+            sys.stderr.write("error: need at least 1 customer and 2 months\n")
+            return 2
+        result = export_uptake(
+            args.seed,
+            args.customers,
+            args.months,
+            args.out,
+            args.effect_scale,
+            args.base_shift,
+        )
+        sys.stdout.write(
+            f"wrote {result['customer_months']} simulated customer-months to {args.out}\n"
+        )
+        return 0
     try:
         config = GeneratorConfig(args.seed, args.customers, args.months, args.start)
     except ValueError as exc:

@@ -5477,7 +5477,7 @@
             "type": "array"
           },
           "score": {
-            "description": "Ordering score. rules-v1: rule-based relevance, not a probability. sim-propensity-v1: probability of uptake next month under a SIMULATION of product uptake, not real customer behaviour (ADR-0049)",
+            "description": "Ordering score. rules-v1: rule-based relevance, not a probability. sim-propensity-v2: probability of uptake next month under a SIMULATION of product uptake, not real customer behaviour (ADR-0049, ADR-0053)",
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Score",
@@ -5562,7 +5562,7 @@
             "type": "string"
           },
           "model_version": {
-            "description": "Ordering version: rules-v1 or sim-propensity-v1 (ADR-0049)",
+            "description": "Ordering version: rules-v1 or sim-propensity-v2 (ADR-0049, ADR-0053)",
             "title": "Model Version",
             "type": "string"
           },
@@ -5580,7 +5580,7 @@
             "type": "boolean"
           },
           "score_version": {
-            "description": "Human-readable label of what ordered the list, e.g. 'sim-propensity-v1 (trained on simulated uptake, not real customer behaviour)'",
+            "description": "Human-readable label of what ordered the list, e.g. 'sim-propensity-v2 (trained on simulated uptake, not real customer behaviour)'",
             "title": "Score Version",
             "type": "string"
           }
