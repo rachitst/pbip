@@ -40,6 +40,9 @@ class Principal:
     roles: frozenset[str]
     amr: frozenset[str]
     token_id: str
+    # users.token_version the access token was issued under (ADR-0021). A use case that must not
+    # act on behalf of a session revoked while the request was in flight re-checks it under lock.
+    token_version: int = 0
 
     @property
     def mfa_verified(self) -> bool:
@@ -63,7 +66,7 @@ def get_current_principal(
     # Same message as a bad signature: a revoked session is not distinguishable from an invalid one.
     if not access_token_is_current(session, claims.subject, claims.version):
         raise UnauthorizedError("invalid or expired token", headers={"WWW-Authenticate": "Bearer"})
-    return Principal(claims.subject, claims.roles, claims.amr, claims.token_id)
+    return Principal(claims.subject, claims.roles, claims.amr, claims.token_id, claims.version)
 
 
 def require_roles(*roles: RoleName, mfa: bool = False) -> Callable[..., Principal]:

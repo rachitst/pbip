@@ -159,7 +159,6 @@ _CATEGORY_WORDS: tuple[tuple[SpendCategory, re.Pattern[str]], ...] = tuple(
         (SpendCategory.HEALTHCARE, r"\b(health|healthcare|medical|doctor|pharmacy|hospital)\b"),
         (SpendCategory.EDUCATION, r"\b(education|school|college|tuition|course)\b"),
         (SpendCategory.HOUSING, r"\b(housing|rent|maintenance)\b"),
-        (SpendCategory.FEES, r"\b(fees?|charges?)\b"),
     )
 )
 

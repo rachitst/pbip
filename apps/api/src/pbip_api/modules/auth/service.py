@@ -392,11 +392,23 @@ class AuthService:
         current_password: str,
         new_password: str,
         meta: RequestMeta,
+        *,
+        token_version: int,
     ) -> None:
+        """Change the password of the session's own user.
+
+        ``token_version`` is re-checked under the row lock: two concurrent changes on one session
+        both pass authentication, but the first one revokes that session (ADR-0021). The second
+        must then fail as the revoked session it is (401) - not go on to check its stale current
+        password, which would answer 403 and count a failed attempt towards the user's lockout.
+        """
         user = self.session.execute(
-            select(User).where(User.id == user_id).with_for_update()
+            select(User)
+            .where(User.id == user_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         ).scalar_one_or_none()
-        if user is None or user.status != UserStatus.ACTIVE:
+        if user is None or user.status != UserStatus.ACTIVE or user.token_version != token_version:
             raise UnauthorizedError("invalid or expired token")
 
         if self._is_locked(user):

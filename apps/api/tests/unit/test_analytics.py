@@ -33,6 +33,7 @@ from pbip_api.modules.analytics.service import (
     percentage_shares,
     previous_closed_months,
 )
+from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
 
@@ -55,7 +56,8 @@ def test_categorize_transaction_keywords() -> None:
     assert categorize_transaction("Apartment maintenance rent") == "housing"
     assert categorize_transaction("Hotel booking Taj") == "travel"
     assert categorize_transaction(None, "TRANSFER") == "transfers"
-    assert categorize_transaction(None, "FEE") == "fees"
+    # #175: there is no FEE type and no "fees" category; an unknown type is "other".
+    assert categorize_transaction(None, "FEE") == "other"
     assert categorize_transaction("Unknown random payment") == "other"
 
 
@@ -399,3 +401,14 @@ def test_income_source_key_drops_dates_numbers_and_punctuation() -> None:
     assert income_source_key(CLEARING, "SALARY-November/26 #4411")[1] == "salary"
     assert income_source_key(CLEARING, "Rent from Ravi, 3rd floor")[1] == "rent from ravi rd floor"
     assert income_source_key(CLEARING, None) == (CLEARING, "")
+
+
+def test_the_assistant_offers_exactly_the_categories_the_categoriser_produces() -> None:
+    """#175: ``fees`` was offered to the model but could never hold a debit (no FEE type)."""
+    from pbip_api.modules.analytics.categorization import CATEGORY_RULES
+    from pbip_api.modules.assistant.tools import SpendArgs, SpendCategory
+
+    produced = {name for name, _ in CATEGORY_RULES} | {"transfers", "other"}
+    assert {c.value for c in SpendCategory} == produced
+    with pytest.raises(ValidationError):
+        SpendArgs.model_validate({"category": "fees"})
