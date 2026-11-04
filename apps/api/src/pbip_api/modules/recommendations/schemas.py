@@ -1,9 +1,28 @@
 """Pydantic schemas for personalized banking product recommendations (TASK-054)."""
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class RecommendedLoanOut(BaseModel):
+    """UC-06 (ADR-0056): the loans module's assessment of a recommended catalogue loan."""
+
+    model_config = ConfigDict(frozen=True)
+
+    loan_type: Literal["PERSONAL", "AUTO", "HOME"]
+    eligibility_status: Literal["ELIGIBLE"] = Field(
+        description="Only loans the eligibility rules allow are recommended"
+    )
+    suggested_min_amount_minor: int = Field(description="The product's smallest amount")
+    suggested_max_amount_minor: int = Field(
+        description="The largest amount the eligibility rules allow at tenure_months"
+    )
+    tenure_months: int = Field(description="The tenor the range is sized at")
+    emi_at_max_minor: int = Field(description="EMI at the suggested maximum")
+    annual_rate_bps: int = Field(description="Indicative annual rate in basis points")
 
 
 class ProductRecommendationItem(BaseModel):
@@ -13,7 +32,11 @@ class ProductRecommendationItem(BaseModel):
 
     product_id: UUID = Field(..., description="Unique product catalog identifier")
     product_type: str = Field(
-        ..., description="Product category: SAVINGS, LOAN, INVESTMENT, or INSURANCE"
+        ...,
+        description=(
+            "Product kind: SAVINGS, LOAN, INVESTMENT, or INSURANCE. With product_id it is stable "
+            "across responses, for wiring card actions"
+        ),
     )
     title: str = Field(..., description="Human-readable product title")
     description: str = Field(..., description="Summary description of the product offer")
@@ -30,6 +53,13 @@ class ProductRecommendationItem(BaseModel):
     reasons: list[str] = Field(min_length=1, description="Human-readable justification reasons")
     model_version: str = Field(..., description="Recommendation model version identifier")
     cta_label: str = Field(..., description="Call to action button label")
+    loan: RecommendedLoanOut | None = Field(
+        default=None,
+        description=(
+            "Set when the product is a catalogue loan (product_id is the loan catalogue id): its "
+            "eligibility, suggested range and EMI (UC-06, ADR-0056)"
+        ),
+    )
 
 
 class RecommendationsResponse(BaseModel):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from datetime import date, datetime
 from uuid import UUID
 
@@ -75,23 +76,36 @@ def recommendation_age_band(session: Session, customer_id: UUID, today: date) ->
     ``session.get``: on a customer request the row is already in the session (the authenticated
     customer was just loaded), so this costs no query (#343).
     """
-    return recommendation_bands(session, customer_id, today)[0]
+    subject = recommendation_subject(session, customer_id, today)
+    return AgeBand.UNKNOWN if subject is None else subject.age_band
 
 
-def recommendation_bands(
+@dataclass(frozen=True, slots=True)
+class RecommendationSubject:
+    """What the recommendation engine may know about the customer row (ADR-0015, ADR-0056)."""
+
+    age_band: AgeBand
+    risk_band: RiskBand | None  # RTQ-1 (TASK-097); None until assessed
+    user_id: UUID  # for the loans module's lockout rule (UC-06), never shown or sent to the engine
+
+
+def recommendation_subject(
     session: Session, customer_id: UUID, today: date
-) -> tuple[AgeBand, RiskBand | None]:
-    """The age band (rules of :func:`recommendation_age_band`) and the RTQ-1 risk band (TASK-097,
-    ``None`` until assessed) from ONE read of the customer row, for the recommendation engine
-    (ADR-0056). One read matters off the HTTP path: nothing else holds the row there, so two
-    separate ``session.get`` calls would each load it."""
+) -> RecommendationSubject | None:
+    """The age band (rules of :func:`recommendation_age_band`), the RTQ-1 risk band and the user id
+    from ONE read of the customer row, for the recommendation engine (ADR-0056). One read matters
+    off the HTTP path: nothing else holds the row there, so two separate ``session.get`` calls would
+    each load it. ``None`` when there is no such customer."""
     customer = session.get(Customer, customer_id)
     if customer is None:
-        return AgeBand.UNKNOWN, None
+        return None
     risk = RiskBand(customer.risk_profile) if customer.risk_profile else None
-    if customer.recommendations_consent_at is None:
-        return AgeBand.UNKNOWN, risk
-    return age_band(customer.date_of_birth, today), risk
+    age = (
+        AgeBand.UNKNOWN
+        if customer.recommendations_consent_at is None
+        else age_band(customer.date_of_birth, today)
+    )
+    return RecommendationSubject(age, risk, customer.user_id)
 
 
 def risk_profile(session: Session, customer_id: UUID) -> RiskProfileOut:
