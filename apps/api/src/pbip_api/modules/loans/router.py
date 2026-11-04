@@ -45,7 +45,12 @@ def list_products(_customer: Customer = Depends(get_current_customer)) -> list[L
     return service.list_products()
 
 
-@router.post("/calculate-emi", response_model=EmiOut, summary="EMI and repayment schedule")
+@router.post(
+    "/calculate-emi",
+    response_model=EmiOut,
+    summary="EMI and repayment schedule",
+    responses={404: {"description": "No such loan product (problem+json)"}},
+)
 def calculate_emi(body: EmiRequest, _customer: Customer = Depends(get_current_customer)) -> EmiOut:
     return service.calculate_emi(body.product_id, body.principal_minor, body.tenure_months)
 
@@ -54,6 +59,7 @@ def calculate_emi(body: EmiRequest, _customer: Customer = Depends(get_current_cu
     "/check-eligibility",
     response_model=EligibilityOut,
     summary="Explainable eligibility from the customer's own ledger figures",
+    responses={404: {"description": "No such loan product (problem+json)"}},
 )
 def check_eligibility(
     body: EligibilityRequest,
@@ -76,7 +82,10 @@ def check_eligibility(
     response_model=LoanOut,
     status_code=201,
     summary="Apply for a loan: approve, book the schedule and disburse (idempotent)",
-    responses={422: {"description": "Not eligible (plain reasons) or invalid request"}},
+    responses={
+        404: {"description": "No such loan product, or the account is not mine (problem+json)"},
+        422: {"description": "Not eligible (plain reasons) or invalid request"},
+    },
 )
 def apply_for_loan(
     body: LoanApplyRequest,

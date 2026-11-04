@@ -166,6 +166,57 @@ def document_not_found_responses(router: APIRouter) -> None:
             route.responses[404] = {"description": NOT_FOUND_DESCRIPTION}
 
 
+UNAUTHORIZED_DESCRIPTION = "Missing, invalid or expired access token (problem+json)"
+FORBIDDEN_DESCRIPTION = (
+    "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer "
+    "route called by a non-customer, or a cookie route without the CSRF header"
+)
+RATE_LIMITED_DESCRIPTION = "Too many requests in the limiter's window (problem+json)"
+MALFORMED_BODY_DESCRIPTION = "The request body is not valid JSON (problem+json)"
+# The auth module's checks that answer 403: customer-only routes, the staff ``require_roles``
+# gates and the CSRF guard of the cookie routes.
+_ROLE_GATES = frozenset({"get_current_customer", "require_roles_dependency", "csrf_guard"})
+
+
+def _dependency_names(route: APIRoute) -> set[str]:
+    names: set[str] = set()
+    stack = [route.dependant]
+    while stack:
+        dependant = stack.pop()
+        names.add(getattr(dependant.call, "__name__", ""))
+        stack.extend(dependant.dependencies)
+    return names
+
+
+def document_problem_responses(router: APIRouter) -> None:
+    """Document the codes that shared machinery returns: 401 on authenticated routes, 403 on
+    role-gated or CSRF-guarded ones, 429 on rate-limited ones and 400 (unparseable JSON) on
+    routes with a body.
+
+    #175 M11: the codes come from shared dependencies, so the contract did not list them and
+    ``status_code_conformance`` reported each as undocumented. They are read from the route's
+    dependency tree by name (``core`` must not import the auth module): the principal dependency
+    and the ``rate_limit*`` / ``*_rate_limit`` limiters. A route's own entry is kept. Call it
+    before the router is included, like ``document_not_found_responses``.
+    """
+    for route in router.routes:
+        if not isinstance(route, APIRoute):
+            continue
+        names = _dependency_names(route)
+        codes: dict[int, str] = {}
+        if "get_current_principal" in names:
+            codes[401] = UNAUTHORIZED_DESCRIPTION
+        if names & _ROLE_GATES:
+            codes[403] = FORBIDDEN_DESCRIPTION
+        if any(name.startswith("rate_limit") or name.endswith("_rate_limit") for name in names):
+            codes[429] = RATE_LIMITED_DESCRIPTION
+        if route.dependant.body_params:
+            codes[400] = MALFORMED_BODY_DESCRIPTION
+        for code, description in codes.items():
+            if code not in route.responses and str(code) not in route.responses:
+                route.responses[code] = {"description": description}
+
+
 def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(DomainError, _domain_error_handler)
     app.add_exception_handler(StarletteHTTPException, _http_error_handler)

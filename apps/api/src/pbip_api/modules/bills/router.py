@@ -76,6 +76,7 @@ def list_billers(
     response_model=BillPaymentOut,
     status_code=201,
     summary="Pay a utility bill (idempotent)",
+    responses={404: {"description": "No such biller, or the account is not mine (problem+json)"}},
 )
 def pay_bill(
     body: PayBillRequest,
