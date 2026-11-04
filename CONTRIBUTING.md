@@ -131,11 +131,61 @@ Open the PR early as a draft if useful; mark it ready for review only when `CI G
 
 ### Review
 
-* Answer every review comment: fix it in a new commit on the same branch, or reply with your reasoning. Resolve each
-  conversation (unresolved conversations block the merge).
-* Pushing new commits re-runs CI and dismisses earlier approvals, so the latest version is always what gets reviewed.
-* Contributors do not merge their own PRs; merging is done by the repository maintainer and is enforced by the
-  repository rulesets.
+How a change is reviewed and merged, as practised on this repository:
+
+1. **Automated checks on every PR.** The `CI` workflow (`.github/workflows/ci.yml`) runs on every pull request and
+   push. Its jobs:
+
+   | Job | What it checks |
+   |---|---|
+   | `API - lint, types, boundaries, contract` | `ruff check`, `ruff format --check`, `mypy --strict`, import-linter contracts, the OpenAPI contract is current |
+   | `API - unit, integration, security tests` | Migrations up, down, up and `alembic check`; the ER diagram matches the schema; all API tests against PostgreSQL with the 80% coverage gate |
+   | `ML + data-gen tests (no database allowed)` | `ml/tests` and `data-gen/tests` without PostgreSQL or Redis |
+   | `Web - lint, types, tests, build` | Prettier, ESLint, `tsc`, Vitest with coverage, the production build, generated API types match the contract |
+   | `Security - SAST, dependencies, secrets` | Bandit, pip-audit, `npm audit` (high and above), detect-secrets against the baseline |
+   | `Docker images build` | Both images build |
+   | `E2E - Playwright against the full stack` | The browser journeys against the Docker stack, and the TLS checks |
+   | `Workflow files - actionlint` | The workflow files themselves |
+   | `CI Gate` | Passes only if every job above succeeded (a skipped job fails it) |
+
+   Also on every PR: **CodeQL** (`codeql.yml`, Python and JavaScript/TypeScript; weekly too), **PR title**
+   (`pr-title.yml`, Conventional Commit format) and **GitGuardian Security Checks** (a GitHub app that scans the
+   pushed commits for secrets). Scheduled, not per PR: nightly Schemathesis fuzzing (`fuzz.yml`), the
+   OWASP ZAP baseline (`dast.yml`) and the k6 load suite with page-load budgets (`perf.yml`, also on pushes to `main`).
+2. **AI-assisted review.** Before the human review, the diff gets an AI-assisted review pass for correctness bugs and
+   AGENTS.md violations (layering, ledger and lock-order rules, the security checklist, missing tests). Its findings
+   are leads, not verdicts: each one is checked against the code, then fixed in the PR or answered. It never replaces
+   CI or the human review.
+3. **Line-by-line review by the lead.** The lead reads every changed line before merge, checks the description's
+   claims against the diff and the CI results, and asks for changes in PR comments. Answer every comment: fix it in a
+   new commit on the same branch, or reply with your reasoning, then resolve the conversation (unresolved
+   conversations block the merge). Pushing new commits re-runs CI and dismisses earlier approvals, so the latest version
+   is always what gets reviewed.
+4. **Squash merge with an explicit subject.** Only squash merges are allowed. The lead writes the squash subject
+   explicitly (a Conventional Commit naming what the change does and its issue or ADR), so no WIP or "Merge branch"
+   title reaches `main`. Draft and work-in-progress PRs are never merged.
+5. **Batch PRs.** To save CI time, the lead may combine several reviewed PRs that touch unrelated areas into one batch
+   branch (merge commits `chore(batch): merge #N` on top of `main`), run CI once on the combined head, and squash-merge
+   it with a subject that lists every PR (for example `perf: batch G, clickstream batch insert (#449, TASK-055),
+   version-checked read caches (#451, #343, #175)`). Each PR in a batch is still reviewed on its own PR first.
+6. **Merge-alone rule.** A PR that touches `ledger/`, `payments/`, `auth/`, `core/security.py` or `alembic/` (the
+   CODEOWNERS paths) is never batched: it is reviewed and merged on its own, after its own green CI, with the
+   concurrency and negative tests AGENTS.md section 4 requires.
+7. **Who merges.** Contributors do not merge their own PRs; the repository maintainer merges, enforced by the
+   rulesets below.
+
+**Rulesets as configured** (`.github/rulesets/`, both active on the default branch):
+
+* `main`: no deletion, no force-push (`non_fast_forward`), linear history; changes only through a pull request with
+  squash as the only merge method, review threads resolved, stale approvals dismissed on push, and an extra approval
+  for unattributed changes; required status checks `CI Gate` and `PR title - Conventional Commit`, with the branch up to
+  date with `main` (strict). The required approving review count is 0, so the human review in step 3 is a team rule
+  rather than a ruleset setting.
+* `main-merge-restriction`: blocks updates to `main` for everyone except repository admins (bypass "pull request"
+  only), so only the maintainer can merge, and only through a pull request.
+
+Teammates also review recent merged PRs in their own area after the fact; the current requests are in
+[`docs/testing/peer-review-requests.md`](docs/testing/peer-review-requests.md).
 
 ## 5. Coding and testing practices
 
