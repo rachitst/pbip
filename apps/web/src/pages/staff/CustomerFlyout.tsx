@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { SyntheticEvent } from "react";
 import { api } from "../../api/client";
 import type {
+  BehaviourProfile,
   CustomerInsightDetail,
   InteractionChannel,
   InteractionOutcome,
@@ -24,6 +25,7 @@ import {
   OUTCOME_LABEL,
   PRODUCT_TYPE_LABEL,
   declineText,
+  durationText,
   inactivityText,
   score100,
   segmentLabel,
@@ -75,6 +77,7 @@ export function CustomerFlyout({
             canAssign={canAssign}
           />
           <Indicators detail={detail.data} />
+          <BehaviourProfileSection customerId={customerId} />
         </>
       )}
       <OutreachLog customerId={customerId} />
@@ -163,6 +166,99 @@ function Indicators({ detail }: { detail: CustomerInsightDetail }) {
           </ul>
         )}
       </section>
+    </>
+  );
+}
+
+/** UC-11 profile (ADR-0057): only with the customer's analytics consent; otherwise the API says
+ * only that there is none. */
+function BehaviourProfileSection({ customerId }: { customerId: string }) {
+  const profile = useQuery({
+    queryKey: ["insights", "behaviour-profile", customerId],
+    queryFn: () => api.customerBehaviourProfile(customerId),
+  });
+  return (
+    <section className="flyout-section" aria-labelledby="rm-behaviour">
+      <h3 id="rm-behaviour">Behavioural profile</h3>
+      {profile.isPending && <LoadingState label="Loading the behavioural profile..." />}
+      {profile.isError && (
+        <ErrorState
+          message={errorMessage(profile.error, "Could not load the behavioural profile.")}
+          onRetry={() => {
+            void profile.refetch();
+          }}
+        />
+      )}
+      {profile.data &&
+        (profile.data.profile ? (
+          <ProfileBody profile={profile.data.profile} />
+        ) : (
+          <p className="muted">
+            The customer has not turned on usage analytics, so no behavioural profile is kept.
+          </p>
+        ))}
+    </section>
+  );
+}
+
+function ProfileBody({ profile }: { profile: BehaviourProfile }) {
+  const { engagement, spend_income: money } = profile;
+  return (
+    <>
+      <dl className="details details--counts">
+        <dt>Segment</dt>
+        <dd>{segmentLabel(profile.segment)}</dd>
+        {money && (
+          <>
+            <dt>Monthly income</dt>
+            <dd>
+              <Amount minor={money.monthly_income_minor} currency={money.currency} />
+            </dd>
+            <dt>Monthly spend</dt>
+            <dd>
+              <Amount minor={money.monthly_spend_minor} currency={money.currency} />
+            </dd>
+          </>
+        )}
+        {engagement && (
+          <>
+            <dt>App sessions (last {engagement.window_days} days)</dt>
+            <dd>{engagement.sessions}</dd>
+            <dt>Average session</dt>
+            <dd>{engagement.sessions ? durationText(engagement.avg_session_seconds) : "—"}</dd>
+            <dt>Pages per session</dt>
+            <dd>{engagement.pages_per_session}</dd>
+            <dt>Last active</dt>
+            <dd>
+              {engagement.last_active_at ? formatRelative(engagement.last_active_at) : "Not yet"}
+            </dd>
+          </>
+        )}
+      </dl>
+      {!engagement && (
+        <p className="muted">App usage is summarised overnight; nothing has been summarised yet.</p>
+      )}
+      <h4>Product interests</h4>
+      {profile.product_interests.length === 0 ? (
+        <p className="muted">No interest in a product category shown yet.</p>
+      ) : (
+        <ul>
+          {profile.product_interests.map((i) => (
+            <li key={i.category}>
+              <strong>{PRODUCT_TYPE_LABEL[i.category] ?? i.category}</strong>{" "}
+              <span className="muted">
+                score {i.score.toFixed(2)} · {countOf(i.signals, "signal")} · last{" "}
+                {formatRelative(i.last_signal_at)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="muted small">
+        Interest is a rule-based score: card opens weigh 3, loan calculator uses 2 and product page
+        visits 1, halving every 14 days.
+        {profile.computed_at && ` Updated ${formatRelative(profile.computed_at)}.`}
+      </p>
     </>
   );
 }

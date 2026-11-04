@@ -6,6 +6,7 @@ import type {
   AccountOut,
   EligibilityOut,
   EmiOut,
+  LoanOffersOut,
   LoanOut,
   LoanProductOut,
   LoanSummaryOut,
@@ -92,6 +93,45 @@ const detail: LoanOut = {
   ],
 };
 
+const offers: LoanOffersOut = {
+  monthly_income_minor: 10_000_000,
+  monthly_spend_minor: 3_000_000,
+  available_balance_minor: 14_000_000,
+  rules_version: "loan-eligibility-v2",
+  offers: [
+    {
+      product_id: "p-1",
+      loan_type: "PERSONAL",
+      name: "Personal loan",
+      annual_rate_bps: 1150,
+      status: "ELIGIBLE",
+      suggested_min_amount_minor: 2_500_000,
+      suggested_max_amount_minor: 120_000_000,
+      tenure_months: 36,
+      emi_at_max_minor: 3_957_100,
+      reasons: [
+        "An EMI of INR 39,571.00 brings repayments to 40% of your income of INR 1,00,000.00, within the 50% limit.",
+        "Your spending of INR 30,000.00 a month plus this EMI comes to 69.6% of your income, within the 90% limit.",
+        "Your balance of INR 1,40,000.00 already covers the first EMI of INR 39,571.00.",
+      ],
+    },
+    {
+      product_id: "p-3",
+      loan_type: "HOME",
+      name: "Home loan",
+      annual_rate_bps: 850,
+      status: "NOT_ELIGIBLE",
+      suggested_min_amount_minor: 0,
+      suggested_max_amount_minor: 0,
+      tenure_months: 240,
+      emi_at_max_minor: 0,
+      reasons: [
+        "Your balance of INR 1.00 does not cover one EMI of INR 4,339.11; we look for at least the first EMI in your accounts before lending.",
+      ],
+    },
+  ],
+};
+
 function emiFor(principal: number, months: number): EmiOut {
   // A fixed fake figure per request, so the test can see WHICH request the page displayed.
   return {
@@ -119,6 +159,10 @@ function eligibilityFor(amount: number, months: number, eligible = true): Eligib
     dti_with_loan: eligible ? 0.09 : 0.71,
     max_eligible_amount_minor: 16_423_834,
     tenor_options: [],
+    monthly_spend_minor: 3_000_000,
+    available_balance_minor: 10_000_000,
+    spending_with_loan_ratio: eligible ? 0.39 : 1.6,
+    rules_version: "loan-eligibility-v2",
     reasons: [
       eligible
         ? "An EMI of INR 8,862.00 brings repayments to 9% of your income, within the 50% limit."
@@ -131,6 +175,7 @@ interface Options {
   loans?: () => Response;
   apply?: () => Response;
   products?: () => Response;
+  offers?: () => Response;
   eligible?: boolean;
 }
 
@@ -148,6 +193,9 @@ function mockApi(options: Options = {}) {
       return Promise.resolve(options.products?.() ?? json(200, [personal]));
     }
     if (url === "/api/v1/loans") return Promise.resolve(options.loans?.() ?? json(200, []));
+    if (url === "/api/v1/loans/offers") {
+      return Promise.resolve(options.offers?.() ?? json(200, offers));
+    }
     if (url === "/api/v1/loans/loan-1") return Promise.resolve(json(200, detail));
     if (url === "/api/v1/loans/calculate-emi") {
       const body = bodyOf(init);
@@ -358,5 +406,57 @@ describe("Loans (TASK-051)", () => {
     await waitFor(() => {
       expect(screen.queryByLabelText("Loan amount")).toBeNull();
     });
+  });
+});
+
+describe("Loans for you (UC-06, ADR-0056)", () => {
+  it("shows each catalogue loan with its eligibility, suggested range, EMI and reasons", async () => {
+    mockApi();
+    renderPage();
+    expect(screen.getByText("Checking which loans suit you...")).toBeInTheDocument();
+    const personal = await screen.findByRole("region", { name: "Personal loan" });
+    expect(within(personal).getByText("Eligible")).toBeInTheDocument();
+    expect(within(personal).getByText("INR 25,000.00 to INR 12,00,000.00")).toBeInTheDocument();
+    expect(within(personal).getByText("INR 39,571.00 over 36 months")).toBeInTheDocument();
+    expect(within(personal).getByText(/Your spending of INR 30,000.00/)).toBeInTheDocument();
+    expect(within(personal).getByText(/Your balance of INR 1,40,000.00/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Based on your income of INR 1,00,000.00 a month, spending of INR 30,000.00 a month and balance of INR 1,40,000.00.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a loan the rules refuse as not eligible, with the reason and no range", async () => {
+    mockApi();
+    renderPage();
+    const home = await screen.findByRole("region", { name: "Home loan" });
+    expect(within(home).getByText("Not eligible")).toBeInTheDocument();
+    expect(within(home).queryByText("You could borrow")).not.toBeInTheDocument();
+    expect(within(home).getByText(/does not cover one EMI/)).toBeInTheDocument();
+    expect(within(home).getByText("from 8.50% p.a.")).toBeInTheDocument();
+  });
+
+  it("shows an error state for the offers and retries", async () => {
+    let attempts = 0;
+    mockApi({
+      offers: () => {
+        attempts += 1;
+        return attempts === 1 ? json(500, { title: "x" }) : json(200, offers);
+      },
+    });
+    const user = userEvent.setup();
+    renderPage();
+    expect(await screen.findByText(/Could not load your loan offers/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("region", { name: "Personal loan" })).toBeInTheDocument();
+  });
+
+  it("shows an empty state when no loan product exists", async () => {
+    mockApi({ offers: () => json(200, { ...offers, offers: [] }) });
+    renderPage();
+    expect(
+      await screen.findByText("No loan products are available right now."),
+    ).toBeInTheDocument();
   });
 });

@@ -20,6 +20,9 @@ export type DeviceOut = components["schemas"]["DeviceOut"];
 export type RiskProfileOut = components["schemas"]["RiskProfileOut"];
 export type RiskQuestionnaire = components["schemas"]["RiskQuestionnaire"];
 export type DemographicsOut = components["schemas"]["DemographicsOut"];
+export type AnalyticsConsentOut = components["schemas"]["AnalyticsConsentOut"];
+export type BehaviourProfileResponse = components["schemas"]["BehaviourProfileResponse"];
+export type BehaviourProfile = components["schemas"]["BehaviourProfile"];
 export type EntriesPage = components["schemas"]["EntriesPage"];
 export type EntryOut = components["schemas"]["EntryOut"];
 /** TASK-017 query filters, from the generated contract (amounts in paise, dates YYYY-MM-DD IST). */
@@ -83,6 +86,9 @@ export type EligibilityOut = components["schemas"]["EligibilityOut"];
 export type LoanApplyRequest = components["schemas"]["LoanApplyRequest"];
 export type LoanSummaryOut = components["schemas"]["LoanSummaryOut"];
 export type LoanOut = components["schemas"]["LoanOut"];
+export type LoanOffersOut = components["schemas"]["LoanOffersOut"];
+export type LoanOfferOut = components["schemas"]["LoanOfferOut"];
+export type RecommendedLoanOut = components["schemas"]["RecommendedLoanOut"];
 export type AdminCreateUserRequest = components["schemas"]["AdminCreateUserRequest"];
 export type LockoutStatusOut = components["schemas"]["LockoutStatusOut"];
 export type UnlockResultOut = components["schemas"]["UnlockResultOut"];
@@ -320,6 +326,13 @@ export const api = {
       body: JSON.stringify(answers),
     }),
   demographics: () => apiFetch<DemographicsOut>("/api/v1/customers/me/demographics"),
+  /** ADR-0057: clickstream and behavioural profiling only with this consent. */
+  analyticsConsent: () => apiFetch<AnalyticsConsentOut>("/api/v1/customers/me/analytics-consent"),
+  setAnalyticsConsent: (granted: boolean) =>
+    apiFetch<AnalyticsConsentOut>("/api/v1/customers/me/analytics-consent", {
+      method: "PUT",
+      body: JSON.stringify({ granted }),
+    }),
   setDateOfBirth: (dateOfBirth: string) =>
     apiFetch<DemographicsOut>("/api/v1/customers/me/date-of-birth", {
       method: "PUT",
@@ -434,6 +447,8 @@ export const api = {
       body: JSON.stringify({ code }),
     }),
   loanProducts: () => apiFetch<LoanProductOut[]>("/api/v1/loans/products"),
+  /** UC-06 (ADR-0056): every catalogue loan assessed on my own income, spending and balance. */
+  loanOffers: () => apiFetch<LoanOffersOut>("/api/v1/loans/offers"),
   /** TASK-054: at most three products for the signed-in customer, each with its reasons. */
   recommendations: () => apiFetch<RecommendationsResponse>("/api/v1/recommendations"),
   /** The server computes every EMI (exact integer paise); the browser never does money maths. */
@@ -615,6 +630,10 @@ export const api = {
   },
   customerInsightDetail: (customerId: string) =>
     apiFetch<CustomerInsightDetail>(`/api/v1/insights/customers/${encodeURIComponent(customerId)}`),
+  customerBehaviourProfile: (customerId: string) =>
+    apiFetch<BehaviourProfileResponse>(
+      `/api/v1/insights/customers/${encodeURIComponent(customerId)}/behaviour-profile`,
+    ),
   customerInteractions: (customerId: string, limit = 20) =>
     apiFetch<InteractionListResponse>(
       `/api/v1/insights/customers/${encodeURIComponent(customerId)}/interactions?limit=${String(limit)}`,

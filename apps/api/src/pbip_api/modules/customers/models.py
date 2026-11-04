@@ -16,6 +16,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -49,6 +50,15 @@ class Customer(Base):
             "(recommendations_consent_at IS NULL) = (recommendations_consent_policy IS NULL)",
             name="recommendations_consent_complete",
         ),
+        # ADR-0057: every analytics consent decision (on or off) says when and under which policy.
+        CheckConstraint(
+            "(analytics_consent_updated_at IS NULL) = (analytics_consent_policy IS NULL)",
+            name="analytics_consent_decision_complete",
+        ),
+        CheckConstraint(
+            "NOT analytics_consent OR analytics_consent_updated_at IS NOT NULL",
+            name="analytics_consent_granted_has_time",
+        ),
     )
 
     id: Mapped[UUID] = uuid_pk()
@@ -73,6 +83,14 @@ class Customer(Base):
     # ADR-0015 consent to use the date of birth for recommendations; NULL = not granted.
     recommendations_consent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     recommendations_consent_policy: Mapped[str | None] = mapped_column(String(40))
+    # ADR-0057 consent to clickstream collection and behavioural profiling; off until the customer
+    # turns it on. ``updated_at``/``policy`` describe the latest decision, on or off (NULL: never
+    # decided). Withdrawal erases the clickstream events and the stored profile.
+    analytics_consent: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
+    analytics_consent_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    analytics_consent_policy: Mapped[str | None] = mapped_column(String(40))
     created_at: Mapped[datetime] = created_at_col()
 
 

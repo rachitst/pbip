@@ -64,6 +64,16 @@ describe("profile & security", () => {
       if (url.endsWith("/customers/me/demographics")) {
         return Promise.resolve(json(200, demographics));
       }
+      if (url.endsWith("/customers/me/analytics-consent")) {
+        return Promise.resolve(
+          json(200, {
+            granted: false,
+            updated_at: null,
+            policy_version: null,
+            current_policy_version: "ADR-0057-v1",
+          }),
+        );
+      }
       if (url.endsWith("/customers/devices") && init?.method === "POST") {
         return Promise.resolve(json(201, { ...device, id: "dev-2", label: "This browser" }));
       }

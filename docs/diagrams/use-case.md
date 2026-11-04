@@ -84,14 +84,14 @@ flowchart LR
 | UC-03 | customer | `GET /api/v1/accounts/{id}/statements?format=pdf\|csv`; web `/statements` |
 | UC-04 | customer, fraud engine | `POST /api/v1/transfers`, `POST /api/v1/transfers/{id}/step-up`, `/transfers/scheduled`; web `/accounts` (Send money), `/scheduled` |
 | UC-05 | customer | `/api/v1/payees` (add, list, edit, verify, delete); web `/payees` |
-| UC-06 | customer, AI assistant | `/api/v1/loans/products`, `/calculate-emi`, `/check-eligibility`, `GET /loans/offers` (PR #470), `/apply`; recommendations carousel; web `/loans` |
-| UC-07 | customer, AI assistant | `/api/v1/customers/me/risk-profile`, `/api/v1/wealth/*` including `GET /wealth/instruments`, `POST /wealth/investments/buy`, `GET /wealth/holdings`, `POST /wealth/holdings/{id}/sell` (PR #465, API only so far); web `/wealth`, `/wealth/compare` |
+| UC-06 | customer, AI assistant | `/api/v1/loans/products`, `/calculate-emi`, `/check-eligibility`, `GET /loans/offers` (#470), `/apply`; recommendations carousel; web `/loans` |
+| UC-07 | customer, AI assistant | `/api/v1/customers/me/risk-profile`, `/api/v1/wealth/*` including `GET /wealth/instruments`, `POST /wealth/investments/buy`, `GET /wealth/holdings`, `POST /wealth/holdings/{id}/sell` (investing API, #465 in review; insurance and web, PR pending; fund SIPs, PR pending); web `/wealth`, `/wealth/compare` |
 | UC-08 | customer, AI assistant | `POST /api/v1/assistant/chat`, `/chat/stream`, `GET /messages`; chat drawer on every customer page |
 | UC-09 | fraud engine | in-process `FraudScorer.score` on every transfer and bill payment; hourly structuring monitor |
 | UC-10 | fraud analyst, admin | `GET /api/v1/fraud/alerts`, `/alerts/{id}`, `POST /alerts/{id}/decision`; web `/staff/fraud` |
-| UC-11 | customer (data subject), RM, admin | `GET`/`PUT /api/v1/customers/me/analytics-consent`, `POST /api/v1/events/batch`, `GET /api/v1/analytics/behaviour-profile/me`, `GET /api/v1/insights/customers/{id}/behaviour-profile`, `GET /api/v1/insights/behaviour` (#463); web `/staff/behaviour` |
+| UC-11 | customer (data subject), RM, admin | `GET`/`PUT /api/v1/customers/me/analytics-consent`, `POST /api/v1/events/batch`, `GET /api/v1/analytics/behaviour-profile/me`, `GET /api/v1/insights/customers/{id}/behaviour-profile`, `GET /api/v1/insights/behaviour` (#463, #477); web: "App usage analytics" on `/profile`, the RM flyout on `/staff/insights`, `/staff/behaviour` |
 | UC-12 | customer, RM | `GET /api/v1/recommendations`; RM detail `GET /api/v1/insights/customers/{id}`; web `/accounts`, `/staff/insights` |
-| UC-13 | fraud analyst, admin | `GET /api/v1/fraud/monitoring`, `GET /api/v1/fraud/stats` (charted since PR #464); web `/staff/monitoring`, `/staff/fraud-dashboard` |
+| UC-13 | fraud analyst, admin | `GET /api/v1/fraud/monitoring`, `GET /api/v1/fraud/stats` (charted since #464); web `/staff/monitoring`, `/staff/fraud-dashboard` |
 | Compliance | compliance officer, admin | `/api/v1/compliance/audit-logs`, `/audit-logs/verify`, `/exceptions`; web `/staff/compliance`, `/staff/audit-log` |
 | Administration | admin | `/api/v1/admin/users`, `/admin/users/{id}/lockout`, `/unlock`, `/admin/settings`, RM assignment; web `/staff/admin` |
 

@@ -55,6 +55,13 @@ const EVENT_LABEL: Record<string, string> = {
   search_performed: "Searches",
 };
 
+const CATEGORY_LABEL: Record<string, string> = {
+  LOAN: "Loans and credit",
+  SAVINGS: "Savings",
+  INVESTMENT: "Investments",
+  INSURANCE: "Insurance",
+};
+
 const TYPE_LABEL: Record<string, string> = {
   TRANSFER: "Transfers",
   BILL_PAYMENT: "Bill payments",
@@ -338,7 +345,94 @@ export function AffinityPanel({ panel, period }: { panel: Analytics["affinity"];
           </table>
         </div>
       )}
+      <InterestByCategory panel={panel} />
     </section>
+  );
+}
+
+/** ADR-0057: product interest across the behavioural profiles of customers who turned usage
+ * analytics on (the daily job's own 90-day window, not the period filter). */
+export function InterestByCategory({ panel }: { panel: Analytics["affinity"] }) {
+  const interests = panel.interests ?? [];
+  const data = interests.map((i) => ({
+    category: label(CATEGORY_LABEL, i.category),
+    customers: i.customers,
+  }));
+  return (
+    <>
+      <h3>Product interest by category</h3>
+      <p className="muted">
+        From the behavioural profiles of {countOf(panel.profiled_customers, "customer")} who turned
+        usage analytics on: card opens, loan calculator uses and product page visits in the last 90
+        days, recent ones weighing more. Refreshed daily.
+      </p>
+      {interests.length === 0 ? (
+        <EmptyState message="No product interest recorded yet." />
+      ) : (
+        <>
+          <div
+            role="img"
+            aria-label={`Customers interested per product category: ${data.map((d) => `${d.category} ${String(d.customers)}`).join(", ")}.`}
+            className="insights-chart insights-chart--bars"
+          >
+            <ResponsiveContainer
+              width="100%"
+              height="100%"
+              minWidth={0}
+              initialDimension={{ width: 500, height: 240 }}
+            >
+              <BarChart data={data} margin={{ top: 10, right: 16, left: 0, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="category" stroke="var(--muted)" fontSize={11} />
+                <YAxis stroke="var(--muted)" fontSize={12} allowDecimals={false} />
+                <Tooltip {...TOOLTIP_STYLE} formatter={(v) => [String(v), "Customers"]} />
+                <Bar
+                  dataKey="customers"
+                  fill="var(--chart-2)"
+                  radius={[4, 4, 0, 0]}
+                  isAnimationActive={false}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="entries">
+            <table>
+              <caption className="sr-only">
+                Product interest by category, most customers first
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Category</th>
+                  <th scope="col" className="right">
+                    Customers
+                  </th>
+                  <th scope="col" className="right">
+                    Share of profiled
+                  </th>
+                  <th scope="col" className="right">
+                    Average score
+                  </th>
+                  <th scope="col" className="right">
+                    Signals
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {interests.map((i) => (
+                  <tr key={i.category}>
+                    <th scope="row">{label(CATEGORY_LABEL, i.category)}</th>
+                    <td className="right">{i.customers}</td>
+                    <td className="right">{formatShare(i.share_pct)}</td>
+                    <td className="right">{i.avg_score.toFixed(2)}</td>
+                    <td className="right">{i.signals}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </>
   );
 }
 
@@ -349,13 +443,18 @@ export function EngagementPanel({
   panel: Analytics["engagement"];
   period: string;
 }) {
-  const daily = panel.daily.map((d) => ({ day: d.day.slice(5), active: d.active_customers }));
+  const daily = panel.daily.map((d) => ({
+    day: d.day.slice(5),
+    active: d.active_customers,
+    sessions: d.sessions,
+  }));
   return (
     <section className="card" aria-labelledby="ba-engagement">
       <h2 id="ba-engagement">Engagement</h2>
       <p className="muted">
-        From app clickstream events in the {period}. A session is one browser session of one
-        customer; its length is the time from its first to its last event.
+        From app clickstream events in the {period}, of the customers who turned usage analytics on.
+        A session is one browser visit of one customer, ended by 30 minutes without activity; its
+        length is the time from its first to its last event.
       </p>
       <dl className="metric-grid">
         <Metric
@@ -364,9 +463,14 @@ export function EngagementPanel({
           definition={`Customers with at least one event (${formatShare(panel.active_share_pct)}).`}
         />
         <Metric
+          label="Customers sharing analytics"
+          value={`${String(panel.consenting_customers)} of ${String(panel.customers)}`}
+          definition="Customers who turned usage analytics on; only their activity is recorded."
+        />
+        <Metric
           label="Sessions"
           value={panel.sessions}
-          definition="Distinct customer sessions with an event."
+          definition="Customer visits, split after 30 minutes without activity."
         />
         <Metric
           label="Events per session"
@@ -410,8 +514,33 @@ export function EngagementPanel({
               </BarChart>
             </ResponsiveContainer>
           </div>
+          <div
+            role="img"
+            aria-label={`Sessions per day: ${panel.daily.map((d) => `${d.day} ${String(d.sessions)}`).join(", ")}.`}
+            className="insights-chart insights-chart--bars"
+          >
+            <ResponsiveContainer
+              width="100%"
+              height="100%"
+              minWidth={0}
+              initialDimension={{ width: 500, height: 240 }}
+            >
+              <BarChart data={daily} margin={{ top: 10, right: 16, left: 0, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="day" stroke="var(--muted)" fontSize={11} />
+                <YAxis stroke="var(--muted)" fontSize={12} allowDecimals={false} />
+                <Tooltip {...TOOLTIP_STYLE} formatter={(v) => [String(v), "Sessions"]} />
+                <Bar
+                  dataKey="sessions"
+                  fill="var(--chart-3)"
+                  radius={[4, 4, 0, 0]}
+                  isAnimationActive={false}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
           <details>
-            <summary>Active customers per day (table)</summary>
+            <summary>Active customers and sessions per day (table)</summary>
             <div className="entries">
               <table>
                 <thead>
@@ -423,6 +552,12 @@ export function EngagementPanel({
                     <th scope="col" className="right">
                       Events
                     </th>
+                    <th scope="col" className="right">
+                      Sessions
+                    </th>
+                    <th scope="col" className="right">
+                      Average session
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -431,6 +566,10 @@ export function EngagementPanel({
                       <th scope="row">{d.day}</th>
                       <td className="right">{d.active_customers}</td>
                       <td className="right">{d.events}</td>
+                      <td className="right">{d.sessions}</td>
+                      <td className="right">
+                        {d.sessions ? sessionLength(d.avg_session_seconds) : "—"}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

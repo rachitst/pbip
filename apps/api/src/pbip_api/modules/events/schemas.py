@@ -38,6 +38,9 @@ class TelemetryEventType(StrEnum):
     ACCOUNT_VIEWED = "account_viewed"
     PRODUCT_CLICKED = "product_clicked"
     SEARCH_PERFORMED = "search_performed"
+    # ADR-0057: sent about once a minute while the customer area is visible and in use, so a
+    # session's length is measured instead of ending at its last click.
+    SESSION_HEARTBEAT = "session_heartbeat"
 
 
 class TelemetryEventIn(BaseModel):
@@ -120,6 +123,11 @@ class EventBatchResponse(BaseModel):
     accepted: int = Field(..., ge=0, description="Events stored by this request")
     duplicates: int = Field(
         ..., ge=0, description="Events already stored (same event_id and timestamp), skipped"
+    )
+    not_recorded: int = Field(
+        default=0,
+        ge=0,
+        description="Events discarded unstored because the customer's analytics consent is off",
     )
     batch_id: UUID = Field(default_factory=uuid4, description="Unique batch tracking UUID")
     received_at: datetime = Field(..., description="UTC server timestamp of receipt")

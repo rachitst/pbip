@@ -122,6 +122,7 @@ def test_every_insights_route_is_behind_the_mfa_rm_gate() -> None:
         "/api/v1/insights/behaviour",
         "/api/v1/insights/customers/{customer_id}",
         "/api/v1/insights/customers/{customer_id}/interactions",
+        "/api/v1/insights/customers/{customer_id}/behaviour-profile",
     } <= {r.path for r in insights_routes}
     offenders = [
         f"{sorted(route.methods)} {route.path}"

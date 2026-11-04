@@ -1,7 +1,7 @@
 """Response and request models of the compliance exceptions dashboard (TASK-100)."""
 
-from datetime import datetime
-from typing import Annotated
+from datetime import date, datetime
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
@@ -54,6 +54,34 @@ class ExceptionOut(BaseModel):
         default_factory=list, description="Fraud rule/model codes of a blocked payment"
     )
     first_invalid_seq: int | None = Field(default=None, description="Audit chain failures only")
+    subject_id: str | None = Field(
+        default=None,
+        description="System exceptions: the dead-lettered outbox event id, or the scheduled "
+        "transfer (standing order) id",
+    )
+    event_type: str | None = Field(
+        default=None, description="Notification dead letters: the outbox event type"
+    )
+    attempts: int | None = Field(
+        default=None, description="Notification dead letters: delivery attempts made"
+    )
+    error_type: str | None = Field(
+        default=None,
+        description="Notification dead letters: exception class of the last failure (no message)",
+    )
+    failure: Literal["MISSED", "AUTO_PAUSED"] | None = Field(
+        default=None,
+        description="Scheduled transfer failures: an occurrence never paid, or the order paused",
+    )
+    failure_reason: str | None = Field(
+        default=None, description="Scheduled transfer failures: the scheduler's reason code"
+    )
+    occurrence_date: date | None = Field(
+        default=None, description="Scheduled transfer failures: the missed occurrence's date"
+    )
+    failed_attempts: int | None = Field(
+        default=None, description="Scheduled transfer failures: failed runs that day, if any"
+    )
 
 
 class ExceptionCounts(BaseModel):
@@ -66,6 +94,8 @@ class ExceptionsByKind(BaseModel):
     BLOCKED_TRANSFER: ExceptionCounts
     ACCOUNT_LOCKOUT: ExceptionCounts
     AUDIT_CHAIN_FAILURE: ExceptionCounts
+    NOTIFICATION_DEAD_LETTER: ExceptionCounts
+    SCHEDULED_TRANSFER_FAILURE: ExceptionCounts
 
 
 class AuditChainOut(BaseModel):
@@ -103,6 +133,33 @@ def _step(step: Step | None) -> ExceptionStepOut | None:
     return ExceptionStepOut(by_user_id=step.by_user_id, at=step.at, reason=step.reason)
 
 
+_FAILURE = {
+    "SCHEDULED_TRANSFER_MISSED": "MISSED",
+    "SCHEDULED_TRANSFER_AUTO_PAUSED": "AUTO_PAUSED",
+}
+
+
+def _system_fields(record: ExceptionRecord) -> dict[str, Any]:
+    """The audited detail of a dead letter or a scheduled-transfer failure, by output field."""
+    detail = record.detail
+    if record.kind is ExceptionKind.NOTIFICATION_DEAD_LETTER:
+        return {
+            "subject_id": detail.get("resource_id"),
+            "event_type": detail.get("event_type"),
+            "attempts": detail.get("attempts"),
+            "error_type": detail.get("error"),
+        }
+    if record.kind is ExceptionKind.SCHEDULED_TRANSFER_FAILURE:
+        return {
+            "subject_id": detail.get("resource_id"),
+            "failure": _FAILURE.get(str(detail.get("source_action"))),
+            "failure_reason": detail.get("last_failure_reason") or detail.get("reason"),
+            "occurrence_date": detail.get("missed_date"),
+            "failed_attempts": detail.get("failed_attempts"),
+        }
+    return {}
+
+
 def exception_out(record: ExceptionRecord) -> ExceptionOut:
     detail = record.detail
     return ExceptionOut(
@@ -119,6 +176,7 @@ def exception_out(record: ExceptionRecord) -> ExceptionOut:
         transaction_type=detail.get("transaction_type"),
         reason_codes=list(detail.get("reason_codes", [])),
         first_invalid_seq=detail.get("first_invalid_seq"),
+        **_system_fields(record),
     )
 
 

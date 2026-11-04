@@ -331,3 +331,74 @@ describe("productTypeLabel", () => {
     expect(productTypeLabel("CREDIT_CARD")).toBe("Credit card");
   });
 });
+
+describe("a recommended catalogue loan (UC-06, ADR-0056)", () => {
+  const personalLoan: ProductRecommendationItem = {
+    product_id: "10000000-0000-4000-a000-000000000001",
+    product_type: "LOAN",
+    title: "Personal loan",
+    description:
+      "You could borrow INR 25,000.00 to INR 12,00,000.00 over 36 months, subject to the final check when you apply.",
+    score: 0.64,
+    reasons: [
+      "An EMI of INR 39,571.00 brings repayments to 40% of your income of INR 1,00,000.00, within the 50% limit.",
+      "Your spending of INR 30,000.00 a month plus this EMI comes to 69.6% of your income, within the 90% limit.",
+      "Your balance of INR 1,40,000.00 already covers the first EMI of INR 39,571.00.",
+    ],
+    model_version: "rules-v1",
+    cta_label: "See this loan",
+    loan: {
+      loan_type: "PERSONAL",
+      eligibility_status: "ELIGIBLE",
+      suggested_min_amount_minor: 2_500_000,
+      suggested_max_amount_minor: 120_000_000,
+      tenure_months: 36,
+      emi_at_max_minor: 3_957_100,
+      annual_rate_bps: 1150,
+    },
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function renderCarousel(items: ProductRecommendationItem[]) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(() => Promise.resolve(json(200, response(items)))),
+    );
+    const router = createMemoryRouter([{ path: "/", element: <ProductRecommendations /> }], {
+      initialEntries: ["/"],
+    });
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("shows its eligibility, suggested range, EMI and rate, and its reasons on request", async () => {
+    renderCarousel([personalLoan, savingsAccount]);
+    const card = (await screen.findByRole("heading", { name: "Personal loan" })).closest("li");
+    if (card === null) throw new Error("the loan card is not a list item");
+    const loan = within(card);
+    expect(loan.getByText("Eligible")).toBeInTheDocument();
+    expect(loan.getByText("INR 25,000.00 to INR 12,00,000.00")).toBeInTheDocument();
+    expect(loan.getByText("INR 39,571.00 over 36 months")).toBeInTheDocument();
+    expect(loan.getByText("from 11.50% p.a.")).toBeInTheDocument();
+    await userEvent
+      .setup()
+      .click(loan.getByRole("button", { name: "Why this was recommended for you" }));
+    expect(loan.getByText(/Your spending of INR 30,000.00 a month/)).toBeVisible();
+    expect(loan.getByText(/Your balance of INR 1,40,000.00/)).toBeVisible();
+  });
+
+  it("shows no loan figures on a product that is not a loan", async () => {
+    renderCarousel([savingsAccount]);
+    await screen.findByRole("heading", { name: "Savings account" });
+    expect(screen.queryByText("You could borrow")).not.toBeInTheDocument();
+    expect(screen.queryByText("Eligible")).not.toBeInTheDocument();
+  });
+});

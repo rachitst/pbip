@@ -517,16 +517,19 @@ flowchart TD
     sacct -- yes --> sold --> snote --> r200
 ```
 
-The `fund_sips`, `fund_sip_runs` and `insurance_applications` tables exist in migration `0031`, but no route, service
-or job uses them yet, so no SIP or insurance application flow is drawn.
+Wealth scope: investing API (#465, in review); insurance and web (PR pending); fund SIPs (PR pending). The
+`fund_sips`, `fund_sip_runs` and `insurance_applications` tables exist in #465's migration `0031`, but no route,
+service or job uses them in that PR, so no SIP or insurance application flow is drawn yet.
 
 ## 9. Behavioural profile and analytics consent (UC-11)
 
 Exports: [SVG](svg/activity-behaviour-profile.svg), [PNG](png/activity-behaviour-profile.png).
 Analytics consent is off until the customer turns it on. Without it the browser's clickstream batches are acknowledged
 and discarded, no profile is built, and staff see an empty profile. Turning it off erases the customer's events and
-profile in the same transaction (ADR-0057). The consent and profile endpoints are API only: no web screen calls
-them yet.
+profile in the same transaction (ADR-0057). In the web app (#477) the customer decides under "App usage analytics" on
+the Profile page; the tracker sends batches only while the recorded consent is on and the browser sends no Global
+Privacy Control signal, with a session heartbeat every 60 s while the page is in use. The profile is shown in the
+RM flyout on `/staff/insights`, and the aggregates are charted on `/staff/behaviour`.
 
 <!-- diagram: activity-behaviour-profile -->
 ```mermaid

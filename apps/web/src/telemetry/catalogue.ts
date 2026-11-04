@@ -44,6 +44,9 @@ export const EVENT_PROPERTIES: Record<TelemetryEventType, Readonly<Record<string
   loan_calculator_used: { loan_type: oneOf(LOAN_TYPES) },
   search_performed: { search_scope: oneOf(SEARCH_SCOPES), filter_count: smallCount },
   product_clicked: { product_id: uuid },
+  // ADR-0057: sent about once a minute while the customer area is visible and in use, so a
+  // session's length is measured; it carries nothing.
+  session_heartbeat: {},
 };
 
 /** Top-level keys of a sent event; the API rejects unknown keys too (``extra="forbid"``). */

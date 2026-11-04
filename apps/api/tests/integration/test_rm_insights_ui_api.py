@@ -139,7 +139,9 @@ def test_propensity_order_ranks_by_product_score_within_the_rm_scope(
 ) -> None:
     """The churn order (equal churn here, so balance decides) and the propensity order differ on
     the same portfolio, and the churn signals stay on every row."""
-    no_product = make_customer(salary=10_000_00)  # income 10,000: below every product's threshold
+    # No regular income (a one-off deposit is not income, ADR-0043): below every engine product's
+    # threshold, and the loans module offers no catalogue loan without income (ADR-0056).
+    no_product = make_customer(funds=20_000_00)
     rich = make_customer(salary=200_000_00)
     targeted = make_customer(salary=60_000_00)  # less money; the credit line targets its segment
     outsider = make_customer(salary=300_000_00)  # not assigned: never listed, whatever its score
@@ -167,7 +169,8 @@ def test_propensity_order_ranks_by_product_score_within_the_rm_scope(
     assert str(outsider.customer_id) not in {i["customer_id"] for i in items}
     best, second, last = items
     assert best["top_product_score"] > second["top_product_score"]
-    assert best["top_recommended_product"] == "Personal credit line"
+    # ADR-0056: the catalogue loans replace the credit line, with the credit line's rule score
+    assert best["top_recommended_product"] == "Personal loan"
     assert isinstance(best["top_product_reason"], str) and best["top_product_reason"]
     assert (last["top_product_score"], last["top_product_reason"]) == (None, None)
     for item in items:  # churn signals are still reported in this order

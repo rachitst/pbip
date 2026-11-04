@@ -1,5 +1,5 @@
 # ADR 0056: Catalogue loan recommendations with balance and spending checks, and the risk band as a suitability rule
-- Status: Proposed (for the owner's review under the standing approval)
+- Status: Accepted (standing approval, 2026-11-05)
 - Date: 2026-11-04
 - Deciders: Architecture Team (UC-06, UC-07; FR-30, FR-31, FR-34, FR-12, FR-53)
 
@@ -58,7 +58,7 @@ cover every new input or the input must be read live; the customer never sees an
   (`ml/tests/test_recommendation_propensity.py`) are unchanged and pass.
 
 ### 2. UC-06: catalogue loans, assessed by the loans module, in the recommendation mix
-Implemented in a follow-up PR on top of section 1 (one concern per PR); recorded here as one decision.
+Implemented in the PR stacked on section 1's (one concern per PR); recorded here as one decision.
 
 **Eligibility (loans module, `loan-eligibility-v2`).** The TASK-046 rules stay, in order, and two rules are added:
 
@@ -78,8 +78,10 @@ Implemented in a follow-up PR on top of section 1 (one concern per PR); recorded
 - The largest affordable amount per tenor (`tenor_options`, `max_eligible_amount_minor`, and the assistant's FR-38
   suggestion) uses the tightest of the three budgets (50% of income less existing EMIs; 90% of income less spending
   and PBIP EMIs; the balance), so a suggested maximum always passes rules 3-5.
+- Rules 4 and 5 compare integers (`spend + PBIP EMIs + EMI <= income * 90 // 100`, `balance >= EMI`); the ratio
+  shown is rounded to one decimal place in the reasons.
 - `EligibilityOut` gains `monthly_spend_minor`, `available_balance_minor`, `spending_with_loan_ratio` and
-  `rules_version` (additive). Applying (`POST /loans/apply`) re-runs the same check, so the new rules also gate
+  `rules_version` (additive, defaulted). Applying (`POST /loans/apply`) re-runs the same check, so the new rules also gate
   disbursal; the lock order and transaction shape do not change.
 
 **Recommendation.** The engine gets the loans module's own assessment of each catalogue loan as an input
@@ -93,9 +95,19 @@ module's reasons). The engine never re-decides loan eligibility.
   needs no new coefficients and no retraining. Only the first eligible loan (catalogue order: personal, car, home)
   competes for the top slots; the others follow every non-loan product, so the carousel shows at most one loan
   unless nothing else is eligible.
-- Exposure: `GET /api/v1/recommendations` (the carousel) shows the loan in the mix with its `loan` details, and a new
-  customer-only `GET /api/v1/loans/offers` returns every catalogue loan with its assessment, eligible or not, for the
-  `/loans` page. Both are read-only.
+- **Offer sizing.** Each catalogue loan is sized at a reference tenor (personal 36, car 60, home 240 months: the
+  middle of each product's offered range); if nothing fits there, the next longer offered tenor that fits. The
+  suggested range is the product minimum to the largest amount rules 3-5 allow at that tenor; the maximum is itself
+  checked through the same `assess` function, so it always passes `/loans/check-eligibility`.
+- **Exposure: both.** `GET /api/v1/recommendations` (the carousel) shows the loan in the mix with an additive `loan`
+  object (eligibility, suggested range, tenor, EMI at the maximum, rate). A new customer-only, read-only
+  `GET /api/v1/loans/offers` returns every catalogue loan with its assessment, eligible or not, with the reasons, for
+  the `/loans` page. The loan-specific endpoint is needed because the carousel shows at most three products and never
+  explains a refusal; the `/loans` page must show both. The route uses `get_current_customer` (the customer and user
+  come from the token, nothing from the request), is in the BOLA matrix and the authentication list, and is covered
+  by the route-policy registry like every `get_current_principal` route.
+- The RM insights view asks for every product (`recommendations.service.EVERY_PRODUCT`, the engine catalogue plus
+  the catalogue loans) instead of the engine catalogue's size, so a trailing catalogue loan is not cut off.
 - Each item keeps a stable `product_id` (the loan catalogue id for loans) and `product_type` (LOAN, SAVINGS,
   INVESTMENT, INSURANCE), which the web carousel uses to wire actions.
 
@@ -134,5 +146,10 @@ module's reasons). The engine never re-decides loan eligibility.
 - `ml/tests/test_recommendations_risk_band.py` (every band, no band, eligibility first, the model cannot restore an
   excluded product), `apps/api/tests/integration/test_recommendations_risk_band.py` (through the API, live band with
   the cached part reused, the assistant's pre-band list); the TASK-054 gate tests unchanged.
-- UC-06 tests arrive with the follow-up PR (loans unit and integration tests for rules 4-5, the offers endpoint in
-  the BOLA matrix and the route registry, statement counts).
+- `apps/api/tests/unit/test_loan_eligibility_rules.py` (rules 4 and 5 at and over their thresholds, every failing
+  rule reported, the suggested maximum always eligible, the binding budget, offers), `ml/tests/
+  test_recommendations_loan_offers.py` (catalogue loans replace the credit line, the engine never re-decides, held
+  types, one loan in the top places, the model orders loans by the credit line's probability and adds none),
+  `apps/api/tests/integration/test_loan_offers.py` (rule 4 refuses the check and the application, the offers
+  endpoint, the recommendations carry the loans module's assessment), the BOLA matrix, the statement-count tests
+  (one more live statement), `Loans.test.tsx` and `ProductRecommendations.test.tsx`.

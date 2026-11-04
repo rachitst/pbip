@@ -160,6 +160,16 @@ def login_json(client: TestClient, email: str, password: str = PASSWORD) -> dict
     return dict(response.json())
 
 
+def grant_analytics_consent(client: TestClient, actor: Actor) -> Actor:
+    """Turn the customer's analytics consent on through the API (ADR-0057): without it the events
+    API stores nothing for them. Returns the actor so a call can wrap ``make_customer()``."""
+    r = client.put(
+        "/api/v1/customers/me/analytics-consent", headers=actor.headers, json={"granted": True}
+    )
+    assert r.status_code == 200 and r.json()["granted"] is True, r.text
+    return actor
+
+
 def age_payee(engine: Engine, payee_id: str, hours: int) -> None:
     """Pretend a payee was added ``hours`` ago (to leave the 'new payee' fraud window)."""
     with engine.begin() as connection:
