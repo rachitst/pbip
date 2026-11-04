@@ -213,7 +213,10 @@ score or reason.
   **DECLINED**, and the hold was released.
 - **Why Bob's inbound is not flagged:** Bob receives Alice's INR 40,000.00 at 03:45. Sending INR 24,000.00 is 60% of
   that, below the 80% threshold. With the fresh-seed INR 20,000.00 step-up, INR 24,000.00 is 120% of it, so
-  MULE_PASS_THROUGH can fire on Bob's transfer too within 60 minutes (code); check the alert's reasons.
+  MULE_PASS_THROUGH fires on Bob's transfer too within 60 minutes. Confirmed on 4 Nov from the fraud event: Bob's
+  INR 24,000.00 scored **60** (NEW_PAYEE, MULE_PASS_THROUGH, plus model reasons) and was held. To keep Bob's
+  inbound unflagged, send Bob's INR 24,000.00 more than 60 minutes after Alice's step-up, or have the analyst
+  release it as in step 1.
 - **Fresh seed (4 Nov live):** after the release, Carol's INR 22,800.00 to "Quick Cash Exports" was
   `202 PENDING_REVIEW`, score **60**, reasons NEW_PAYEE, MULE_PASS_THROUGH, MODEL_VELOCITY_10M,
   MODEL_PAYEE_AGE_SECONDS. REJECT returned 204, then DECLINED.
