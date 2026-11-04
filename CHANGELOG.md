@@ -137,13 +137,16 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
 - Cheaper scoring: the Isolation Forest is scored without scikit-learn's per-call overhead, and LightGBM and TreeSHAP
   share one float64 matrix on one thread, with identical decisions; the share of transfers scored by rules only at a
   50 ms budget fell from 47.5% to 0.05% under load (#417, #422).
-- Rules STRUCTURING (F7) and DORMANT_REACTIVATION (F8), `baseline-rules-0.6` (ADR-0046, #424).
+- Rules STRUCTURING (F7) and DORMANT_REACTIVATION (F8), `baseline-rules-0.6` (ADR-0046, #424), and an hourly
+  deposit-side structuring monitor that opens REVIEW analyst alerts (`STRUCTURED_DEPOSITS`, ADR-0052, #436).
 - Product propensity model trained on a documented simulation of uptake; it failed its pre-registered gate, so
   `rules-v1` is still served (ADR-0049, #427).
 
 ### Fixes
 - Payments and transfers: a fraud block on a standing order's final run completes it without a pause reason (#313).
 - Loans: no instalment above the EMI when interest rounds a paisa over it (#242).
+- Auth: a password change whose session was revoked in flight is refused with 401 (#423, closes #403).
+- Ledger: the never-used FEE transaction type is removed (migration 0029, #431).
 - Analytics: re-materialise the posting month of reversed transfers (#171); exclude transfers between a customer's
   own accounts from segmentation features (#192); month-end analytics tests (#207); audit follow-ups with one-pass
   segmentation features, exact shares and burn rate, and documented 404s (#394 via #397); the recommendation context
@@ -184,6 +187,6 @@ The first release. The `v1.0.0` tag has **not** been created yet; it is created 
 - Testing: local verification run (#191), test strategy and verification report (#373).
 - Demo: live demo script with verified amounts and a fallback plan (#377).
 - User manual with customer, staff and compliance guides (#374).
-- 48 ADRs (0001-0049; the number 0026 is not used) and the team execution plan with batch status updates (#118, #119, #121, #122, #126, #139, #142,
+- ADRs 0001-0052 (0026 is not used) and the team execution plan with batch status updates (#118, #119, #121, #122, #126, #139, #142,
   #146, #151, #153, #157, #163-#166, #190, #195, #197, #199, #203, #208, #225, #226, #230, #240, #270, #291, #294,
   #298, #308, #320, #338, #355, #357, #361, #408).
