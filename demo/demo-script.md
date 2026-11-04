@@ -298,7 +298,62 @@ minute (after that, Ollama).
 | **Sign-in 429** | "too many requests" | Wait 60 s. |
 | **Page or API down** | 502 from nginx, or a container exited | `docker compose ps`, then `docker compose up -d --wait` and `docker compose restart web`. For one service: `docker compose restart api` (or `worker`). Never `--build`. Logs: `docker compose logs --tail=100 api`. **Never `docker compose down -v`** (it deletes the `pgdata` volume, which is the demo database). Never reseed or drop `pbip`. |
 | **Laptop rebooted** | - | Section 2. |
-| **Everything fails** | - | The recorded fallback video (TASK-093 acceptance criterion; not part of this file). |
+| **Everything fails** | - | Play the recorded fallback video (TASK-093). The video is attached to the release, not kept in git. Section 7.1 explains how to record it again. |
+
+### 7.1 Recording the fallback video again
+
+`demo/record/record-demo.ts` drives the **web UI** in a real Chromium through the same story as the lead's
+API-level live run (section 10), in this order:
+
+1. Alice: INR 35,000.00 to a new payee, held for review.
+2. Alice: the step-up to Bob Demo, then posted.
+3. The analyst rejects Alice's held transfer.
+4. Carol: lab F1, held, then released.
+5. Lab F6: Bob's INR 24,000.00, then Carol's INR 22,800.00 forward, which is held with `MULE_PASS_THROUGH` and
+   rejected.
+6. The six assistant questions from section 10.
+7. The compliance officer's hash-chain verify.
+
+It records one 1920x1080 video and adds a small caption per step as an overlay. The overlay is `aria-hidden`
+with `pointer-events: none`, so it does not change what the app does.
+
+```bash
+cd ~/Desktop/Rachit/pbip/apps/web          # the checkout whose compose stack is running
+npm ci && npx playwright install chromium  # once; the same Playwright as the E2E journeys
+DEMO_VIDEO_DIR=~/.local/share/pbip-lead/video \
+  npx playwright test -c ../../demo/record/playwright.config.ts
+```
+
+- **Before you record:**
+  - Start on a fresh seed, or at least 60 minutes after the last rehearsal (section 8).
+  - Leave a minute after any other sign-ins. The script keeps under the limit of 10 sign-ins a minute per IP
+    on its own, but it cannot see sign-ins from other tools.
+  - It signs in 16 times in about 9 minutes; Bob and Carol sign in with a password only.
+- **Password:** the script uses `PBIP_DEMO_PASSWORD` when it is set. Otherwise it reads the `DEMO_PASSWORD`
+  constant from `scripts/seed_dev.py` (for `APP_ENV=local` only). Codes come from `scripts/totp.py --unused`
+  through `docker compose exec`, run in the repository root. When you run from a worktree, set
+  `E2E_COMPOSE_DIR` to the checkout that runs the stack. The script never prints passwords, codes or tokens.
+- **Output:** `pbip-demo-<UTC time>.webm` in `DEMO_VIDEO_DIR` (default `demo/record/out/`, which git
+  ignores). With `ffmpeg` on `PATH`, the script also writes an H.264 `.mp4`. A `.json` file next to the video
+  lists every step as PASS, DIFF or FAIL, with the status, score and reasons the API returned. A failed run
+  leaves a `-FAILED` video.
+- **Checks:**
+  - Every step checks the API's answer, which it reads from the browser's own responses. The analyst opens
+    the alert for that exact transaction id.
+  - The run stops with FAIL as soon as an outcome is not one this script allows.
+  - **DIFF** marks an outcome that section 5 or 7 documents, and the run continues:
+    - Alice's INR 35,000.00 is BLOCKED.
+    - The step-up transfer is held instead, and the analyst releases it.
+    - Bob's inbound is held (on a fresh seed), and the analyst releases it before Carol forwards from her own
+      session.
+    - Groq is not used for "am I doing ok money-wise?".
+- **Amounts:**
+  - The step-up amount is INR 20,000.00 while Bob Demo is under 24 hours old, and INR 40,000.00 after that
+    (5.2).
+  - Override the amounts with `DEMO_STEPUP_AMOUNT_MINOR` and `DEMO_REVIEW_AMOUNT_MINOR` (minor units) when
+    Alice's history has moved her average (5.1).
+- **Pacing:** `DEMO_PACE` multiplies every pause (default `1`; `0.3` for a quick check). `DEMO_SLOWMO_MS`
+  slows every browser action down (default `120`). `DEMO_CAPTIONS=0` turns the captions off.
 
 ## 8. After the demo or a rehearsal
 
