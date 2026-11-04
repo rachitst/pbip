@@ -113,7 +113,7 @@ Example, a high-risk F5 transfer:
 
 - **Switch:** `FRAUD_SCORER=hybrid` plus `FRAUD_MODEL_DIR=models/fraud`. The models load once when the app starts and are warmed with one throw-away score.
 - **Floor and fallback:** the baseline rules score every transfer first, and `risk = max(baseline, hybrid)`, so the model can raise a decision but never lower it. A missing, failing or slow model (over `FRAUD_MODEL_BUDGET_MS`, default 50 ms) serves the baseline result, marked `+rules-only` with a `MODEL_UNAVAILABLE` reason.
-- **Inputs:** queried from the platform for each transfer: debits in the last 30 days, payee age, failed sign-ins in 24 h. They go through the same online feature code as training; `test_served_row_equals_the_training_row` checks every model column against `build_dataset`. Device signals are not on the payment path yet (TASK-095).
+- **Inputs:** queried from the platform for each transfer: debits and money received in the last 30 days (and the last customer activity before that when there was none, ADR-0051), payee age, failed sign-ins in 24 h. They go through the same online feature code as training; `test_served_row_equals_the_training_row` checks every model column against `build_dataset`. Device signals are not on the payment path yet (TASK-095).
 - **Persistence:** `fraud_events` stores the full snapshot (baseline and hybrid inputs, `model_probability`, `anomaly_score`, both risks) and `model_version`. Customers never see reasons or scores; staff alert detail shows RULE/MODEL/ANOMALY reasons (`test_hybrid_risk_drives_the_transfer_state_machine`).
 - **Latency (laptop, served end to end, 25 transfers):** p50 20.6 ms, p95 24.7 ms, max 29.2 ms.
 

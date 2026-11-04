@@ -108,7 +108,7 @@ def main() -> None:
     assert scorer.anomaly is not None
     scores = {
         "Hybrid (served)": h.batch_risk(scorer, test) / 100,
-        "LightGBM alone": np.asarray(scorer.booster.predict(test[list(t.MODEL_FEATURES)])),
+        "LightGBM alone": np.asarray(scorer.booster.predict(test[h.model_columns(scorer.booster)])),
         "Isolation Forest alone": scorer.anomaly.score(test),
         "Rules only (fail-safe)": h.batch_risk(rules_only, test) / 100,
     }
@@ -123,7 +123,7 @@ def main() -> None:
     fig.tight_layout()
     fig.savefig(args.img / "fraud-pr-curves.png", dpi=120)
 
-    shap = shap_summary(scorer.booster, test[list(t.MODEL_FEATURES)])
+    shap = shap_summary(scorer.booster, test[h.model_columns(scorer.booster)])
     report["test"]["lightgbm_shap_mean_abs"] = shap
     fig, ax = plt.subplots(figsize=(6.4, 4.4))
     ax.barh(list(shap)[::-1], list(shap.values())[::-1])

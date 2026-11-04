@@ -31,11 +31,13 @@ eligibility decisions; use on real traffic without retraining on real labelled o
 - Imbalance: `scale_pos_weight` = negatives / positives; early stopping on validation PR-AUC
   (`fraud-models.md` "LightGBM (supervised)").
 
-## Features (9 columns, verified in `artifacts.py` `MODEL_FEATURES`)
+## Features (`artifacts.py` `MODEL_FEATURES`)
 
-`ratio_to_avg_amount`, `payee_age_seconds`, `velocity_10m`, `failure_count_24h`, `distinct_devices_7d`
-(the TASK-024 features, `fraud/features.py` `FEATURE_NAMES`), plus `log_amount`, `hour_ist`, `new_device`
-and `is_debit`. No demographic, location or identity field.
+`-3` and earlier (9 columns): `ratio_to_avg_amount`, `payee_age_seconds`, `velocity_10m`, `failure_count_24h`,
+`distinct_devices_7d` (the TASK-024 features, `fraud/features.py` `FEATURE_NAMES`), plus `log_amount`, `hour_ist`,
+`new_device` and `is_debit`. Feature contract 2 (`-4`, ADR-0051, 11 columns) adds `near_threshold_72h` and
+`days_since_last_activity`, and counts devices on debits only. The scorer serves each model with its own column
+list. No demographic, location or identity field.
 
 ## Evaluation (copied from existing reports)
 
