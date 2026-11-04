@@ -248,6 +248,48 @@ class CustomerService:
             details=details,
         )
 
+    def set_phone(self, customer: Customer, phone: str, meta: RequestMeta) -> CustomerProfileOut:
+        """Store the customer's mobile number encrypted with ``FieldCipher`` (ADR-0042, #398).
+
+        The plain number is never stored, logged or audited: the audit row records only THAT it
+        changed. Saving the number already on file changes nothing and is not re-audited (Fernet
+        is randomised, so the stored token is decrypted to compare).
+        """
+        cipher = self._require_field_cipher()
+        row = self._lock(customer)
+        current = self._decrypt_phone(cipher, row.phone_enc)
+        if current != phone:
+            replaced = row.phone_enc is not None
+            row.phone_enc = cipher.encrypt(phone)
+            self._audit_customer(row, "PHONE_SET", meta, {"replaced_existing": replaced})
+        self.session.commit()
+        return self.get_profile(row)
+
+    def delete_phone(self, customer: Customer, meta: RequestMeta) -> None:
+        """Erase the mobile number on request; nothing else about the customer changes."""
+        row = self._lock(customer)
+        if row.phone_enc is not None:
+            row.phone_enc = None
+            self._audit_customer(row, "PHONE_DELETED", meta, {})
+        self.session.commit()
+
+    def _require_field_cipher(self) -> FieldCipher:
+        cipher = self._get_field_cipher()
+        if cipher is None:
+            # Staging/production refuse to boot without the key; this guards a misconfigured dev
+            # stack from ever storing a phone number in clear (generic 500, nothing written).
+            raise RuntimeError("FIELD_ENCRYPTION_KEY is not configured")
+        return cipher
+
+    @staticmethod
+    def _decrypt_phone(cipher: FieldCipher, token: str | None) -> str | None:
+        if token is None:
+            return None
+        try:
+            return cipher.decrypt(token)
+        except CryptoError:
+            return None  # unreadable under the current keys: overwrite it
+
     def get_risk_profile(self, customer: Customer) -> RiskProfileOut:
         return _risk_profile_out(customer)
 

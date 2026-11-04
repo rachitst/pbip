@@ -1,0 +1,6 @@
+/* Mobile number on Profile & security (#398). Uses the shared design tokens from styles/tokens.css. */
+.phone-form__input {
+  max-width: 20rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
