@@ -121,3 +121,14 @@ def evaluate_feature_drift_task() -> dict[str, float]:
     with session_scope() as session:
         results = evaluate_feature_drift(session, get_redis(), utcnow())
     return {r.feature: r.psi for r in results}
+
+
+@celery_app.task(name="pbip.fraud.monitor_structuring_deposits")
+def monitor_structuring_deposits_task() -> dict[str, int]:
+    """Alert analysts to credits structured just under the threshold (hourly beat; ADR-0052).
+
+    Read-only on money. Idempotent: a credit already in an alert is never alerted again, under a
+    per-account advisory lock, so a re-delivered or concurrent run opens nothing twice."""
+    from pbip_api.modules.fraud.structuring_monitor import run_structuring_monitor
+
+    return run_structuring_monitor()

@@ -12,11 +12,12 @@ from typing import Any
 import structlog
 from redis import Redis
 from redis.exceptions import RedisError
-from sqlalchemy import ColumnElement, Date, cast, func, literal_column, select
+from sqlalchemy import ColumnElement, Date, and_, cast, func, literal_column, select
 from sqlalchemy.orm import Session
 
 from pbip_api.modules.accounts.service import mask_account_number
 from pbip_api.modules.fraud.models import FraudEvent
+from pbip_api.modules.fraud.structuring_monitor import MONITOR_VERSION
 from pbip_api.modules.ledger.models import Transaction
 from pbip_api.modules.payees.models import Payee
 
@@ -52,7 +53,8 @@ def fraud_stats(session: Session, redis_client: Redis, days: int, now: datetime)
 
 def compute(session: Session, days: int, now: datetime) -> dict[str, Any]:
     since = now - timedelta(days=days)
-    in_window = FraudEvent.created_at >= since
+    # Payment decisions only: a batch monitor's alert (ADR-0052) did not score a payment.
+    in_window = and_(FraudEvent.created_at >= since, FraudEvent.model_version != MONITOR_VERSION)
     day = cast(func.timezone("UTC", FraudEvent.created_at), Date)
     per_day: dict[str, dict[str, int]] = {}
     for d, decision, count in session.execute(
@@ -133,7 +135,7 @@ def _risky_payees(session: Session, since: datetime) -> list[dict[str, Any]]:
 def _p95(session: Session, since: datetime) -> float | None:
     value = session.scalar(
         select(func.percentile_cont(0.95).within_group(FraudEvent.latency_ms)).where(
-            FraudEvent.created_at >= since
+            FraudEvent.created_at >= since, FraudEvent.model_version != MONITOR_VERSION
         )
     )
     return None if value is None else round(float(value), 2)

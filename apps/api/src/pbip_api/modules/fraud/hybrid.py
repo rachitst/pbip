@@ -25,7 +25,7 @@ from uuid import UUID
 import structlog
 from pbip_ml.fraud.contract import FraudReason, FraudScoreResult, ReasonSource, TransactionContext
 from pbip_ml.fraud.features import AVG_WINDOW, PastTransfer
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from pbip_api.core.config import Settings
@@ -159,7 +159,15 @@ class HybridFraudScorer:
                 Transaction.amount,
                 FraudEvent.features["device_id"].astext,  # the device of each earlier transfer
             )
-            .outerjoin(FraudEvent, FraudEvent.transaction_id == Transaction.id)
+            # The customer's own event only: a structuring-monitor alert (ADR-0052) may add a
+            # second event on a transfer this customer sent, and must not duplicate the debit.
+            .outerjoin(
+                FraudEvent,
+                and_(
+                    FraudEvent.transaction_id == Transaction.id,
+                    FraudEvent.customer_id == context.customer_id,
+                ),
+            )
             .where(
                 Transaction.debit_account_id.in_(accounts),
                 Transaction.id != context.transaction_id,

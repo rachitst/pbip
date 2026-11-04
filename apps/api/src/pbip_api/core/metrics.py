@@ -25,6 +25,10 @@ FRAUD_INFERENCE_SECONDS = Histogram(
     buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0),
 )
 FRAUD_DECISIONS_TOTAL = Counter("fraud_decisions_total", "Fraud decisions by outcome", ["decision"])
+# Analyst alerts opened by a batch fraud monitor (ADR-0052); the label is a fixed monitor name.
+FRAUD_MONITOR_ALERTS_TOTAL = Counter(
+    "fraud_monitor_alerts_total", "Analyst alerts opened by batch fraud monitors", ["monitor"]
+)
 TRANSFERS_TOTAL = Counter("transfers_total", "Transfers by final status", ["status"])
 IDEMPOTENT_REPLAYS_TOTAL = Counter(
     "idempotent_replays_total", "Requests answered from a stored idempotent response"
