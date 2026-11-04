@@ -5,7 +5,7 @@ Money received from another customer and most of it sent straight on is flagged;
 scorer's clock is injected, so "20 minutes later" and "3 hours later" need no sleeping.
 """
 
-import statistics
+import json
 import uuid
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
@@ -17,7 +17,7 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from pbip_api.core.config import Settings
 from pbip_api.core.db import get_session, utcnow
-from pbip_api.modules.fraud.baseline import BaselineRulesScorer
+from pbip_api.modules.fraud.baseline import MULE_SNAPSHOT_IDS, BaselineRulesScorer
 from pbip_api.modules.fraud.dependencies import get_fraud_scorer
 from pbip_api.modules.fraud.models import FraudEvent
 from pbip_api.modules.ledger import service as ledger
@@ -26,6 +26,7 @@ from pbip_ml.fraud.contract import FraudDecision, FraudScorer, TransactionContex
 from pbip_test_support import Actor, age_payee
 from pydantic import ValidationError
 from sqlalchemy import Engine, select, text
+from sqlalchemy import event as sql_event
 from sqlalchemy.orm import Session, sessionmaker
 
 pytestmark = pytest.mark.integration
@@ -297,36 +298,111 @@ def test_concurrent_forwards_see_the_same_inbound_total(
         assert mule_reason(e) is not None
 
 
-def test_scoring_stays_fast_with_1000_inbound_transfers(
-    mule: tuple[Actor, dict[str, Any], Actor, dict[str, Any]],
-    migrated_engine: Engine,
-    settings: Settings,
-) -> None:
-    a, _, b, _ = mule
-    with sessionmaker(bind=migrated_engine)() as session:
-        for _ in range(1_000):
+def _receive(engine: Engine, sender: Actor, receiver: Actor, count: int, amount: int) -> None:
+    """``count`` transfers of ``amount`` from ``sender`` to ``receiver``, posted through the ledger."""
+    with sessionmaker(bind=engine)() as session:
+        for _ in range(count):
             txn = ledger.create_transaction(
                 session,
                 type_=TransactionType.TRANSFER,
-                amount=10_000,
+                amount=amount,
                 currency="INR",
-                debit_account_id=a.account_id,
-                credit_account_id=b.account_id,
+                debit_account_id=sender.account_id,
+                credit_account_id=receiver.account_id,
             )
             ledger.post_transaction(session, txn, ledger.transfer_legs(txn))
         session.commit()
+
+
+Sent = list[tuple[str, Any, int]]  # (statement, parameters, rows returned)
+
+
+def _scoring_cost(engine: Engine, settings: Settings, actor: Actor, amount: int,
+                  now: datetime) -> tuple[Any, Sent]:  # fmt: skip
+    """Score once; record every SQL statement sent, its parameters and the rows it returned."""
+    sent: Sent = []
+
+    def record(*args: Any) -> None:  # (conn, cursor, statement, parameters, context, many)
+        sent.append((str(args[2]), args[3], int(args[1].rowcount)))
+
+    sql_event.listen(engine, "after_cursor_execute", record)
+    try:
+        result = score_now(engine, settings, actor, amount, at=lambda: now)
+    finally:
+        sql_event.remove(engine, "after_cursor_execute", record)
+    return result, sent
+
+
+def _plan_nodes(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    return [plan, *(node for child in plan.get("Plans", []) for node in _plan_nodes(child))]
+
+
+def _transaction_scans(engine: Engine, statement: str, parameters: Any) -> set[str]:
+    """How PostgreSQL reads ``transactions`` for this statement on fresh statistics: the name of
+    each ``ix_transactions_*`` index it scans, and ``Seq Scan`` if it reads the whole table."""
+    with engine.connect() as connection:
+        connection.exec_driver_sql("ANALYZE transactions")  # what autovacuum would leave
+        raw = connection.exec_driver_sql(f"EXPLAIN (FORMAT JSON) {statement}", parameters)
+        plan = raw.scalar_one()
+        connection.rollback()
+    root = (json.loads(plan) if isinstance(plan, str) else plan)[0]["Plan"]
+    scans: set[str] = set()
+    for node in _plan_nodes(root):
+        index = str(node.get("Index Name", ""))
+        if index.startswith("ix_transactions_"):
+            scans.add(index)
+        elif node.get("Relation Name") == "transactions" and node["Node Type"] == "Seq Scan":
+            scans.add("Seq Scan")
+    return scans
+
+
+# Hang guard, not a speed bar (as #362, #446): posting 1,000 ledger transfers takes 20-40 s on a
+# busy 2-CPU laptop, near pytest-timeout's 60 s default.
+@pytest.mark.timeout(300)
+def test_scoring_cost_does_not_grow_with_1000_inbound_transfers(
+    make_customer: Callable[..., Actor], migrated_engine: Engine, settings: Settings
+) -> None:
+    """p95 < 100 ms (AGENTS.md section 8) rests on bounded work, asserted here as cost, not time.
+
+    MULE_PASS_THROUGH sums and counts the inbound in PostgreSQL and fetches at most
+    MULE_SNAPSHOT_IDS ids, so 1,000 inbound transfers cost the same SQL statements as 3, none
+    returns more than 20 rows, and the inbound look-ups and the repeat-episode count can be served
+    by the account/created_at indexes (a regression to fetching every row, an N+1 or an
+    unindexable predicate fails here). A wall-clock p95 failed under load (103 ms at load 8); the
+    real latency is measured by ``scripts/benchmark_structuring_scoring.py --rule mule``.
+    """
+    sender = make_customer(funds=3 * 400_000 + 1_000 * 10_000)
+    few, many = make_customer(), make_customer()
+    _receive(migrated_engine, sender, few, 3, 400_000)  # INR 12,000.00 in all
+    _receive(migrated_engine, sender, many, 1_000, 10_000)  # INR 1,00,000.00 in all
     fixed = utcnow() + timedelta(minutes=5)
-    latencies = []
-    for call in range(43):  # the first 3 warm the connection pool and the plan cache
-        result = score_now(migrated_engine, settings, b, 9_000_000, at=lambda: fixed)
-        if call >= 3:
-            latencies.append(result.latency_ms)
+
+    few_result, few_sent = _scoring_cost(migrated_engine, settings, few, 1_080_000, fixed)
+    result, sent = _scoring_cost(migrated_engine, settings, many, 9_000_000, fixed)
+
+    assert few_result.features["mule_inbound_count"] == 3
+    assert "MULE_PASS_THROUGH" in {r.code for r in few_result.reasons}
     assert result.features["mule_inbound_count"] == 1_000
     assert result.features["mule_inbound_total_minor"] == 10_000_000
+    assert result.features["mule_ratio"] == 0.9
     assert str(result.features["mule_inbound_transaction_ids"]).count(",") == 19  # capped at 20
     assert "MULE_PASS_THROUGH" in {r.code for r in result.reasons}
-    p95 = statistics.quantiles(latencies, n=20)[-1]
-    assert p95 < 100, latencies  # AGENTS.md §8: p95 < 100 ms, DB look-ups included
+    assert [s for s, _, _ in sent] == [s for s, _, _ in few_sent], "statements grow with N"
+    assert max(rows for _, _, rows in sent) <= MULE_SNAPSHOT_IDS
+    # The plan is read for the 3-credit account: on a test-sized table the 1,000-credit account
+    # holds most rows, where a sequential scan is the planner's right choice; on a real ledger
+    # every account is a small share of the table, as this one is here.
+    inbound = [(s, p) for s, p, _ in few_sent if "transactions.debit_account_id IN" in s]
+    assert len(inbound) == 2  # the count/sum and the capped id list
+    for statement, parameters in inbound:
+        assert _transaction_scans(migrated_engine, statement, parameters) == {
+            "ix_transactions_credit_account_id_created_at"
+        }
+    episodes = [(s, p) for s, p, _ in few_sent if "JOIN fraud_events" in s]
+    assert len(episodes) == 1  # the repeat-pattern count: this account's debits in 30 days
+    assert {"ix_transactions_debit_account_id_created_at"} == _transaction_scans(
+        migrated_engine, *episodes[0]
+    )
 
 
 @pytest.mark.parametrize(

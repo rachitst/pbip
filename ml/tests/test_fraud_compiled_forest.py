@@ -9,14 +9,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from pbip_datagen.__main__ import _export_fraud
 from pbip_datagen.fraud import generate_labelled
 from pbip_datagen.generator import GeneratorConfig
 from pbip_ml.fraud import inference as inf
 from pbip_ml.fraud.artifacts import ANOMALY_FEATURES, AnomalyModel
 from pbip_ml.fraud.compiled_forest import CompiledForest, compile_forest
 from pbip_ml.fraud.features import PastTransfer
-from pbip_ml.fraud.train import run
 from sklearn.ensemble import IsolationForest
 
 pytestmark = pytest.mark.unit
@@ -56,14 +54,11 @@ def test_a_forest_it_cannot_reproduce_is_not_compiled(monkeypatch: pytest.Monkey
     assert compile_forest(forest) is None
 
 
-@pytest.fixture(scope="module")
-def artifacts(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    data, out = tmp_path_factory.mktemp("data"), tmp_path_factory.mktemp("model")
-    _export_fraud(GeneratorConfig(seed=42, customers=600, months=4), data)
-    run(data, out)
-    return out
-
-
+# Hang guard, not a speed bar (as #446): training the shared model (about 5 s, in this test's setup
+# when it runs first) and 300 transfers each scored by scikit-learn's own score_samples (about
+# 15 ms of fixed overhead a row, the cost the compiled forest exists to avoid) take about 10 s on
+# an idle 2-CPU laptop; under load the 60 s pytest-timeout default fired.
+@pytest.mark.timeout(240)
 def test_the_served_scorer_uses_the_compiled_forest_and_decides_identically(
     artifacts: Path,
 ) -> None:
