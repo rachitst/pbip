@@ -14,6 +14,11 @@
    re-orders the products steps 1 and 5 allowed, by a probability of uptake learned from a
    SIMULATION. It never adds a product and never changes a reason. Without it, rules-v1 orders
    them as before.
+7. ADR-0056 (UC-07): an investment product carries a risk level, and the customer's RTQ-1 risk
+   band (TASK-097) is a suitability rule applied with the eligibility rules, before any ordering:
+   a product riskier than the band is not offered (the assistant's TASK-105 rule). Without a band
+   the product is offered as before and its last reason says the band was not considered. The
+   band is never a ranking weight, so the model in step 6 still only re-orders what is allowed.
 """
 
 import math
@@ -28,6 +33,7 @@ from pbip_ml.recommendations.contract import (
     HeldProductKind,
     ProductType,
     Recommendation,
+    RiskLevel,
 )
 
 
@@ -119,6 +125,7 @@ PRODUCT_CATALOGUE: tuple[BankingProduct, ...] = (
         min_health_score=55,
         target_segments=["HIGH_NET_WORTH", "BUDGET_CONSCIOUS"],
         cta_label="Learn more",
+        risk_level=RiskLevel.HIGH,  # the catalogue's MF-INDEX (equity index fund) is HIGH
     ),
     BankingProduct(
         product_id=FAMILY_COVER_ID,
@@ -306,34 +313,72 @@ def held_product_rule(
     return reason is not None, reason
 
 
+_RISK_ORDER: dict[RiskLevel, int] = {RiskLevel.LOW: 0, RiskLevel.MODERATE: 1, RiskLevel.HIGH: 2}
+
+NO_RISK_BAND_REASON = (
+    "You have not answered the risk questionnaire under Profile & security, so this suggestion "
+    "does not take your risk tolerance into account yet."
+)
+
+
+def risk_band_rule(
+    product: BankingProduct, ctx: CustomerRecommendationContext
+) -> tuple[bool, str | None]:
+    """``(offer, reason)`` for UC-07 suitability (ADR-0056): a product with a risk level is offered
+    only when it is not riskier than the customer's band, and its reason names the band. Products
+    without a risk level (savings, loans, cover) are not affected."""
+    risk = product.risk_level
+    if risk is None:
+        return True, None
+    if ctx.risk_band is None:
+        return True, NO_RISK_BAND_REASON
+    if _RISK_ORDER[risk] > _RISK_ORDER[ctx.risk_band]:
+        return False, None
+    return True, (
+        f"Your risk profile from the questionnaire is {ctx.risk_band.value.lower()}; this is a "
+        f"{risk.value.lower()}-risk product, so it fits that profile."
+    )
+
+
 def generate_recommendations(
     ctx: CustomerRecommendationContext,
     catalogue: tuple[BankingProduct, ...] = PRODUCT_CATALOGUE,
     top_k: int = 3,
     model_version: str = MODEL_VERSION,
     propensity: OrderingModel | None = None,
+    apply_risk_band: bool = True,
 ) -> list[Recommendation]:
     """Eligible products only, ordered by relevance, each with reasons from the customer's data.
 
     Held products are dropped unless a top-up rule allows them; the top-up reason comes first so
     the customer always sees why a product they hold is offered again (ADR-0030). With
     ``propensity`` (ADR-0049) the same offers are ordered by the model's simulated probability and
-    labelled with its version; the eligibility and held-product rules above still decide which.
+    labelled with its version; the eligibility, risk-band and held-product rules above still
+    decide which. The band reason comes last, after the eligibility figures (ADR-0056).
+    ``apply_risk_band=False`` skips the band rule entirely (no exclusion, no band reason): only for
+    the assistant, which applies the same rule itself and names what it left out (TASK-105).
     """
-    offers: list[tuple[BankingProduct, list[str]]] = []
+    offers: list[tuple[BankingProduct, list[str], list[str]]] = []
     for product in catalogue:
         if not evaluate_eligibility(product, ctx):
             continue
+        suitable, band_reason = risk_band_rule(product, ctx) if apply_risk_band else (True, None)
         offer, top_up_reason = held_product_rule(product, ctx)
-        if offer:
-            offers.append((product, [top_up_reason] if top_up_reason else []))
+        if suitable and offer:
+            offers.append(
+                (
+                    product,
+                    [top_up_reason] if top_up_reason else [],
+                    [band_reason] if band_reason else [],
+                )
+            )
     scores = {
         product.product_id: (
             relevance_score(product, ctx)
             if propensity is None
             else round(propensity.score(product.product_id, ctx), 4)
         )
-        for product, _ in offers
+        for product, _, _ in offers
     }
     if propensity is not None:
         model_version = propensity.version
@@ -343,11 +388,11 @@ def generate_recommendations(
             product_id=product.product_id,
             product_type=product.product_type,
             score=scores[product.product_id],
-            reasons=[*held_reasons, *_REASONS[product.product_id](ctx)[:3]],
+            reasons=[*held_reasons, *_REASONS[product.product_id](ctx)[:3], *band_reasons],
             model_version=model_version,
             title=product.title,
             description=product.description,
             cta_label=product.cta_label,
         )
-        for product, held_reasons in ranked[:top_k]
+        for product, held_reasons, band_reasons in ranked[:top_k]
     ]

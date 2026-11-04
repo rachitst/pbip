@@ -100,6 +100,20 @@ class RiskyPayee(BaseModel):
     max_risk: int
 
 
+class RiskBand(BaseModel):
+    low: int = Field(description="Lowest risk score in the band (inclusive)")
+    high: int = Field(description="Highest risk score in the band (inclusive)")
+    count: int = Field(description="Payment decisions in the window with a score in the band")
+
+
+class AlertOutcomes(BaseModel):
+    """Alerts raised in the window, by their status now."""
+
+    OPEN: int
+    CONFIRMED_FRAUD: int
+    FALSE_POSITIVE: int
+
+
 class FraudStats(BaseModel):
     window_days: int
     generated_at: datetime
@@ -114,6 +128,10 @@ class FraudStats(BaseModel):
         description="Decisions served by the rules because the model failed"
     )
     latency_p95_ms: float | None
+    risk_bands: list[RiskBand] = Field(
+        description="Risk-score distribution of the window's payment decisions, ten bands"
+    )
+    alerts: AlertOutcomes
 
 
 class HighRiskCustomer(BaseModel):
@@ -250,7 +268,10 @@ def _summary(
 @router.get(
     "/stats",
     response_model=FraudStats,
-    summary="Fraud telemetry: decisions over time, hold rate, top reasons, risky payees",
+    summary=(
+        "Fraud telemetry: decisions over time, hold rate, top reasons, risky payees, "
+        "risk-score distribution and alert outcomes"
+    ),
 )
 def get_stats(
     days: int = Query(default=7, ge=1, le=90),

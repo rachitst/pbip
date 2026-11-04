@@ -14,7 +14,7 @@ below differ; each step names the fresh-seed value where it changed.
 
 **How each step was checked (3 Nov 2026).** Every step names its source:
 
-- **live**: the lead's end-to-end run on the frozen stack at `https://localhost:8443` (database `pbip`). The
+- **live**: the team's end-to-end run on the frozen stack at `https://localhost:8443` (database `pbip`). The
   amounts for Alice were confirmed by a side-effect-free dry scoring probe in the API container, after tonight's
   rehearsal. Earlier read-only checks (sign-ins, GETs, SELECTs) count as live too.
 - **scratch**: run with #388's code on a throwaway database, seeded the way the live one was (Alice and Bob
@@ -302,7 +302,7 @@ minute (after that, Ollama).
 
 ### 7.1 Recording the fallback video again
 
-`demo/record/record-demo.ts` drives the **web UI** in a real Chromium through the same story as the lead's
+`demo/record/record-demo.ts` drives the **web UI** in a real Chromium through the same story as the team's
 API-level live run (section 10), in this order:
 
 1. Alice: INR 35,000.00 to a new payee, held for review.

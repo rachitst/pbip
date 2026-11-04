@@ -13,6 +13,18 @@ class ProductType(StrEnum):
     INSURANCE = "INSURANCE"
 
 
+class RiskLevel(StrEnum):
+    """A product's risk level, and the customer's RTQ-1 risk band (TASK-097), on one scale.
+
+    The values match ``customers.risk.RiskBand`` and the wealth catalogue's ``risk_level`` so the
+    engine and the assistant (TASK-105) apply the same suitability rule (ADR-0056).
+    """
+
+    LOW = "LOW"
+    MODERATE = "MODERATE"
+    HIGH = "HIGH"
+
+
 class HeldProductKind(StrEnum):
     """What a customer already holds, as the owning modules report it (TASK-111, ADR-0030).
 
@@ -100,6 +112,13 @@ class CustomerRecommendationContext(BaseModel):
         default=(),
         description="Open accounts, active loans and open fixed deposits (TASK-111, ADR-0030)",
     )
+    risk_band: RiskLevel | None = Field(
+        default=None,
+        description=(
+            "The customer's RTQ-1 risk band (TASK-097); None until the questionnaire is answered. "
+            "A suitability rule, never a ranking weight (ADR-0056)"
+        ),
+    )
 
 
 class BankingProduct(BaseModel):
@@ -119,5 +138,9 @@ class BankingProduct(BaseModel):
     min_health_score: int = 0
     min_discretionary_ratio: float = 0.0
     target_segments: list[str] = Field(default_factory=list)
+    risk_level: RiskLevel | None = Field(
+        default=None,
+        description="Set for investment products: checked against the customer's band (ADR-0056)",
+    )
     # No cta_path: PBIP has no product application pages yet, so none is linked.
     cta_label: str = "Learn more"

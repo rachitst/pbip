@@ -995,7 +995,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Fraud telemetry: decisions over time, hold rate, top reasons, risky payees
+         * Fraud telemetry: decisions over time, hold rate, top reasons, risky payees, risk-score distribution and alert outcomes
          * @description Aggregates only, cached in Redis for 60 seconds per window (TASK-035).
          */
         get: operations["get_stats_api_v1_fraud_stats_get"];
@@ -1816,6 +1816,18 @@ export interface components {
             transaction_status: string;
             /** Transaction Type */
             transaction_type: string;
+        };
+        /**
+         * AlertOutcomes
+         * @description Alerts raised in the window, by their status now.
+         */
+        AlertOutcomes: {
+            /** Confirmed Fraud */
+            CONFIRMED_FRAUD: number;
+            /** False Positive */
+            FALSE_POSITIVE: number;
+            /** Open */
+            OPEN: number;
         };
         /**
          * AlertStatus
@@ -3474,6 +3486,7 @@ export interface components {
         };
         /** FraudStats */
         FraudStats: {
+            alerts: components["schemas"]["AlertOutcomes"];
             /** Block Rate */
             block_rate: number;
             /** By Day */
@@ -3495,6 +3508,11 @@ export interface components {
              * @description Decisions served by the rules because the model failed
              */
             model_fallbacks: number;
+            /**
+             * Risk Bands
+             * @description Risk-score distribution of the window's payment decisions, ten bands
+             */
+            risk_bands: components["schemas"]["pbip_api__modules__fraud__router__RiskBand"][];
             /** Risky Payees */
             risky_payees: components["schemas"]["RiskyPayee"][];
             /** Scored */
@@ -4700,11 +4718,6 @@ export interface components {
             user_id: string;
         };
         /**
-         * RiskBand
-         * @enum {string}
-         */
-        RiskBand: "LOW" | "MODERATE" | "HIGH";
-        /**
          * RiskLevel
          * @enum {string}
          */
@@ -4721,7 +4734,7 @@ export interface components {
              */
             assessed_at: string | null;
             /** @description LOW, MODERATE or HIGH; null if never assessed */
-            band: components["schemas"]["RiskBand"] | null;
+            band: components["schemas"]["pbip_api__modules__customers__risk__RiskBand"] | null;
             /**
              * Max Score
              * @description Highest possible score
@@ -5561,6 +5574,29 @@ export interface components {
              * @enum {string}
              */
             yield_basis: "GUARANTEED" | "FIXED_COUPON" | "MARKET_LINKED";
+        };
+        /**
+         * RiskBand
+         * @enum {string}
+         */
+        pbip_api__modules__customers__risk__RiskBand: "LOW" | "MODERATE" | "HIGH";
+        /** RiskBand */
+        pbip_api__modules__fraud__router__RiskBand: {
+            /**
+             * Count
+             * @description Payment decisions in the window with a score in the band
+             */
+            count: number;
+            /**
+             * High
+             * @description Highest risk score in the band (inclusive)
+             */
+            high: number;
+            /**
+             * Low
+             * @description Lowest risk score in the band (inclusive)
+             */
+            low: number;
         };
     };
     responses: never;
