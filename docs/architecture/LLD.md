@@ -975,12 +975,10 @@ lock, so a repeated run finds nothing due and posts nothing (`test_concurrent_re
    at resolution. There is no claim or assign endpoint.
 8. **docs/README.md planned one LLD per module** (`docs/lld/*.md`). The backlog's definition of done asks for a
    single `docs/architecture/LLD.md`, which is what this is.
-9. **Suspected defect, found by reading and not reproduced:** in `_execute_due_occurrence`, a fraud `BLOCK` on the
-   final occurrence of a standing order sets `status = PAUSED, pause_reason = FRAUD_BLOCK` and then
-   `status = COMPLETED` without clearing `pause_reason`. That combination violates
-   `ck_scheduled_transfers_pause_reason_valid`, so the COMMIT would fail and the run (including the declined
-   transaction and its fraud event) would roll back and be retried. `test_fraud_block_pauses_and_advances` covers
-   a block with later occurrences only. This needs a test and a fix in a separate PR.
+9. **Resolved (#313): a fraud `BLOCK` on the final occurrence of a standing order.** `_execute_due_occurrence` now
+   completes such an order without a pause reason (`status = COMPLETED`, `pause_reason = None`), which keeps
+   `ck_scheduled_transfers_pause_reason_valid`; proved by
+   `test_scheduled_transfers_engine.py::test_a_fraud_block_on_the_final_run_completes_the_order_without_a_pause_reason`.
 
 ## 7. What this document did not verify
 
