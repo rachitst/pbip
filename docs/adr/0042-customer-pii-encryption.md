@@ -92,7 +92,7 @@ requirement. The column was therefore given a write path, following this ADR's r
 - Audit `PHONE_SET` (`replaced_existing` only) and `PHONE_DELETED`, never the number.
 - The number is contact data only: it is not used for sign-in, MFA or account recovery, and no SMS is sent.
 - Profile & security has a "Mobile number" section.
-- Threat model row T65; tests in `test_customer_phone.py` and the BOLA matrix.
+- Threat model row T66; tests in `test_customer_phone.py` and the BOLA matrix.
 
 Standing approval for this update: (1) no control weakened; the new route is customer-only, validated, audited
 and rate-limited; (2) no money movement; (3) no migration (the column already exists); (4) no new service,
