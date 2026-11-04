@@ -73,6 +73,10 @@ def _result(failures: list[FuzzFailure], total_cases: int = 10) -> FuzzResult:
     )
 
 
+# Hang guard, not a speed bar (as #446): three complete passes over every operation in both modes
+# (about 200 Hypothesis runs each, 11-14 s on an idle 2-CPU laptop) took 50-62 s under load, against
+# pytest-timeout's 60 s default. Each pass is needed: one to fuzz, one to reproduce, one other seed.
+@pytest.mark.timeout(240)
 def test_same_seed_reproduces_the_inputs_and_every_operation_is_fuzzed_in_both_modes() -> None:
     first = run_fuzz(
         spec_path=SPEC_PATH, app=NOT_AN_APP, auth=False, min_cases=80, seed=11, execute=_ok

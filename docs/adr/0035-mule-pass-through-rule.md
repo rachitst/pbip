@@ -43,7 +43,9 @@ one trades caught mules against legitimate customers held for a second factor or
    The episode count is a third query, run only when the rule fires. All are reads: no lock is taken and nothing is
    written, so concurrent transfers see the same inbound total and the ledger lock order (AGENTS.md section 4) is
    unchanged. Measured: with 1,000 inbound transfers on the account, the whole baseline scorer had p95 42.8 ms and
-   median 18.8 ms over 30 calls on the shared laptop at load average 7.4 (`test_scoring_stays_fast_with_1000_inbound_transfers`).
+   median 18.8 ms over 30 calls on the shared laptop at load average 7.4 (then a wall-clock test; the cost is now asserted
+   by `test_scoring_cost_does_not_grow_with_1000_inbound_transfers` and the time measured by
+   `scripts/benchmark_structuring_scoring.py --rule mule`).
 5. **Version.** `MODEL_VERSION` is `baseline-rules-0.5` (0.4 is IMPOSSIBLE_TRAVEL, ADR-0034, merged first).
 
 ### Measurement on the synthetic data (honest limits)
