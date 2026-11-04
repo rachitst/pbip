@@ -350,10 +350,13 @@ def _settings(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAns
 
 def _consent(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAnswer:
     return FaqAnswer(
-        "Giving your date of birth and consent is optional. With your consent PBIP uses only "
-        "your age band to offer products you are eligible for, such as senior-citizen deposit "
-        "rates; it is never used to price credit, and staff and the assistant never see the date. "
-        "You can withdraw consent at any time under Profile & security.",
+        "PBIP asks for two separate, optional consents, and you can withdraw either at any time "
+        "under Profile & security. Recommendations: with your date of birth and consent, only "
+        "your age band is used to offer products you are eligible for, such as senior-citizen "
+        "deposit rates; it is never used to price credit, and staff and the assistant never see "
+        "the date. Usage analytics: how you use the app (pages and product interest) is recorded "
+        "only while you agree; it is off until you turn it on, and withdrawing it erases what "
+        "was recorded.",
         "/profile",
     )
 

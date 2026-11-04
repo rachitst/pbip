@@ -166,3 +166,12 @@ def test_the_assistant_answer_matches_the_registry() -> None:
     text = faq.answer(FaqTopic.ASSISTANT, FACTS).text
     assert "I only read" in text and "can't move money" in text
     assert "anyone else" in text and "not personalised financial advice" in text
+
+
+def test_the_consent_answer_covers_both_consents_and_withdrawal() -> None:
+    """Recommendations consent (TASK-107) and analytics consent (ADR-0057): optional, separate,
+    revocable; analytics is off by default and withdrawal erases what was recorded."""
+    text = faq.answer(FaqTopic.CONSENT, FACTS).text
+    assert "two separate, optional consents" in text and "withdraw" in text
+    assert "never used to price credit" in text
+    assert "off until you turn it on" in text and "erases what was recorded" in text

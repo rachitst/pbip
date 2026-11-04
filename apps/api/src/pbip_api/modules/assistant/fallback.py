@@ -117,7 +117,9 @@ _FAQ: tuple[tuple[FaqTopic, re.Pattern[str]], ...] = tuple(
         (FaqTopic.SETTINGS,
          r"\b(dark|light) (mode|theme)\b|\btheme\b|\bsettings\b"
          r"|\b(add|change|update)\b.{0,20}\b(mobile|phone)( number)?\b"),
-        (FaqTopic.CONSENT, r"\bconsent\b|\bdate of birth\b|\bage band\b|\bprivacy\b"),
+        (FaqTopic.CONSENT,
+         r"\bconsent\b|\bdate of birth\b|\bage band\b|\bprivacy\b|\busage analytics\b"
+         r"|\btrack(ing)? (me|my (clicks|activity|usage))\b"),
         (FaqTopic.SPENDING_INSIGHTS,
          r"\b(financial )?health score\b|\bspending (and|&) health\b"),
         (FaqTopic.ASSISTANT,
