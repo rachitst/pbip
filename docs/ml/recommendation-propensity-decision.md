@@ -152,6 +152,61 @@ and the measured HTTP p95 is 51-57 ms. So the endpoint does **not** meet 40 ms p
 loaded laptop; the service-level p95 is at the limit (39 ms). An idle-machine run is still needed to
 demonstrate the HTTP budget (`scripts/measure_analytics_latency.py` against a quiet stack).
 
+### Latency with the version-checked context cache (#343, ADR-0054), measured 2026-11-04
+
+**Where the time went (profiled before this change).** A request is 7 SQL statements plus BEGIN, ROLLBACK and the
+pool pre-ping, so 10 database round trips. Under load every round trip costs about the same (1.5-2 ms each at a load
+average of 8, even a primary-key lookup), so the count of round trips, not one slow query, drives the wall clock.
+Server CPU per request (uvicorn process, `/proc` utime + stime over 300 sequential requests): 13.3-15.2 ms for
+recommendations, against 7.2-9.0 ms for `GET /api/v1/accounts` and 0.6-1.2 ms for `/api/health/live`. Every
+authenticated customer endpoint pays the same base: JWT verification (< 1 ms), the token-version check and the
+customer lookup (2 statements), the pool pre-ping, BEGIN and ROLLBACK, middleware and serialisation. That is what
+`/accounts` costs with its one extra statement, so **`/accounts` is the floor any customer endpoint pays**. The engine
+is < 0.2 ms; the rest of the recommendation cost was the context: the lifetime entries pass, segment, loans and
+fixed deposits.
+
+**Change.** The expensive part of the context (health score, cash flow, lifestyle ratio, held loans and deposits) is
+cached in process per customer and used only while the version read in the same query as the accounts is unchanged:
+every owned account's PostgreSQL row version (`xmin`), balance, hold and status, plus the UTC and bank dates. Every
+posting or hold on any of the accounts (including money received from another customer), any account opened or
+closed, and a new day rebuild it. Segment, balances and the age band (date of birth AND consent) are read on every
+request, so withdrawing consent shows on the very next response (tested while the cached part is reused). A warm
+request is 4 statements (token check, customer, accounts with versions, segment) instead of 7; a cold one is
+unchanged. Tests: `test_recommendation_context_cache.py`; the statement counts (cold 7, warm 4) are pinned in
+`test_recommendation_context_is_six_queries_and_the_request_seven`.
+
+**Measured, main vs this change.** Scratch PostgreSQL 16 (seeded with `scripts/seed_dev.py`, Alice: 42 entries),
+real HTTP to one uvicorn process (keep-alive client, one login, 20 warm-up then 2 x 150 requests per endpoint), one
+server at a time, each run started only when the 1-minute load average was below 4 (the lead's rule for this
+machine). Machine: 2-CPU Celeron N4500, shared.
+
+| p50 / p95 (ms), load at start | main | this change |
+|---|---|---|
+| Recommendations, run 1 | 33.3 / 61.2 (3.80) | 14.8 / 36.0 (3.70) |
+| Recommendations, run 2 | 32.9 / 58.2 (3.41) | 13.0 / 26.2 (3.51) |
+| `/accounts` (the floor), runs 1 / 2 | 24.1 / 36.8, 20.5 / 39.4 | 11.1 / 25.8, 10.9 / 13.3 |
+| `/api/health/live`, runs 1 / 2 | 3.8 / 6.2, 1.9 / 5.0 | 1.5 / 2.0, 1.7 / 3.4 |
+| Server CPU per request: recommendations / accounts | 13.3-13.6 / 7.2-8.3 | 7.4-8.1 / 6.6-6.7 |
+
+The running compose stack (`https://localhost:8443`, nginx TLS, the deployed `main` image, Bob, one login), at load
+3.65 and 4.29: recommendations 25.1 / 36.8 and 28.6 / 43.9, `/accounts` 15.1 / 20.5 and 14.3 / 21.8 (p50 / p95, ms).
+The stack runs `main`, so it gives the "before" through nginx. For the "after" through nginx, the two images
+(main and this branch) were run side by side behind their own copy of the stack's nginx with the stack's
+configuration; those runs were at a load average of **7.1-8.1**, above the threshold of 4, so they are indicative
+only: recommendations p95 37.8-56.0 ms (main) against 28.3-40.9 ms (this change); `/accounts` p95 23.8-35.0 ms in both.
+They were torn down afterwards to free the laptop.
+
+**Result.** With a warm cache, the endpoint costs about as much as `/accounts`. Over real HTTP its p95 was 26-36 ms
+at a load below 4, inside the 40 ms budget, and server CPU fell by about 40% (13.5 to 7.7 ms). The 40 ms target is
+therefore met **for a warm cache** on this laptop. The first request after any posting is a cold build. Cold requests
+cost what `main` costs (7 statements; in-process p95 103-105 ms against 104-151 ms for main, at load 8-9) and do
+**not** meet 40 ms here under load. The measured floor is `/accounts`: about 7 ms of server CPU and 5 database
+round trips. At a load of 8 its HTTP p95 is 58-70 ms, so on this oversubscribed laptop no customer endpoint meets
+40 ms p95. The time is CPU queueing, not this endpoint's work. Two further cuts would lower the floor for every
+endpoint, and both are outside this change: dropping `pool_pre_ping` (a resilience trade-off; no measurable
+difference under the load it was tried at), and merging the token-version check with the customer lookup
+(authentication code, needs its own review).
+
 A trained model would not change this picture: an LR or small GBM scores six products in well under a
 millisecond. The latency question is independent of the model decision.
 

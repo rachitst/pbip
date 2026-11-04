@@ -45,7 +45,9 @@ jobs:
   api-tests:
     name: API - unit, integration, security tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Hang guard, not a speed bar: the suite (2,500+ tests with coverage) took 19-21 min on the hosted runners on
+    # 4 Nov 2026, and two runs on main were cut off at 20 min with every test passing (efadfc9, 4bf81e3).
+    timeout-minutes: 35
     services:
       postgres:
         image: postgres:16-alpine

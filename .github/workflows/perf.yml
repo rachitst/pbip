@@ -89,6 +89,22 @@ jobs:
       - name: Slowest statements under load (pg_stat_statements, TASK-079)
         if: always() && hashFiles('perf-results/invariants-before.json') != ''
         run: docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < infra/k6/top-statements.sql | tee perf-results/pg-stat-statements.txt
+      # TASK-055 (#78): 500 events/s through the clickstream endpoint (k6 thresholds gate), then the
+      # sequential per-request latency for 1, 10 and 100 events (recorded, not gated: a measurement).
+      - name: Clickstream ingestion, 500 events/s (k6)
+        env:
+          BASE_URL: https://localhost:8443
+          USERS: ${{ env.LOAD_USERS }}
+        run: python scripts/dev.py load-events --summary-export /results/k6-events-summary.json
+      - name: Clickstream per-request latency (batch sizes 1, 10, 100)
+        run: >-
+          uv run python scripts/measure_events_latency.py http --base-url https://localhost:8443
+          --ca infra/certs/ca.crt --email load0001@perf.pbip --requests 300
+          --json perf-results/events-latency.json | tee perf-results/events-latency.txt
+      - name: Clickstream insert cost at the database (per batch and per event)
+        run: >-
+          uv run python scripts/measure_events_latency.py db --email load0001@perf.pbip
+          --batches 300 --json perf-results/events-insert.json | tee perf-results/events-insert.txt
       - run: npm ci
         working-directory: apps/web
       - run: npx playwright install --with-deps chromium
