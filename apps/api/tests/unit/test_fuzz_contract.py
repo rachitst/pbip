@@ -262,6 +262,9 @@ def test_a_failed_check_is_recorded_not_raised() -> None:
     assert "Server error" in failure.message and failure.path == "/api/v1/notifications"
 
 
+# Hang guard, not a speed bar (as #362): three passes over the whole contract, two of them in fresh
+# interpreters (each subprocess may take 300 s), exceeded pytest-timeout's 60 s default at load 8+.
+@pytest.mark.timeout(600)
 def test_report_serialises_failures_on_bodyless_operations_and_digest_is_stable() -> None:
     """Regression: a failure on a GET put Schemathesis's NotSet sentinel into the report, which
     broke json.dumps (no artifact exactly when there was a finding) and made the input digest

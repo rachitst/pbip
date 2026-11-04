@@ -62,7 +62,9 @@ RULE-source rules in the baseline scorer (`fraud/baseline.py`), which the API se
    two range scans), plus one id query only when something matched. DORMANT_REACTIVATION is one statement of four
    scalar subqueries, each a `min`/`max` of `created_at` on one of those indexes, plus the account's `created_at` by
    primary key. No migration. Measured: with 1,000 near-threshold inbound transfers on the account, the whole
-   baseline scorer stays under p95 100 ms (`test_scoring_stays_fast_with_1000_near_threshold_inbound_transfers`).
+   baseline scorer stays under p95 100 ms (cost asserted by
+   `test_scoring_cost_does_not_grow_with_1000_near_threshold_inbound_transfers`, time measured by
+   `scripts/benchmark_structuring_scoring.py`).
 6. **Version.** `MODEL_VERSION` is `baseline-rules-0.6`.
 
 ### Measurement on the synthetic data (honest limits)

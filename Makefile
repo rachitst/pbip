@@ -3,7 +3,7 @@
 # On Windows, use dev.ps1 or dev.cmd instead of make.
 .DEFAULT_GOAL := help
 .PHONY: help doctor setup env infra-up infra-down up up-all down logs migrate seed \
-	datagen fraud-model recommendation-model promote-model fraud-champion notebooks ml-up mlflow-smoke dev-api dev-worker dev-web lint fmt typecheck imports security openapi \
+	datagen fraud-model recommendation-model promote-model fraud-champion fraud-bundle fraud-model-release notebooks ml-up mlflow-smoke dev-api dev-worker dev-web lint fmt typecheck imports security openapi \
 	test test-unit test-int test-web test-e2e smoke perf load load-events fuzz check clean
 
 PYTHON ?= python3
@@ -50,7 +50,7 @@ datagen: ## Generate + COPY-load the synthetic ML dataset (seed 42, 1,000 custom
 fraud-model: ## Train the fraud models into models/fraud (needed for FRAUD_SCORER=hybrid)
 	@$(PYTHON) scripts/dev.py fraud-model
 
-recommendation-model: ## Train the simulated-uptake recommendation model into models/recommendations (used only if it beats rules-v1)
+recommendation-model: ## Train the recommendation rankers on simulated uptake into models/recommendations (served only if gated)
 	@$(PYTHON) scripts/dev.py recommendation-model
 
 promote-model: ## Measure the newest fraud run on data/fraud; promote to MLflow 'champion' if it passes
@@ -58,6 +58,12 @@ promote-model: ## Measure the newest fraud run on data/fraud; promote to MLflow 
 
 fraud-champion: ## Export the MLflow 'champion' fraud model into models/fraud (checksums verified)
 	@$(PYTHON) scripts/dev.py fraud-champion
+
+fraud-bundle: ## Pack models/fraud into a byte-reproducible release bundle in dist/ (TASK-084)
+	@$(PYTHON) scripts/dev.py fraud-bundle
+
+fraud-model-release: ## Install the release fraud model pinned by ml/models/fraud-champion.lock.json (no training)
+	@$(PYTHON) scripts/dev.py fraud-model-release
 
 notebooks: ## Execute the EDA notebooks head-to-tail and save outputs
 	@$(PYTHON) scripts/dev.py notebooks
