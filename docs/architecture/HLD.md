@@ -5,7 +5,7 @@
 | Task | TASK-053 (GitHub issue #76) |
 | Scope | System boundaries, C4 context and container views, components, data stores, API and ML inference contracts, security, scalability, observability, production roadmap |
 | Verified against | `main` at `2e65b87` (1 Nov 2026): code, compose files, workflows and tests, not earlier documents |
-| Related | [Blueprint](../PROJECT_BLUEPRINT.md) (engineering rules), [LLD](LLD.md) (tables, state machines, lock order), [ER diagram](er-diagram.md) (generated from the schema), [threat model](../security/threat-model.md), [AI assistant security](../security/ai-assistant-security.md), [runbook](../operations/runbook.md), [traceability](../requirements/traceability.md), [diagrams](../diagrams/README.md) (use case, activity, sequence, state, module, component, deployment and data flow) |
+| Related | [Blueprint](../PROJECT_BLUEPRINT.md) (engineering rules), [LLD](LLD.md) (tables, state machines, lock order), [ER diagram](er-diagram.md) (generated from the schema), [threat model](../security/threat-model.md), [AI assistant security](../security/ai-assistant-security.md), [runbook](../operations/runbook.md), [traceability](../requirements/traceability.md), [use cases as built](../requirements/use-cases.md), [diagrams](../diagrams/README.md) (use case, activity, sequence, state, module, component, deployment and data flow) |
 
 **Status labels used throughout.** Each capability is marked with one of three labels:
 

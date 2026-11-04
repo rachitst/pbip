@@ -4,8 +4,8 @@
 |---|---|
 | Task | TASK-104 (#187) |
 | Source | *PBIP Use Case Document v0.2*: sections 5 (scope), 6 (actors), 7 (UC-01 to UC-13), 8 (non-functional), 9 to 11 (deliverables, practices, success criteria) |
-| Status checked against | `main` at `2e65b87` (1 Nov 2026): the code and the tests, not earlier documents; rows changed by the batch docs PRs since then were checked against `main` at the time, most recently `7c21858` (4 Nov 2026, final batch docs) |
-| Companion documents | [User stories](user-stories.md) (acceptance criteria and tests per story), [traceability](traceability.md) (requirement to code, tests and gaps), [HLD](../architecture/HLD.md) |
+| Status checked against | `main` at `e9026ad` (5 Nov 2026) plus the v1.1.0 pull requests in review: batch I #471 (#461, #464, documentation), #465, #466, #470 and #472. A row whose evidence is only in one of those PRs names it |
+| Companion documents | [Use cases as built](use-cases.md) (flows, screens and tests per use case), [user stories](user-stories.md) (acceptance criteria and tests per story), [traceability](traceability.md) (requirement to code, tests and gaps), [HLD](../architecture/HLD.md) |
 
 Every requirement below is derived from a sentence in the use-case document. Its **Source** column says which one.
 The document's wording is kept; where it was ambiguous, the interpretation chosen is stated in the requirement.
@@ -58,7 +58,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | FR-09 | The customer shall see recent transactions for an account, paginated. | UC-02, section 5 | Implemented | TASK-008, TASK-019 | |
 | FR-10 | The customer shall see spending insights: category breakdown, month-over-month trends, daily burn rate. | UC-02, section 5 "spending insights" | Implemented | TASK-040, TASK-049 | |
 | FR-11 | The customer shall see financial health indicators: a 0-100 health score with components and tips, and a balance forecast labelled as a prediction. | Section 5 "financial health indicators" | Implemented | TASK-041, TASK-042, TASK-049, TASK-050 | Forecast chart on `/insights` (`BalanceForecastSection.tsx`, TASK-050) |
-| FR-12 | The dashboard shall show personalised product recommendations. | UC-02, section 5 | Partial | TASK-054; TASK-062 | Carousel on `/accounts` (TASK-062, merged #328); the ranking is rules-based (`rules-v1`) |
+| FR-12 | The dashboard shall show personalised product recommendations. | UC-02, section 5 | Implemented | TASK-054, TASK-062; #461, #470 | Carousel on `/accounts` with reasons; `rules-v1` with the gated simulated-uptake ranker (ADR-0053); risk band (#461) and catalogue loans (#470) |
 | FR-13 | The customer shall be able to open an account and view its details. | Section 5 "view account details" | Implemented | TASK-005 | |
 | FR-14 | The customer shall be able to search and filter transactions by date and amount. | Section 5 "transaction search" | Implemented | TASK-017 | Filters on the account history (`AccountTransactions.tsx`) |
 | FR-15 | The customer shall be able to view a statement for a chosen account and period and download it as PDF. | UC-03, section 5 | Implemented | TASK-016, TASK-074 | PDF or CSV from `/statements` (`Statements.tsx`, `modules/statements`) |
@@ -86,12 +86,12 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | ID | Requirement | Source | Status | Tasks | Gap |
 |---|---|---|---|---|---|
 | FR-29 | The system shall provide a loan catalogue and an EMI calculator with a repayment schedule. | Section 5 "loan catalogue, EMI calculator" | Implemented | TASK-045, TASK-051 | Web `/loans` (`Loans.tsx`) |
-| FR-30 | The system shall assess loan eligibility from the customer's own income and existing repayments, with the reasons explained. | UC-06 "generates eligibility assessment" | Partial | TASK-046 | Uses income and EMIs (DTI ≤ 50%), not balances or spending patterns as UC-06 lists. Income counts only recurring credits (#404, ADR-0043), so a customer with no salary history gets no income-based offer |
-| FR-31 | The system shall display personalised loan suggestions. | UC-06 "displays recommendations" | Partial | TASK-054, TASK-062 | The recommendation engine suggests a credit line and a rewards card, not the catalogue loans; the carousel (TASK-062, PR #328) links the credit line to `/loans` without preselecting a catalogue loan |
+| FR-30 | The system shall assess loan eligibility from the customer's own balances, income, spending and existing repayments, with the reasons explained. | UC-06 "generates eligibility assessment" | Implemented | TASK-046; #470 | Five rules (ADR-0056): regular income, debt-to-income at most 50%, spending plus EMIs at most 90% of income, available balance covers the first EMI, no lockout in 90 days; reasons quote the customer's figures. Without #470: income and EMIs only |
+| FR-31 | The system shall display personalised loan suggestions. | UC-06 "displays recommendations" | Implemented | TASK-054, TASK-062; #470 | `GET /api/v1/loans/offers` and "Loans for you" on `/loans`; eligible catalogue loans with a suggested range on the carousel (#470). Without #470: an abstract credit line |
 | FR-32 | The customer shall apply for a loan and track it. | Section 5 "loan applications, loan tracking" | Implemented | TASK-047, TASK-051 | API and web `/loans` (application, disbursal receipt, amortisation progress; ADR-0024) |
 | FR-33 | The system shall record the customer's risk tolerance. | UC-07 input | Implemented | TASK-097 | Five-question questionnaire, deterministic LOW/MODERATE/HIGH band, answers and assessment time stored and audited (`/api/v1/customers/me/risk-profile`) |
-| FR-34 | The system shall suggest investment products using risk tolerance, savings behaviour, income and available funds. | UC-07 | Partial | TASK-054; TASK-097, TASK-105 | Fixed deposit and index-fund SIP suggestions use income, savings ratio, buffer and balance; the risk band is recorded (FR-33) and filters the assistant's suggestions (TASK-105, #335), but not yet the `/recommendations` ranking |
-| FR-35 | The customer shall browse fixed deposits, mutual funds, stocks and bonds, and insurance products. | Section 5 wealth | Partial | TASK-063, TASK-064, TASK-065, TASK-096 (merged #337) | Seeded catalogues: deposits, illustrative funds and a gold bond (`GET /api/v1/wealth/products`, ADR-0025), term-life and health insurance with indicative premiums and entry-age hints (`GET /api/v1/wealth/insurance`, ADR-0028); fixed deposits pay out automatically at maturity (#332, merged #341, ADR-0029); no stocks |
+| FR-34 | The system shall suggest investment products using risk tolerance, savings behaviour, income and available funds. | UC-07 | Implemented | TASK-054, TASK-097, TASK-105; #461 | Income, savings ratio, buffer and balance decide eligibility; the risk band is a suitability rule in the ranking (#461, ADR-0056) and in the assistant |
+| FR-35 | The customer shall browse fixed deposits, mutual funds, stocks and bonds, and insurance products. | Section 5 wealth | Partial | TASK-063, TASK-064, TASK-065, TASK-096; #465 | Catalogues and fixed deposits (with automatic payout) are implemented; with #465 funds, stocks and bonds can be bought and sold at a simulated daily price through the ledger (API only, ADR-0058). Missing: the buy and sell screens and fund SIPs (ADR-0058 PRs (b) and (d)); insurance is listed but cannot be applied for (PR (c)) |
 | FR-36 | The customer shall compare wealth and insurance products. | Section 5 "product comparison" | Implemented | TASK-098 (merged #337) | `/wealth/compare`: two to four products side by side, "Not applicable" where a field does not apply |
 
 ### 2.5 AI assistant (UC-08, section 5)
@@ -115,16 +115,16 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | FR-46 | Trigger: rapid consecutive transactions. | UC-09 | Implemented | TASK-034 | `VELOCITY_BURST` (4 or more in 10 min) |
 | FR-47 | Trigger: unusual transaction behaviour. | UC-09 | Implemented | TASK-030, TASK-033, #251 | `AMOUNT_SPIKE` in every mode; the Isolation Forest anomaly reason with `FRAUD_SCORER=hybrid`, which the local and demo configuration use since #251 (the code default and the staging compose stay `rules`) |
 | FR-48 | A flagged transaction shall raise an alert, notify the customer, and appear in the analyst queue for resolution (release or reject). | UC-10 | Implemented | TASK-018, TASK-033, TASK-036 | |
-| FR-49 | Analysts shall see suspicious-activity tracking and fraud statistics on a fraud monitoring dashboard. | Section 5 fraud dashboard | Partial | TASK-035, TASK-036; TASK-099 | Alert queue and detail screens and the statistics API (decisions over time, top reasons, masked risky payees) exist; the statistics are not charted in the UI |
+| FR-49 | Analysts shall see suspicious-activity tracking and fraud statistics on a fraud monitoring dashboard. | Section 5 fraud dashboard | Implemented | TASK-035, TASK-036, TASK-099; #464 | `/staff/fraud-dashboard` charts `GET /fraud/stats`: decisions per day, hold and block rates, risk-score bands, top reasons, alert outcomes, masked destinations |
 
 ### 2.7 Analytics and recommendations (UC-11, UC-12, section 5)
 
 | ID | Requirement | Source | Status | Tasks | Gap |
 |---|---|---|---|---|---|
 | FR-50 | The system shall capture page visits and clickstream events. | UC-11 data captured | Implemented | TASK-055; TASK-112 (#286, merged #333) | The ingestion API stores typed events in monthly partitions, at most 25 per batch with request p95 under 15 ms (ADR-0055, #458); the web app sends page visits as route templates and five allow-listed interactions (`docs/analytics/clickstream-events.md`) |
-| FR-51 | The system shall capture session duration and product interests. | UC-11 data captured | Planned | TASK-055, TASK-101 | No session-duration field; no derived product interest |
+| FR-51 | The system shall capture session duration and product interests. | UC-11 data captured | Implemented | #463 | Sessions split after 30 minutes of inactivity, durations and decayed product interests in a daily profile, for consenting customers only (ADR-0057). The customer-facing consent switch in the web app is not built yet (API only) |
 | FR-52 | The system shall analyse spend and income patterns and assign each customer a behavioural segment. | UC-11, section 5 "customer segmentation" | Implemented | TASK-040, TASK-044, TASK-052 | |
-| FR-53 | The system shall recommend loan, savings, investment and insurance products with reasons, using the behaviour profile and spending patterns. | UC-12 | Partial | TASK-054; TASK-062 | Rules-based (`rules-v1`) API; carousel on `/accounts` (TASK-062, merged #328); the propensity model is deferred until real exposure and conversion data exist (`docs/ml/recommendation-propensity-decision.md`, #345) |
+| FR-53 | The system shall recommend loan, savings, investment and insurance products with reasons, using the behaviour profile and spending patterns. | UC-12 | Implemented | TASK-054, TASK-062; #461, #470 | `rules-v1` with segment, spending, income and held products; a ranker trained on simulated uptake re-orders only what the rules allow (ADR-0053, gate on simulated data only) |
 | FR-54 | Recommendations shall use demographics. | UC-12 input | Implemented | TASK-107 | Limited by ADR-0015 to a consented age band derived from an optional date of birth; `unknown` without both |
 | FR-55 | Recommendations shall take existing products into account. | UC-12 input | Implemented | TASK-111 (#285, merged #342) | Accounts, active loans and open fixed deposits are an input. A held savings account, fixed deposit or (with an active personal loan) the personal credit line is not offered again, except a fixed-deposit top-up when the balance covers at least 6 months of spending, whose reason says so (ADR-0030) |
 | FR-56 | A relationship manager shall see customers ranked by churn risk, with signals and the top eligible product. | Section 6 (relationship manager) | Implemented | TASK-056; TASK-066; #347; #391 | RM page `/staff/insights` (TASK-066). Since #391 (merged in #397, ADR-0041) an RM's list opens in rule-based product score order (`order_by=PROPENSITY`), with churn-risk order one click away and the default for an administrator. Since #347 an RM sees only the customers an administrator assigned to them; any other customer is indistinguishable from a non-existent one (404); unassigned customers are visible to administrators only (ADR-0032) |
@@ -146,42 +146,42 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | NFR-02 | Encrypt sensitive data | Partial | MultiFernet field encryption with key rotation; `test_crypto.py`, `test_rotate_field_key.py`; TLS in nginx and to PostgreSQL (#280, `scripts/verify_tls.sh`); field-encryption policy for PII, ADR-0042 (#402) | TASK-075 | Certbot issuance on a real host (#198); #145 waits for #399 (the mobile number is field-encrypted since #428, closing #398) |
 | NFR-03 | Role-based access control | Implemented | `require_roles`, policy functions; `test_rbac_bola.py`, route-policy registry test | | |
 | NFR-04 | Audit logs | Implemented | Hash-chained append-only `audit_logs`; `test_audit_and_outbox.py` | | |
-| NFR-05 | Protection against OWASP Top 10 | Partial | Threat-model mapping, Bandit, CodeQL, nightly Schemathesis | TASK-090 | No DAST against a deployed environment |
+| NFR-05 | Protection against OWASP Top 10 | Implemented | Threat-model mapping, Bandit, CodeQL, dependency and secret scans, nightly Schemathesis, nightly OWASP ZAP baseline against the HTTPS stack | TASK-090 | The ZAP scan is passive and has not run against a deployed environment (#198) |
 | NFR-06 | Page load < 2 s | Implemented | `apps/web/e2e/perf.spec.ts` in `perf.yml`: pages 110-451 ms in CI with 2 API replicas (#419); 313-1,600 ms on the Windows laptop (2026-11-04) | TASK-102 | Not measured on a deployed environment (#198) |
-| NFR-07 | API response < 500 ms | Partial | Analytics endpoints p95 12-19 ms (local, sequential); fraud scoring p95 24.7 ms; the assistant's LLM path for unclear questions takes 12-50 s on CPU | TASK-078, TASK-102 | Under load (k6, 50 VUs, 2 API replicas, #419): every route group p95 under 500 ms in two CI runs (transfers 287 / 347 ms); not met on laptops with one replica; LLM path misses the target (documented in ADR-0018) |
+| NFR-07 | API response < 500 ms | Partial | k6 in CI with 2 API replicas: every route group p95 under 500 ms; fraud scoring p95 24.7 ms; clear assistant questions under 0.1 s | TASK-078, TASK-102 | Not met by the assistant's model path for unclear questions (12-50 s on CPU, ADR-0018); 500-user load and the host run wait for staging (TASK-078, TASK-079) |
 | NFR-08 | Login < 3 s | Implemented | k6 login p95 340-406 ms and browser login 251-277 ms in CI (#419); browser login 2,133 ms on the Windows laptop (2026-11-04) | TASK-102 | Not measured on a deployed environment (#198) |
-| NFR-09 | 99% availability in the test environment | Planned | No environment deployed | TASK-103, #198 | |
-| NFR-10 | Horizontal scaling, stateless APIs, containerised deployment | Partial | Stateless API, one worker per container, Docker images and compose | TASK-079 | Multi-replica deployment never exercised |
-| NFR-11 | Centralised logging, error tracking, health monitoring, performance metrics | Partial | structlog → Alloy → Loki, Prometheus metrics and alert rules, Grafana, health probes (dev compose); `unhandled_exception` events and `unhandled_errors_total` (#289); Celery worker metrics through Redis and the API `/metrics` (#380, ADR-0039) | TASK-069, TASK-103 | No Alertmanager; not deployed; worker metrics not yet checked against a live Prometheus (#378) |
+| NFR-09 | 99% availability in the test environment | Planned | Probes, availability ratio and alert, staging probe and report scripts exist | TASK-103, #186, #198 | Needs the staging host |
+| NFR-10 | Horizontal scaling, stateless APIs, containerised deployment | Implemented | Stateless API, one process per container; two API replicas exercised in CI by `perf.yml` (#419, ADR-0045) | TASK-079 | Not yet run on the staging host |
+| NFR-11 | Centralised logging, error tracking, health monitoring, performance metrics | Partial | Loki through Alloy, `unhandled_exception` events and metric, health probes, Prometheus and Grafana as code, worker metrics (ADR-0039), optional OTel collector | TASK-069, TASK-103 | No alert notification channel (no Alertmanager); not deployed with staging |
 
 ## 4. Engineering and documentation requirements (sections 9 to 11)
 
 | ID | Requirement | Status | Tasks | Gap |
 |---|---|---|---|---|
-| ER-01 | Responsive web application | Partial | Remaining UI tasks above | Customer and staff screens exist for the journeys above (`apps/web/src/shell/routes.tsx`); the fraud statistics are not charted (FR-49) |
-| ER-02 | Backend API and database implementation | Implemented | | 57 operations, migrations 0001-0010, [ER diagram](../architecture/er-diagram.md) |
+| ER-01 | Responsive web application | Implemented | | Screens for every use case (`apps/web/src/shell/routes.tsx`). Not yet built: investing screens (ADR-0058 PR (d)) and the analytics consent setting (#463's web half) |
+| ER-02 | Backend API and database implementation | Implemented | | 105 operations on `main` (111 with #465 and #470); migrations 0001-0030 (0031 with #465); [ER diagram](../architecture/er-diagram.md) |
 | ER-03 | API documentation | Implemented | | `docs/api/openapi.json`, drift-checked in CI |
 | ER-04 | Automated tests, ≥ 70% coverage | Implemented | TASK-087 (report, #373; auth branch coverage 95.83% after #410) | CI coverage gate is 80% (backend); 96.71% in CI run 41689113122, 96.53% in run 41600683787 ([test strategy and report](../testing/test-strategy-and-report.md)) |
 | ER-05 | CI: build, test, quality scan, security scan | Implemented | | |
-| ER-06 | CI: package, deploy, smoke test | Partial | #198, TASK-091 | Deploy workflow exists but is gated off; no staging host |
-| ER-07 | Requirements specification, user stories, use case document | Implemented | TASK-104 | This document and [user-stories.md](user-stories.md) |
-| ER-08 | HLD, LLD, ER diagram | Partial | TASK-053 (HLD), TASK-106 (ER, done), TASK-027 (LLD) | LLD waits for TASK-015 |
-| ER-09 | Deployment guide, support guide | Implemented | TASK-013, TASK-075 | |
+| ER-06 | CI: package, deploy, smoke test | Partial | #198 | Packaging runs on every release tag; the deploy and smoke steps have not run against a host |
+| ER-07 | Requirements specification, user stories, use case document | Implemented | TASK-104 | This document, [user-stories.md](user-stories.md) and [use-cases.md](use-cases.md) |
+| ER-08 | HLD, LLD, ER diagram | Implemented | TASK-053, TASK-106, TASK-027 | [HLD](../architecture/HLD.md), [LLD](../architecture/LLD.md), [ER diagram](../architecture/er-diagram.md) (drift-checked in CI) and [diagrams](../diagrams/README.md) |
+| ER-09 | Deployment guide, support guide | Implemented | TASK-075 | [Deployment guide](../operations/deployment-guide.md), [support guide](../operations/support-guide.md), [runbook](../operations/runbook.md) |
 | ER-10 | User manual | Implemented | TASK-092 (#374) | [`docs/user-manual/`](../user-manual/README.md): customer, staff and compliance guides with screenshots |
-| ER-11 | Peer reviews | Partial | | The ruleset requires 0 approvals (see traceability) |
+| ER-11 | Peer reviews | Partial | | The lead reviews every PR before merge; teammates' area reviews are requested in [peer-review-requests.md](../testing/peer-review-requests.md); the ruleset requires 0 approvals |
 
-## 5. Gaps with no owning task
+## 5. Open gaps
 
-These requirements were Partial or Planned with no backlog task for the missing part. On 2026-11-01 each one got a task
-(TASK-108 to TASK-112, unassigned and unscheduled, plan section 6a), was given to its existing owner (#201), or was
-delivered (TLS, #280).
+Requirements that are not fully met, and what they wait for.
 
-| Requirement | Missing part |
-|---|---|
-| FR-02, FR-06 | Web screens for MFA enrolment and self-registration (owned by #201) |
-| FR-05 | ~~Administration screen and application-configuration function~~: done in TASK-108 (#282, merged #346; E2E journey #359) |
-| FR-08 | ~~Total-balance overview on the dashboard~~: done in TASK-109 (#283, merged #330) |
-| FR-39 | ~~"Show unusual expenses" in the assistant~~: done in TASK-110 (#284, merged #331) |
-| FR-55 | ~~Existing products as a recommendation input~~: done in TASK-111 (#285, merged #342) |
-| FR-50 | ~~The web app sending page visits and clickstream events~~: done in TASK-112 (#286, merged #333) |
-| NFR-02 | ~~TLS termination as code~~: done in #280 (nginx TLS + HSTS, PostgreSQL `verify-full`); certbot issuance on a real host waits for #198 |
+| Requirement | Missing part | Waits for |
+|---|---|---|
+| FR-35, ER-01 | Investing screens and fund SIPs; insurance application | ADR-0058 PRs (b), (c), (d), not open |
+| FR-51, ER-01 | The customer's analytics consent switch in the web app | #463's web half, not open |
+| NFR-02 | At-rest encryption evidence on the deployment host | #399, #145 |
+| NFR-06, NFR-07, NFR-08 | Budgets measured on staging; load at 500 users; the model path of the assistant (12-50 s on CPU) | TASK-102 (#185), TASK-078 (#101); ADR-0018 records the assistant limit |
+| NFR-09 | A month of availability on staging | TASK-103 (#186), #198 |
+| NFR-10 | Scaling run on the host | TASK-079 |
+| NFR-11 | An alert notification channel | owner decision |
+| ER-06 | First deployment through the Deploy workflow | #198 |
+| ER-11 | Recorded peer reviews | teammates |
