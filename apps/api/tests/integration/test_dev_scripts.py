@@ -34,6 +34,8 @@ from pbip_api.modules.ledger.models import (
     TransactionEntry,
     TransactionType,
 )
+from pbip_api.modules.loans import service as loans_service
+from pbip_api.modules.loans.catalogue import PRODUCTS as LOAN_PRODUCTS
 from pbip_api.modules.payees.models import PayeeStatus
 from pbip_api.modules.payees.service import PayeeService
 from pbip_test_support import PASSWORD, FakeClock, generated_password, totp_code
@@ -277,6 +279,83 @@ def test_e2e_fund_deposits_through_the_ledger(
     ).one()
     assert deposit.type == TransactionType.DEPOSIT
     assert deposit.reference == e2e_fund.REFERENCE
+
+
+def test_e2e_fund_with_a_salary_gives_regular_income_for_the_loan_journey(
+    db: Session, auth_service_factory: Callable[[Session], AuthService]
+) -> None:
+    """Two back-dated salaries (1st of the two previous months, 10:00 IST) then the opening
+    balance: ADR-0043 sees regular income, so the loan journey can apply (TASK-077)."""
+    auth_service_factory(db).register_customer(
+        "e2e-salary@example.com", PASSWORD, "Salaried Tester", RequestMeta()
+    )
+    db.commit()
+
+    e2e_fund.fund(db, "e2e-salary@example.com", 50_000_00, salary_minor=80_000_00)
+
+    account = _customer_account(db, "e2e-salary@example.com")
+    db.refresh(account)
+    assert account.ledger_balance == 50_000_00 + 2 * 80_000_00
+    deposits = db.scalars(
+        select(Transaction)
+        .where(Transaction.credit_account_id == account.id)
+        .order_by(Transaction.created_at)
+    ).all()
+    salaries, opening = deposits[:-1], deposits[-1]
+    assert opening.reference == e2e_fund.REFERENCE
+    expected = e2e_fund.salary_dates(utcnow())
+    assert [t.posted_at for t in salaries] == expected
+    assert [t.reference for t in salaries] == [f"Salary {at:%B %Y}" for at in expected]
+    assert all(at.astimezone(BANK_TZ).day == 1 and at < utcnow() for at in expected)
+    user_id, customer_id = db.execute(
+        select(User.id, Customer.id)
+        .join(Customer, Customer.user_id == User.id)
+        .where(User.email == "e2e-salary@example.com")
+    ).one()
+    product = LOAN_PRODUCTS[0]
+    check = loans_service.check_eligibility(
+        db,
+        customer_id=customer_id,
+        user_id=user_id,
+        product_id=product.id,
+        amount_minor=product.min_amount_minor,
+        tenure_months=product.tenures_months[0],
+    )
+    assert check.status == "ELIGIBLE" and check.monthly_income_minor > 0
+
+
+def test_e2e_fund_refuses_an_unbounded_salary(
+    db: Session, auth_service_factory: Callable[[Session], AuthService]
+) -> None:
+    auth_service_factory(db).register_customer(
+        "e2e-greedy@example.com", PASSWORD, "Greedy", RequestMeta()
+    )
+    db.commit()
+    with pytest.raises(e2e_fund.FundingRefusedError, match="salary"):
+        e2e_fund.fund(db, "e2e-greedy@example.com", 100_00, e2e_fund.MAX_FUND_MINOR + 1)
+    assert db.scalar(select(func.count()).select_from(Transaction)) == 0
+
+
+@pytest.mark.parametrize(
+    ("argv", "code"),
+    [
+        (["x", "a@example.com", "100", "--salary"], 2),
+        (["x", "a@example.com", "100", "--salary", "-5"], 2),
+        (["x", "a@example.com", "100", "--wage", "5"], 2),
+        (["x", "a@example.com"], 2),
+    ],
+)
+def test_e2e_fund_usage_errors(argv: list[str], code: int) -> None:
+    assert e2e_fund.main(argv) == code
+
+
+def test_salary_dates_are_the_two_previous_months_whatever_the_day() -> None:
+    first_morning = datetime(2026, 1, 1, 0, 30, tzinfo=BANK_TZ)  # before 10:00 on a 1st
+    assert e2e_fund.salary_dates(first_morning) == [
+        datetime(2025, 11, 1, 10, tzinfo=BANK_TZ),
+        datetime(2025, 12, 1, 10, tzinfo=BANK_TZ),
+    ]
+    assert e2e_fund.salary_dates(datetime(2026, 3, 31, 23, tzinfo=BANK_TZ))[0].month == 1
 
 
 @pytest.mark.parametrize(
