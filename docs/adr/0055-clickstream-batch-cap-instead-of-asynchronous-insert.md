@@ -19,7 +19,7 @@ The owner approved an asynchronous insert **only if no event can be lost**: an e
 the 202 is sent, with tests for a crash before the flush. Otherwise the batch is capped.
 
 ## Measurements
-Two `workflow_dispatch` runs of the Performance workflow on `diag/events-async-floor` (never merged), which added
+Two `workflow_dispatch` runs of the Performance workflow on `diag/events-async-floor` (never merged; the commit is kept as tag `archive/events-async-floor`, 43a7de2), which added
 two diagnostic endpoints next to the real one, with the same auth, rate limit and validation:
 
 - **validate only**: stores nothing. This is the floor of *any* design, asynchronous or not.
