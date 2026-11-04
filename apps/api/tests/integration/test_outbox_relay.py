@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 import structlog
 from pbip_api.core.config import Settings
-from pbip_api.core.db import session_scope
+from pbip_api.core.db import session_scope, utcnow
 from pbip_api.modules.compliance.models import AuditLog
 from pbip_api.modules.compliance.service import AuditService
 from pbip_api.modules.notifications import outbox_purge
@@ -324,3 +324,25 @@ def test_purge_deletes_only_processed_events_past_retention_in_batches(
     assert left == {at_boundary, recent, pending, dead}
     assert just_older not in left and not left & set(old)
     assert kept_notifications == 1  # the customer's notification outlives its event
+
+
+def test_a_new_event_is_due_by_the_clock_the_relay_reads(
+    db: Session, make_customer: Callable[..., Actor], migrated_engine: Engine
+) -> None:
+    """#371: ``next_attempt_at`` came from the database's ``now()`` (its transaction start, on the
+    database host's clock) while the relay compares it with the app's clock. With the database
+    clock ahead (Docker Desktop's VM drifts by hundreds of ms) a just-enqueued event was not yet
+    due and an immediate relay skipped it. It is now stamped by the app clock at insert."""
+    alice = make_customer()
+    payload = {"user_id": str(alice.user_id), "amount_minor": 500, "currency": "INR"}
+    db.execute(select(1))  # opens the transaction: the database's now() is fixed from here
+    before = utcnow()
+    notifications.enqueue(db, notifications.TRANSFER_POSTED, payload)
+    db.commit()
+    after = utcnow()
+
+    (event,) = db.scalars(select(OutboxEvent)).all()
+    assert before <= event.next_attempt_at <= after
+    assert relay_outbox(db, now=after) == 1
+    db.commit()
+    assert _delivered(migrated_engine) == [event.id]
