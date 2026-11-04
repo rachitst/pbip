@@ -70,6 +70,37 @@ def test_stats_report_decisions_rules_and_masked_payees(
     assert body["model_fallbacks"] == 0 and body["latency_p95_ms"] is not None
 
 
+def test_stats_report_the_risk_score_distribution_and_alert_outcomes(
+    client: TestClient,
+    make_staff: Callable[..., Actor],
+    migrated_engine: Engine,
+    traffic: dict[str, Any],
+) -> None:
+    """Ten 10-point bands (zeros included) that add up to ``scored``; alerts by current status."""
+    analyst = make_staff(RoleName.FRAUD_ANALYST)
+    body = client.get("/api/v1/fraud/stats?days=7", headers=analyst.headers).json()
+    bands = body["risk_bands"]
+    assert [(b["low"], b["high"]) for b in bands] == [
+        (0, 9), (10, 19), (20, 29), (30, 39), (40, 49),
+        (50, 59), (60, 69), (70, 79), (80, 89), (90, 100),
+    ]  # fmt: skip
+    assert sum(b["count"] for b in bands) == body["scored"] == 4
+    with migrated_engine.connect() as connection:
+        scores = connection.execute(text("SELECT risk_score FROM fraud_events")).scalars().all()
+    for score in scores:  # each decision sits in the band that contains its score
+        band = next(b for b in bands if b["low"] <= score <= b["high"])
+        assert band["count"] >= 1
+    # The rule-flagged and the forced BLOCK payments opened alerts; nobody has decided them yet.
+    with migrated_engine.connect() as connection:
+        raised = connection.execute(text("SELECT count(*) FROM fraud_alerts")).scalar_one()
+    assert raised >= 1
+    assert body["alerts"] == {"OPEN": raised, "CONFIRMED_FRAUD": 0, "FALSE_POSITIVE": 0}
+    with migrated_engine.begin() as connection:
+        connection.execute(text("UPDATE fraud_alerts SET status = 'CONFIRMED_FRAUD'"))
+    month = client.get("/api/v1/fraud/stats?days=30", headers=analyst.headers).json()
+    assert month["alerts"] == {"OPEN": 0, "CONFIRMED_FRAUD": raised, "FALSE_POSITIVE": 0}
+
+
 def test_risky_payees_are_masked_and_counted_across_customers(
     app: FastAPI,
     client: TestClient,
@@ -124,7 +155,7 @@ def test_stats_are_cached_for_60_seconds_and_survive_redis_down(
 ) -> None:
     analyst = make_staff(RoleName.FRAUD_ANALYST)
     first = client.get("/api/v1/fraud/stats", headers=analyst.headers).json()
-    assert 0 < int(fake_redis.ttl("fraud:stats:v1:7")) <= 60
+    assert 0 < int(fake_redis.ttl("fraud:stats:v2:7")) <= 60
     alice = make_customer(funds=1_000_000)
     send(client, alice, make_verified_payee(alice, make_customer()), 1_000)  # one more event
     assert client.get("/api/v1/fraud/stats", headers=analyst.headers).json() == first  # cached
@@ -148,6 +179,8 @@ def test_stats_only_count_events_inside_the_lookback_window(
                 "WHERE decision IN ('STEP_UP', 'BLOCK')"
             )
         )
+        connection.execute(text("UPDATE fraud_alerts SET created_at = now() - interval '10 days'"))
+        raised = connection.execute(text("SELECT count(*) FROM fraud_alerts")).scalar_one()
     analyst = make_staff(RoleName.FRAUD_ANALYST)
     week = client.get("/api/v1/fraud/stats?days=7", headers=analyst.headers).json()
     assert week["scored"] == 2
@@ -156,8 +189,12 @@ def test_stats_only_count_events_inside_the_lookback_window(
     assert sum(d["STEP_UP"] + d["BLOCK"] for d in week["by_day"]) == 0
     assert "NEW_PAYEE_LARGE_AMOUNT" not in {r["code"] for r in week["top_rules"]}
     assert week["risky_payees"] == []
+    assert sum(b["count"] for b in week["risk_bands"]) == 2
+    assert week["alerts"] == {"OPEN": 0, "CONFIRMED_FRAUD": 0, "FALSE_POSITIVE": 0}
     month = client.get("/api/v1/fraud/stats?days=30", headers=analyst.headers).json()
     assert month["scored"] == 4 and month["totals"]["BLOCK"] == 1
     assert len(month["by_day"]) == len(week["by_day"]) + 1
     assert "NEW_PAYEE_LARGE_AMOUNT" in {r["code"] for r in month["top_rules"]}
     assert len(month["risky_payees"]) == 1
+    assert sum(b["count"] for b in month["risk_bands"]) == 4
+    assert month["alerts"]["OPEN"] == raised >= 1
