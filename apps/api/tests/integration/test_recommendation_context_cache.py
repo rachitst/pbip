@@ -1,4 +1,4 @@
-"""The version-checked recommendation context cache (#343, ADR-0053), against real PostgreSQL.
+"""The version-checked recommendation context cache (#343, ADR-0054), against real PostgreSQL.
 
 Verifies:
 - a warm request reads only the accounts (with their row versions), the segment and nothing else,

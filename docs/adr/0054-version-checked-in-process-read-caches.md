@@ -1,4 +1,4 @@
-# ADR 0053: Version-checked in-process read caches for the recommendation context and the forecast fit
+# ADR 0054: Version-checked in-process read caches for the recommendation context and the forecast fit
 - Status: Accepted (under owner's standing approval, 2026-11-04)
 - Date: 2026-11-04
 - Deciders: Architecture Team (issues #343 and #175)
@@ -73,9 +73,11 @@ A reader that reads the accounts and then the entries under READ COMMITTED can o
 the versions it read, so a stored entry is never older than its version; at worst it is newer, which is harmless.
 
 ## Consequences
-- Warm recommendation request: 4 statements instead of 7 (token check, customer, accounts with versions, segment), and
-  server CPU 10 ms instead of 15 ms per request, about that of `GET /api/v1/accounts` (8.7 ms). A cold request is
-  unchanged (7 statements). Repeat forecast: no model fit, p50 61-74 ms instead of 1.6-2.0 s on the laptop.
+- Warm recommendation request: 4 statements instead of 7 (token check, customer, accounts with versions, segment).
+  Server CPU per request falls from 13.3-13.6 ms to 7.4-8.1 ms, about what `GET /api/v1/accounts` costs (6.6-8.3 ms).
+  HTTP p95 is 26-36 ms against 58-61 ms on main, at a load average below 4 on the laptop
+  (`docs/ml/recommendation-propensity-decision.md`). A cold request is unchanged (7 statements). Repeat forecast: no
+  model fit, p95 37-44 ms instead of 1.0-1.2 s (`docs/testing/analytics-latency-2026-11-04.md`).
 - No explicit invalidation calls, no post-commit hooks, no Redis dependency on these paths, and no cross-replica
   invalidation: each replica checks the version itself. Each replica warms its own cache, so with two replicas a
   customer's first request on each one is cold.

@@ -490,7 +490,7 @@ def upcoming_obligations(
 
 # The model fit is the forecast's whole cost (AutoARIMA: about 1 s of CPU per call on the reference
 # laptop) and a pure function of its inputs, which change once a day: the history ends yesterday.
-# So the result is kept per account under a digest of exactly those inputs (ADR-0053). Each entry
+# So the result is kept per account under a digest of exactly those inputs (ADR-0054). Each entry
 # is a few KB; the TTL only bounds memory.
 _MODEL_DAYS = VersionedCache[tuple[UUID, UUID], tuple[str, tuple[ModelDay, ...]]](
     "balance_forecast_model", max_entries=2_000, ttl_seconds=6 * 3600

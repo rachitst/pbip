@@ -47,7 +47,7 @@ SCHEDULED_WORKER_DURATION_SECONDS = Histogram(
 FD_MATURITY_PAYOUTS_TOTAL = Counter(
     "fd_maturity_payouts_total", "Automatic fixed-deposit maturity payouts by outcome", ["outcome"]
 )
-# Version-checked read caches (ADR-0053); the label is a fixed cache name, never a key.
+# Version-checked read caches (ADR-0054); the label is a fixed cache name, never a key.
 READ_CACHE_LOOKUPS_TOTAL = Counter(
     "pbip_read_cache_lookups_total",
     "Lookups in the in-process read caches by outcome (hit or miss)",

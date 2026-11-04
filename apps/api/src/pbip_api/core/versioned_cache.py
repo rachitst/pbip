@@ -1,5 +1,5 @@
 """Bounded in-process cache whose entries are valid only for the version they were stored under
-(ADR-0053).
+(ADR-0054).
 
 The caller reads the version from the database on every request (for example the row versions of
 the customer's accounts), so a hit is never older than the data it was derived from: any write

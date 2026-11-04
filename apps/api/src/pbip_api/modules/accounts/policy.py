@@ -49,7 +49,7 @@ def list_owned_accounts_with_versions(
 ) -> list[tuple[Account, int]]:
     """``list_owned_accounts`` plus each account's row version, in the same single query.
 
-    For read caches (ADR-0053): a result derived from these accounts' ledger history is still valid
+    For read caches (ADR-0054): a result derived from these accounts' ledger history is still valid
     while every version, and the set of accounts, is unchanged.
     """
     rows = session.execute(

@@ -323,7 +323,7 @@ def test_recommendation_context_is_six_queries_and_the_request_seven(
     customer that authentication has just loaded, so the request is 7: token check, customer, then
     the five. A new query here is a latency budget decision.
 
-    ADR-0053: that is the cold build. While the accounts' row versions are unchanged, the entries,
+    ADR-0054: that is the cold build. While the accounts' row versions are unchanged, the entries,
     loans and deposits come from the cache: 3 for the service (accounts, segment, age band) and 4
     over HTTP (test_recommendation_context_cache.py has the invalidation cases)."""
     alice = make_customer(funds=200_000_00)
@@ -371,7 +371,7 @@ def test_a_customer_with_a_loan_adds_only_the_instalments_query(
     with sessionmaker(bind=migrated_engine)() as session:
         recommendations_service.get_customer_recommendations(session, alice.customer_id)
         session.rollback()
-        recommendations_service.clear_context_cache()  # the cold build (ADR-0053)
+        recommendations_service.clear_context_cache()  # the cold build (ADR-0054)
         with count_statements(migrated_engine) as sent:
             recommendations_service.get_customer_recommendations(session, alice.customer_id)
     assert len(sent) == 7, sent

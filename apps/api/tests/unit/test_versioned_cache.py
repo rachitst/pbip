@@ -1,4 +1,4 @@
-"""VersionedCache (ADR-0053): an entry is used only under the exact version it was stored with."""
+"""VersionedCache (ADR-0054): an entry is used only under the exact version it was stored with."""
 
 import pytest
 from pbip_api.core.metrics import READ_CACHE_LOOKUPS_TOTAL

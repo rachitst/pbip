@@ -10,7 +10,7 @@ TASK-111 (ADR-0030): the engine also gets what the customer already holds, read 
 modules' service functions with the authenticated customer id: open accounts, active loans and
 open fixed deposits. Only the kind and an amount go in, never ids or account numbers.
 
-#343 (ADR-0053): the parts that are expensive to read (the entries pass behind the health score
+#343 (ADR-0054): the parts that are expensive to read (the entries pass behind the health score
 and cash flow, loans and fixed deposits) are kept per customer in a version-checked in-process
 cache. The version is read on every request in the same query as the accounts: every account's
 row version, balance, hold and status, plus the dates the figures depend on. A posting, a hold, a
@@ -111,7 +111,7 @@ class _DerivedInputs:
     loans_and_deposits: tuple[HeldProduct, ...]
 
 
-# ~1 KB per customer; the TTL only bounds memory, correctness comes from the version (ADR-0053).
+# ~1 KB per customer; the TTL only bounds memory, correctness comes from the version (ADR-0054).
 _DERIVED = VersionedCache[UUID, _DerivedInputs](
     "recommendation_context", max_entries=10_000, ttl_seconds=900
 )

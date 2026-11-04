@@ -1,4 +1,4 @@
-"""The forecast model result is reused only for exactly the same inputs (#175, ADR-0053).
+"""The forecast model result is reused only for exactly the same inputs (#175, ADR-0054).
 
 The fit (AutoARIMA, about 1 s of CPU) is a pure function of the account's balance history up to
 yesterday, the first forecast day and the horizon. Everything else in the response (today's
