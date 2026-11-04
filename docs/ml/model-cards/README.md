@@ -12,7 +12,7 @@ evaluation report exists, the card says so instead of giving a number.
 | [Balance forecast](balance-forecast.md) | `ml/src/pbip_ml/forecasting/model.py` | `forecast-arima-2` | yes: `GET /api/v1/analytics/forecast` | `docs/ml/balance-forecast.md` |
 | [K-Means customer segmentation](kmeans-segmentation.md) | `ml/src/pbip_ml/segmentation/pipeline.py` | none defined in code | stored by an offline job, read by `GET /api/v1/analytics/segment` | no evaluation report on main |
 | [Rule-based product recommendation score](recommendation-score.md) | `ml/src/pbip_ml/recommendations/engine.py` | `rules-v1` | yes | no ranking evaluation (no outcome labels); latency and the no-model decision: [`docs/ml/recommendation-propensity-decision.md`](../recommendation-propensity-decision.md) |
-| [Simulated-uptake propensity model](recommendation-propensity.md) | `ml/src/pbip_ml/recommendations/training.py`, `propensity.py` | `sim-propensity-v1` | no: failed its gate against `rules-v1` (ADR-0049) | on SIMULATED uptake only: the card, from `models/recommendations/report.json` |
+| [Simulated-uptake propensity model](recommendation-propensity.md) | `data-gen/src/pbip_datagen/uptake.py`, `ml/src/pbip_ml/recommendations/training.py`, `propensity.py` | `sim-propensity-v2` | yes where `make recommendation-model` installed it: passed its gate against `rules-v1` (ADR-0053); `rules-v1` is the fallback | on SIMULATED uptake only: the card, from `models/recommendations/report.json` |
 
 Not covered by a card:
 

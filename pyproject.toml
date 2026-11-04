@@ -160,7 +160,16 @@ source_modules = [
     "pbip_ml.recommendations.propensity",
 ]
 forbidden_modules = [
-    "pbip_ml.recommendations.simulation",
+    "pbip_ml.recommendations.panel",
     "pbip_ml.recommendations.train",
     "pbip_ml.recommendations.training",
 ]
+
+# TASK-054 (#77), ADR-0053: the simulated uptake labels must not be derived from rules-v1. The data
+# generator, and so the label simulation, never imports any pbip_ml code (the rules engine, its
+# eligibility rules or its relevance score), directly or through another module.
+[[tool.importlinter.contracts]]
+name = "simulated uptake labels must not depend on the recommendation rules"
+type = "forbidden"
+source_modules = ["pbip_datagen"]
+forbidden_modules = ["pbip_ml"]

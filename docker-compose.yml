@@ -32,6 +32,9 @@ x-api-env: &api-env
   FRAUD_MODEL_DIR: /models/fraud
   # Model step budget, 5-100 ms (#362): set it in .env for a slow demo machine (docs/SETUP_GUIDE.md section 12).
   FRAUD_MODEL_BUDGET_MS: ${FRAUD_MODEL_BUDGET_MS:-50}
+  # Recommendation ordering (ADR-0053): ./models/recommendations comes from `make recommendation-model`,
+  # which writes a model only if it passed its gate against rules-v1. Absent or refused -> rules-v1.
+  RECOMMENDATION_MODEL_DIR: /models/recommendations
   # Tracing (ADR 0017, ADR-0050): off unless .env says so. With OTEL_EXPORTER=otlp, start the `otel`
   # profile; if the collector is not running, spans are dropped and requests are unaffected.
   OTEL_ENABLED: ${OTEL_ENABLED:-false}
@@ -105,7 +108,10 @@ services:
     ports: ["127.0.0.1:8000-8003:8000"]
     extra_hosts: ["host.docker.internal:host-gateway"]  # Linux; Docker Desktop provides it already
     # Read-only: the API must never be able to rewrite the models it loads (threat model T34).
-    volumes: ["./models/fraud:/models/fraud:ro", *dev-ca]
+    volumes:
+      - "./models/fraud:/models/fraud:ro"
+      - "./models/recommendations:/models/recommendations:ro"
+      - *dev-ca
     restart: unless-stopped
 
   worker:

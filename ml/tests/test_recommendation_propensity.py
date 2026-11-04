@@ -1,7 +1,10 @@
-"""The simulated-uptake propensity model (TASK-054, ADR-0049): the simulation is deterministic and
-leaks no future data, the model only re-ranks what the rules allow, the artefact loads only when
-intact and promoted, and everything it produces says it was trained on simulated uptake."""
+"""The simulated-uptake ranker experiment (TASK-054 #77, ADR-0049, ADR-0053): the panel leaks no
+future data and keeps the eligibility rules first, both models are trained and measured against
+rules-v1 with NDCG@3 and hit-rate@3, the gate serves a model only if it beats rules-v1 with the
+rules and reasons intact, the artefact loads only when intact and promoted, and everything it
+produces says it was trained on simulated uptake."""
 
+import csv
 import json
 import math
 from collections.abc import Callable
@@ -11,7 +14,9 @@ from uuid import UUID, uuid4
 
 import numpy as np
 import pytest
-from pbip_ml.recommendations import training
+from pbip_datagen.__main__ import export_uptake
+from pbip_datagen.uptake import PRODUCTS
+from pbip_ml.recommendations import train, training
 from pbip_ml.recommendations.contract import (
     CustomerRecommendationContext,
     HeldProduct,
@@ -28,11 +33,22 @@ from pbip_ml.recommendations.engine import (
 from pbip_ml.recommendations.engine import (
     MODEL_VERSION as RULES_VERSION,
 )
+from pbip_ml.recommendations.panel import (
+    PANEL_FILE,
+    PRODUCT_KEYS,
+    Rows,
+    build_rows,
+    candidates,
+    context_at,
+    read_panel,
+    time_split,
+)
 from pbip_ml.recommendations.propensity import (
     FEATURE_NAMES,
     MANIFEST,
     MODEL_FILE,
     MODEL_VERSION,
+    REPORT_FILE,
     SCORE_LABEL,
     ProductModel,
     PropensityLoadError,
@@ -40,7 +56,6 @@ from pbip_ml.recommendations.propensity import (
     feature_vector,
     load,
 )
-from pbip_ml.recommendations.simulation import Scenario, Snapshot, simulate
 
 pytestmark = pytest.mark.unit
 
@@ -49,8 +64,15 @@ N = len(FEATURE_NAMES)
 
 
 @pytest.fixture(scope="module")
-def panel() -> list[Snapshot]:
-    return simulate(seed=7, customers=120, months=14)
+def data_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    out = tmp_path_factory.mktemp("uptake")
+    export_uptake(seed=7, customers=400, months=16, out=out)
+    return out
+
+
+@pytest.fixture(scope="module")
+def rows(data_dir: Path) -> Rows:
+    return build_rows(read_panel(data_dir))
 
 
 def _model(favourite: UUID | None = None) -> PropensityModel:
@@ -79,58 +101,53 @@ def _ctx(**overrides: object) -> CustomerRecommendationContext:
     return CustomerRecommendationContext.model_validate(values)
 
 
-# --- The simulation -------------------------------------------------------------------------
+# --- The panel: no leakage, eligibility first, the model sees only the served context ---------
 
 
-def test_the_simulation_is_deterministic_for_a_seed_and_changes_with_it() -> None:
-    first = simulate(seed=3, customers=25, months=10)
-    again = simulate(seed=3, customers=25, months=10)
-    other = simulate(seed=4, customers=25, months=10)
-
-    assert first == again
-    assert first != other
+def test_the_data_gen_products_map_exactly_onto_the_catalogue() -> None:
+    assert tuple(PRODUCT_KEYS) == PRODUCTS
+    assert frozenset(PRODUCT_KEYS.values()) == CATALOGUE_IDS
 
 
-def test_a_customers_history_does_not_depend_on_the_population_size() -> None:
-    small = [s for s in simulate(seed=3, customers=5, months=10) if s.customer == 4]
-    large = [s for s in simulate(seed=3, customers=30, months=10) if s.customer == 4]
-
-    assert small == large
-
-
-def test_features_at_a_month_use_no_later_month() -> None:
-    """Simulating more months never changes what an earlier month's context or label was: the
-    context at month t is built from months <= t only, the label from month t + 1 only."""
-    short = simulate(seed=5, customers=30, months=9)
-    long = simulate(seed=5, customers=30, months=15)
-    long_prefix = [s for s in long if s.month <= max(s.month for s in short)]
-
-    assert short == long_prefix
+def test_the_context_at_a_month_uses_no_later_month(data_dir: Path) -> None:
+    for history in list(read_panel(data_dir).values())[:40]:
+        for t in range(2, len(history)):
+            assert context_at(history[: t + 1], t) == context_at(history, t)
 
 
-def test_the_simulation_only_lets_customers_take_up_what_the_rules_offered(
-    panel: list[Snapshot],
-) -> None:
-    by_id = {product.product_id: product for product in PRODUCT_CATALOGUE}
-    for snap in panel:
-        assert snap.taken_next_month <= set(snap.offerable)
-        for pid in snap.offerable:
-            assert evaluate_eligibility(by_id[pid], snap.context)
-            assert held_product_rule(by_id[pid], snap.context)[0]
+def test_only_products_the_rules_allow_become_rows(rows: Rows) -> None:
+    """Eligibility first: every candidate passes the eligibility and held-product rules."""
+    for g in sorted(set(rows.group.tolist()))[::25]:
+        ctx = rows.contexts[g]
+        offered = rows.product[rows.group == g]
+        assert [PRODUCT_CATALOGUE[int(i)].product_id for i in offered] == list(candidates(ctx))
+        for i in offered:
+            product = PRODUCT_CATALOGUE[int(i)]
+            assert evaluate_eligibility(product, ctx)
+            assert held_product_rule(product, ctx)[0]
 
 
-def test_the_simulated_panel_has_uptake_for_every_product_and_no_age_band() -> None:
-    snaps = simulate(seed=11, customers=150, months=14)
-    taken = {pid for snap in snaps for pid in snap.taken_next_month}
+def test_clicks_persona_and_age_band_are_not_model_inputs(data_dir: Path, tmp_path: Path) -> None:
+    """They drive the simulated labels, but the served context has none of them (ADR-0015 for
+    the age band), so changing them must not change a single feature or label."""
+    with (data_dir / PANEL_FILE).open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        fields = list(reader.fieldnames or [])
+        raw = list(reader)
+    for row in raw:
+        row.update({f"clicks_{p}": "9" for p in PRODUCTS}, persona="x", age_band="60+")
+    with (tmp_path / PANEL_FILE).open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fields)
+        writer.writeheader()
+        writer.writerows(raw)
+    original = build_rows(read_panel(data_dir))
+    edited = build_rows(read_panel(tmp_path))
+    assert np.array_equal(original.features, edited.features)
+    assert np.array_equal(original.label, edited.label)
+    assert {ctx.age_band for ctx in edited.contexts} == {"unknown"}
 
-    assert taken == CATALOGUE_IDS
-    assert {snap.context.age_band for snap in snaps} == {"unknown"}  # ADR-0015
 
-
-# --- Features, split and training -----------------------------------------------------------
-
-
-def test_the_age_band_and_customer_id_are_not_model_inputs() -> None:
+def test_the_age_band_and_customer_id_are_not_features() -> None:
     base = _ctx()
     assert feature_vector(base) == feature_vector(
         base.model_copy(update={"age_band": "60+", "customer_id": uuid4()})
@@ -138,80 +155,191 @@ def test_the_age_band_and_customer_id_are_not_model_inputs() -> None:
     assert not [name for name in FEATURE_NAMES if "age" in name]
 
 
-def test_the_time_split_keeps_every_training_label_before_the_first_test_month(
-    panel: list[Snapshot],
-) -> None:
-    split = training.time_split(training.build_rows(panel), train_last_feature_month=7)
-
+def test_the_time_split_keeps_every_label_before_the_next_block(rows: Rows) -> None:
+    split = time_split(rows, train_last=6)
     # a row's label is observed in the month after its feature month
-    assert int(split.train.month.max()) + 1 < int(split.test.month.min())
-    assert not set(split.train.group.tolist()) & set(split.test.group.tolist())
-    assert len(split.train.label) and len(split.test.label)
+    assert int(split.train.month.max()) + 1 < int(split.valid.month.min())
+    assert int(split.valid.month.max()) + 1 < int(split.test.month.min())
+    assert len(split.train.label) and len(split.valid.label) and len(split.test.label)
 
 
-def test_training_and_evaluation_report_metrics_for_both_rankers(panel: list[Snapshot]) -> None:
-    split = training.time_split(training.build_rows(panel), train_last_feature_month=7)
-    model = training.fit(split.train)
-    evaluation = training.evaluate(model, split.test)
+# --- Models and metrics -------------------------------------------------------------------------
 
-    for scorer in (MODEL_VERSION, RULES_VERSION):
-        ranking = evaluation[scorer]["ranking"]
-        for key in ("precision_at_1", "precision_at_3", "recall_at_1", "recall_at_3"):
-            assert 0.0 <= ranking[key] <= 1.0
-        assert set(evaluation[scorer]["per_product"]) == {p.title for p in PRODUCT_CATALOGUE}
-    for entry in evaluation[MODEL_VERSION]["per_product"].values():
-        assert {"brier", "ece", "mean_probability"} <= set(entry)
-    assert "ece" not in next(iter(evaluation[RULES_VERSION]["per_product"].values()))
-    # The fitted model scores rows exactly as the serving code does.
-    rows = split.test
+
+def test_both_models_train_and_the_lr_scores_as_the_serving_code_does(rows: Rows) -> None:
+    split = time_split(rows, train_last=6)
+    lr = training.fit_logistic(split.train)
+    ranker = training.fit_ranker(split.train, split.valid)
+    scores = {
+        RULES_VERSION: split.test.rules_score,
+        training.LR_VERSION: training.predict_logistic(lr, split.test),
+        training.LGBM_VERSION: training.predict_ranker(ranker, split.test),
+    }
+    result = training.compare(split.test, scores)
+
+    for name in scores:
+        for key in ("ndcg_at_3", "hit_rate_at_3", "precision_at_1", "mrr"):
+            assert 0.0 <= result["metrics"][name][key] <= 1.0
+    assert set(result["difference_vs_rules_v1"]) == {training.LR_VERSION, training.LGBM_VERSION}
     served = [
-        model.products[PRODUCT_CATALOGUE[int(p)].product_id].probability(list(x))
-        for p, x in zip(rows.product[:50], rows.features[:50], strict=True)
+        lr.products[PRODUCT_CATALOGUE[int(p)].product_id].probability(list(x))
+        for p, x in zip(split.test.product[:50], split.test.features[:50], strict=True)
     ]
-    assert np.allclose(served, training.predict(model, rows)[:50])
+    assert np.allclose(served, scores[training.LR_VERSION][:50])
 
 
-def test_the_ranking_metrics_on_a_hand_worked_example() -> None:
-    rows = training.Rows(
-        group=np.array([0, 0, 0, 1, 1, 2]),
-        month=np.zeros(6, dtype=np.int64),
-        product=np.array([0, 1, 2, 0, 1, 0]),
-        features=np.zeros((6, N)),
-        rules_score=np.zeros(6),
-        label=np.array([0, 1, 0, 1, 1, 0]),
+def _rows(group: list[int], product: list[int], label: list[int]) -> Rows:
+    n = len(group)
+    return Rows(
+        group=np.array(group),
+        customer=np.array(group),
+        month=np.zeros(n, dtype=np.int64),
+        product=np.array(product),
+        features=np.zeros((n, N)),
+        rules_score=np.zeros(n),
+        label=np.array(label),
+        contexts=(),
     )
-    metrics = training._ranking(rows, np.array([0.9, 0.5, 0.1, 0.2, 0.8, 0.3]))
-
-    assert metrics["customer_months_with_uptake"] == 2  # group 2 has no uptake
-    assert metrics["precision_at_1"] == pytest.approx(0.5)  # group 0 misses, group 1 hits
-    assert metrics["recall_at_3"] == pytest.approx(1.0)
-    assert metrics["precision_at_3"] == pytest.approx((1 / 3 + 2 / 3) / 2)
 
 
-def _evaluation(model_auc: float, rules_auc: float, ece: float) -> dict[str, Any]:
-    def side(auc: float, with_ece: bool) -> dict[str, Any]:
-        entry = {"pr_auc": auc, **({"ece": ece} if with_ece else {})}
+def test_ndcg_and_hit_rate_on_a_hand_worked_example() -> None:
+    rows = _rows([0, 0, 0, 0, 1, 1, 2], [0, 1, 2, 3, 0, 1, 0], [0, 0, 0, 1, 1, 1, 0])
+    metrics = training.per_group(rows, np.array([0.9, 0.8, 0.7, 0.1, 0.2, 0.8, 0.3]))
+
+    assert len(metrics.ndcg) == 2  # group 2 has no uptake
+    assert metrics.hit.tolist() == [0.0, 1.0]  # group 0's uptake is ranked 4th
+    assert metrics.ndcg.tolist() == pytest.approx([0.0, 1.0])
+    assert metrics.reciprocal_rank.tolist() == pytest.approx([0.25, 1.0])
+    second = training.per_group(rows, np.array([0.1, 0.9, 0.8, 0.85, 0.2, 0.8, 0.3]))
+    assert second.ndcg[0] == pytest.approx(1 / math.log2(3))  # the uptake at rank 2
+
+
+def test_ties_keep_the_catalogue_order_as_the_engine_does() -> None:
+    rows = _rows([0, 0], [0, 1], [0, 1])
+    assert training.per_group(rows, np.array([0.5, 0.5])).precision_at_1.tolist() == [0.0]
+
+
+def test_the_bootstrap_interval_is_zero_for_identical_rankers_and_positive_for_a_better_one() -> (
+    None
+):
+    customers = np.repeat(np.arange(50), 2).astype(np.float64)
+    same = np.linspace(0, 1, 100)
+    assert training.bootstrap_difference(customers, same, same) == (0.0, 0.0)
+    low, _ = training.bootstrap_difference(customers, np.ones(100), np.zeros(100) + 0.5)
+    assert low > 0
+
+
+# --- The gate -----------------------------------------------------------------------------------
+
+
+def _test_metrics(
+    model: float, rules: float, low: float, name: str = MODEL_VERSION
+) -> dict[str, Any]:
+    return {
+        "metrics": {
+            name: {"ndcg_at_3": model, "hit_rate_at_3": model},
+            RULES_VERSION: {"ndcg_at_3": rules, "hit_rate_at_3": rules},
+        },
+        "difference_vs_rules_v1": {
+            name: {
+                "ndcg_at_3": {"difference": model - rules, "ci95": [low, low + 0.1]},
+                "hit_rate_at_3": {"difference": model - rules, "ci95": [low, low + 0.1]},
+            }
+        },
+    }
+
+
+_CLEAN = {"ineligible_products_shown": 0, "reasons_differing_from_rules_v1": 0}
+
+
+def _latency(added: float, name: str = MODEL_VERSION) -> dict[str, Any]:
+    return {RULES_VERSION: {"p95_ms": 0.05}, name: {"p95_ms": 0.05 + added}}
+
+
+def test_the_gate_promotes_only_a_model_that_beats_rules_v1_with_the_rules_intact() -> None:
+    assert training.gate(MODEL_VERSION, _test_metrics(0.7, 0.5, 0.1), _CLEAN, _latency(0.1))[
+        "promoted"
+    ]
+    failing = {
+        "no better": (_test_metrics(0.5, 0.5, -0.02), _CLEAN, _latency(0.1)),
+        "worse": (_test_metrics(0.4, 0.5, -0.15), _CLEAN, _latency(0.1)),
+        "better but within noise": (_test_metrics(0.52, 0.5, -0.01), _CLEAN, _latency(0.1)),
+        "shows an ineligible product": (
+            _test_metrics(0.7, 0.5, 0.1),
+            {**_CLEAN, "ineligible_products_shown": 1},
+            _latency(0.1),
+        ),
+        "changes a reason": (
+            _test_metrics(0.7, 0.5, 0.1),
+            {**_CLEAN, "reasons_differing_from_rules_v1": 1},
+            _latency(0.1),
+        ),
+        "too slow": (_test_metrics(0.7, 0.5, 0.1), _CLEAN, _latency(5.0)),
+    }
+    for case, (test, checks, latency) in failing.items():
+        assert not training.gate(MODEL_VERSION, test, checks, latency)["promoted"], case
+
+
+def test_the_gate_never_promotes_a_model_without_a_served_form() -> None:
+    name = training.LGBM_VERSION
+    verdict = training.gate(name, _test_metrics(0.9, 0.5, 0.2, name), _CLEAN, _latency(0.1, name))
+    assert not verdict["promoted"]
+    assert verdict["checks"]["has_a_served_form"] is False
+
+
+def test_the_candidate_is_chosen_on_the_validation_months() -> None:
+    def validation(lr: float, lgbm: float) -> dict[str, Any]:
         return {
-            "macro_pr_auc": auc,
-            "ranking": {"precision_at_1": auc, "recall_at_3": auc},
-            "per_product": {p.title: dict(entry) for p in PRODUCT_CATALOGUE},
+            "metrics": {
+                training.LR_VERSION: {"ndcg_at_3": lr},
+                training.LGBM_VERSION: {"ndcg_at_3": lgbm},
+            }
         }
 
-    return {MODEL_VERSION: side(model_auc, True), RULES_VERSION: side(rules_auc, False)}
+    assert training.choose_candidate(validation(0.7, 0.6)) == training.LR_VERSION
+    assert training.choose_candidate(validation(0.6, 0.7)) == training.LGBM_VERSION
 
 
-def test_the_gate_promotes_only_a_calibrated_model_that_beats_rules_v1() -> None:
-    assert training.gate(_evaluation(0.30, 0.20, 0.005))["promoted"]
-    assert not training.gate(_evaluation(0.20, 0.20, 0.005))["promoted"]  # no gain
-    assert not training.gate(_evaluation(0.19, 0.20, 0.005))["promoted"]  # worse
-    assert not training.gate(_evaluation(0.30, 0.20, 0.08))["promoted"]  # miscalibrated
+def test_the_engine_checks_find_no_ineligible_product_and_no_changed_reason(rows: Rows) -> None:
+    split = time_split(rows, train_last=6)
+    lr = training.fit_logistic(split.train)
+    ranker = training.fit_ranker(split.train, split.valid)
+    contexts = tuple(rows.contexts[g] for g in sorted(set(split.test.group.tolist()))[:150])
+    for ordering in (lr, training.RankerOrdering(ranker)):
+        checks = training.engine_checks(ordering, contexts)
+        assert checks["ineligible_products_shown"] == 0
+        assert checks["reasons_differing_from_rules_v1"] == 0
+
+
+def test_the_training_command_writes_the_model_only_with_a_promoting_verdict(
+    data_dir: Path, tmp_path: Path
+) -> None:
+    (tmp_path / MODEL_FILE).write_text("stale", encoding="utf-8")
+    report = train.run(data_dir, tmp_path)
+
+    assert report["data"].startswith("SIMULATED")
+    assert set(report["test"]["metrics"]) == {
+        RULES_VERSION,
+        training.LR_VERSION,
+        training.LGBM_VERSION,
+        training.POPULARITY,
+    }
+    promoted = report["gate"]["promoted"]
+    assert (tmp_path / MODEL_FILE).exists() is promoted
+    assert (tmp_path / MANIFEST).exists() is promoted
+    assert json.loads((tmp_path / REPORT_FILE).read_text())["gate"] == report["gate"]
+    if promoted:
+        assert load(tmp_path, CATALOGUE_IDS).version == MODEL_VERSION
+    else:
+        with pytest.raises(PropensityLoadError):
+            load(tmp_path, CATALOGUE_IDS)
 
 
 # --- The artefact ---------------------------------------------------------------------------
 
 
 def _write(out: Path, promoted: bool) -> None:
-    report = {"gate": {"promoted": promoted, "checks": {}}}
+    report = {"gate": {"promoted": promoted, "candidate": MODEL_VERSION, "checks": {}}}
     training.write_artifacts(_model(INDEX_SIP_ID), report, out)
 
 
@@ -281,6 +409,14 @@ def test_an_artefact_that_does_not_fit_this_code_is_refused(
         load(tmp_path, CATALOGUE_IDS)
 
 
+def test_a_missing_model_file_is_a_load_error_so_rules_v1_serves(tmp_path: Path) -> None:
+    _write(tmp_path, promoted=True)
+    (tmp_path / MODEL_FILE).unlink()
+
+    with pytest.raises(PropensityLoadError):
+        load(tmp_path, CATALOGUE_IDS)
+
+
 def test_a_missing_directory_is_a_load_error_not_a_crash(tmp_path: Path) -> None:
     with pytest.raises(PropensityLoadError):
         load(tmp_path / "absent", CATALOGUE_IDS)
@@ -305,12 +441,12 @@ def test_the_model_never_offers_a_product_the_rules_exclude() -> None:
 
 
 def test_the_model_reorders_the_same_offers_with_the_same_reasons_and_its_own_label(
-    panel: list[Snapshot],
+    rows: Rows,
 ) -> None:
     model = _model(FIXED_DEPOSIT_ID)
-    for snap in panel[::7]:
-        rules = generate_recommendations(snap.context, top_k=6)
-        ranked = generate_recommendations(snap.context, top_k=6, propensity=model)
+    for ctx in rows.contexts[::40]:
+        rules = generate_recommendations(ctx, top_k=6)
+        ranked = generate_recommendations(ctx, top_k=6, propensity=model)
 
         assert {r.product_id for r in ranked} == {r.product_id for r in rules}
         assert {r.product_id: r.reasons for r in ranked} == {r.product_id: r.reasons for r in rules}
@@ -373,9 +509,3 @@ def test_probabilities_are_finite_for_extreme_inputs() -> None:
     for ctx in (_ctx(), _ctx(monthly_inflow_minor=10**15, total_balance_minor=10**15)):
         for pid in CATALOGUE_IDS:
             assert math.isfinite(model.score(pid, ctx))
-
-
-def test_the_rules_follow_scenario_runs() -> None:
-    """The sanity scenario (uptake follows rules-v1) produces labelled rows too."""
-    snaps = simulate(seed=9, customers=40, months=8, scenario=Scenario.RULES_FOLLOW)
-    assert any(snap.taken_next_month for snap in snaps)

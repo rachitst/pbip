@@ -135,3 +135,30 @@ on the CI runners (above).
 each VU sign in again before its token is 10 minutes old (`TOKEN_MAX_AGE_SECONDS`), as the web app renews its
 session. The regression test is `test_k6_load_suite_renews_tokens_before_the_access_ttl`. The 2-minute CI runs
 never reached the TTL.
+
+## Two wall-clock tests moved to benchmarks (#317 item 2)
+
+`test_scoring_stays_fast_with_1000_near_threshold_inbound_transfers` (p95 < 100 ms) and
+`test_copy_loads_1000_customers_in_under_15_seconds` (< 15 s) failed on busy 2-CPU machines. As in #379 and #412,
+the tests now assert cost and shape (`test_scoring_cost_does_not_grow_with_1000_near_threshold_inbound_transfers`:
+the same SQL statements for 1,000 near-threshold credits as for 3, at most 20 rows per statement, index scans;
+`test_copy_loads_1000_customers_with_one_copy_per_table`: one binary COPY per table, ANALYZE before the big COPY, no
+row-level trigger). The time is measured by two scripts, on a scratch database only (name `pbip_test*` or
+`pbip_bench*`):
+
+```bash
+uv run python scripts/benchmark_structuring_scoring.py --database-url "$BENCH_DATABASE_URL" --calls 200
+uv run python scripts/benchmark_synthetic_load.py --database-url "$BENCH_DATABASE_URL" --runs 3
+```
+
+Measured on 4 Nov 2026 on the 2-CPU Celeron team laptop, **with other jobs running** (load average 7-8.4 on 2 CPUs,
+so about four runnable tasks per core):
+
+| Benchmark | Load average (1 / 5 / 15 min) | Result | Budget |
+|---|---|---|---|
+| COPY load, seed 42, 1,000 customers × 12 months (391,800 transactions), 3 fresh loads | 7.09 / 8.14 / 8.33 before, 8.43 / 8.35 / 8.39 after | 11.21 / 13.97 / 14.82 s (median 13.97 s), 3 of 3 within | < 15 s |
+| Rules scoring with 1,000 near-threshold inbound transfers, 200 calls after 3 warm-up | 8.27 / 8.25 / 8.35 before, 8.00 / 8.19 / 8.33 after | p50 75.9, p95 176.3, p99 226.4, max 280.2 ms | p95 < 100 ms |
+
+The scoring p95 is over 100 ms at this load, which is the CPU, not the query: the cost test shows the work does
+not grow with the number of credits, and the old test passed on an idle machine. Measure again on an idle machine
+before quoting a number against the budget.

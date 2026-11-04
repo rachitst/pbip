@@ -54,8 +54,8 @@ class Recommendation(BaseModel):
         le=1,
         description=(
             "Ordering score. rules-v1: rule-based relevance, not a probability. "
-            "sim-propensity-v1: probability of uptake next month under a SIMULATION, not "
-            "real customer behaviour (ADR-0049)"
+            "sim-propensity-v2: probability of uptake next month under a SIMULATION, not "
+            "real customer behaviour (ADR-0049, ADR-0053)"
         ),
     )
     reasons: list[str] = Field(min_length=1)

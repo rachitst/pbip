@@ -1,5 +1,5 @@
 # ADR 0049: A propensity model trained on simulated uptake, behind the rules, served only if it beats rules-v1
-- Status: Accepted (under owner's standing approval, 2026-11-04)
+- Status: Accepted (under owner's standing approval, 2026-11-04); the simulation, models and gate are superseded by [ADR-0053](0053-simulated-uptake-v2-ranker-gate-and-serving.md)
 - Date: 2026-11-04
 - Deciders: Architecture Team (TASK-054 criterion 2, issue #77; owner's direction of 2026-11-04)
 - Builds on: [ADR-0015](0015-demographics-for-recommendations.md) (no age in ranking),

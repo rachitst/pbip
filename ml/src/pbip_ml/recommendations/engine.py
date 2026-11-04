@@ -10,14 +10,15 @@
    stays "unknown" until consented date of birth exists (TASK-107).
 5. ADR-0030 (TASK-111): a product the customer already holds is not offered again, unless a
    top-up rule allows it, and then the first reason says it is a top-up and why.
-6. ADR-0049: when the API has loaded the promoted ``sim-propensity-v1`` model, it re-orders the
-   products steps 1 and 5 allowed, by a probability of uptake learned from a SIMULATION. It never
-   adds a product and never changes a reason. Without it, rules-v1 orders them as before.
+6. ADR-0049, ADR-0053: when the API has loaded the promoted ``sim-propensity-v2`` model, it
+   re-orders the products steps 1 and 5 allowed, by a probability of uptake learned from a
+   SIMULATION. It never adds a product and never changes a reason. Without it, rules-v1 orders
+   them as before.
 """
 
 import math
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import Protocol
 from uuid import UUID
 
 from pbip_ml.recommendations.contract import (
@@ -29,8 +30,17 @@ from pbip_ml.recommendations.contract import (
     Recommendation,
 )
 
-if TYPE_CHECKING:
-    from pbip_ml.recommendations.propensity import PropensityModel
+
+class OrderingModel(Protocol):
+    """What may re-order the allowed offers (ADR-0049): a version label and a score in [0, 1]
+    for one allowed product. ``propensity.PropensityModel`` is the served implementation; the
+    offline ranker experiment checks its candidates through the same engine path."""
+
+    @property
+    def version(self) -> str: ...
+
+    def score(self, product_id: UUID, ctx: CustomerRecommendationContext) -> float: ...
+
 
 MODEL_VERSION = "rules-v1"
 SCORE_LABEL = "rules-v1 (hand-weighted rules, not a trained model or a probability)"
@@ -301,7 +311,7 @@ def generate_recommendations(
     catalogue: tuple[BankingProduct, ...] = PRODUCT_CATALOGUE,
     top_k: int = 3,
     model_version: str = MODEL_VERSION,
-    propensity: "PropensityModel | None" = None,
+    propensity: OrderingModel | None = None,
 ) -> list[Recommendation]:
     """Eligible products only, ordered by relevance, each with reasons from the customer's data.
 

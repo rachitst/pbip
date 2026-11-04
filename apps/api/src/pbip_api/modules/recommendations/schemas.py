@@ -23,8 +23,8 @@ class ProductRecommendationItem(BaseModel):
         le=1.0,
         description=(
             "Ordering score. rules-v1: rule-based relevance, not a probability. "
-            "sim-propensity-v1: probability of uptake next month under a SIMULATION of product "
-            "uptake, not real customer behaviour (ADR-0049)"
+            "sim-propensity-v2: probability of uptake next month under a SIMULATION of product "
+            "uptake, not real customer behaviour (ADR-0049, ADR-0053)"
         ),
     )
     reasons: list[str] = Field(min_length=1, description="Human-readable justification reasons")
@@ -42,12 +42,12 @@ class RecommendationsResponse(BaseModel):
         default_factory=list, description="Top recommended banking products"
     )
     model_version: str = Field(
-        ..., description="Ordering version: rules-v1 or sim-propensity-v1 (ADR-0049)"
+        ..., description="Ordering version: rules-v1 or sim-propensity-v2 (ADR-0049, ADR-0053)"
     )
     score_version: str = Field(
         ...,
         description=(
-            "Human-readable label of what ordered the list, e.g. 'sim-propensity-v1 (trained on "
+            "Human-readable label of what ordered the list, e.g. 'sim-propensity-v2 (trained on "
             "simulated uptake, not real customer behaviour)'"
         ),
     )
