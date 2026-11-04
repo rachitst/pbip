@@ -33,8 +33,8 @@ references, search terms or any other free text. The API refuses free text and u
 * Batches leave every 10 s, and when the tab is hidden or closed (`visibilitychange`, `pagehide`), with
   `fetch(..., { keepalive: true })` and the bearer token. `navigator.sendBeacon` is not used: it cannot send the
   `Authorization` header the API requires.
-* Bounds: at most 25 events per batch, at most 10 batches per minute, one request at a time, and a buffer of
-  100 events that drops the oldest when full.
+* Bounds: at most 25 events per batch (also the API's limit, ADR-0055), at most 10 batches per minute, one
+  request at a time, and a buffer of 100 events that drops the oldest when full.
 * A failed batch (network error, 401, 422, 429, 5xx) is dropped. There is no retry, and a 401 neither refreshes
   the session nor signs the customer out. Tracking never throws into the page.
 

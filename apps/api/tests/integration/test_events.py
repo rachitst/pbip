@@ -257,6 +257,31 @@ def test_events_resend_is_idempotent_not_a_server_error(
     assert len(stored) == 1
 
 
+def test_a_batch_at_the_cap_is_stored_and_one_over_it_is_refused_with_nothing_stored(
+    client: TestClient, make_customer: Callable[..., Actor], db: Session
+) -> None:
+    """ADR-0055: at most 25 events per batch; a larger batch is a 422 naming the limit."""
+    alice = make_customer()
+    at_cap = {"events": [_event(session_id="sess-cap") for _ in range(25)]}
+    resp = client.post("/api/v1/events/batch", json=at_cap, headers=alice.headers)
+    assert resp.status_code == 202, resp.text
+    assert (resp.json()["accepted"], resp.json()["duplicates"]) == (25, 0)
+
+    over = {"events": [_event(session_id="sess-over") for _ in range(26)]}
+    resp = client.post("/api/v1/events/batch", json=over, headers=alice.headers)
+    assert resp.status_code == 422
+    assert resp.headers["content-type"].startswith("application/problem+json")
+    [error] = resp.json()["errors"]
+    assert error["loc"] == ["body", "events"]
+    assert error["type"] == "too_long"
+    assert "at most 25 items" in error["msg"]
+
+    stored = db.scalars(
+        select(ClickstreamEvent.session_id).where(ClickstreamEvent.customer_id == alice.customer_id)
+    ).all()
+    assert sorted(set(stored)) == ["sess-cap"] and len(stored) == 25
+
+
 def test_events_are_rate_limited(
     app: FastAPI, client: TestClient, make_customer: Callable[..., Actor], settings: Settings
 ) -> None:

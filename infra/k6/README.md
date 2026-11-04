@@ -84,7 +84,7 @@ uv run python scripts/load_invariants.py check perf-results/before.json  # exit 
 ## Clickstream ingestion (TASK-055, #78): `events.js`
 
 Sustains **500 events/s** through `POST /api/v1/events/batch`: a `constant-arrival-rate` scenario starts
-`ceil(EVENTS_PER_SECOND / BATCH_SIZE)` batches per second (default 5 batches of 100 events), round-robin over
+`ceil(EVENTS_PER_SECOND / BATCH_SIZE)` batches per second (default 20 batches of 25 events), round-robin over
 `USERS` seeded customers. Every event is valid against the API schema and the web catalogue
 (`apps/web/src/telemetry/catalogue.ts`): allow-listed types, route templates as `page_url`, catalogue properties only.
 
@@ -101,7 +101,7 @@ python scripts/dev.py load-events --summary-export /results/events-summary.json 
 $env:BASE_URL = "https://host.docker.internal:8443"; .\dev.ps1 load-events --insecure-skip-tls-verify
 ```
 
-* Options (environment variables): `EVENTS_PER_SECOND` (default 500), `BATCH_SIZE` (1-100, default 100), `DURATION`
+* Options (environment variables): `EVENTS_PER_SECOND` (default 500), `BATCH_SIZE` (1-25, default 25: the API's cap, ADR-0055), `DURATION`
   (default `1m`; keep it under the 15 min access-token lifetime), `USERS` (default 20), `BASE_URL`.
 * Thresholds: HTTP errors < 0.5%, batch p95 < 500 ms, > 99.5% of batches answered 202 with every event stored, and
   `dropped_iterations` = 0 (every scheduled batch started, so the target rate was sustained, not just attempted).

@@ -15,7 +15,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from pbip_api.core.db import utcnow
 
-MAX_BATCH_EVENTS = 100
+# 25 keeps a request's p95 under TASK-055's 15 ms on an idle CI runner (nginx TLS included); a
+# 40-event batch was already at 13.8-15.6 ms and 100 events at 21.6-22.9 ms. The web tracker sends
+# at most 25. ADR-0055 explains why the insert stays synchronous and how the cap was measured.
+MAX_BATCH_EVENTS = 25
 MAX_PROPERTIES = 20
 
 _PROPERTY_KEY = r"^[a-z][a-z0-9_]{0,39}$"
@@ -97,7 +100,7 @@ class TelemetryEventIn(BaseModel):
 
 
 class EventBatchRequest(BaseModel):
-    """Batch payload containing up to 100 telemetry events."""
+    """Batch payload of 1 to 25 telemetry events (ADR-0055 explains the limit)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

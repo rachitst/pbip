@@ -829,7 +829,7 @@ export interface paths {
         put?: never;
         /**
          * Batch ingest client-side and server-side telemetry events
-         * @description Store up to 100 events for the authenticated customer; committed before the response.
+         * @description Store up to 25 events for the authenticated customer; committed before the response.
          */
         post: operations["ingest_events_batch_api_v1_events_batch_post"];
         delete?: never;
@@ -2910,12 +2910,12 @@ export interface components {
         };
         /**
          * EventBatchRequest
-         * @description Batch payload containing up to 100 telemetry events.
+         * @description Batch payload of 1 to 25 telemetry events (ADR-0055 explains the limit).
          */
         EventBatchRequest: {
             /**
              * Events
-             * @description Telemetry events to ingest (1 to 100 per batch)
+             * @description Telemetry events to ingest (1 to 25 per batch)
              */
             events: components["schemas"]["TelemetryEventIn"][];
         };

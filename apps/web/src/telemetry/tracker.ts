@@ -14,7 +14,7 @@ import type {
  * only appends to an in-memory buffer and never throws; batches leave on a timer and when the tab
  * is hidden or closed; every bound below is fixed, and a batch that fails is dropped, not retried.
  *
- * Bounds (the API allows 100 events per batch and 120 batches per minute per client IP):
+ * Bounds (the API allows 25 events per batch, ADR-0055, and 120 batches per minute per client IP):
  * - a batch carries at most MAX_BATCH_SIZE events;
  * - at most MAX_BATCHES_PER_MINUTE batches are sent in any 60 s, and one at a time;
  * - the buffer keeps at most MAX_BUFFERED_EVENTS; when full, the OLDEST events are dropped. */
