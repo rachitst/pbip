@@ -3,9 +3,10 @@
 ``HybridFraudScorer`` implements the ``FraudScorer`` contract for transfers and bill payments:
 
 1. The baseline rules score the transfer first. They are the bank's policy and the fail-safe.
-2. The platform's own records give the model its inputs: debits in the last 30 days, payee age,
-   failed sign-ins in 24 hours and the device. The ``pbip_ml`` online features turn them into the
-   row the models were trained on.
+2. The platform's own records give the model its inputs: debits and received money in the last
+   30 days, the last customer activity before that if there was none since, payee age, failed
+   sign-ins in 24 hours and the device. The ``pbip_ml`` online features turn them into the row
+   the models were trained on (``test_fraud_feature_parity`` proves the same numbers as offline).
 3. The models score that row in a worker thread, bounded by ``FRAUD_MODEL_BUDGET_MS``.
 4. The higher of the two risks decides, so the model can raise a decision but never lower one
    the rules reached. Reasons are merged by code, and the snapshot keeps both scores.
@@ -19,24 +20,25 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
 import structlog
 from pbip_ml.fraud.contract import FraudReason, FraudScoreResult, ReasonSource, TransactionContext
 from pbip_ml.fraud.features import AVG_WINDOW, PastTransfer
-from sqlalchemy import and_, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.orm import InstrumentedAttribute, Session
+from sqlalchemy.sql import Select
 
 from pbip_api.core.config import Settings
 from pbip_api.core.velocity import VelocityCounters
 from pbip_api.modules.accounts.models import AccountHolder
 from pbip_api.modules.auth.models import SecurityEvent, SecurityEventType
 from pbip_api.modules.customers.models import Customer
-from pbip_api.modules.fraud.baseline import BaselineRulesScorer, decide
+from pbip_api.modules.fraud.baseline import ACTIVITY_TYPES, BaselineRulesScorer, decide
 from pbip_api.modules.fraud.models import FraudEvent
 from pbip_api.modules.fraud.travel import TravelPolicy
-from pbip_api.modules.ledger.models import Transaction
+from pbip_api.modules.ledger.models import Transaction, TransactionStatus
 from pbip_api.modules.payees.models import Payee
 
 if TYPE_CHECKING:  # the model stack (LightGBM, scikit-learn) loads only when the flag is on
@@ -46,6 +48,11 @@ if TYPE_CHECKING:  # the model stack (LightGBM, scikit-learn) loads only when th
 _logger = structlog.get_logger(__name__)
 
 LOGIN_WINDOW = timedelta(hours=24)
+# Customer-induced activity: the same set as DORMANT_REACTIVATION (ADR-0046, ADR-0051). Fees,
+# interest, payouts, reversals and loan postings neither wake an account nor count as structuring.
+_IS_ACTIVITY = and_(
+    Transaction.status == TransactionStatus.POSTED, Transaction.type.in_(ACTIVITY_TYPES)
+)
 RULES_ONLY_SUFFIX = "+rules-only"
 # Model scoring is CPU-bound and short. Two workers are enough for a bounded wait, and a timed-out
 # call finishes in the background without blocking the request.
@@ -153,11 +160,17 @@ class HybridFraudScorer:
         accounts = select(AccountHolder.account_id).where(
             AccountHolder.customer_id == context.customer_id
         )
+        window = (
+            Transaction.id != context.transaction_id,
+            Transaction.created_at >= at - AVG_WINDOW,
+            Transaction.created_at < at,
+        )
         debits = self.session.execute(
             select(
                 Transaction.created_at,
                 Transaction.amount,
                 FraudEvent.features["device_id"].astext,  # the device of each earlier transfer
+                _IS_ACTIVITY,
             )
             # The customer's own event only: a structuring-monitor alert (ADR-0052) may add a
             # second event on a transfer this customer sent, and must not duplicate the debit.
@@ -168,17 +181,29 @@ class HybridFraudScorer:
                     FraudEvent.customer_id == context.customer_id,
                 ),
             )
-            .where(
-                Transaction.debit_account_id.in_(accounts),
-                Transaction.id != context.transaction_id,
-                Transaction.created_at >= at - AVG_WINDOW,
-                Transaction.created_at < at,
+            .where(Transaction.debit_account_id.in_(accounts), *window)
+        ).all()
+        # Money received, from anyone but the customer's own accounts (a move between them is
+        # already a debit above). No device: the sender made it (ADR-0051).
+        credits = self.session.execute(
+            select(Transaction.created_at, Transaction.amount, _IS_ACTIVITY).where(
+                Transaction.credit_account_id.in_(accounts),
+                or_(
+                    Transaction.debit_account_id.is_(None),
+                    Transaction.debit_account_id.not_in(accounts),
+                ),
+                *window,
             )
         ).all()
         history = [
-            PastTransfer(created, "DEBIT", amount, UUID(device) if device else None)
-            for created, amount, device in debits
+            PastTransfer(created, "DEBIT", amount, UUID(device) if device else None, bool(active))
+            for created, amount, device, active in debits
+        ] + [
+            PastTransfer(created, "CREDIT", amount, None, bool(active))
+            for created, amount, active in credits
         ]
+        if not any(h.activity for h in history):
+            history += self._last_activity_before(context, accounts, at - AVG_WINDOW)
         return TransferInputs(
             amount_minor=context.amount_minor,
             currency=context.currency,
@@ -189,6 +214,34 @@ class HybridFraudScorer:
             failed_logins_24h=self._failed_logins(context.customer_id, at - LOGIN_WINDOW),
             history=history,
         )
+
+    def _last_activity_before(
+        self, context: TransactionContext, accounts: Select[UUID], before: datetime
+    ) -> list[PastTransfer]:
+        """The customer's latest activity older than the 30-day history, for
+        ``days_since_last_activity`` (F8 dormancy). Only asked when the 30 days hold none, so an
+        active customer pays nothing; two index range scans, each stopping at its first row.
+        Outside every other feature's window, so only its time matters."""
+        sides: tuple[tuple[InstrumentedAttribute[UUID | None], Literal["DEBIT", "CREDIT"]], ...] = (
+            (Transaction.debit_account_id, "DEBIT"),
+            (Transaction.credit_account_id, "CREDIT"),
+        )
+        found: list[PastTransfer] = []
+        for side, direction in sides:
+            row = self.session.execute(
+                select(Transaction.created_at, Transaction.amount)
+                .where(
+                    side.in_(accounts),
+                    _IS_ACTIVITY,
+                    Transaction.id != context.transaction_id,
+                    Transaction.created_at < before,
+                )
+                .order_by(Transaction.created_at.desc())
+                .limit(1)
+            ).first()
+            if row is not None:
+                found.append(PastTransfer(row[0], direction, row[1], None))
+        return found
 
     def _failed_logins(self, customer_id: UUID, since: datetime) -> int:
         user_id = select(Customer.user_id).where(Customer.id == customer_id).scalar_subquery()

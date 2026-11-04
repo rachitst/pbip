@@ -343,7 +343,9 @@ def test_a_monitor_event_on_a_sent_transfer_does_not_duplicate_the_senders_model
             ),
             new_device=False,
         )  # fmt: skip
-    assert len(inputs.history) == 2  # one row per earlier debit, not one per fraud event
+    # One row per earlier debit, not one per fraud event. Since ADR-0051 the history also holds the
+    # money received (the funding deposit), which has no fraud-event join and no device.
+    assert sorted(h.direction for h in inputs.history) == ["CREDIT", "DEBIT", "DEBIT"]
 
 
 def test_payment_stats_leave_monitor_alerts_out(

@@ -38,7 +38,7 @@ FREE-AI "fairness and equity"; EU AI Act Art. 10 (bias examination of data).
 
 | Model | Evidence |
 |---|---|
-| Fraud (LightGBM, Isolation Forest, hybrid) | Behavioural transaction features only: 9 LightGBM features (`MODEL_FEATURES`), 4 anomaly features (`ANOMALY_FEATURES`) in `ml/src/pbip_ml/fraud/training.py`. No demographic field. `NEW_COUNTRY` is a coarse GeoIP security signal (ADR-0014) |
+| Fraud (LightGBM, Isolation Forest, hybrid) | Behavioural transaction features only: 9 LightGBM features in `-3`, 11 in feature contract 2 (`MODEL_FEATURES`, ADR-0051), 4 anomaly features (`ANOMALY_FEATURES`) in `ml/src/pbip_ml/fraud/training.py`. No demographic field. `NEW_COUNTRY` is a coarse GeoIP security signal (ADR-0014) |
 | Forecast | The account's own balance history only (`ml/src/pbip_ml/forecasting/model.py`) |
 | Recommendations `rules-v1` | The only demographic input is the consented `age_band`. It adds an eligibility reason and never changes ranking (ADR-0015 decision 2). Tested by `test_adr_0015_age_band_never_changes_ranking_only_adds_an_eligibility_reason` and `test_unknown_age_band_still_receives_standard_recommendations` (`ml/tests/test_recommendations.py`) |
 | K-Means | Five ledger features (`FEATURE_NAMES` in `ml/src/pbip_ml/segmentation/pipeline.py`). The card warns that HIGH_NET_WORTH reflects wealth and must not restrict product access |

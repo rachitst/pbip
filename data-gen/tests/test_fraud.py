@@ -1,7 +1,9 @@
 """TASK-023, TASK-071: labelled fraud scenarios F1-F8 are injected deterministically and cleanly."""
 
+import functools
 import hashlib
 import json
+import uuid
 from collections import defaultdict
 from dataclasses import fields
 from datetime import timedelta
@@ -14,6 +16,7 @@ from pbip_datagen.fraud import (
     DEFAULT_DORMANCY_DAYS,
     DEFAULT_MAX_TRANSFER_MINOR,
     DEFAULT_REPORTING_THRESHOLD_MINOR,
+    INBOUND_IDS,
     SCENARIOS,
     FraudConfig,
     FraudLabel,
@@ -36,6 +39,23 @@ V2_1_DIGESTS = {
     CONFIG: "e4aa3ba3016d76ee1c260f15f5720dfed908214d66c970863cdd419538fd2b09",  # pragma: allowlist secret (a SHA-256 digest of data)
     LONG_CONFIG: "c63c42175c4b6c0e91fefe34875d1f5713d5007957c8de176f81d6d77758ccaf",  # pragma: allowlist secret (a SHA-256 digest of data)
 }
+
+# SHA-256 of every row and label except the v2.4 money-received (L4) rows, recorded on the output
+# of generator v2.3.0 (the base of #274's PR): L4 is purely additive.
+V2_3_DIGESTS = {
+    CONFIG: "67d5c7779ec8c1e28277fdd3230ba4d5970f2d3641e799719f025d5192878127",  # pragma: allowlist secret (a SHA-256 digest of data)
+    LONG_CONFIG: "1b24ca90169aad9d3e8fe2bd1030a3cbcce5227b34e3fc4871f4aafe3bb10007",  # pragma: allowlist secret (a SHA-256 digest of data)
+}
+
+
+@functools.cache
+def _received_base(customer_id: uuid.UUID) -> int:
+    return uuid.uuid5(customer_id, INBOUND_IDS).int & ~0xFFFFFF
+
+
+def _received(t: Transfer) -> bool:
+    """An L4 (v2.4) legitimate inbound transfer: its id comes from the L4 namespace."""
+    return t.id.int & ~0xFFFFFF == _received_base(t.customer_id)
 
 
 @pytest.fixture(scope="module")
@@ -60,12 +80,23 @@ def _v2_1_digest(data: LabelledTransfers, config: GeneratorConfig) -> str:
     for t in data.transfers:
         if t.customer_id in churned and t.occurred_at >= churned[t.customer_id]:
             continue
-        if t.id not in new:
+        if t.id not in new and not _received(t):
             digest.update(_row(t))
     digest.update(b"--labels--\n")
     for lb in data.labels:
         if lb.transaction_id not in new:
             digest.update(_row(lb))
+    return digest.hexdigest()
+
+
+def _v2_3_digest(data: LabelledTransfers) -> str:
+    digest = hashlib.sha256()
+    for t in data.transfers:
+        if not _received(t):
+            digest.update(_row(t))
+    digest.update(b"--labels--\n")
+    for lb in data.labels:
+        digest.update(_row(lb))
     return digest.hexdigest()
 
 
@@ -108,6 +139,15 @@ def test_v2_1_rows_are_unchanged(data: LabelledTransfers, long_data: LabelledTra
     assert _v2_1_digest(data, CONFIG) == V2_1_DIGESTS[CONFIG]
     assert _v2_1_digest(long_data, LONG_CONFIG) == V2_1_DIGESTS[LONG_CONFIG]
     assert _incidents(long_data, "F7") and _incidents(long_data, "F8")  # the digest skipped them
+
+
+def test_v2_3_rows_are_unchanged_by_money_received(
+    data: LabelledTransfers, long_data: LabelledTransfers
+) -> None:
+    """#274: L4 only adds rows; every v2.3 row, id and label is byte-identical."""
+    assert _v2_3_digest(data) == V2_3_DIGESTS[CONFIG]
+    assert _v2_3_digest(long_data) == V2_3_DIGESTS[LONG_CONFIG]
+    assert any(_received(t) for t in data.transfers)  # the digest skipped something
 
 
 @pytest.mark.parametrize(
@@ -320,7 +360,7 @@ def test_ordinary_transfers_never_match_a_scenario_signature(data: LabelledTrans
     labelled = {lb.transaction_id for lb in data.labels}
     income = {c.id: c.monthly_income_minor for c in iter_customers(CONFIG)}
     for t in data.transfers:
-        if t.id in labelled:
+        if t.id in labelled or _received(t):  # L4 credits: test_legitimate_money_received
             continue
         assert t.direction == "DEBIT" and t.payee_added_at is not None and t.ip_country == "IN"
         new_payee = t.occurred_at - t.payee_added_at < timedelta(days=30)
@@ -349,6 +389,29 @@ def test_legitimate_first_time_behaviour_is_present(data: LabelledTransfers) -> 
         sum(t.new_device for t in normal) > 100
         and sum(t.failed_logins_24h > 0 for t in normal) > 100
     )
+
+
+def test_legitimate_money_received(data: LabelledTransfers) -> None:
+    """#274 (v2.4): legitimate credits exist, so a detector's false positives can be measured.
+
+    Before v2.4 every credit was fraud (F6, F7). L4 credits are never labelled, come from senders
+    who are not payees, and some are just under the reporting threshold, like F7's deposits.
+    """
+    labelled = {lb.transaction_id for lb in data.labels}
+    received = [t for t in data.transfers if _received(t)]
+    assert not {t.id for t in received} & labelled
+    assert all(
+        t.direction == "CREDIT" and t.payee_added_at is None and not t.new_device
+        and t.failed_logins_24h == 0 and 0 < t.amount_minor <= DEFAULT_MAX_TRANSFER_MINOR
+        for t in received
+    )  # fmt: skip
+    assert len({t.customer_id for t in received}) > 0.9 * CONFIG.customers
+    assert len(received) > CONFIG.customers * CONFIG.months * 0.8  # about one a month
+    threshold = DEFAULT_REPORTING_THRESHOLD_MINOR
+    near = [t for t in received if 0.9 * threshold <= t.amount_minor < threshold]
+    assert len(near) >= 20  # legitimate near-threshold credits, the false-positive candidates
+    credits = [t for t in data.transfers if t.direction == "CREDIT"]
+    assert {t.id for t in credits} - labelled == {t.id for t in received}
 
 
 def test_fraud_config_is_validated() -> None:
