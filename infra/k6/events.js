@@ -15,6 +15,9 @@
 // Pass/fail: k6 exits non-zero when a threshold below is crossed. `dropped_iterations` counts batches
 // the schedule could not start (no free VU), so a zero count means the target rate was sustained.
 // `events_accepted` is the events the API stored (accepted + duplicates); its summary rate is events/s.
+// `events_not_recorded` counts events the API discarded because the customer's analytics consent is
+// off (ADR-0057); any such event fails the run, since a discard is not the insert being measured.
+// setup() turns each load user's consent on (seed_load.py does too), so a stale seed cannot do that.
 import http from "k6/http";
 import { check } from "k6";
 import { Counter } from "k6/metrics";
@@ -34,6 +37,7 @@ const BATCHES_PER_SECOND = Math.ceil(EVENTS_PER_SECOND / BATCH_SIZE);
 
 const eventsSent = new Counter("events_sent");
 const eventsAccepted = new Counter("events_accepted");
+const eventsNotRecorded = new Counter("events_not_recorded");
 
 export const options = {
   scenarios: {
@@ -55,6 +59,8 @@ export const options = {
     "checks{endpoint:events_batch}": ["rate>0.995"],
     // Every scheduled batch started: the target events/s was sustained, not just attempted.
     dropped_iterations: ["count<1"],
+    // ADR-0057: a batch discarded for lack of consent is not an insert; fail loudly.
+    events_not_recorded: ["count<1"],
   },
   summaryTrendStats: ["avg", "med", "p(90)", "p(95)", "p(99)", "max", "count"],
 };
@@ -144,6 +150,16 @@ export function setup() {
       throw new Error(
         `login failed for ${email(i)}: is scripts/seed_load.py seeded and the login limit raised?`,
       );
+    const consent = http.put(
+      `${BASE_URL}/api/v1/customers/me/analytics-consent`,
+      JSON.stringify({ granted: true }),
+      {
+        headers: { ...JSON_HEADERS, Authorization: `Bearer ${token}` },
+        tags: { endpoint: "consent" },
+      },
+    );
+    if (consent.status !== 200 || consent.json("granted") !== true)
+      throw new Error(`could not turn analytics consent on for ${email(i)} (ADR-0057)`);
     users.push({ i, token });
   }
   return { users };
@@ -165,5 +181,7 @@ export default function (data) {
     },
     { endpoint: "events_batch" },
   );
+  if (res.status === 202 && res.json("not_recorded") > 0)
+    eventsNotRecorded.add(res.json("not_recorded"));
   if (ok) eventsAccepted.add(res.json("accepted") + res.json("duplicates"));
 }

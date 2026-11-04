@@ -463,8 +463,8 @@ def investment_suggestions(ctx: ToolContext, raw: Mapping[str, object]) -> ToolR
     profile = discovery.RiskProfile(
         stored.band.value, stored.questionnaire_version, stored.assessed_at
     )
-    engine = recommendations_service.get_customer_recommendations(
-        ctx.session, ctx.customer_id, ctx.now, top_k=len(PRODUCT_CATALOGUE)
+    engine = recommendations_service.get_customer_recommendations(  # ADR-0056: the band rule
+        ctx.session, ctx.customer_id, ctx.now, top_k=len(PRODUCT_CATALOGUE), apply_risk_band=False
     )
     suggestions = [
         discovery.EngineSuggestion(item.product_id, item.title, item.reasons)

@@ -1,6 +1,7 @@
 """Recommendation contract. Every recommendation carries human-readable reasons."""
 
 from enum import StrEnum
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -11,6 +12,18 @@ class ProductType(StrEnum):
     SAVINGS = "SAVINGS"
     INVESTMENT = "INVESTMENT"
     INSURANCE = "INSURANCE"
+
+
+class RiskLevel(StrEnum):
+    """A product's risk level, and the customer's RTQ-1 risk band (TASK-097), on one scale.
+
+    The values match ``customers.risk.RiskBand`` and the wealth catalogue's ``risk_level`` so the
+    engine and the assistant (TASK-105) apply the same suitability rule (ADR-0056).
+    """
+
+    LOW = "LOW"
+    MODERATE = "MODERATE"
+    HIGH = "HIGH"
 
 
 class HeldProductKind(StrEnum):
@@ -44,6 +57,26 @@ class HeldProduct(BaseModel):
     )
 
 
+class LoanOffer(BaseModel):
+    """UC-06 (ADR-0056): one catalogue loan as the API's loans module assessed it on the
+    customer's own income, spending and balance. The engine never re-decides eligibility; it only
+    offers an ``eligible`` loan the customer does not already hold and orders it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    product_id: UUID = Field(description="The loan catalogue id (stable)")
+    loan_type: Literal["PERSONAL", "AUTO", "HOME"]
+    title: str
+    description: str
+    eligible: bool
+    min_amount_minor: int = Field(ge=0, description="Suggested range: from (0 if not eligible)")
+    max_amount_minor: int = Field(ge=0, description="Suggested range: up to (0 if not eligible)")
+    tenure_months: int = Field(ge=0, description="The tenor the range is sized at")
+    emi_minor: int = Field(ge=0, description="EMI at the suggested maximum")
+    annual_rate_bps: int = Field(ge=0)
+    reasons: tuple[str, ...] = Field(min_length=1, description="The loans module's own reasons")
+
+
 class Recommendation(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -63,6 +96,7 @@ class Recommendation(BaseModel):
     title: str = Field(default="", description="Product title / name")
     description: str = Field(default="", description="Product description")
     cta_label: str = Field(default="Learn more", description="Call to action button text")
+    loan: LoanOffer | None = Field(default=None, description="Set for a catalogue loan (UC-06)")
 
 
 class CustomerRecommendationContext(BaseModel):
@@ -100,6 +134,20 @@ class CustomerRecommendationContext(BaseModel):
         default=(),
         description="Open accounts, active loans and open fixed deposits (TASK-111, ADR-0030)",
     )
+    loan_offers: tuple[LoanOffer, ...] = Field(
+        default=(),
+        description=(
+            "Every catalogue loan as the loans module assessed it (UC-06, ADR-0056). When given, "
+            "the catalogue loans replace the abstract credit line"
+        ),
+    )
+    risk_band: RiskLevel | None = Field(
+        default=None,
+        description=(
+            "The customer's RTQ-1 risk band (TASK-097); None until the questionnaire is answered. "
+            "A suitability rule, never a ranking weight (ADR-0056)"
+        ),
+    )
 
 
 class BankingProduct(BaseModel):
@@ -119,5 +167,9 @@ class BankingProduct(BaseModel):
     min_health_score: int = 0
     min_discretionary_ratio: float = 0.0
     target_segments: list[str] = Field(default_factory=list)
+    risk_level: RiskLevel | None = Field(
+        default=None,
+        description="Set for investment products: checked against the customer's band (ADR-0056)",
+    )
     # No cta_path: PBIP has no product application pages yet, so none is linked.
     cta_label: str = "Learn more"

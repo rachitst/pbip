@@ -1,0 +1,9 @@
+{
+  "name": "pbip-diagrams",
+  "private": true,
+  "description": "Docs tooling only: renders the Mermaid diagrams in docs/diagrams to SVG and PNG. Not part of any build or image.",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@mermaid-js/mermaid-cli": "12.2.0"
+  }
+}

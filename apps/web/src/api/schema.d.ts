@@ -213,6 +213,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/analytics/behaviour-profile/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My behavioural profile: segment, spend and income, engagement, product interests
+         * @description UC-11 profile of the authenticated customer only; no profile while analytics consent is off
+         *     (ADR-0057).
+         */
+        get: operations["get_my_behaviour_profile_api_v1_analytics_behaviour_profile_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/analytics/forecast": {
         parameters: {
             query?: never;
@@ -730,6 +751,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/customers/me/analytics-consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get my analytics consent (clickstream and behavioural profile, ADR-0057) */
+        get: operations["get_my_analytics_consent_api_v1_customers_me_analytics_consent_get"];
+        /** Turn analytics on or off; turning it off erases my activity data and profile */
+        put: operations["put_my_analytics_consent_api_v1_customers_me_analytics_consent_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/customers/me/date-of-birth": {
         parameters: {
             query?: never;
@@ -956,7 +995,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Fraud telemetry: decisions over time, hold rate, top reasons, risky payees
+         * Fraud telemetry: decisions over time, hold rate, top reasons, risky payees, risk-score distribution and alert outcomes
          * @description Aggregates only, cached in Redis for 60 seconds per window (TASK-035).
          */
         get: operations["get_stats_api_v1_fraud_stats_get"];
@@ -1041,6 +1080,26 @@ export interface paths {
         post?: never;
         /** End a customer's relationship-manager assignment (ADMIN with MFA, audited) */
         delete: operations["unassign_relationship_manager_api_v1_insights_customers__customer_id__assignment_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/insights/customers/{customer_id}/behaviour-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One customer's behavioural profile (UC-11); empty while analytics consent is off
+         * @description RM: assigned customers only; admin: any (ADR-0032). Consent decides content (ADR-0057).
+         */
+        get: operations["get_customer_behaviour_profile_api_v1_insights_customers__customer_id__behaviour_profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1143,6 +1202,26 @@ export interface paths {
         put?: never;
         /** Explainable eligibility from the customer's own ledger figures */
         post: operations["check_eligibility_api_v1_loans_check_eligibility_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/loans/offers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every catalogue loan assessed on my own income, spending and balance (UC-06)
+         * @description Read-only. The customer is the authenticated one; nothing is taken from the request.
+         */
+        get: operations["loan_offers_api_v1_loans_offers_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1772,8 +1851,19 @@ export interface components {
         };
         /** AffinityPanel */
         AffinityPanel: {
+            /**
+             * Interests
+             * @description Product interest by category across profiled customers, most customers first
+             */
+            interests?: components["schemas"]["CategoryInterest"][];
             /** Products */
             products: string[];
+            /**
+             * Profiled Customers
+             * @description Customers in scope with a behavioural profile (analytics consent on), from the latest daily profile run over its own 90-day window, not the period filter
+             * @default 0
+             */
+            profiled_customers: number;
             /** Recommendation Clicks */
             recommendation_clicks: components["schemas"]["ProductClicks"][];
             /** Segments */
@@ -1885,6 +1975,18 @@ export interface components {
             transaction_type: string;
         };
         /**
+         * AlertOutcomes
+         * @description Alerts raised in the window, by their status now.
+         */
+        AlertOutcomes: {
+            /** Confirmed Fraud */
+            CONFIRMED_FRAUD: number;
+            /** False Positive */
+            FALSE_POSITIVE: number;
+            /** Open */
+            OPEN: number;
+        };
+        /**
          * AlertStatus
          * @enum {string}
          */
@@ -1940,6 +2042,40 @@ export interface components {
             share_bps: number;
             /** Value Minor */
             value_minor: number;
+        };
+        /**
+         * AnalyticsConsentIn
+         * @description Turn analytics (clickstream and behavioural profiling, ADR-0057) on (true) or off (false).
+         */
+        AnalyticsConsentIn: {
+            /** Granted */
+            granted: boolean;
+        };
+        /**
+         * AnalyticsConsentOut
+         * @description The customer's own analytics consent decision. Returned to the owner only.
+         */
+        AnalyticsConsentOut: {
+            /**
+             * Current Policy Version
+             * @description Policy version a new decision agrees to
+             */
+            current_policy_version: string;
+            /**
+             * Granted
+             * @description Whether in-app activity may be recorded and used to build a behavioural profile
+             */
+            granted: boolean;
+            /**
+             * Policy Version
+             * @description Policy version of the latest decision
+             */
+            policy_version: string | null;
+            /**
+             * Updated At
+             * @description When the latest decision (on or off) was made; null if never decided
+             */
+            updated_at: string | null;
         };
         /**
          * AssignedRm
@@ -2168,6 +2304,39 @@ export interface components {
             /** Spending */
             spending: components["schemas"]["SegmentSpend"][];
         };
+        /** BehaviourProfile */
+        BehaviourProfile: {
+            /**
+             * Computed At
+             * @description When the daily job last built the engagement and interests; null before
+             */
+            computed_at: string | null;
+            /** @description Null until the daily job has run */
+            engagement: components["schemas"]["ProfileEngagement"] | null;
+            /**
+             * Product Interests
+             * @description Highest score first
+             */
+            product_interests: components["schemas"]["ProductInterestOut"][];
+            /**
+             * Segment
+             * @description Weekly segment, or UNSEGMENTED
+             * @enum {string}
+             */
+            segment: "HIGH_NET_WORTH" | "BUDGET_CONSCIOUS" | "FREQUENT_TRANSACTOR" | "DISCRETIONARY_SPENDER" | "INACTIVE_SAVER" | "UNSEGMENTED";
+            /** @description Null when no account is held */
+            spend_income: components["schemas"]["SpendIncomePattern"] | null;
+        };
+        /**
+         * BehaviourProfileResponse
+         * @description UC-11 behavioural profile. Without analytics consent there is no profile at all.
+         */
+        BehaviourProfileResponse: {
+            /** Analytics Consent */
+            analytics_consent: boolean;
+            /** @description Null when analytics consent is off */
+            profile: components["schemas"]["BehaviourProfile"] | null;
+        };
         /** BillPaymentOut */
         BillPaymentOut: {
             /**
@@ -2275,6 +2444,37 @@ export interface components {
             instrument_id: string;
             /** Units */
             units?: number | null;
+        };
+        /**
+         * CategoryInterest
+         * @description How many profiled customers show interest in a product category (ADR-0057).
+         */
+        CategoryInterest: {
+            /**
+             * Avg Score
+             * @description Mean interest score of those customers (3 decimals)
+             */
+            avg_score: number;
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "LOAN" | "SAVINGS" | "INVESTMENT" | "INSURANCE";
+            /**
+             * Customers
+             * @description Profiled customers with this category among their interests
+             */
+            customers: number;
+            /**
+             * Share Pct
+             * @description customers / profiled customers in scope, percent
+             */
+            share_pct: number;
+            /**
+             * Signals
+             * @description Interest signals behind the scores (clicks, calculator, pages)
+             */
+            signals: number;
         };
         /**
          * CategoryShiftItem
@@ -2651,12 +2851,24 @@ export interface components {
             /** Active Customers */
             active_customers: number;
             /**
+             * Avg Session Seconds
+             * @description Mean length of those sessions
+             * @default 0
+             */
+            avg_session_seconds: number;
+            /**
              * Day
              * Format: date
              */
             day: string;
             /** Events */
             events: number;
+            /**
+             * Sessions
+             * @description Sessions that started on this day (UTC)
+             * @default 0
+             */
+            sessions: number;
         };
         /**
          * DateOfBirthIn
@@ -2849,6 +3061,12 @@ export interface components {
         /** EligibilityOut */
         EligibilityOut: {
             /**
+             * Available Balance Minor
+             * @description Available balance across my accounts (ADR-0056, rule 5)
+             * @default 0
+             */
+            available_balance_minor: number;
+            /**
              * Dti Existing
              * @description Existing repayments / income
              */
@@ -2874,6 +3092,12 @@ export interface components {
              */
             monthly_income_minor: number;
             /**
+             * Monthly Spend Minor
+             * @description Average monthly spending from the ledger (ADR-0056, rule 4)
+             * @default 0
+             */
+            monthly_spend_minor: number;
+            /**
              * Product Id
              * Format: uuid
              */
@@ -2887,6 +3111,18 @@ export interface components {
             reasons: string[];
             /** Requested Amount Minor */
             requested_amount_minor: number;
+            /**
+             * Rules Version
+             * @description Version of the eligibility rules applied
+             * @default loan-eligibility-v2
+             */
+            rules_version: string;
+            /**
+             * Spending With Loan Ratio
+             * @description (Spending + active PBIP EMIs + proposed EMI) / income; limit 0.90
+             * @default 0
+             */
+            spending_with_loan_ratio: number;
             /**
              * Status
              * @enum {string}
@@ -3004,6 +3240,12 @@ export interface components {
             /** By Segment */
             by_segment: components["schemas"]["SegmentEngagement"][];
             /**
+             * Consenting Customers
+             * @description Customers in scope with analytics consent on; only their events count
+             * @default 0
+             */
+            consenting_customers: number;
+            /**
              * Customers
              * @description Customers in scope (all, or the filtered segment)
              */
@@ -3013,13 +3255,16 @@ export interface components {
              * @description Days (UTC) with at least one event
              */
             daily: components["schemas"]["DailyEngagement"][];
-            /** Events */
+            /**
+             * Events
+             * @description Interactions in the period (session heartbeats not counted)
+             */
             events: number;
             /** Events Per Session */
             events_per_session: number;
             /**
              * Sessions
-             * @description Distinct (customer, session id) pairs in the period
+             * @description Sessions in the period: events of one session id, split where 30 minutes pass without an event (ADR-0057)
              */
             sessions: number;
         };
@@ -3100,6 +3345,12 @@ export interface components {
              */
             duplicates: number;
             /**
+             * Not Recorded
+             * @description Events discarded unstored because the customer's analytics consent is off
+             * @default 0
+             */
+            not_recorded: number;
+            /**
              * Received At
              * Format: date-time
              * @description UTC server timestamp of receipt
@@ -3134,7 +3385,7 @@ export interface components {
          * ExceptionKind
          * @enum {string}
          */
-        ExceptionKind: "BLOCKED_TRANSFER" | "ACCOUNT_LOCKOUT" | "AUDIT_CHAIN_FAILURE";
+        ExceptionKind: "BLOCKED_TRANSFER" | "ACCOUNT_LOCKOUT" | "AUDIT_CHAIN_FAILURE" | "NOTIFICATION_DEAD_LETTER" | "SCHEDULED_TRANSFER_FAILURE";
         /** ExceptionOut */
         ExceptionOut: {
             acknowledged: components["schemas"]["ExceptionStepOut"] | null;
@@ -3143,8 +3394,38 @@ export interface components {
              * @description Blocked payments only
              */
             amount_minor?: number | null;
+            /**
+             * Attempts
+             * @description Notification dead letters: delivery attempts made
+             */
+            attempts?: number | null;
             /** Currency */
             currency?: string | null;
+            /**
+             * Error Type
+             * @description Notification dead letters: exception class of the last failure (no message)
+             */
+            error_type?: string | null;
+            /**
+             * Event Type
+             * @description Notification dead letters: the outbox event type
+             */
+            event_type?: string | null;
+            /**
+             * Failed Attempts
+             * @description Scheduled transfer failures: failed runs that day, if any
+             */
+            failed_attempts?: number | null;
+            /**
+             * Failure
+             * @description Scheduled transfer failures: an occurrence never paid, or the order paused
+             */
+            failure?: ("MISSED" | "AUTO_PAUSED") | null;
+            /**
+             * Failure Reason
+             * @description Scheduled transfer failures: the scheduler's reason code
+             */
+            failure_reason?: string | null;
             /**
              * First Invalid Seq
              * @description Audit chain failures only
@@ -3162,6 +3443,11 @@ export interface components {
              */
             occurred_at: string;
             /**
+             * Occurrence Date
+             * @description Scheduled transfer failures: the missed occurrence's date
+             */
+            occurrence_date?: string | null;
+            /**
              * Reason Codes
              * @description Fraud rule/model codes of a blocked payment
              */
@@ -3178,6 +3464,11 @@ export interface components {
              */
             risk_score?: number | null;
             status: components["schemas"]["ExceptionStatus"];
+            /**
+             * Subject Id
+             * @description System exceptions: the dead-lettered outbox event id, or the scheduled transfer (standing order) id
+             */
+            subject_id?: string | null;
             /** Transaction Type */
             transaction_type?: string | null;
         };
@@ -3206,6 +3497,8 @@ export interface components {
             ACCOUNT_LOCKOUT: components["schemas"]["ExceptionCounts"];
             AUDIT_CHAIN_FAILURE: components["schemas"]["ExceptionCounts"];
             BLOCKED_TRANSFER: components["schemas"]["ExceptionCounts"];
+            NOTIFICATION_DEAD_LETTER: components["schemas"]["ExceptionCounts"];
+            SCHEDULED_TRANSFER_FAILURE: components["schemas"]["ExceptionCounts"];
         };
         /**
          * FinancialHealthComponents
@@ -3438,6 +3731,7 @@ export interface components {
         };
         /** FraudStats */
         FraudStats: {
+            alerts: components["schemas"]["AlertOutcomes"];
             /** Block Rate */
             block_rate: number;
             /** By Day */
@@ -3459,6 +3753,11 @@ export interface components {
              * @description Decisions served by the rules because the model failed
              */
             model_fallbacks: number;
+            /**
+             * Risk Bands
+             * @description Risk-score distribution of the window's payment decisions, ten bands
+             */
+            risk_bands: components["schemas"]["pbip_api__modules__fraud__router__RiskBand"][];
             /** Risky Payees */
             risky_payees: components["schemas"]["RiskyPayee"][];
             /** Scored */
@@ -3938,6 +4237,72 @@ export interface components {
              * @enum {string}
              */
             status: "PAID" | "DUE" | "OVERDUE";
+        };
+        /**
+         * LoanOfferOut
+         * @description UC-06: one catalogue loan assessed on my own figures. Amounts are 0 when not eligible.
+         */
+        LoanOfferOut: {
+            /**
+             * Annual Rate Bps
+             * @description Indicative annual rate in basis points
+             */
+            annual_rate_bps: number;
+            /**
+             * Emi At Max Minor
+             * @description EMI at the suggested maximum
+             */
+            emi_at_max_minor: number;
+            /**
+             * Loan Type
+             * @enum {string}
+             */
+            loan_type: "PERSONAL" | "AUTO" | "HOME";
+            /** Name */
+            name: string;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /**
+             * Reasons
+             * @description Why, quoting my own income, spending and balance
+             */
+            reasons: string[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ELIGIBLE" | "NOT_ELIGIBLE";
+            /**
+             * Suggested Max Amount Minor
+             * @description The largest amount the eligibility rules allow at ``tenure_months``
+             */
+            suggested_max_amount_minor: number;
+            /**
+             * Suggested Min Amount Minor
+             * @description The product's smallest amount
+             */
+            suggested_min_amount_minor: number;
+            /**
+             * Tenure Months
+             * @description The tenor the offer is sized at
+             */
+            tenure_months: number;
+        };
+        /** LoanOffersOut */
+        LoanOffersOut: {
+            /** Available Balance Minor */
+            available_balance_minor: number;
+            /** Monthly Income Minor */
+            monthly_income_minor: number;
+            /** Monthly Spend Minor */
+            monthly_spend_minor: number;
+            /** Offers */
+            offers: components["schemas"]["LoanOfferOut"][];
+            /** Rules Version */
+            rules_version: string;
         };
         /** LoanOut */
         LoanOut: {
@@ -4646,6 +5011,29 @@ export interface components {
              */
             share_pct: number;
         };
+        /** ProductInterestOut */
+        ProductInterestOut: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "LOAN" | "SAVINGS" | "INVESTMENT" | "INSURANCE";
+            /**
+             * Last Signal At
+             * Format: date-time
+             */
+            last_signal_at: string;
+            /**
+             * Score
+             * @description Recency-weighted interest (signal weight halves every 14 days), 3 decimals
+             */
+            score: number;
+            /**
+             * Signals
+             * @description Clicks, calculator uses and product-page visits counted
+             */
+            signals: number;
+        };
         /**
          * ProductRecommendationItem
          * @description A single personalized product recommendation with explainable reasons.
@@ -4661,6 +5049,8 @@ export interface components {
              * @description Summary description of the product offer
              */
             description: string;
+            /** @description Set when the product is a catalogue loan (product_id is the loan catalogue id): its eligibility, suggested range and EMI (UC-06, ADR-0056) */
+            loan?: components["schemas"]["RecommendedLoanOut"] | null;
             /**
              * Model Version
              * @description Recommendation model version identifier
@@ -4674,7 +5064,7 @@ export interface components {
             product_id: string;
             /**
              * Product Type
-             * @description Product category: SAVINGS, LOAN, INVESTMENT, or INSURANCE
+             * @description Product kind: SAVINGS, LOAN, INVESTMENT, or INSURANCE. With product_id it is stable across responses, for wiring card actions
              */
             product_type: string;
             /**
@@ -4692,6 +5082,30 @@ export interface components {
              * @description Human-readable product title
              */
             title: string;
+        };
+        /** ProfileEngagement */
+        ProfileEngagement: {
+            /**
+             * Avg Session Seconds
+             * @description Mean session length (first to last event)
+             */
+            avg_session_seconds: number;
+            /**
+             * Interactions
+             * @description Events other than session heartbeats
+             */
+            interactions: number;
+            /** Last Active At */
+            last_active_at: string | null;
+            /** Pages Per Session */
+            pages_per_session: number;
+            /** Sessions */
+            sessions: number;
+            /**
+             * Window Days
+             * @description Days of clickstream the profile covers
+             */
+            window_days: number;
         };
         /** ReadyResponse */
         ReadyResponse: {
@@ -4750,6 +5164,48 @@ export interface components {
              * @description Human-readable label of what ordered the list, e.g. 'sim-propensity-v2 (trained on simulated uptake, not real customer behaviour)'
              */
             score_version: string;
+        };
+        /**
+         * RecommendedLoanOut
+         * @description UC-06 (ADR-0056): the loans module's assessment of a recommended catalogue loan.
+         */
+        RecommendedLoanOut: {
+            /**
+             * Annual Rate Bps
+             * @description Indicative annual rate in basis points
+             */
+            annual_rate_bps: number;
+            /**
+             * Eligibility Status
+             * @description Only loans the eligibility rules allow are recommended
+             * @constant
+             */
+            eligibility_status: "ELIGIBLE";
+            /**
+             * Emi At Max Minor
+             * @description EMI at the suggested maximum
+             */
+            emi_at_max_minor: number;
+            /**
+             * Loan Type
+             * @enum {string}
+             */
+            loan_type: "PERSONAL" | "AUTO" | "HOME";
+            /**
+             * Suggested Max Amount Minor
+             * @description The largest amount the eligibility rules allow at tenure_months
+             */
+            suggested_max_amount_minor: number;
+            /**
+             * Suggested Min Amount Minor
+             * @description The product's smallest amount
+             */
+            suggested_min_amount_minor: number;
+            /**
+             * Tenure Months
+             * @description The tenor the range is sized at
+             */
+            tenure_months: number;
         };
         /**
          * RecommendedProduct
@@ -4842,11 +5298,6 @@ export interface components {
             user_id: string;
         };
         /**
-         * RiskBand
-         * @enum {string}
-         */
-        RiskBand: "LOW" | "MODERATE" | "HIGH";
-        /**
          * RiskLevel
          * @enum {string}
          */
@@ -4863,7 +5314,7 @@ export interface components {
              */
             assessed_at: string | null;
             /** @description LOW, MODERATE or HIGH; null if never assessed */
-            band: components["schemas"]["RiskBand"] | null;
+            band: components["schemas"]["pbip_api__modules__customers__risk__RiskBand"] | null;
             /**
              * Max Score
              * @description Highest possible score
@@ -5361,6 +5812,26 @@ export interface components {
             /** Units Micro */
             units_micro: number | null;
         };
+        /** SpendIncomePattern */
+        SpendIncomePattern: {
+            /** Currency */
+            currency: string;
+            /**
+             * Discretionary Ratio
+             * @description Share of spend on lifestyle categories
+             */
+            discretionary_ratio: number;
+            /**
+             * Monthly Income Minor
+             * @description Average recurring monthly income (ADR-0043)
+             */
+            monthly_income_minor: number;
+            /**
+             * Monthly Spend Minor
+             * @description Average monthly spend
+             */
+            monthly_spend_minor: number;
+        };
         /**
          * SpendingBreakdownResponse
          * @description Response containing categorized spending breakdown for an account.
@@ -5551,7 +6022,7 @@ export interface components {
          * @description Supported telemetry event types.
          * @enum {string}
          */
-        TelemetryEventType: "page_view" | "loan_calculator_used" | "transfer_initiated" | "account_viewed" | "product_clicked" | "search_performed";
+        TelemetryEventType: "page_view" | "loan_calculator_used" | "transfer_initiated" | "account_viewed" | "product_clicked" | "search_performed" | "session_heartbeat";
         /** TenorOption */
         TenorOption: {
             /** Emi At Max Minor */
@@ -5800,6 +6271,29 @@ export interface components {
              * @enum {string}
              */
             yield_basis: "GUARANTEED" | "FIXED_COUPON" | "MARKET_LINKED";
+        };
+        /**
+         * RiskBand
+         * @enum {string}
+         */
+        pbip_api__modules__customers__risk__RiskBand: "LOW" | "MODERATE" | "HIGH";
+        /** RiskBand */
+        pbip_api__modules__fraud__router__RiskBand: {
+            /**
+             * Count
+             * @description Payment decisions in the window with a score in the band
+             */
+            count: number;
+            /**
+             * High
+             * @description Highest risk score in the band (inclusive)
+             */
+            high: number;
+            /**
+             * Low
+             * @description Lowest risk score in the band (inclusive)
+             */
+            low: number;
         };
     };
     responses: never;
@@ -6414,6 +6908,47 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    get_my_behaviour_profile_api_v1_analytics_behaviour_profile_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BehaviourProfileResponse"];
+                };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such account of mine, or no segment yet (problem+json) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -7951,6 +8486,94 @@ export interface operations {
             };
         };
     };
+    get_my_analytics_consent_api_v1_customers_me_analytics_consent_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsConsentOut"];
+                };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    put_my_analytics_consent_api_v1_customers_me_analytics_consent_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalyticsConsentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsConsentOut"];
+                };
+            };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     put_my_date_of_birth_api_v1_customers_me_date_of_birth_put: {
         parameters: {
             query?: never;
@@ -8996,6 +9619,58 @@ export interface operations {
             };
         };
     };
+    get_customer_behaviour_profile_api_v1_insights_customers__customer_id__behaviour_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BehaviourProfileResponse"];
+                };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such customer, or not assigned to the calling RM */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_customer_interactions_api_v1_insights_customers__customer_id__interactions_get: {
         parameters: {
             query?: {
@@ -9363,6 +10038,40 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    loan_offers_api_v1_loans_offers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoanOffersOut"];
+                };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

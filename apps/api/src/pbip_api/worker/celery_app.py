@@ -86,6 +86,11 @@ celery_app.conf.update(
             "task": "pbip.analytics.segment_customers",
             "schedule": crontab(hour=3, minute=0, day_of_week=0),
         },
+        # UC-11 / ADR-0057: behavioural profiles of consenting customers, daily after the above.
+        "build-behaviour-profiles-daily": {
+            "task": "pbip.analytics.build_behaviour_profiles",
+            "schedule": crontab(hour=3, minute=40),
+        },
     },
 )
 

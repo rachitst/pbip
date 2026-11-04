@@ -41,6 +41,8 @@ jobs:
       - run: uv run lint-imports
       - name: OpenAPI contract is up to date
         run: uv run python scripts/export_openapi.py --check
+      - name: Relative links and images in Markdown resolve
+        run: python scripts/check_links.py
 
   api-tests:
     name: API - unit, integration, security tests

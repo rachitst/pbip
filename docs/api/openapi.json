@@ -111,12 +111,26 @@
       },
       "AffinityPanel": {
         "properties": {
+          "interests": {
+            "description": "Product interest by category across profiled customers, most customers first",
+            "items": {
+              "$ref": "#/components/schemas/CategoryInterest"
+            },
+            "title": "Interests",
+            "type": "array"
+          },
           "products": {
             "items": {
               "type": "string"
             },
             "title": "Products",
             "type": "array"
+          },
+          "profiled_customers": {
+            "default": 0,
+            "description": "Customers in scope with a behavioural profile (analytics consent on), from the latest daily profile run over its own 90-day window, not the period filter",
+            "title": "Profiled Customers",
+            "type": "integer"
           },
           "recommendation_clicks": {
             "items": {
@@ -397,6 +411,30 @@
         "title": "AlertDetail",
         "type": "object"
       },
+      "AlertOutcomes": {
+        "description": "Alerts raised in the window, by their status now.",
+        "properties": {
+          "CONFIRMED_FRAUD": {
+            "title": "Confirmed Fraud",
+            "type": "integer"
+          },
+          "FALSE_POSITIVE": {
+            "title": "False Positive",
+            "type": "integer"
+          },
+          "OPEN": {
+            "title": "Open",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "OPEN",
+          "CONFIRMED_FRAUD",
+          "FALSE_POSITIVE"
+        ],
+        "title": "AlertOutcomes",
+        "type": "object"
+      },
       "AlertStatus": {
         "enum": [
           "OPEN",
@@ -514,6 +552,69 @@
           "share_bps"
         ],
         "title": "AllocationSlice",
+        "type": "object"
+      },
+      "AnalyticsConsentIn": {
+        "additionalProperties": false,
+        "description": "Turn analytics (clickstream and behavioural profiling, ADR-0057) on (true) or off (false).",
+        "properties": {
+          "granted": {
+            "title": "Granted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "granted"
+        ],
+        "title": "AnalyticsConsentIn",
+        "type": "object"
+      },
+      "AnalyticsConsentOut": {
+        "description": "The customer's own analytics consent decision. Returned to the owner only.",
+        "properties": {
+          "current_policy_version": {
+            "description": "Policy version a new decision agrees to",
+            "title": "Current Policy Version",
+            "type": "string"
+          },
+          "granted": {
+            "description": "Whether in-app activity may be recorded and used to build a behavioural profile",
+            "title": "Granted",
+            "type": "boolean"
+          },
+          "policy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Policy version of the latest decision",
+            "title": "Policy Version"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the latest decision (on or off) was made; null if never decided",
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "granted",
+          "updated_at",
+          "policy_version",
+          "current_policy_version"
+        ],
+        "title": "AnalyticsConsentOut",
         "type": "object"
       },
       "AssignedRm": {
@@ -1017,6 +1118,101 @@
         "title": "BehaviourAnalyticsResponse",
         "type": "object"
       },
+      "BehaviourProfile": {
+        "properties": {
+          "computed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the daily job last built the engagement and interests; null before",
+            "title": "Computed At"
+          },
+          "engagement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProfileEngagement"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null until the daily job has run"
+          },
+          "product_interests": {
+            "description": "Highest score first",
+            "items": {
+              "$ref": "#/components/schemas/ProductInterestOut"
+            },
+            "title": "Product Interests",
+            "type": "array"
+          },
+          "segment": {
+            "description": "Weekly segment, or UNSEGMENTED",
+            "enum": [
+              "HIGH_NET_WORTH",
+              "BUDGET_CONSCIOUS",
+              "FREQUENT_TRANSACTOR",
+              "DISCRETIONARY_SPENDER",
+              "INACTIVE_SAVER",
+              "UNSEGMENTED"
+            ],
+            "title": "Segment",
+            "type": "string"
+          },
+          "spend_income": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpendIncomePattern"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when no account is held"
+          }
+        },
+        "required": [
+          "computed_at",
+          "segment",
+          "spend_income",
+          "engagement",
+          "product_interests"
+        ],
+        "title": "BehaviourProfile",
+        "type": "object"
+      },
+      "BehaviourProfileResponse": {
+        "description": "UC-11 behavioural profile. Without analytics consent there is no profile at all.",
+        "properties": {
+          "analytics_consent": {
+            "title": "Analytics Consent",
+            "type": "boolean"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BehaviourProfile"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when analytics consent is off"
+          }
+        },
+        "required": [
+          "analytics_consent",
+          "profile"
+        ],
+        "title": "BehaviourProfileResponse",
+        "type": "object"
+      },
       "BillPaymentOut": {
         "properties": {
           "account_id": {
@@ -1226,6 +1422,50 @@
           "account_id"
         ],
         "title": "BuyRequest",
+        "type": "object"
+      },
+      "CategoryInterest": {
+        "description": "How many profiled customers show interest in a product category (ADR-0057).",
+        "properties": {
+          "avg_score": {
+            "description": "Mean interest score of those customers (3 decimals)",
+            "title": "Avg Score",
+            "type": "number"
+          },
+          "category": {
+            "enum": [
+              "LOAN",
+              "SAVINGS",
+              "INVESTMENT",
+              "INSURANCE"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "customers": {
+            "description": "Profiled customers with this category among their interests",
+            "title": "Customers",
+            "type": "integer"
+          },
+          "share_pct": {
+            "description": "customers / profiled customers in scope, percent",
+            "title": "Share Pct",
+            "type": "number"
+          },
+          "signals": {
+            "description": "Interest signals behind the scores (clicks, calculator, pages)",
+            "title": "Signals",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category",
+          "customers",
+          "share_pct",
+          "avg_score",
+          "signals"
+        ],
+        "title": "CategoryInterest",
         "type": "object"
       },
       "CategoryShiftItem": {
@@ -1902,6 +2142,12 @@
             "title": "Active Customers",
             "type": "integer"
           },
+          "avg_session_seconds": {
+            "default": 0,
+            "description": "Mean length of those sessions",
+            "title": "Avg Session Seconds",
+            "type": "integer"
+          },
           "day": {
             "format": "date",
             "title": "Day",
@@ -1909,6 +2155,12 @@
           },
           "events": {
             "title": "Events",
+            "type": "integer"
+          },
+          "sessions": {
+            "default": 0,
+            "description": "Sessions that started on this day (UTC)",
+            "title": "Sessions",
             "type": "integer"
           }
         },
@@ -2308,6 +2560,12 @@
       },
       "EligibilityOut": {
         "properties": {
+          "available_balance_minor": {
+            "default": 0,
+            "description": "Available balance across my accounts (ADR-0056, rule 5)",
+            "title": "Available Balance Minor",
+            "type": "integer"
+          },
           "dti_existing": {
             "description": "Existing repayments / income",
             "title": "Dti Existing",
@@ -2333,6 +2591,12 @@
             "title": "Monthly Income Minor",
             "type": "integer"
           },
+          "monthly_spend_minor": {
+            "default": 0,
+            "description": "Average monthly spending from the ledger (ADR-0056, rule 4)",
+            "title": "Monthly Spend Minor",
+            "type": "integer"
+          },
           "product_id": {
             "format": "uuid",
             "title": "Product Id",
@@ -2354,6 +2618,18 @@
           "requested_amount_minor": {
             "title": "Requested Amount Minor",
             "type": "integer"
+          },
+          "rules_version": {
+            "default": "loan-eligibility-v2",
+            "description": "Version of the eligibility rules applied",
+            "title": "Rules Version",
+            "type": "string"
+          },
+          "spending_with_loan_ratio": {
+            "default": 0.0,
+            "description": "(Spending + active PBIP EMIs + proposed EMI) / income; limit 0.90",
+            "title": "Spending With Loan Ratio",
+            "type": "number"
           },
           "status": {
             "enum": [
@@ -2601,6 +2877,12 @@
             "title": "By Segment",
             "type": "array"
           },
+          "consenting_customers": {
+            "default": 0,
+            "description": "Customers in scope with analytics consent on; only their events count",
+            "title": "Consenting Customers",
+            "type": "integer"
+          },
           "customers": {
             "description": "Customers in scope (all, or the filtered segment)",
             "title": "Customers",
@@ -2615,6 +2897,7 @@
             "type": "array"
           },
           "events": {
+            "description": "Interactions in the period (session heartbeats not counted)",
             "title": "Events",
             "type": "integer"
           },
@@ -2623,7 +2906,7 @@
             "type": "number"
           },
           "sessions": {
-            "description": "Distinct (customer, session id) pairs in the period",
+            "description": "Sessions in the period: events of one session id, split where 30 minutes pass without an event (ADR-0057)",
             "title": "Sessions",
             "type": "integer"
           }
@@ -2789,6 +3072,13 @@
             "title": "Duplicates",
             "type": "integer"
           },
+          "not_recorded": {
+            "default": 0,
+            "description": "Events discarded unstored because the customer's analytics consent is off",
+            "minimum": 0.0,
+            "title": "Not Recorded",
+            "type": "integer"
+          },
           "received_at": {
             "description": "UTC server timestamp of receipt",
             "format": "date-time",
@@ -2866,7 +3156,9 @@
         "enum": [
           "BLOCKED_TRANSFER",
           "ACCOUNT_LOCKOUT",
-          "AUDIT_CHAIN_FAILURE"
+          "AUDIT_CHAIN_FAILURE",
+          "NOTIFICATION_DEAD_LETTER",
+          "SCHEDULED_TRANSFER_FAILURE"
         ],
         "title": "ExceptionKind",
         "type": "string"
@@ -2895,6 +3187,18 @@
             "description": "Blocked payments only",
             "title": "Amount Minor"
           },
+          "attempts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Notification dead letters: delivery attempts made",
+            "title": "Attempts"
+          },
           "currency": {
             "anyOf": [
               {
@@ -2905,6 +3209,70 @@
               }
             ],
             "title": "Currency"
+          },
+          "error_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Notification dead letters: exception class of the last failure (no message)",
+            "title": "Error Type"
+          },
+          "event_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Notification dead letters: the outbox event type",
+            "title": "Event Type"
+          },
+          "failed_attempts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Scheduled transfer failures: failed runs that day, if any",
+            "title": "Failed Attempts"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "enum": [
+                  "MISSED",
+                  "AUTO_PAUSED"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Scheduled transfer failures: an occurrence never paid, or the order paused",
+            "title": "Failure"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Scheduled transfer failures: the scheduler's reason code",
+            "title": "Failure Reason"
           },
           "first_invalid_seq": {
             "anyOf": [
@@ -2930,6 +3298,19 @@
             "format": "date-time",
             "title": "Occurred At",
             "type": "string"
+          },
+          "occurrence_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Scheduled transfer failures: the missed occurrence's date",
+            "title": "Occurrence Date"
           },
           "reason_codes": {
             "description": "Fraud rule/model codes of a blocked payment",
@@ -2968,6 +3349,18 @@
           },
           "status": {
             "$ref": "#/components/schemas/ExceptionStatus"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "System exceptions: the dead-lettered outbox event id, or the scheduled transfer (standing order) id",
+            "title": "Subject Id"
           },
           "transaction_type": {
             "anyOf": [
@@ -3045,12 +3438,20 @@
           },
           "BLOCKED_TRANSFER": {
             "$ref": "#/components/schemas/ExceptionCounts"
+          },
+          "NOTIFICATION_DEAD_LETTER": {
+            "$ref": "#/components/schemas/ExceptionCounts"
+          },
+          "SCHEDULED_TRANSFER_FAILURE": {
+            "$ref": "#/components/schemas/ExceptionCounts"
           }
         },
         "required": [
           "BLOCKED_TRANSFER",
           "ACCOUNT_LOCKOUT",
-          "AUDIT_CHAIN_FAILURE"
+          "AUDIT_CHAIN_FAILURE",
+          "NOTIFICATION_DEAD_LETTER",
+          "SCHEDULED_TRANSFER_FAILURE"
         ],
         "title": "ExceptionsByKind",
         "type": "object"
@@ -3527,6 +3928,9 @@
       },
       "FraudStats": {
         "properties": {
+          "alerts": {
+            "$ref": "#/components/schemas/AlertOutcomes"
+          },
           "block_rate": {
             "title": "Block Rate",
             "type": "number"
@@ -3563,6 +3967,14 @@
             "description": "Decisions served by the rules because the model failed",
             "title": "Model Fallbacks",
             "type": "integer"
+          },
+          "risk_bands": {
+            "description": "Risk-score distribution of the window's payment decisions, ten bands",
+            "items": {
+              "$ref": "#/components/schemas/pbip_api__modules__fraud__router__RiskBand"
+            },
+            "title": "Risk Bands",
+            "type": "array"
           },
           "risky_payees": {
             "items": {
@@ -3605,7 +4017,9 @@
           "top_rules",
           "risky_payees",
           "model_fallbacks",
-          "latency_p95_ms"
+          "latency_p95_ms",
+          "risk_bands",
+          "alerts"
         ],
         "title": "FraudStats",
         "type": "object"
@@ -4465,6 +4879,121 @@
           "paid_at"
         ],
         "title": "LoanInstalmentOut",
+        "type": "object"
+      },
+      "LoanOfferOut": {
+        "description": "UC-06: one catalogue loan assessed on my own figures. Amounts are 0 when not eligible.",
+        "properties": {
+          "annual_rate_bps": {
+            "description": "Indicative annual rate in basis points",
+            "title": "Annual Rate Bps",
+            "type": "integer"
+          },
+          "emi_at_max_minor": {
+            "description": "EMI at the suggested maximum",
+            "title": "Emi At Max Minor",
+            "type": "integer"
+          },
+          "loan_type": {
+            "enum": [
+              "PERSONAL",
+              "AUTO",
+              "HOME"
+            ],
+            "title": "Loan Type",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "reasons": {
+            "description": "Why, quoting my own income, spending and balance",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Reasons",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "ELIGIBLE",
+              "NOT_ELIGIBLE"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "suggested_max_amount_minor": {
+            "description": "The largest amount the eligibility rules allow at ``tenure_months``",
+            "title": "Suggested Max Amount Minor",
+            "type": "integer"
+          },
+          "suggested_min_amount_minor": {
+            "description": "The product's smallest amount",
+            "title": "Suggested Min Amount Minor",
+            "type": "integer"
+          },
+          "tenure_months": {
+            "description": "The tenor the offer is sized at",
+            "title": "Tenure Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "product_id",
+          "loan_type",
+          "name",
+          "annual_rate_bps",
+          "status",
+          "suggested_min_amount_minor",
+          "suggested_max_amount_minor",
+          "tenure_months",
+          "emi_at_max_minor",
+          "reasons"
+        ],
+        "title": "LoanOfferOut",
+        "type": "object"
+      },
+      "LoanOffersOut": {
+        "properties": {
+          "available_balance_minor": {
+            "title": "Available Balance Minor",
+            "type": "integer"
+          },
+          "monthly_income_minor": {
+            "title": "Monthly Income Minor",
+            "type": "integer"
+          },
+          "monthly_spend_minor": {
+            "title": "Monthly Spend Minor",
+            "type": "integer"
+          },
+          "offers": {
+            "items": {
+              "$ref": "#/components/schemas/LoanOfferOut"
+            },
+            "title": "Offers",
+            "type": "array"
+          },
+          "rules_version": {
+            "title": "Rules Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "offers",
+          "monthly_income_minor",
+          "monthly_spend_minor",
+          "available_balance_minor",
+          "rules_version"
+        ],
+        "title": "LoanOffersOut",
         "type": "object"
       },
       "LoanOut": {
@@ -5864,6 +6393,43 @@
         "title": "ProductHolding",
         "type": "object"
       },
+      "ProductInterestOut": {
+        "properties": {
+          "category": {
+            "enum": [
+              "LOAN",
+              "SAVINGS",
+              "INVESTMENT",
+              "INSURANCE"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "last_signal_at": {
+            "format": "date-time",
+            "title": "Last Signal At",
+            "type": "string"
+          },
+          "score": {
+            "description": "Recency-weighted interest (signal weight halves every 14 days), 3 decimals",
+            "title": "Score",
+            "type": "number"
+          },
+          "signals": {
+            "description": "Clicks, calculator uses and product-page visits counted",
+            "title": "Signals",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category",
+          "score",
+          "signals",
+          "last_signal_at"
+        ],
+        "title": "ProductInterestOut",
+        "type": "object"
+      },
       "ProductRecommendationItem": {
         "description": "A single personalized product recommendation with explainable reasons.",
         "properties": {
@@ -5877,6 +6443,17 @@
             "title": "Description",
             "type": "string"
           },
+          "loan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendedLoanOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set when the product is a catalogue loan (product_id is the loan catalogue id): its eligibility, suggested range and EMI (UC-06, ADR-0056)"
+          },
           "model_version": {
             "description": "Recommendation model version identifier",
             "title": "Model Version",
@@ -5889,7 +6466,7 @@
             "type": "string"
           },
           "product_type": {
-            "description": "Product category: SAVINGS, LOAN, INVESTMENT, or INSURANCE",
+            "description": "Product kind: SAVINGS, LOAN, INVESTMENT, or INSURANCE. With product_id it is stable across responses, for wiring card actions",
             "title": "Product Type",
             "type": "string"
           },
@@ -5926,6 +6503,55 @@
           "cta_label"
         ],
         "title": "ProductRecommendationItem",
+        "type": "object"
+      },
+      "ProfileEngagement": {
+        "properties": {
+          "avg_session_seconds": {
+            "description": "Mean session length (first to last event)",
+            "title": "Avg Session Seconds",
+            "type": "integer"
+          },
+          "interactions": {
+            "description": "Events other than session heartbeats",
+            "title": "Interactions",
+            "type": "integer"
+          },
+          "last_active_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Active At"
+          },
+          "pages_per_session": {
+            "title": "Pages Per Session",
+            "type": "number"
+          },
+          "sessions": {
+            "title": "Sessions",
+            "type": "integer"
+          },
+          "window_days": {
+            "description": "Days of clickstream the profile covers",
+            "title": "Window Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window_days",
+          "sessions",
+          "avg_session_seconds",
+          "pages_per_session",
+          "interactions",
+          "last_active_at"
+        ],
+        "title": "ProfileEngagement",
         "type": "object"
       },
       "ReadyResponse": {
@@ -6019,6 +6645,62 @@
           "evaluated_at"
         ],
         "title": "RecommendationsResponse",
+        "type": "object"
+      },
+      "RecommendedLoanOut": {
+        "description": "UC-06 (ADR-0056): the loans module's assessment of a recommended catalogue loan.",
+        "properties": {
+          "annual_rate_bps": {
+            "description": "Indicative annual rate in basis points",
+            "title": "Annual Rate Bps",
+            "type": "integer"
+          },
+          "eligibility_status": {
+            "const": "ELIGIBLE",
+            "description": "Only loans the eligibility rules allow are recommended",
+            "title": "Eligibility Status",
+            "type": "string"
+          },
+          "emi_at_max_minor": {
+            "description": "EMI at the suggested maximum",
+            "title": "Emi At Max Minor",
+            "type": "integer"
+          },
+          "loan_type": {
+            "enum": [
+              "PERSONAL",
+              "AUTO",
+              "HOME"
+            ],
+            "title": "Loan Type",
+            "type": "string"
+          },
+          "suggested_max_amount_minor": {
+            "description": "The largest amount the eligibility rules allow at tenure_months",
+            "title": "Suggested Max Amount Minor",
+            "type": "integer"
+          },
+          "suggested_min_amount_minor": {
+            "description": "The product's smallest amount",
+            "title": "Suggested Min Amount Minor",
+            "type": "integer"
+          },
+          "tenure_months": {
+            "description": "The tenor the range is sized at",
+            "title": "Tenure Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "loan_type",
+          "eligibility_status",
+          "suggested_min_amount_minor",
+          "suggested_max_amount_minor",
+          "tenure_months",
+          "emi_at_max_minor",
+          "annual_rate_bps"
+        ],
+        "title": "RecommendedLoanOut",
         "type": "object"
       },
       "RecommendedProduct": {
@@ -6202,15 +6884,6 @@
         "title": "RelationshipManagerOut",
         "type": "object"
       },
-      "RiskBand": {
-        "enum": [
-          "LOW",
-          "MODERATE",
-          "HIGH"
-        ],
-        "title": "RiskBand",
-        "type": "string"
-      },
       "RiskLevel": {
         "enum": [
           "LOW",
@@ -6249,7 +6922,7 @@
           "band": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/RiskBand"
+                "$ref": "#/components/schemas/pbip_api__modules__customers__risk__RiskBand"
               },
               {
                 "type": "null"
@@ -7439,6 +8112,37 @@
         "title": "SipRunOut",
         "type": "object"
       },
+      "SpendIncomePattern": {
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "discretionary_ratio": {
+            "description": "Share of spend on lifestyle categories",
+            "title": "Discretionary Ratio",
+            "type": "number"
+          },
+          "monthly_income_minor": {
+            "description": "Average recurring monthly income (ADR-0043)",
+            "title": "Monthly Income Minor",
+            "type": "integer"
+          },
+          "monthly_spend_minor": {
+            "description": "Average monthly spend",
+            "title": "Monthly Spend Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "currency",
+          "monthly_income_minor",
+          "monthly_spend_minor",
+          "discretionary_ratio"
+        ],
+        "title": "SpendIncomePattern",
+        "type": "object"
+      },
       "SpendingBreakdownResponse": {
         "description": "Response containing categorized spending breakdown for an account.",
         "properties": {
@@ -7783,7 +8487,8 @@
           "transfer_initiated",
           "account_viewed",
           "product_clicked",
-          "search_performed"
+          "search_performed",
+          "session_heartbeat"
         ],
         "title": "TelemetryEventType",
         "type": "string"
@@ -8437,6 +9142,41 @@
           "catalogue_version"
         ],
         "title": "WealthProductOut",
+        "type": "object"
+      },
+      "pbip_api__modules__customers__risk__RiskBand": {
+        "enum": [
+          "LOW",
+          "MODERATE",
+          "HIGH"
+        ],
+        "title": "RiskBand",
+        "type": "string"
+      },
+      "pbip_api__modules__fraud__router__RiskBand": {
+        "properties": {
+          "count": {
+            "description": "Payment decisions in the window with a score in the band",
+            "title": "Count",
+            "type": "integer"
+          },
+          "high": {
+            "description": "Highest risk score in the band (inclusive)",
+            "title": "High",
+            "type": "integer"
+          },
+          "low": {
+            "description": "Lowest risk score in the band (inclusive)",
+            "title": "Low",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "low",
+          "high",
+          "count"
+        ],
+        "title": "RiskBand",
         "type": "object"
       }
     },
@@ -9255,6 +9995,42 @@
         "summary": "Clear a user's lockout and login rate-limit counters (ADMIN with MFA)",
         "tags": [
           "admin"
+        ]
+      }
+    },
+    "/api/v1/analytics/behaviour-profile/me": {
+      "get": {
+        "description": "UC-11 profile of the authenticated customer only; no profile while analytics consent is off\n(ADR-0057).",
+        "operationId": "get_my_behaviour_profile_api_v1_analytics_behaviour_profile_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BehaviourProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          },
+          "404": {
+            "description": "No such account of mine, or no segment yet (problem+json)"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "My behavioural profile: segment, spend and income, engagement, product interests",
+        "tags": [
+          "analytics"
         ]
       }
     },
@@ -11104,6 +11880,91 @@
         ]
       }
     },
+    "/api/v1/customers/me/analytics-consent": {
+      "get": {
+        "operationId": "get_my_analytics_consent_api_v1_customers_me_analytics_consent_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsConsentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get my analytics consent (clickstream and behavioural profile, ADR-0057)",
+        "tags": [
+          "customers"
+        ]
+      },
+      "put": {
+        "operationId": "put_my_analytics_consent_api_v1_customers_me_analytics_consent_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyticsConsentIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsConsentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The request body is not valid JSON (problem+json)"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Turn analytics on or off; turning it off erases my activity data and profile",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
     "/api/v1/customers/me/date-of-birth": {
       "delete": {
         "operationId": "delete_my_date_of_birth_api_v1_customers_me_date_of_birth_delete",
@@ -11931,7 +12792,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Fraud telemetry: decisions over time, hold rate, top reasons, risky payees",
+        "summary": "Fraud telemetry: decisions over time, hold rate, top reasons, risky payees, risk-score distribution and alert outcomes",
         "tags": [
           "fraud"
         ]
@@ -12334,6 +13195,64 @@
         ]
       }
     },
+    "/api/v1/insights/customers/{customer_id}/behaviour-profile": {
+      "get": {
+        "description": "RM: assigned customers only; admin: any (ADR-0032). Consent decides content (ADR-0057).",
+        "operationId": "get_customer_behaviour_profile_api_v1_insights_customers__customer_id__behaviour_profile_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Customer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BehaviourProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          },
+          "404": {
+            "description": "No such customer, or not assigned to the calling RM"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "One customer's behavioural profile (UC-11); empty while analytics consent is off",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
     "/api/v1/insights/customers/{customer_id}/interactions": {
       "get": {
         "operationId": "list_customer_interactions_api_v1_insights_customers__customer_id__interactions_get",
@@ -12719,6 +13638,39 @@
           }
         ],
         "summary": "Explainable eligibility from the customer's own ledger figures",
+        "tags": [
+          "loans"
+        ]
+      }
+    },
+    "/api/v1/loans/offers": {
+      "get": {
+        "description": "Read-only. The customer is the authenticated one; nothing is taken from the request.",
+        "operationId": "loan_offers_api_v1_loans_offers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoanOffersOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Every catalogue loan assessed on my own income, spending and balance (UC-06)",
         "tags": [
           "loans"
         ]

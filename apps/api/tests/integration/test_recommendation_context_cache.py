@@ -51,9 +51,10 @@ def engine_inputs(monkeypatch: pytest.MonkeyPatch) -> list[CustomerRecommendatio
         ctx: CustomerRecommendationContext,
         top_k: int = 3,
         propensity: PropensityModel | None = None,
+        apply_risk_band: bool = True,
     ) -> list[Recommendation]:
         seen.append(ctx)
-        return real(ctx, top_k=top_k, propensity=propensity)
+        return real(ctx, top_k=top_k, propensity=propensity, apply_risk_band=apply_risk_band)
 
     monkeypatch.setattr(recommendations_service, "generate_recommendations", spy)
     return seen
@@ -89,12 +90,14 @@ def test_a_warm_request_reads_accounts_and_segment_only_and_equals_a_cold_build(
     migrated_engine: Engine,
     engine_inputs: list[CustomerRecommendationContext],
 ) -> None:
-    """Cold: token check, customer, accounts, entries, segment, loans, deposits (7). Warm: token
-    check, customer, accounts, segment (4). The engine gets the same context either way."""
+    """Cold: token check, customer, accounts, entries, segment, loans, deposits, lockouts (8).
+    Warm: token check, customer, accounts, segment, lockouts (5). The lockout count (UC-06 loan
+    rule 1, ADR-0056) changes without touching an account, so it is read live. The engine gets
+    the same context either way."""
     alice = make_customer(salary=150_000_00)
     cold, cold_sent = _served(client, alice, migrated_engine, engine_inputs)
     warm, sent = _served(client, alice, migrated_engine, engine_inputs)
-    assert (len(cold_sent), len(sent)) == (7, 4), sent
+    assert (len(cold_sent), len(sent)) == (8, 5), sent
     assert _rebuilt(cold_sent) and not _rebuilt(sent)
     assert warm == cold == _fresh(migrated_engine, alice)
 
@@ -188,14 +191,14 @@ def test_withdrawn_consent_shows_on_the_next_request_while_the_cached_part_is_re
 
     assert client.put(consent, headers=alice.headers, json={"granted": False}).status_code == 200
     withdrawn, sent = _served(client, alice, migrated_engine, engine_inputs)
-    assert len(sent) == 4 and not _rebuilt(sent)  # a cache hit ...
+    assert len(sent) == 5 and not _rebuilt(sent)  # a cache hit ...
     assert withdrawn.age_band == "unknown"  # ... that still sees the withdrawal at once
     assert withdrawn.model_copy(update={"age_band": "60+"}) == granted
 
     client.put(consent, headers=alice.headers, json={"granted": True})
     client.delete("/api/v1/customers/me/date-of-birth", headers=alice.headers)
     deleted, sent = _served(client, alice, migrated_engine, engine_inputs)
-    assert (len(sent), _rebuilt(sent), deleted.age_band) == (4, False, "unknown")
+    assert (len(sent), _rebuilt(sent), deleted.age_band) == (5, False, "unknown")
 
 
 def test_a_new_day_rebuilds_the_inputs(
