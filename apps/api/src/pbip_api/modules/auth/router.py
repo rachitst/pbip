@@ -212,5 +212,11 @@ def change_password(
     service: AuthService = Depends(get_auth_service),
     meta: RequestMeta = Depends(get_request_meta),
 ) -> None:
-    service.change_password(principal.user_id, body.current_password, body.new_password, meta)
+    service.change_password(
+        principal.user_id,
+        body.current_password,
+        body.new_password,
+        meta,
+        token_version=principal.token_version,
+    )
     response.delete_cookie(REFRESH_COOKIE, path=_COOKIE_PATH)
