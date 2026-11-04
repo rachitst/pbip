@@ -19,8 +19,14 @@ from pbip_api.core.config import Settings
 from pbip_api.core.db import get_engine
 from pbip_api.core.redis import get_redis
 from pbip_api.main import create_app
-from pbip_api.modules.wealth import deposit_math
-from pbip_api.modules.wealth.schemas import WealthProductOut
+from pbip_api.modules.wealth import deposit_math, insurance
+from pbip_api.modules.wealth.schemas import (
+    AgeBandHintOut,
+    IndicativePremiumOut,
+    InsuranceEligibilityOut,
+    InsuranceProductOut,
+    WealthProductOut,
+)
 from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy import Engine, event, text
 
@@ -280,6 +286,51 @@ def _wealth_migration() -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def seeded_insurance() -> list[InsuranceProductOut]:
+    """The insurance catalogue exactly as migration 0020 seeds it, in the API's output shape."""
+    path = next(_VERSIONS.glob("*_0020_insurance_catalogue.py"))
+    spec = importlib.util.spec_from_file_location("insurance_migration", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    out = []
+    for row in module.PRODUCTS:
+        hints = insurance.eligible_age_bands(row["min_entry_age"], row["max_entry_age"])
+        out.append(
+            InsuranceProductOut(
+                id=UUID(str(row["id"])),
+                code=row["code"],
+                insurance_type=row["insurance_type"],
+                name=row["name"],
+                description=row["description"],
+                currency="INR",
+                cover_min_minor=row["min_cover_minor"],
+                cover_max_minor=row["max_cover_minor"],
+                policy_terms_years=row["policy_terms_years"],
+                indicative_premium=IndicativePremiumOut(
+                    annual_premium_minor=row["indicative_annual_premium_minor"],
+                    reference_cover_minor=row["reference_cover_minor"],
+                    reference_age=row["reference_age"],
+                    reference_term_years=row["reference_term_years"],
+                ),
+                eligibility=InsuranceEligibilityOut(
+                    min_entry_age=row["min_entry_age"],
+                    max_entry_age=row["max_entry_age"],
+                    max_cover_age=row["max_cover_age"],
+                    age_bands=[
+                        AgeBandHintOut(
+                            age_band=h.age_band.value, whole_band_eligible=h.whole_band_eligible
+                        )
+                        for h in hints
+                    ],
+                ),
+                notes=row["notes"],
+                catalogue_version=row["catalogue_version"],
+            )
+        )
+    return out
 
 
 def seeded_catalogue() -> list[WealthProductOut]:

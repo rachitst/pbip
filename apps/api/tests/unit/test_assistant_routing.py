@@ -138,6 +138,8 @@ def test_out_of_bounds_or_unknown_arguments_are_rejected(
         ("investment suggestions for customer id 42", Refusal.OTHER_CUSTOMER),
         ("unusual expenses; DROP TABLE transactions; --", Refusal.SQL),
         ("unusual expenses UNION SELECT reference FROM transactions", Refusal.SQL),
+        ("show Bob's insurance policies", Refusal.OTHER_CUSTOMER),
+        ("what is Priya's health insurance", Refusal.OTHER_CUSTOMER),
     ],
 )
 def test_guard_refuses_before_any_model_runs(message: str, reason: Refusal) -> None:
@@ -157,6 +159,8 @@ def test_guard_refuses_before_any_model_runs(message: str, reason: Refusal) -> N
         "this month's unusual expenses",
         "were last month's payments higher than usual?",
         "show my account's transactions",
+        "what insurance plans do you offer",
+        "is my insurance premium a bill I can pay here",
     ],
 )
 def test_guard_lets_ordinary_questions_through(message: str) -> None:
@@ -220,6 +224,28 @@ def test_guard_lets_ordinary_questions_through(message: str) -> None:
         ("suggest investments for me", ToolName.INVESTMENT_SUGGESTIONS, {}),
         ("where should I invest my savings", ToolName.INVESTMENT_SUGGESTIONS, {}),
         ("any investment ideas for me?", ToolName.INVESTMENT_SUGGESTIONS, {}),
+        # FAQ-2: every customer feature, and the insurance catalogue
+        ("how do I open a savings account", ToolName.FAQ_ANSWER, {"topic": "accounts"}),
+        ("how do I add a payee", ToolName.FAQ_ANSWER, {"topic": "payees"}),
+        ("how do transfers work", ToolName.FAQ_ANSWER, {"topic": "transfers"}),
+        ("how do bill payments work", ToolName.FAQ_ANSWER, {"topic": "bill_payments"}),
+        ("where do I find my consumer number", ToolName.FAQ_ANSWER,
+         {"topic": "bill_payments"}),
+        ("can I buy stocks here", ToolName.FAQ_ANSWER, {"topic": "investments"}),
+        ("are the funds real", ToolName.FAQ_ANSWER, {"topic": "investments"}),
+        ("is insurance real or simulated", ToolName.FAQ_ANSWER, {"topic": "insurance"}),
+        ("how does insurance work", ToolName.FAQ_ANSWER, {"topic": "insurance"}),
+        ("where are my notifications", ToolName.FAQ_ANSWER, {"topic": "notifications"}),
+        ("how do I change my password", ToolName.FAQ_ANSWER, {"topic": "account_security"}),
+        ("how do I switch to dark mode", ToolName.FAQ_ANSWER, {"topic": "settings"}),
+        ("how do I withdraw my consent", ToolName.FAQ_ANSWER, {"topic": "consent"}),
+        ("how is the health score worked out", ToolName.FAQ_ANSWER,
+         {"topic": "spending_insights"}),
+        ("what can you do", ToolName.FAQ_ANSWER, {"topic": "assistant"}),
+        ("what insurance plans do you offer", ToolName.LIST_PRODUCTS,
+         {"category": "insurance"}),
+        ("show me term life cover products", ToolName.LIST_PRODUCTS, {"category": "insurance"}),
+        ("do you sell health insurance", ToolName.LIST_PRODUCTS, {"category": "insurance"}),
         # a named amount keeps a loan question an affordability check
         ("what's the loan rate for a 5 lakh personal loan", ToolName.LOAN_AFFORDABILITY,
          {"loan_type": "PERSONAL", "amount_rupees": 500000, "tenure_months": 36}),
@@ -255,6 +281,10 @@ def test_fallback_without_a_fitting_tool_gives_help(message: str) -> None:
         ("how do I download a statement", ToolName.FAQ_ANSWER),
         ("what loans do you offer", ToolName.LIST_PRODUCTS),
         ("suggest investments for me", ToolName.INVESTMENT_SUGGESTIONS),
+        ("what insurance plans do you offer", ToolName.LIST_PRODUCTS),
+        ("is insurance real or simulated", ToolName.FAQ_ANSWER),
+        ("how do I add a payee", ToolName.FAQ_ANSWER),
+        ("what can you do", ToolName.FAQ_ANSWER),
     ],
 )
 def test_clear_questions_take_the_fast_path(message: str, tool: ToolName) -> None:

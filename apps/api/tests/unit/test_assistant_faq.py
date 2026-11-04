@@ -4,6 +4,9 @@ Each answer quotes figures from the code or configuration that enforces them. Th
 every figure to that source, so changing a limit without the FAQ following (or vice versa) fails.
 """
 
+import re
+from pathlib import Path
+
 import pytest
 from pbip_api.core.config import Settings
 from pbip_api.core.money import format_minor
@@ -15,6 +18,16 @@ from pbip_api.modules.payments.service import SCHEDULE_MAX_LEAD_DAYS, STEP_UP_MA
 from pbip_api.modules.statements.service import MAX_ENTRIES, MAX_PERIOD_DAYS
 from pbip_api.modules.wealth import deposit_math
 from pbip_test_support import seeded_catalogue
+
+# Every customer feature (section 5, UC-08), in the words of the requirement. Each one must have an
+# FAQ entry; a new feature is added here and to faq.FEATURE_TOPICS together.
+CUSTOMER_FEATURES = (
+    "accounts", "statements", "payees", "transfers", "transfer limits", "fraud holds",
+    "scheduled transfers", "bill payments", "loans", "fixed deposits", "funds, stocks and bonds",
+    "insurance", "notifications", "two-factor sign-in", "sign-in lockout", "devices and password",
+    "settings", "consent", "spending and financial health", "assistant limits",
+)  # fmt: skip
+ROUTES = Path(__file__).resolve().parents[4] / "apps" / "web" / "src" / "shell" / "routes.tsx"
 
 pytestmark = pytest.mark.unit
 
@@ -32,7 +45,7 @@ def test_every_topic_has_an_answer_and_a_link_into_the_app() -> None:
         found = faq.answer(topic, FACTS, seeded_catalogue())
         assert found.text and found.link.startswith("/"), topic
         assert "TODO" not in found.text and "lorem" not in found.text.lower()
-    assert faq.FAQ_VERSION == "FAQ-1"
+    assert faq.FAQ_VERSION == "FAQ-2"
 
 
 def test_facts_come_from_the_validated_settings() -> None:
@@ -116,3 +129,40 @@ def test_catalogue_names_are_shown_as_delimited_capped_data() -> None:
 def test_percent_is_exact(bps: int) -> None:
     whole, cents = faq.percent(bps).removesuffix("%").split(".")
     assert int(whole) * 100 + int(cents) == bps
+
+
+def test_every_customer_feature_has_an_faq_entry() -> None:
+    assert set(faq.FEATURE_TOPICS) == set(CUSTOMER_FEATURES)
+    for feature in CUSTOMER_FEATURES:
+        found = faq.answer(faq.FEATURE_TOPICS[feature], FACTS, seeded_catalogue())
+        assert len(found.text) > 80, feature
+    # and no topic is left without a feature that needs it
+    assert set(faq.FEATURE_TOPICS.values()) == set(FaqTopic)
+
+
+def test_every_page_in_the_customer_menu_is_explained_by_some_answer() -> None:
+    """The web app's customer navigation (shell/routes.tsx): each page is some answer's link."""
+    nav = ROUTES.read_text(encoding="utf-8").split("function customerNav", 1)[1]
+    nav = nav.split("function staffNav", 1)[0]
+    pages = set(re.findall(r'to: "(/[a-z-]+)"', nav)) - {"/staff"}
+    assert {"/accounts", "/payees", "/bills", "/scheduled", "/statements", "/loans"} <= pages
+    links = {faq.answer(topic, FACTS, seeded_catalogue()).link for topic in FaqTopic}
+    assert pages <= links, pages - links
+
+
+@pytest.mark.parametrize("topic", [FaqTopic.INVESTMENTS, FaqTopic.INSURANCE])
+def test_simulated_products_say_so_and_quote_no_figure_that_could_go_stale(
+    topic: FaqTopic,
+) -> None:
+    """Investing and insurance flows are still being built: their answers stay generic and true."""
+    text = faq.answer(topic, FACTS).text
+    assert "simulated" in text
+    assert not re.search(r"\d", text), text
+    assert "not" in text and ("advice" in text or "quote" in text)
+
+
+def test_the_assistant_answer_matches_the_registry() -> None:
+    """It names only read-only abilities and says it cannot move money or see others' data."""
+    text = faq.answer(FaqTopic.ASSISTANT, FACTS).text
+    assert "I only read" in text and "can't move money" in text
+    assert "anyone else" in text and "not personalised financial advice" in text

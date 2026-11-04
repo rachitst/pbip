@@ -8,6 +8,10 @@ own; ``tests/unit/test_assistant_faq.py`` pins each answer to its source, so a c
 changes the answer (or fails the test) instead of leaving the FAQ out of date.
 
 Changing what an answer SAYS (not a figure it reads) is a new :data:`FAQ_VERSION`.
+
+:data:`FEATURE_TOPICS` maps every customer feature to the topic that explains it; a unit test fails
+when a feature has no entry. Investing (funds, stocks, bonds) and insurance are SIMULATED in PBIP,
+and their answers say so in general terms that stay true as those flows grow.
 """
 
 from collections.abc import Callable, Sequence
@@ -27,7 +31,7 @@ from pbip_api.modules.statements.service import MAX_ENTRIES, MAX_PERIOD_DAYS
 from pbip_api.modules.wealth.deposit_math import NO_INTEREST_DAYS
 from pbip_api.modules.wealth.schemas import WealthProductOut
 
-FAQ_VERSION = "FAQ-1"
+FAQ_VERSION = "FAQ-2"  # FAQ-2: an entry for every customer feature (section 5, UC-08)
 # auth.service caps a lockout at one hour (_MAX_LOCK_SECONDS); the unit test pins this wording.
 LOCK_CAP_TEXT = "an hour"
 
@@ -41,6 +45,43 @@ class FaqTopic(StrEnum):
     SCHEDULED_TRANSFERS = "scheduled_transfers"
     LOANS = "loans"
     FIXED_DEPOSITS = "fixed_deposits"
+    ACCOUNTS = "accounts"
+    PAYEES = "payees"
+    TRANSFERS = "transfers"
+    BILL_PAYMENTS = "bill_payments"
+    INVESTMENTS = "investments"
+    INSURANCE = "insurance"
+    NOTIFICATIONS = "notifications"
+    ACCOUNT_SECURITY = "account_security"
+    SETTINGS = "settings"
+    CONSENT = "consent"
+    SPENDING_INSIGHTS = "spending_insights"
+    ASSISTANT = "assistant"
+
+
+# Every customer-facing feature and the topic that explains it (tested for completeness).
+FEATURE_TOPICS: dict[str, FaqTopic] = {
+    "accounts": FaqTopic.ACCOUNTS,
+    "statements": FaqTopic.STATEMENTS,
+    "payees": FaqTopic.PAYEES,
+    "transfers": FaqTopic.TRANSFERS,
+    "transfer limits": FaqTopic.TRANSFER_LIMITS,
+    "fraud holds": FaqTopic.FRAUD_HOLDS,
+    "scheduled transfers": FaqTopic.SCHEDULED_TRANSFERS,
+    "bill payments": FaqTopic.BILL_PAYMENTS,
+    "loans": FaqTopic.LOANS,
+    "fixed deposits": FaqTopic.FIXED_DEPOSITS,
+    "funds, stocks and bonds": FaqTopic.INVESTMENTS,
+    "insurance": FaqTopic.INSURANCE,
+    "notifications": FaqTopic.NOTIFICATIONS,
+    "two-factor sign-in": FaqTopic.MFA,
+    "sign-in lockout": FaqTopic.SIGN_IN_LOCKOUT,
+    "devices and password": FaqTopic.ACCOUNT_SECURITY,
+    "settings": FaqTopic.SETTINGS,
+    "consent": FaqTopic.CONSENT,
+    "spending and financial health": FaqTopic.SPENDING_INSIGHTS,
+    "assistant limits": FaqTopic.ASSISTANT,
+}
 
 
 @dataclass(frozen=True)
@@ -210,6 +251,135 @@ def _fixed_deposits(_facts: FaqFacts, deposits: Sequence[WealthProductOut]) -> F
     )
 
 
+def _accounts(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAnswer:
+    return FaqAnswer(
+        "Accounts lists each of your accounts with its available balance, any amount on hold "
+        "and its latest transactions. You can open another savings or current (checking) "
+        "account from the same page. Money on hold (for example a transfer under review) stays "
+        "in the account but cannot be spent until the hold is released or the payment is made.",
+        "/accounts",
+    )
+
+
+def _payees(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAnswer:
+    return FaqAnswer(
+        "Add a payee under Payees with their name exactly as on their bank account, their "
+        "account number and bank code. For an account at PBIP the name is checked against the "
+        "account holder; an account at another bank is verified without a name check. You can "
+        "pay a payee once it is verified, give it a nickname, edit it or remove it. A large "
+        "payment to a payee you added recently may ask for a code from your authenticator app.",
+        "/payees",
+    )
+
+
+def _transfers(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAnswer:
+    return FaqAnswer(
+        "To send money, open Accounts, choose the account to pay from, a verified payee, the "
+        "amount and an optional reference, then review and confirm. Every transfer is checked "
+        "for fraud before money moves and counts towards your limits; it is then paid, asks for "
+        "an authenticator code, or is held for review. Ask me about transfer limits or fraud "
+        "holds for the details. I can't send money for you.",
+        "/accounts",
+    )
+
+
+def _bill_payments(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAnswer:
+    return FaqAnswer(
+        "Under Pay bills choose the account to pay from, a biller (such as electricity, water, "
+        "gas, phone, broadband or an insurance premium), the consumer number printed on your "
+        "bill and the amount, then review and confirm. A bill payment is checked for fraud and "
+        "counts towards your daily limit like a transfer, and your recent bill payments are "
+        "listed on the same page.",
+        "/bills",
+    )
+
+
+def _investments(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAnswer:
+    return FaqAnswer(
+        "Mutual funds, stocks and bonds in PBIP are simulated: prices, returns and any holdings "
+        "are illustrative, no real securities are bought or sold, and nothing is traded on a "
+        "real market. The Wealth page shows what is offered and lets you compare products. "
+        "Market-linked products can lose value. Answer the risk questionnaire under Profile & "
+        "security so suggestions fit your risk profile; they are not personalised financial "
+        "advice.",
+        "/wealth",
+    )
+
+
+def _insurance(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAnswer:
+    return FaqAnswer(
+        "Insurance in PBIP (term life and health cover) is simulated: no real insurer issues a "
+        "policy and nothing is underwritten. The Wealth page lists the plans with their cover, "
+        "terms and entry ages, and an indicative premium stated for one example customer, not a "
+        "quote for you. Eligibility hints come from each plan's own entry ages; a real insurer "
+        "would decide eligibility and the premium.",
+        "/wealth",
+    )
+
+
+def _notifications(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAnswer:
+    return FaqAnswer(
+        "The bell at the top of every page shows your notifications and how many are unread: "
+        "payments made, held or declined, scheduled transfers that could not run, loans, fixed "
+        "deposits, statement downloads, a low balance ahead, and security changes such as a new "
+        "password, two-factor sign-in or a new device. Opening one marks it read and, where "
+        "there is one, takes you to the related page; you can also mark them all read.",
+        "/accounts",
+    )
+
+
+def _account_security(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAnswer:
+    return FaqAnswer(
+        "Under Profile & security you can change your password, turn on two-factor sign-in and "
+        "see the devices you sign in from; a new device is untrusted until it builds history. "
+        "PBIP never asks for your password or an authenticator code by phone, message or email, "
+        "and the assistant never needs them. If something looks wrong, change your password.",
+        "/profile",
+    )
+
+
+def _settings(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAnswer:
+    return FaqAnswer(
+        "Profile & security shows your details. There you can add or change an optional mobile "
+        "number (stored encrypted, only its last four digits are shown), your date of birth and "
+        "recommendations consent, your risk-tolerance answers and your password. The light or "
+        "dark theme switch is at the top of the page.",
+        "/profile",
+    )
+
+
+def _consent(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAnswer:
+    return FaqAnswer(
+        "Giving your date of birth and consent is optional. With your consent PBIP uses only "
+        "your age band to offer products you are eligible for, such as senior-citizen deposit "
+        "rates; it is never used to price credit, and staff and the assistant never see the date. "
+        "You can withdraw consent at any time under Profile & security.",
+        "/profile",
+    )
+
+
+def _spending_insights(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAnswer:
+    return FaqAnswer(
+        "Spending & health shows your spending by category, how it changed from month to month, "
+        "a financial health score with the reasons behind it, and a forecast of your balance "
+        "with a range, not an exact figure. All of it is worked out from your own transactions. "
+        "You can also ask me what you spent, about unusual expenses or for a forecast.",
+        "/insights",
+    )
+
+
+def _assistant(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAnswer:
+    return FaqAnswer(
+        "I can read your own balances, transactions, spending and forecast, check loan "
+        "affordability, list the bank's products and answer questions about how PBIP works. I "
+        "only read: I can't move money, pay bills, change settings or see anyone else's "
+        "information. Messages are up to {MAX_MESSAGE_CHARS} characters. My answers come from "
+        "the bank's own figures and are not personalised financial advice; when the language "
+        "model is unavailable I answer simpler questions only.",
+        "/accounts",
+    )
+
+
 _ANSWERS: dict[FaqTopic, Callable[[FaqFacts, Sequence[WealthProductOut]], FaqAnswer]] = {
     FaqTopic.TRANSFER_LIMITS: _transfer_limits,
     FaqTopic.FRAUD_HOLDS: _fraud_holds,
@@ -219,6 +389,18 @@ _ANSWERS: dict[FaqTopic, Callable[[FaqFacts, Sequence[WealthProductOut]], FaqAns
     FaqTopic.SCHEDULED_TRANSFERS: _scheduled_transfers,
     FaqTopic.LOANS: _loans,
     FaqTopic.FIXED_DEPOSITS: _fixed_deposits,
+    FaqTopic.ACCOUNTS: _accounts,
+    FaqTopic.PAYEES: _payees,
+    FaqTopic.TRANSFERS: _transfers,
+    FaqTopic.BILL_PAYMENTS: _bill_payments,
+    FaqTopic.INVESTMENTS: _investments,
+    FaqTopic.INSURANCE: _insurance,
+    FaqTopic.NOTIFICATIONS: _notifications,
+    FaqTopic.ACCOUNT_SECURITY: _account_security,
+    FaqTopic.SETTINGS: _settings,
+    FaqTopic.CONSENT: _consent,
+    FaqTopic.SPENDING_INSIGHTS: _spending_insights,
+    FaqTopic.ASSISTANT: _assistant,
 }
 
 

@@ -435,18 +435,27 @@ _CATEGORY_LINK = {
     ProductCategory.LOANS: "/loans",
     ProductCategory.DEPOSITS: "/wealth",
     ProductCategory.INVESTMENTS: "/wealth",
+    ProductCategory.INSURANCE: "/wealth",
 }
+_WEALTH_CATEGORIES = (ProductCategory.ALL, ProductCategory.DEPOSITS, ProductCategory.INVESTMENTS)
+_INSURANCE_CATEGORIES = (ProductCategory.ALL, ProductCategory.INSURANCE)
 
 
 def list_products(ctx: ToolContext, raw: Mapping[str, object]) -> ToolReply:
-    """TASK-105: the real loan catalogue and the seeded wealth catalogue, figures as stored."""
+    """TASK-105: the real loan catalogue and the seeded wealth and insurance catalogues, figures
+    as stored. The catalogues are the same for every customer: nothing about the caller is read."""
     args = ProductsArgs.model_validate(raw)
     wealth = (
-        []
-        if args.category is ProductCategory.LOANS
-        else wealth_service.list_products(ctx.session, None)
+        wealth_service.list_products(ctx.session, None)
+        if args.category in _WEALTH_CATEGORIES
+        else []
     )
-    text = discovery.product_list(args.category, PRODUCTS, wealth)
+    insurance = (
+        wealth_service.list_insurance_products(ctx.session, None)
+        if args.category in _INSURANCE_CATEGORIES
+        else []
+    )
+    text = discovery.product_list(args.category, PRODUCTS, wealth, insurance)
     return ToolReply(text, _CATEGORY_LINK[args.category])
 
 
@@ -521,14 +530,17 @@ REGISTRY: dict[ToolName, Tool] = {
         ),
         Tool(
             ToolName.FAQ_ANSWER,
-            "How PBIP works: transfer limits, fraud holds, statements, two-factor sign-in, "
-            "sign-in lockout, scheduled transfers, loans or fixed deposits.",
+            "How PBIP works: accounts, payees, transfers, transfer limits, fraud holds, "
+            "statements, scheduled transfers, bill payments, loans, fixed deposits, investments, "
+            "insurance, notifications, two-factor sign-in, sign-in lockout, account security, "
+            "settings, consent, spending insights, or what the assistant can do.",
             FaqArgs,
             faq_answer,
         ),
         Tool(
             ToolName.LIST_PRODUCTS,
-            "The bank's loans, fixed deposits, funds and bonds with their catalogue rates.",
+            "The bank's loans, fixed deposits, funds, bonds and insurance plans with their "
+            "catalogue rates and indicative premiums.",
             ProductsArgs,
             list_products,
         ),

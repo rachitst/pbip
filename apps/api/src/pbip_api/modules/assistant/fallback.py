@@ -91,11 +91,45 @@ _FAQ: tuple[tuple[FaqTopic, re.Pattern[str]], ...] = tuple(
         (FaqTopic.FIXED_DEPOSITS,
          r"\b(fixed deposits?|fds?|term deposits?)\b.{0,40}\b(work|early|premature(ly)?|break"
          r"|clos(e|ing)|penalty|lock[- ]?in|compound(ed|ing)?|matur(e|es|ity))\b"),
+        # FAQ-2: every customer feature. Each pattern asks HOW something works, so it never
+        # takes over a question about the customer's own figures ("what's my balance").
+        (FaqTopic.ACCOUNTS,
+         r"\b(open|opening)\b.{0,20}\b(savings|current|checking|new|another|second) account\b"
+         r"|\bwhat (is|does) (money |an amount )?on hold\b"),
+        (FaqTopic.PAYEES,
+         r"\b(add|adding|remove|removing|delete|edit|verify|verif(y|ied|ication))\b.{0,20}"
+         r"\bpayees?\b|\bpayees?\b.{0,30}\b(verif(y|ied|ication)|name check|nickname)\b"),
+        (FaqTopic.TRANSFERS,
+         r"\bhow (do|does)\b.{0,20}\btransfers? work\b|\b(tell me|help) about transfers\b"),
+        (FaqTopic.BILL_PAYMENTS,
+         r"\bbill payments?\b.{0,30}\bwork\b|\bbillers?\b|\bconsumer number\b"),
+        (FaqTopic.INVESTMENTS,
+         r"\b(stocks?|shares|equit(y|ies)|stock market)\b"
+         r"|\b(buy|sell|trade|trading)\b.{0,20}\b(mutual funds?|funds?|bonds?|units)\b"
+         r"|\b(funds?|bonds?|investments?)\b.{0,20}\b(real|simulated)\b"),
+        (FaqTopic.INSURANCE,
+         r"\binsurance\b.{0,30}\b(works?|real|simulated|underwrit\w*|claims?|quotes?)\b"
+         r"|\bhow (do|does|is)\b.{0,30}\binsurance\b"),
+        (FaqTopic.NOTIFICATIONS, r"\bnotifications?\b|\bthe bell\b"),
+        (FaqTopic.ACCOUNT_SECURITY,
+         r"\b(change|update)\b.{0,20}\bpassword\b|\b(trusted|untrusted|my) devices?\b"
+         r"|\b(phishing|scam(s|mers?)?)\b"),
+        (FaqTopic.SETTINGS,
+         r"\b(dark|light) (mode|theme)\b|\btheme\b|\bsettings\b"
+         r"|\b(add|change|update)\b.{0,20}\b(mobile|phone)( number)?\b"),
+        (FaqTopic.CONSENT, r"\bconsent\b|\bdate of birth\b|\bage band\b|\bprivacy\b"),
+        (FaqTopic.SPENDING_INSIGHTS,
+         r"\b(financial )?health score\b|\bspending (and|&) health\b"),
+        (FaqTopic.ASSISTANT,
+         r"\bwhat can (you|the assistant) do\b|\bwho are you\b|\bwhat are your limits\b"
+         r"|\bare you (a |an )?(bot|robot|ai|human|real person)\b"),
     )
 )  # fmt: skip
 _PRODUCTS = re.compile(
     r"\b(what|which|list|show|tell me about)\b.{0,40}\b(products?|loans|deposits|fds|funds"
-    r"|investments|bonds|schemes)\b.{0,30}\b(offer(ed)?|have|available|there)\b"
+    r"|investments|bonds|schemes|insurance|plans|policies)\b.{0,30}\b(offer(ed)?|have"
+    r"|available|there)\b"
+    r"|\binsurance (plans?|policies|products?|premiums?|options?)\b"
     r"|\b(products?|catalogue|catalog)\b"
     r"|\b(loan|fd|deposit|interest|fund|bond) rates?\b"
     r"|\brates? (on|for) (loans?|fds?|(fixed )?deposits?|funds?|bonds?)\b"
@@ -108,6 +142,10 @@ _PRODUCT_CATEGORIES: tuple[tuple[ProductCategory, re.Pattern[str]], ...] = tuple
         (ProductCategory.LOANS, r"\b(loans?|emis?|borrow(ing)?)\b"),
         (ProductCategory.DEPOSITS, r"\b(fds?|(fixed |term )?deposits?)\b"),
         (ProductCategory.INVESTMENTS, r"\b(funds?|mutual|sips?|gold|bonds?|elss|invest\w*)\b"),
+        (
+            ProductCategory.INSURANCE,
+            r"\b(insurance|term life|life cover|health cover|polic(y|ies)|premiums?)\b",
+        ),
     )
 )
 _INVEST = re.compile(
