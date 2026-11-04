@@ -23,7 +23,7 @@ flowchart LR
     end
 
     subgraph jobs["Celery"]
-        beat["beat (single instance)<br/>relay-outbox 10 s<br/>execute-scheduled-transfers 60 s<br/>expire-stale-step-ups 60 s<br/>pay-out-matured-deposits hourly :05<br/>evaluate-feature-drift hourly :20<br/>monitor-structuring-deposits hourly :35<br/>ensure-clickstream-partitions 01:30<br/>materialize-monthly-spending 02:00<br/>segment-customers-weekly Sunday 03:00<br/>purge-expired-idempotency-keys 04:15<br/>purge-processed-outbox-events 04:30"]
+        beat["beat (single instance)<br/>relay-outbox 10 s<br/>execute-scheduled-transfers 60 s<br/>expire-stale-step-ups 60 s<br/>pay-out-matured-deposits hourly :05<br/>evaluate-feature-drift hourly :20<br/>monitor-structuring-deposits hourly :35<br/>ensure-clickstream-partitions 01:30<br/>materialize-monthly-spending 02:00<br/>segment-customers-weekly Sunday 03:00<br/>build-behaviour-profiles-daily 03:40<br/>purge-expired-idempotency-keys 04:15<br/>purge-processed-outbox-events 04:30"]
         worker["worker<br/>runs the tasks with the same<br/>services as the API"]
     end
 
