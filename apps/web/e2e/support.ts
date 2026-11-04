@@ -56,9 +56,14 @@ function runInApi(script: string, args: string[]): string {
 }
 
 /** Opening balance for a test customer. There is no customer-facing deposit, so the money comes
- * from scripts/e2e_fund.py, which posts a ledger deposit (example.com customers only). */
-export function fundCustomer(email: string, amountMinor: number): void {
-  expect(runInApi("scripts/e2e_fund.py", [email, String(amountMinor)])).toContain("funded");
+ * from scripts/e2e_fund.py, which posts a ledger deposit (example.com customers only). With
+ * ``salaryMinor`` the script first credits that salary on the 1st of each of the two previous
+ * months, so the customer has regular income (ADR-0043) and a loan can be applied for. */
+export function fundCustomer(email: string, amountMinor: number, salaryMinor?: number): void {
+  const salary = salaryMinor === undefined ? [] : ["--salary", String(salaryMinor)];
+  expect(runInApi("scripts/e2e_fund.py", [email, String(amountMinor), ...salary])).toContain(
+    "funded",
+  );
 }
 
 /** A staff TOTP code the API has not seen yet (replay protection allows each 30 s step once). */

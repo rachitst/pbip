@@ -3182,7 +3182,7 @@ export interface components {
          * ExceptionKind
          * @enum {string}
          */
-        ExceptionKind: "BLOCKED_TRANSFER" | "ACCOUNT_LOCKOUT" | "AUDIT_CHAIN_FAILURE";
+        ExceptionKind: "BLOCKED_TRANSFER" | "ACCOUNT_LOCKOUT" | "AUDIT_CHAIN_FAILURE" | "NOTIFICATION_DEAD_LETTER" | "SCHEDULED_TRANSFER_FAILURE";
         /** ExceptionOut */
         ExceptionOut: {
             acknowledged: components["schemas"]["ExceptionStepOut"] | null;
@@ -3191,8 +3191,38 @@ export interface components {
              * @description Blocked payments only
              */
             amount_minor?: number | null;
+            /**
+             * Attempts
+             * @description Notification dead letters: delivery attempts made
+             */
+            attempts?: number | null;
             /** Currency */
             currency?: string | null;
+            /**
+             * Error Type
+             * @description Notification dead letters: exception class of the last failure (no message)
+             */
+            error_type?: string | null;
+            /**
+             * Event Type
+             * @description Notification dead letters: the outbox event type
+             */
+            event_type?: string | null;
+            /**
+             * Failed Attempts
+             * @description Scheduled transfer failures: failed runs that day, if any
+             */
+            failed_attempts?: number | null;
+            /**
+             * Failure
+             * @description Scheduled transfer failures: an occurrence never paid, or the order paused
+             */
+            failure?: ("MISSED" | "AUTO_PAUSED") | null;
+            /**
+             * Failure Reason
+             * @description Scheduled transfer failures: the scheduler's reason code
+             */
+            failure_reason?: string | null;
             /**
              * First Invalid Seq
              * @description Audit chain failures only
@@ -3210,6 +3240,11 @@ export interface components {
              */
             occurred_at: string;
             /**
+             * Occurrence Date
+             * @description Scheduled transfer failures: the missed occurrence's date
+             */
+            occurrence_date?: string | null;
+            /**
              * Reason Codes
              * @description Fraud rule/model codes of a blocked payment
              */
@@ -3226,6 +3261,11 @@ export interface components {
              */
             risk_score?: number | null;
             status: components["schemas"]["ExceptionStatus"];
+            /**
+             * Subject Id
+             * @description System exceptions: the dead-lettered outbox event id, or the scheduled transfer (standing order) id
+             */
+            subject_id?: string | null;
             /** Transaction Type */
             transaction_type?: string | null;
         };
@@ -3254,6 +3294,8 @@ export interface components {
             ACCOUNT_LOCKOUT: components["schemas"]["ExceptionCounts"];
             AUDIT_CHAIN_FAILURE: components["schemas"]["ExceptionCounts"];
             BLOCKED_TRANSFER: components["schemas"]["ExceptionCounts"];
+            NOTIFICATION_DEAD_LETTER: components["schemas"]["ExceptionCounts"];
+            SCHEDULED_TRANSFER_FAILURE: components["schemas"]["ExceptionCounts"];
         };
         /**
          * FinancialHealthComponents
