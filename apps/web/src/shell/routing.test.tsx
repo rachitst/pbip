@@ -38,6 +38,11 @@ describe("routing, roles and the application shell (ADR-0016)", () => {
       if (url.endsWith("/accounts")) return Promise.resolve(json(200, [account]));
       if (url.endsWith("/payees")) return Promise.resolve(json(200, []));
       if (url.endsWith("/customers/me")) return Promise.resolve(json(200, profile));
+      if (url.endsWith("/customers/me/analytics-consent")) {
+        return Promise.resolve(
+          json(200, { granted: true, updated_at: null, policy_version: null }),
+        );
+      }
       if (url.endsWith("/customers/devices")) return Promise.resolve(json(200, []));
       if (url.endsWith("/fraud/demo-lab")) {
         return Promise.resolve(
@@ -384,8 +389,9 @@ describe("routing, roles and the application shell (ADR-0016)", () => {
       window.history.replaceState(null, "", "/accounts?account=acc-1&transaction=tx-9");
       renderApp();
       expect(await screen.findByRole("heading", { name: "My accounts" })).toBeInTheDocument();
-      window.dispatchEvent(new Event("pagehide"));
       await waitFor(() => {
+        // nothing leaves until the recorded consent has loaded (ADR-0057), so hide until it has
+        window.dispatchEvent(new Event("pagehide"));
         expect(batches()).toHaveLength(1);
       });
       expect(batches()[0]?.events).toEqual([

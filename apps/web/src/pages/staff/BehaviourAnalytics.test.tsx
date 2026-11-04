@@ -129,15 +129,18 @@ const full: Analytics = {
         customers: 2,
       },
     ],
-    profiled_customers: 0,
-    interests: [],
+    profiled_customers: 2,
+    interests: [
+      { category: "LOAN", customers: 2, share_pct: 100, avg_score: 4.5, signals: 7 },
+      { category: "INSURANCE", customers: 1, share_pct: 50, avg_score: 3, signals: 1 },
+    ],
   },
   engagement: {
     events: 6,
     sessions: 3,
     active_customers: 3,
     customers: 4,
-    consenting_customers: 3,
+    consenting_customers: 4,
     active_share_pct: 75,
     events_per_session: 2,
     avg_session_seconds: 50,
@@ -227,11 +230,32 @@ describe("Spending, affinity and engagement panels", () => {
   it("shows engagement metrics with a chart summary and a day table", () => {
     renderWith(<EngagementPanel panel={full.engagement} period="last 30 days" />);
     expect(screen.getByText("3 of 4")).toBeInTheDocument();
-    expect(screen.getByText("50 s")).toBeInTheDocument();
+    expect(screen.getAllByText("50 s")).toHaveLength(2); // the mean, and the day's mean
     expect(
       screen.getByRole("img", { name: "Active customers per day: 2026-10-31 3." }),
     ).toBeVisible();
-    expect(screen.getByRole("row", { name: "2026-10-31 3 6" })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: "2026-10-31 3 6 3 50 s" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Sessions per day: 2026-10-31 3." })).toBeVisible();
+    expect(screen.getByText("4 of 4")).toBeInTheDocument(); // customers sharing analytics
+    expect(screen.getByText(/ended by 30 minutes without activity/)).toBeInTheDocument();
+  });
+
+  it("shows product interest by category with a chart summary and a table (ADR-0057)", () => {
+    renderWith(<AffinityPanel panel={full.affinity} period="last 30 days" />);
+    expect(screen.getByText(/behavioural profiles of 2 customers who turned/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", {
+        name: "Customers interested per product category: Loans and credit 2, Insurance 1.",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("row", { name: "Loans and credit 2 100.0% 4.50 7" }),
+    ).toBeInTheDocument();
+  });
+
+  it("explains that no product interest is recorded yet", () => {
+    renderWith(<AffinityPanel panel={empty.affinity} period="last 30 days" />);
+    expect(screen.getByText("No product interest recorded yet.")).toBeInTheDocument();
   });
 
   it("explains an empty clickstream instead of showing zeros as a chart", () => {

@@ -5,8 +5,10 @@ import { json, urlOf } from "../test-utils";
 import clientBatch from "./__fixtures__/client-batch.json";
 import { EVENT_KEYS, EVENT_PROPERTIES } from "./catalogue";
 import {
+  ACTIVE_WINDOW_MS,
   ClickstreamTracker,
   FLUSH_INTERVAL_MS,
+  HEARTBEAT_INTERVAL_MS,
   MAX_BATCHES_PER_MINUTE,
   MAX_BATCH_SIZE,
   MAX_BUFFERED_EVENTS,
@@ -22,7 +24,13 @@ import {
 const START = Date.parse("2026-11-02T10:00:00.000Z");
 const INDEX_SIP = "00000000-0000-4000-a000-000000000005";
 
-function setup(options: { signedIn?: () => boolean; send?: () => Promise<unknown> } = {}) {
+function setup(
+  options: {
+    signedIn?: () => boolean;
+    send?: () => Promise<unknown>;
+    consentKnown?: boolean;
+  } = {},
+) {
   const sent: EventBatchRequest[] = [];
   const send = vi.fn((batch: EventBatchRequest) => {
     sent.push(batch);
@@ -35,6 +43,7 @@ function setup(options: { signedIn?: () => boolean; send?: () => Promise<unknown
     now: () => Date.now(),
     newId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`,
   });
+  if (options.consentKnown !== false) tracker.setConsent(true); // the recorded consent is on
   return { tracker, send, sent };
 }
 
@@ -155,12 +164,13 @@ describe("web clickstream tracker (TASK-112)", () => {
     vi.advanceTimersByTime(FLUSH_INTERVAL_MS);
     await settle();
     expect(send).toHaveBeenCalledTimes(1);
-    vi.advanceTimersByTime(FLUSH_INTERVAL_MS * 5);
+    vi.advanceTimersByTime(FLUSH_INTERVAL_MS * 4); // under a minute: no heartbeat yet
     expect(send).toHaveBeenCalledTimes(1);
 
     tracker.track("account_viewed", { account_type: "CURRENT" });
     vi.advanceTimersByTime(FLUSH_INTERVAL_MS);
-    expect(sent[1]?.events.map((e) => e.event_type)).toEqual(["account_viewed"]);
+    const resent = sent[1]?.events.filter((e) => e.event_type !== "session_heartbeat");
+    expect(resent?.map((e) => e.event_type)).toEqual(["account_viewed"]); // page_view not retried
 
     const throwing = setup({
       send: () => {
@@ -222,6 +232,81 @@ describe("web clickstream tracker (TASK-112)", () => {
     expect(sent.flatMap((b) => b.events.map((e) => e.event_type))).toEqual(["account_viewed"]);
   });
 
+  it("holds events until the recorded consent is known, then sends or discards them (ADR-0057)", () => {
+    const { tracker, send, sent } = setup({ consentKnown: false });
+    tracker.start();
+    tracker.track("page_view");
+    vi.advanceTimersByTime(FLUSH_INTERVAL_MS);
+    window.dispatchEvent(new Event("pagehide"));
+    expect(send).not.toHaveBeenCalled();
+    expect(tracker.pending()).toHaveLength(1);
+    tracker.setConsent(true);
+    vi.advanceTimersByTime(FLUSH_INTERVAL_MS);
+    expect(sent.flatMap((b) => b.events.map((e) => e.event_type))).toEqual(["page_view"]);
+
+    const refused = setup({ consentKnown: false });
+    refused.tracker.start();
+    refused.tracker.track("page_view");
+    refused.tracker.setConsent(false);
+    vi.advanceTimersByTime(FLUSH_INTERVAL_MS);
+    expect(refused.tracker.pending()).toEqual([]);
+    expect(refused.send).not.toHaveBeenCalled();
+  });
+
+  it("forgets the consent at stop(), so the next customer's is loaded again", () => {
+    const { tracker, send } = setup();
+    tracker.start();
+    tracker.stop();
+    tracker.start();
+    tracker.track("page_view");
+    vi.advanceTimersByTime(FLUSH_INTERVAL_MS);
+    expect(send).not.toHaveBeenCalled();
+    expect(tracker.pending()).toHaveLength(1);
+  });
+
+  describe("session heartbeat (ADR-0057)", () => {
+    function types(tracker: ClickstreamTracker) {
+      return tracker.pending().map((e) => e.event_type);
+    }
+
+    it("records one heartbeat a minute while the page is visible and in use", () => {
+      const { tracker } = setup({ consentKnown: false }); // held in the buffer, so visible here
+      tracker.start();
+      vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS - 1);
+      expect(types(tracker)).toEqual([]);
+      vi.advanceTimersByTime(1);
+      expect(types(tracker)).toEqual(["session_heartbeat"]);
+      expect(tracker.pending()[0]?.properties).toEqual({});
+    });
+
+    it("stops while the customer is idle and resumes when they point, type or scroll", () => {
+      const { tracker } = setup({ consentKnown: false });
+      tracker.start();
+      vi.advanceTimersByTime(ACTIVE_WINDOW_MS + HEARTBEAT_INTERVAL_MS * 3);
+      const beats = types(tracker).length;
+      expect(beats).toBe(ACTIVE_WINDOW_MS / HEARTBEAT_INTERVAL_MS); // heartbeats are not activity
+      window.dispatchEvent(new Event("pointerdown"));
+      vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS);
+      expect(types(tracker)).toHaveLength(beats + 1);
+      window.dispatchEvent(new Event("keydown"));
+      tracker.stop();
+      vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS * 2);
+      expect(tracker.pending()).toEqual([]);
+    });
+
+    it("sends no heartbeat while the page is hidden", () => {
+      const { tracker } = setup({ consentKnown: false });
+      Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+      try {
+        tracker.start();
+        vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS * 2);
+        expect(tracker.pending()).toEqual([]);
+      } finally {
+        Reflect.deleteProperty(document, "visibilityState");
+      }
+    });
+  });
+
   it("treats the browser's Global Privacy Control signal as refusing analytics", () => {
     expect(browserAllowsAnalytics()).toBe(true);
     Object.defineProperty(navigator, "globalPrivacyControl", { value: true, configurable: true });
@@ -253,6 +338,7 @@ describe("web clickstream tracker (TASK-112)", () => {
       const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(json(202, {})));
       vi.stubGlobal("fetch", fetchMock);
       clickstream.start();
+      clickstream.setConsent(true);
       clickstream.setPage("/accounts");
       clickstream.track("page_view");
       trackAccountViewed("SAVINGS");
@@ -292,6 +378,7 @@ describe("web clickstream tracker (TASK-112)", () => {
       );
       vi.stubGlobal("fetch", fetchMock);
       clickstream.start();
+      clickstream.setConsent(true);
       clickstream.track("page_view");
       vi.advanceTimersByTime(FLUSH_INTERVAL_MS);
       await settle();
