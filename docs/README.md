@@ -17,6 +17,7 @@
 | Deployment guide | `docs/deployment.md` | DevOps / Platform | S5 | Todo |
 | Support / operations guide | `docs/operations/runbook.md` | Operations / Platform | S5 | **v1 (TASK-075)** |
 | Private-repository readiness (secrets, links, GitHub plan impact) | [`docs/operations/private-repo-checklist.md`](operations/private-repo-checklist.md) | Operations / Platform | before going private | v1 |
+| Staging host on an Oracle Cloud Always Free Arm VM (#198; TASK-078/079/102/103 cloud parts) | [`docs/operations/deploy-oracle-cloud-arm.md`](operations/deploy-oracle-cloud-arm.md) | Operations / Platform | first staging deployment | v1 |
 | User manual | `docs/user-manual.md` | Team / Shared | S7 | Todo |
 | Test strategy + report | blueprint section 12 -> `docs/test-report.md` | Quality / Testing | S6 | Strategy done |
 | Architecture decision records | `docs/adr/` | Team / Shared | as decided | 10 accepted |

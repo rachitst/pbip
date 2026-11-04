@@ -26,7 +26,7 @@ a customer's payment.
 | LightGBM fraud classifier | [lightgbm-fraud.md](lightgbm-fraud.md) | Through the hybrid, can step up, hold or decline an outgoing payment | High |
 | Isolation Forest anomaly model | [isolation-forest.md](isolation-forest.md) | Through the hybrid, as above (small weight) | High (as a component) |
 | Hybrid fraud combiner | [hybrid-fraud-combiner.md](hybrid-fraud-combiner.md) | Makes the decision: ALLOW / STEP_UP / REVIEW / BLOCK | High |
-| Balance forecast `forecast-arima-1` | [balance-forecast.md](balance-forecast.md) | Shows a prediction and may send a low-balance alert. Decides nothing | Low |
+| Balance forecast `forecast-arima-2` | [balance-forecast.md](balance-forecast.md) | Shows a prediction and may send a low-balance alert. Decides nothing | Low |
 | Recommendation score `rules-v1` | [recommendation-score.md](recommendation-score.md) | Orders eligible products. Approves or prices nothing | Low to medium (marketing suitability) |
 | K-Means segmentation | [kmeans-segmentation.md](kmeans-segmentation.md) | Analytics persona and one input to recommendations | Low |
 

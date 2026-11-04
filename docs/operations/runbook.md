@@ -161,6 +161,14 @@ owner decision for the staging host (#198).
 fraction of 15-second readiness probes that succeeded (`web-ready` is the user path) over the last 30 days. It counts only time when the monitoring
 stack itself was running, so stop it only deliberately. Report it monthly from the *Availability* dashboard.
 
+**Tracing (optional, ADR 0017, ADR-0050).** Off by default. With `OTEL_ENABLED=true` and `OTEL_EXPORTER=otlp`
+the API, worker and beat send spans over OTLP/HTTP to `OTEL_EXPORTER_OTLP_ENDPOINT` (the `otel` compose profile runs
+a local collector that only logs them; the production compose has no collector). A collector that is down or hanging
+costs dropped spans only: spans wait in a queue of at most 2,048 and each export gives up after
+`OTEL_EXPORT_TIMEOUT_SECONDS`; the API logs `Failed to export spans batch`. To check it in an incident: stop the
+collector, send requests, and compare `ApiSlowP95` and the latency dashboard with the period before. Stopping the API
+can take up to a few export timeouts longer while it flushes the last batches to a dead collector.
+
 **Error tracking.** Every unhandled exception produces one `unhandled_exception` log event with `request_id`,
 `route` (template, never the raw path), `method`, `error_type` and `raised_at` (`file.py:line:function`), plus the
 metric `unhandled_errors_total{route,error_type}`. The exception message, arguments and request body are never
@@ -171,6 +179,31 @@ The `UnhandledErrors` alert fires on the first occurrence.
 ---
 
 ## 2. Routine operations
+
+### 2.0 First staging deployment (#198)
+
+The host is not in the repository. Step-by-step set-up for an Oracle Cloud Always Free Ampere A1 (Arm64) VM, from the
+cloud account to the first health-gated deploy, is in `docs/operations/deploy-oracle-cloud-arm.md` ("the guide"
+below); after it, this runbook applies unchanged. Two prerequisites: the release images must exist for `linux/arm64`
+(guide section 10), and the host must be logged in to GHCR with a `read:packages` token
+(`docs/operations/private-repo-checklist.md` section 4.5).
+
+How each item of #198 is done and what to record on the issue:
+
+| #198 item | Guide section | Evidence to record on #198 |
+|---|---|---|
+| 1. Provision the host, set the `staging` environment secrets and `DEPLOY_ENABLED`, create the host `.env` | 2-8, 11, 13 | Region and shape (no IPs or secrets); `docker compose -f docker-compose.prod.yml config --quiet` passes |
+| 1. `workflow_dispatch` dry run, then a real deployment of a `vX.Y.Z` tag | 12 (by hand), 13 (workflow) | Run URLs; `docker compose ... ps` with `migrate` exited 0; output of `python3 scripts/smoke_test.py` and `python3 scripts/staging_smoke.py` |
+| 1. Prove a rollback on the host (`deploy.sh rollback`) | 13 | `.deployed_tag` before and after; smoke test output |
+| 1. Record run URLs and results | 13 | The evidence in this table, plus a dated line in §6 |
+| 1. Zero-downtime cutover (follow-up) | 19 | The probe's incidents during the deploy window (ADR-0045 runs two `api` replicas; downtime is measured, not assumed) |
+| 2. GeoIP inside a running stack | 19, and §2.4 | API starts with the database mounted. The `NEW_COUNTRY` transfer check runs on the local stack: staging cannot fund an account (guide section 14) |
+| 3. Celery beat schedules fire at their times; one beat | 19 | Worker log lines for 02:00 UTC and Sunday 03:00 UTC; `ps beat` shows one container |
+
+The same host provides the cloud-only evidence for TASK-103 (the availability probe `infra/deploy/uptime-probe.sh`
+every 30 s and the weekly `python3 scripts/uptime_report.py`, guide section 17) and for TASK-078, TASK-079 and
+TASK-102 (guide section 18: the page-load budgets from the laptop against staging; the k6 suite on the VM against a
+separate local-mode stack, because `scripts/seed_load.py` refuses a staging database).
 
 ### 2.1 Deploy a release
 
@@ -630,6 +663,7 @@ require `amr: otp`, so a stolen password alone is not enough; a stolen *session*
 Run these after any change to the runbook or the stack and record the date on the operations issue:
 
 - [ ] §2.1 deploy of a tag and §2.2 rollback to the previous tag, each followed by a passing smoke test.
+- [ ] §2.0 first staging deployment: every #198 item recorded on the issue with the evidence listed there.
 - [ ] §3.1 rotation on staging: old access token → 401, a signed-in browser survives, smoke test passes.
 - [ ] §3.2 rotation on staging: dry run, apply, old key removed, staff TOTP login works, dry run reports no error.
 - [ ] §4.1 backup produced with `scripts/backup.py` and copied off-host; §4.2 `scripts/restore.py` drill reports `PASS`

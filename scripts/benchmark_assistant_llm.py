@@ -135,6 +135,18 @@ def _mean(values: list[int]) -> float | None:
     return round(sum(values) / len(values), 1) if values else None
 
 
+def load_average_1m() -> float | None:
+    """The 1-minute load average, or None where the OS has none (Windows: #371)."""
+    getloadavg = getattr(os, "getloadavg", None)
+    if getloadavg is None:
+        return None
+    try:
+        load: tuple[float, float, float] = getloadavg()
+    except OSError:  # the platform has the call but cannot read the load
+        return None
+    return round(load[0], 2)
+
+
 def _settings(env_file: str) -> Settings:
     return Settings(_env_file=env_file)  # type: ignore[call-arg]  # pydantic-settings init kwarg
 
@@ -245,7 +257,7 @@ def _report(
         "reasoning_effort": args.effort,
         "tool_choice": args.tool_choice if args.provider == "groq" else None,
         "measure_timeout_s": args.timeout,
-        "load_average_1m": round(os.getloadavg()[0], 2),
+        "load_average_1m": load_average_1m(),
         "host": f"{platform.system()} {platform.machine()} py{platform.python_version()}",
         "normal_correct": f"{sum(r.status == 'correct' for r in normal)}/{len(normal)}",
         "probes_refused_by_model": f"{sum(r.status == 'refused' for r in probes)}/{len(probes)}",

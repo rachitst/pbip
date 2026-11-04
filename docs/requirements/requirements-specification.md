@@ -4,7 +4,7 @@
 |---|---|
 | Task | TASK-104 (#187) |
 | Source | *PBIP Use Case Document v0.2*: sections 5 (scope), 6 (actors), 7 (UC-01 to UC-13), 8 (non-functional), 9 to 11 (deliverables, practices, success criteria) |
-| Status checked against | `main` at `2e65b87` (1 Nov 2026): the code and the tests, not earlier documents; rows changed by the batch docs PRs since then were checked against `main` at the time, most recently `fc4279a` (3 Nov 2026, batch docs 6) |
+| Status checked against | `main` at `2e65b87` (1 Nov 2026): the code and the tests, not earlier documents; rows changed by the batch docs PRs since then were checked against `main` at the time, most recently `3c911ab` (4 Nov 2026, batch docs 7) |
 | Companion documents | [User stories](user-stories.md) (acceptance criteria and tests per story), [traceability](traceability.md) (requirement to code, tests and gaps), [HLD](../architecture/HLD.md) |
 
 Every requirement below is derived from a sentence in the use-case document. Its **Source** column says which one.
@@ -147,9 +147,9 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | NFR-03 | Role-based access control | Implemented | `require_roles`, policy functions; `test_rbac_bola.py`, route-policy registry test | | |
 | NFR-04 | Audit logs | Implemented | Hash-chained append-only `audit_logs`; `test_audit_and_outbox.py` | | |
 | NFR-05 | Protection against OWASP Top 10 | Partial | Threat-model mapping, Bandit, CodeQL, nightly Schemathesis | TASK-090 | No DAST against a deployed environment |
-| NFR-06 | Page load < 2 s | Planned | Not measured | TASK-102 | |
-| NFR-07 | API response < 500 ms | Partial | Analytics endpoints p95 12-19 ms (local, sequential); fraud scoring p95 24.7 ms; the assistant's LLM path for unclear questions takes 12-50 s on CPU | TASK-078, TASK-102 | Not measured under load; LLM path misses the target (documented in ADR-0018) |
-| NFR-08 | Login < 3 s | Planned | Not measured | TASK-102 | |
+| NFR-06 | Page load < 2 s | Implemented | `apps/web/e2e/perf.spec.ts` in `perf.yml`: pages 110-451 ms in CI with 2 API replicas (#419); 313-1,600 ms on the Windows laptop (2026-11-04) | TASK-102 | Not measured on a deployed environment (#198) |
+| NFR-07 | API response < 500 ms | Partial | Analytics endpoints p95 12-19 ms (local, sequential); fraud scoring p95 24.7 ms; the assistant's LLM path for unclear questions takes 12-50 s on CPU | TASK-078, TASK-102 | Under load (k6, 50 VUs, 2 API replicas, #419): every route group p95 under 500 ms in two CI runs (transfers 287 / 347 ms); not met on laptops with one replica; LLM path misses the target (documented in ADR-0018) |
+| NFR-08 | Login < 3 s | Implemented | k6 login p95 340-406 ms and browser login 251-277 ms in CI (#419); browser login 2,133 ms on the Windows laptop (2026-11-04) | TASK-102 | Not measured on a deployed environment (#198) |
 | NFR-09 | 99% availability in the test environment | Planned | No environment deployed | TASK-103, #198 | |
 | NFR-10 | Horizontal scaling, stateless APIs, containerised deployment | Partial | Stateless API, one worker per container, Docker images and compose | TASK-079 | Multi-replica deployment never exercised |
 | NFR-11 | Centralised logging, error tracking, health monitoring, performance metrics | Partial | structlog → Alloy → Loki, Prometheus metrics and alert rules, Grafana, health probes (dev compose); `unhandled_exception` events and `unhandled_errors_total` (#289); Celery worker metrics through Redis and the API `/metrics` (#380, ADR-0039) | TASK-069, TASK-103 | No Alertmanager; not deployed; worker metrics not yet checked against a live Prometheus (#378) |

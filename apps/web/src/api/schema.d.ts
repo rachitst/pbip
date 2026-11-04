@@ -765,6 +765,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/customers/me/phone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set my mobile number (E.164); stored encrypted, returned masked */
+        put: operations["put_my_phone_api_v1_customers_me_phone_put"];
+        post?: never;
+        /** Delete my mobile number */
+        delete: operations["delete_my_phone_api_v1_customers_me_phone_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/customers/me/recommendations-consent": {
         parameters: {
             query?: never;
@@ -1942,7 +1960,7 @@ export interface components {
             label: "Predicted, not exact";
             /**
              * Method
-             * @description auto_arima, seasonal_naive or naive (by history length); none when status is INSUFFICIENT_HISTORY
+             * @description auto_arima or naive (by history length); none when status is INSUFFICIENT_HISTORY
              */
             method: string;
             /** Model Version */
@@ -4152,6 +4170,17 @@ export interface components {
              */
             name_match: "MATCH" | "NO_MATCH" | "NOT_CHECKED";
             payee: components["schemas"]["PayeeOut"];
+        };
+        /**
+         * PhoneIn
+         * @description A mobile number in E.164 form (#398). Stored only encrypted; responses show it masked.
+         */
+        PhoneIn: {
+            /**
+             * Phone
+             * @description E.164: a plus sign, the country code and the number, digits only (for example +919812345678)
+             */
+            phone: string;
         };
         /** PortfolioOut */
         PortfolioOut: {
@@ -6761,6 +6790,57 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DemographicsOut"];
                 };
+            };
+        };
+    };
+    put_my_phone_api_v1_customers_me_phone_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PhoneIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_my_phone_api_v1_customers_me_phone_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
