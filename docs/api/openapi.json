@@ -4084,6 +4084,92 @@
         "title": "InstrumentOut",
         "type": "object"
       },
+      "InsuranceApplicationOut": {
+        "properties": {
+          "age_band": {
+            "enum": [
+              "18-25",
+              "26-35",
+              "36-50",
+              "51-59",
+              "60+"
+            ],
+            "title": "Age Band",
+            "type": "string"
+          },
+          "annual_premium_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annual Premium Minor"
+          },
+          "cover_minor": {
+            "title": "Cover Minor",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision_reason": {
+            "title": "Decision Reason",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "product_name": {
+            "title": "Product Name",
+            "type": "string"
+          },
+          "quote_version": {
+            "title": "Quote Version",
+            "type": "string"
+          },
+          "status": {
+            "description": "SUBMITTED = referred (no insurer decides it in PBIP); APPROVED_SIMULATED = meets the simulated rules, no policy is issued; DECLINED",
+            "enum": [
+              "SUBMITTED",
+              "APPROVED_SIMULATED",
+              "DECLINED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "term_years": {
+            "title": "Term Years",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "product_id",
+          "product_name",
+          "cover_minor",
+          "term_years",
+          "age_band",
+          "annual_premium_minor",
+          "status",
+          "decision_reason",
+          "quote_version",
+          "created_at"
+        ],
+        "title": "InsuranceApplicationOut",
+        "type": "object"
+      },
       "InsuranceEligibilityOut": {
         "description": "Hints from the product's own rules only: the customer's data is not read.",
         "properties": {
@@ -4206,6 +4292,142 @@
           "catalogue_version"
         ],
         "title": "InsuranceProductOut",
+        "type": "object"
+      },
+      "InsuranceQuoteOut": {
+        "properties": {
+          "age_band": {
+            "enum": [
+              "18-25",
+              "26-35",
+              "36-50",
+              "51-59",
+              "60+"
+            ],
+            "title": "Age Band",
+            "type": "string"
+          },
+          "age_factor_bps": {
+            "description": "The age band's factor (10000 = the 26-35 band)",
+            "title": "Age Factor Bps",
+            "type": "integer"
+          },
+          "annual_premium_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Simulated annual premium (rule IQ-1, not an insurer's price); None if declined",
+            "title": "Annual Premium Minor"
+          },
+          "cover_minor": {
+            "title": "Cover Minor",
+            "type": "integer"
+          },
+          "outcome": {
+            "description": "The status an application with these terms would get",
+            "enum": [
+              "SUBMITTED",
+              "APPROVED_SIMULATED",
+              "DECLINED"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "product_name": {
+            "title": "Product Name",
+            "type": "string"
+          },
+          "quote_version": {
+            "title": "Quote Version",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "term_factor_bps": {
+            "description": "Term life term factor; 10000 for health plans",
+            "title": "Term Factor Bps",
+            "type": "integer"
+          },
+          "term_years": {
+            "title": "Term Years",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "product_id",
+          "product_name",
+          "cover_minor",
+          "term_years",
+          "age_band",
+          "annual_premium_minor",
+          "outcome",
+          "reason",
+          "age_factor_bps",
+          "term_factor_bps",
+          "quote_version"
+        ],
+        "title": "InsuranceQuoteOut",
+        "type": "object"
+      },
+      "InsuranceQuoteRequest": {
+        "additionalProperties": false,
+        "description": "The customer DECLARES an age band for this quote, with explicit consent; nothing is read\nfrom the profile (the ADR-0015 consent is for recommendations only). No premium from the\nclient.",
+        "properties": {
+          "age_band": {
+            "enum": [
+              "18-25",
+              "26-35",
+              "36-50",
+              "51-59",
+              "60+"
+            ],
+            "title": "Age Band",
+            "type": "string"
+          },
+          "age_band_consent": {
+            "const": true,
+            "description": "Must be true: I agree to my declared age band being used for this quote",
+            "title": "Age Band Consent",
+            "type": "boolean"
+          },
+          "cover_minor": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100000000000.0,
+            "title": "Cover Minor",
+            "type": "integer"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "term_years": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 60.0,
+            "title": "Term Years",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "product_id",
+          "cover_minor",
+          "term_years",
+          "age_band",
+          "age_band_consent"
+        ],
+        "title": "InsuranceQuoteRequest",
         "type": "object"
       },
       "InsuranceType": {
@@ -14365,6 +14587,215 @@
           }
         ],
         "summary": "Insurance catalogue: term life and health, with indicative premiums (no underwriting)",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/insurance/applications": {
+      "get": {
+        "operationId": "list_insurance_applications_api_v1_wealth_insurance_applications_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InsuranceApplicationOut"
+                  },
+                  "title": "Response List Insurance Applications Api V1 Wealth Insurance Applications Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "My insurance applications with their status",
+        "tags": [
+          "wealth"
+        ]
+      },
+      "post": {
+        "operationId": "apply_for_insurance_api_v1_wealth_insurance_applications_post",
+        "parameters": [
+          {
+            "description": "Unique per logical request; retrying with the same key never duplicates.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Unique per logical request; retrying with the same key never duplicates.",
+              "maxLength": 128,
+              "minLength": 8,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InsuranceQuoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceApplicationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The request body is not valid JSON (problem+json)"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          },
+          "404": {
+            "description": "No such insurance product (problem+json)"
+          },
+          "422": {
+            "description": "Cover or term not offered, or consent not given"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Apply for an insurance plan (simulated; no policy is issued and nothing is charged)",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/insurance/applications/{application_id}": {
+      "get": {
+        "operationId": "get_insurance_application_api_v1_wealth_insurance_applications__application_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Application Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceApplicationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "One of my insurance applications",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/insurance/quote": {
+      "post": {
+        "operationId": "quote_insurance_api_v1_wealth_insurance_quote_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InsuranceQuoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceQuoteOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The request body is not valid JSON (problem+json)"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          },
+          "404": {
+            "description": "No such insurance product (problem+json)"
+          },
+          "422": {
+            "description": "Cover or term not offered, or consent not given"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Simulated insurance quote from my declared age band (no underwriting; stores nothing)",
         "tags": [
           "wealth"
         ]

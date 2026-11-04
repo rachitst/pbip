@@ -66,6 +66,10 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("get", "/api/v1/wealth/holdings"),
         ("get", f"/api/v1/wealth/holdings/{uuid.uuid4()}"),
         ("post", f"/api/v1/wealth/holdings/{uuid.uuid4()}/sell"),
+        ("post", "/api/v1/wealth/insurance/quote"),
+        ("post", "/api/v1/wealth/insurance/applications"),
+        ("get", "/api/v1/wealth/insurance/applications"),
+        ("get", f"/api/v1/wealth/insurance/applications/{uuid.uuid4()}"),
         ("get", "/api/v1/fraud/alerts"),
         ("get", "/api/v1/fraud/stats"),
         ("get", "/api/v1/fraud/monitoring"),
@@ -701,6 +705,35 @@ def test_bola_investment_holdings_are_only_visible_to_their_owner(
     assert after["ledger_balance_minor"] == 2_00_000_00 - victim.json()["amount_minor"]
     mine = client.get(f"/api/v1/wealth/holdings/{holding_id}", headers=alice.headers)
     assert mine.status_code == 200 and mine.json()["units_micro"] == 3_000_000
+
+
+def test_bola_insurance_applications_are_only_visible_to_their_owner(
+    client: TestClient, make_customer: Callable[..., Actor]
+) -> None:
+    """ADR-0058 section 8: applications are read through wealth/policy with the AUTHENTICATED
+    customer id; someone else's and a missing one are the same 404."""
+    alice, mallory = make_customer(), make_customer()
+    applied = client.post(
+        "/api/v1/wealth/insurance/applications",
+        headers={**alice.headers, "Idempotency-Key": uuid.uuid4().hex},
+        json={
+            "product_id": "30000000-0000-4000-a000-000000000001",  # TERM-LIFE-CLASSIC
+            "cover_minor": 1_00_00_000_00,
+            "term_years": 30,
+            "age_band": "26-35",
+            "age_band_consent": True,
+        },
+    )
+    assert applied.status_code == 201, applied.text
+    h = mallory.headers
+    victim = client.get(f"/api/v1/wealth/insurance/applications/{applied.json()['id']}", headers=h)
+    missing = client.get(f"/api/v1/wealth/insurance/applications/{uuid.uuid4()}", headers=h)
+    assert victim.status_code == missing.status_code == 404
+    assert client.get("/api/v1/wealth/insurance/applications", headers=h).json() == []
+    mine = client.get(
+        f"/api/v1/wealth/insurance/applications/{applied.json()['id']}", headers=alice.headers
+    )
+    assert mine.status_code == 200
 
 
 def test_bola_forecast_neither_reads_nor_alerts_for_another_customers_account(

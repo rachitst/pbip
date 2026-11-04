@@ -10,7 +10,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from pbip_api.core.errors import NotFoundError
-from pbip_api.modules.wealth.models import FixedDeposit, InvestmentHolding
+from pbip_api.modules.wealth.models import (
+    FixedDeposit,
+    InsuranceApplication,
+    InvestmentHolding,
+)
 
 
 def get_owned_fixed_deposit(
@@ -56,5 +60,30 @@ def list_owned_holdings(session: Session, customer_id: UUID) -> list[InvestmentH
         select(InvestmentHolding)
         .where(InvestmentHolding.customer_id == customer_id, InvestmentHolding.units_micro > 0)
         .order_by(InvestmentHolding.created_at, InvestmentHolding.id)
+    )
+    return list(session.execute(stmt).scalars())
+
+
+def get_owned_insurance_application(
+    session: Session, customer_id: UUID, application_id: UUID
+) -> InsuranceApplication:
+    application = session.execute(
+        select(InsuranceApplication).where(
+            InsuranceApplication.id == application_id,
+            InsuranceApplication.customer_id == customer_id,
+        )
+    ).scalar_one_or_none()
+    if application is None:
+        raise NotFoundError("insurance application not found")
+    return application
+
+
+def list_owned_insurance_applications(
+    session: Session, customer_id: UUID
+) -> list[InsuranceApplication]:
+    stmt = (
+        select(InsuranceApplication)
+        .where(InsuranceApplication.customer_id == customer_id)
+        .order_by(InsuranceApplication.created_at.desc(), InsuranceApplication.id.desc())
     )
     return list(session.execute(stmt).scalars())

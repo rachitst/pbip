@@ -21,7 +21,7 @@ from pbip_api.modules.auth.dependencies import (
 from pbip_api.modules.auth.service import RequestMeta
 from pbip_api.modules.customers.dependencies import get_current_customer
 from pbip_api.modules.customers.models import Customer
-from pbip_api.modules.wealth import investing_service, service
+from pbip_api.modules.wealth import insurance_service, investing_service, service
 from pbip_api.modules.wealth.models import InsuranceType, RiskLevel
 from pbip_api.modules.wealth.schemas import (
     BuyRequest,
@@ -31,7 +31,10 @@ from pbip_api.modules.wealth.schemas import (
     FixedDepositOut,
     HoldingOut,
     InstrumentOut,
+    InsuranceApplicationOut,
     InsuranceProductOut,
+    InsuranceQuoteOut,
+    InsuranceQuoteRequest,
     OrderOut,
     PortfolioOut,
     SellRequest,
@@ -309,3 +312,78 @@ def sell_investment(
             now=_now(clock),
         )
     )
+
+
+# ------------------------------------- insurance quote and application (ADR-0058 section 8)
+@router.post(
+    "/insurance/quote",
+    response_model=InsuranceQuoteOut,
+    summary="Simulated insurance quote from my declared age band (no underwriting; stores nothing)",
+    responses={
+        404: {"description": "No such insurance product (problem+json)"},
+        422: {"description": "Cover or term not offered, or consent not given"},
+    },
+)
+def quote_insurance(
+    body: InsuranceQuoteRequest,
+    _customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+) -> InsuranceQuoteOut:
+    return insurance_service.quote(session, body)
+
+
+@router.post(
+    "/insurance/applications",
+    response_model=InsuranceApplicationOut,
+    status_code=201,
+    summary="Apply for an insurance plan (simulated; no policy is issued and nothing is charged)",
+    responses={
+        404: {"description": "No such insurance product (problem+json)"},
+        422: {"description": "Cover or term not offered, or consent not given"},
+    },
+)
+def apply_for_insurance(
+    body: InsuranceQuoteRequest,
+    idempotency_key: IdempotencyKeyHeader,
+    customer: Customer = Depends(get_current_customer),
+    principal: Principal = Depends(get_current_principal),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    meta: RequestMeta = Depends(get_request_meta),
+) -> JSONResponse:
+    return _replayable(
+        insurance_service.apply(
+            session,
+            settings,
+            customer_id=customer.id,
+            user_id=principal.user_id,
+            request=body,
+            idempotency_key=idempotency_key,
+            meta=meta,
+        )
+    )
+
+
+@router.get(
+    "/insurance/applications",
+    response_model=list[InsuranceApplicationOut],
+    summary="My insurance applications with their status",
+)
+def list_insurance_applications(
+    customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+) -> list[InsuranceApplicationOut]:
+    return insurance_service.list_applications(session, customer.id)
+
+
+@router.get(
+    "/insurance/applications/{application_id}",
+    response_model=InsuranceApplicationOut,
+    summary="One of my insurance applications",
+)
+def get_insurance_application(
+    application_id: UUID,
+    customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+) -> InsuranceApplicationOut:
+    return insurance_service.get_application(session, customer.id, application_id)

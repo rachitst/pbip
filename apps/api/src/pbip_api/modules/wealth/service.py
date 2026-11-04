@@ -621,8 +621,9 @@ def _begin_idempotent(
 
 
 def _store_response(
-    session: Session, idem_id: UUID, outcome: WealthResult, transaction_id: UUID
+    session: Session, idem_id: UUID, outcome: WealthResult, transaction_id: UUID | None
 ) -> None:
+    """``transaction_id`` is None for a use case that posts nothing (an insurance application)."""
     row = session.get(IdempotencyKey, idem_id)
     if row is None:
         raise RuntimeError("idempotency row vanished")

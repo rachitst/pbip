@@ -272,3 +272,60 @@ class HoldingOut(BaseModel):
     cost_basis_minor: int = Field(description="Average cost of the units held")
     gain_minor: int = Field(description="Value minus cost basis (unrealised)")
     gain_bps: int | None = Field(description="Gain as basis points of the cost basis")
+
+
+# ---------------------------------------------- insurance quote and application (ADR-0058 s. 8)
+AgeBandLiteral = Literal["18-25", "26-35", "36-50", "51-59", "60+"]
+ApplicationStatusLiteral = Literal["SUBMITTED", "APPROVED_SIMULATED", "DECLINED"]
+MAX_COVER_MINOR = 100_00_00_000_00  # INR 100 crore: above every catalogue maximum
+
+
+class InsuranceQuoteRequest(BaseModel):
+    """The customer DECLARES an age band for this quote, with explicit consent; nothing is read
+    from the profile (the ADR-0015 consent is for recommendations only). No premium from the
+    client."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: UUID
+    cover_minor: int = Field(gt=0, le=MAX_COVER_MINOR)
+    term_years: int = Field(gt=0, le=60)
+    age_band: AgeBandLiteral
+    age_band_consent: Literal[True] = Field(
+        description="Must be true: I agree to my declared age band being used for this quote"
+    )
+
+
+class InsuranceQuoteOut(BaseModel):
+    product_id: UUID
+    product_name: str
+    cover_minor: int
+    term_years: int
+    age_band: AgeBandLiteral
+    annual_premium_minor: int | None = Field(
+        description="Simulated annual premium (rule IQ-1, not an insurer's price); None if declined"
+    )
+    outcome: ApplicationStatusLiteral = Field(
+        description="The status an application with these terms would get"
+    )
+    reason: str
+    age_factor_bps: int = Field(description="The age band's factor (10000 = the 26-35 band)")
+    term_factor_bps: int = Field(description="Term life term factor; 10000 for health plans")
+    quote_version: str
+
+
+class InsuranceApplicationOut(BaseModel):
+    id: UUID
+    product_id: UUID
+    product_name: str
+    cover_minor: int
+    term_years: int
+    age_band: AgeBandLiteral
+    annual_premium_minor: int | None
+    status: ApplicationStatusLiteral = Field(
+        description="SUBMITTED = referred (no insurer decides it in PBIP); APPROVED_SIMULATED = "
+        "meets the simulated rules, no policy is issued; DECLINED"
+    )
+    decision_reason: str
+    quote_version: str
+    created_at: datetime
