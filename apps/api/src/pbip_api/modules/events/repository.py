@@ -7,8 +7,6 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Session
 
-from pbip_api.modules.events.models import ClickstreamEvent
-
 # One INSERT ... SELECT FROM unnest(...) per batch: a fixed statement with one array parameter per
 # column, so SQLAlchemy compiles it once and caches it. The previous ``insert().values(records)``
 # compiled a new statement with 8 x N parameters on every call, which made a 100-event insert
@@ -25,9 +23,11 @@ _COLUMNS = (
     ("created_at", ARRAY(DateTime(timezone=True))),
 )
 _INSERT_BATCH = text(
-    f"INSERT INTO {ClickstreamEvent.__tablename__} ({', '.join(name for name, _ in _COLUMNS)}) "  # noqa: S608 - fixed names, no input
-    f"SELECT * FROM unnest({', '.join(f':{name}' for name, _ in _COLUMNS)}) "
-    "ON CONFLICT (id, event_timestamp) DO NOTHING RETURNING id"
+    "INSERT INTO clickstream_events"
+    " (id, event_timestamp, event_type, customer_id, session_id, page_url, properties, created_at)"
+    " SELECT * FROM unnest(:id, :event_timestamp, :event_type, :customer_id, :session_id,"
+    " :page_url, :properties, :created_at)"
+    " ON CONFLICT (id, event_timestamp) DO NOTHING RETURNING id"
 ).bindparams(*(bindparam(name, type_=type_) for name, type_ in _COLUMNS))
 
 
