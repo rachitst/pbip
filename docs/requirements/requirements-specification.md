@@ -121,7 +121,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 
 | ID | Requirement | Source | Status | Tasks | Gap |
 |---|---|---|---|---|---|
-| FR-50 | The system shall capture page visits and clickstream events. | UC-11 data captured | Implemented | TASK-055; TASK-112 (#286, merged #333) | The ingestion API stores typed events in monthly partitions; the web app sends page visits as route templates and five allow-listed interactions (`docs/analytics/clickstream-events.md`) |
+| FR-50 | The system shall capture page visits and clickstream events. | UC-11 data captured | Implemented | TASK-055; TASK-112 (#286, merged #333) | The ingestion API stores typed events in monthly partitions, at most 25 per batch with request p95 under 15 ms (ADR-0055, #458); the web app sends page visits as route templates and five allow-listed interactions (`docs/analytics/clickstream-events.md`) |
 | FR-51 | The system shall capture session duration and product interests. | UC-11 data captured | Planned | TASK-055, TASK-101 | No session-duration field; no derived product interest |
 | FR-52 | The system shall analyse spend and income patterns and assign each customer a behavioural segment. | UC-11, section 5 "customer segmentation" | Implemented | TASK-040, TASK-044, TASK-052 | |
 | FR-53 | The system shall recommend loan, savings, investment and insurance products with reasons, using the behaviour profile and spending patterns. | UC-12 | Partial | TASK-054; TASK-062 | Rules-based (`rules-v1`) API; carousel on `/accounts` (TASK-062, merged #328); the propensity model is deferred until real exposure and conversion data exist (`docs/ml/recommendation-propensity-decision.md`, #345) |

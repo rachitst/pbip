@@ -4,6 +4,28 @@ All notable changes to PBIP are listed here. The format follows [Keep a Changelo
 and the project uses [Semantic Versioning](https://semver.org/). Numbers in brackets are the pull requests that made
 each change. The plain-language summaries are in [`docs/release/`](docs/release/).
 
+## [1.0.2] - 2026-11-04
+
+A patch release on top of 1.0.1, tagged `v1.0.2` on `main` on 4 November 2026. The plain-language summary is in
+[`docs/release/v1.0.2.md`](docs/release/v1.0.2.md).
+
+### Changed
+
+- **API:** `POST /api/v1/events/batch` accepts at most 25 events per batch (was 100); 26 or more get a 422
+  (`too_long`) and nothing is stored. This keeps request p95 under TASK-055's 15 ms. An asynchronous insert was
+  measured and rejected because it could not be both lossless and faster (ADR-0055, #458, #78). The web app
+  already sends at most 25 events per batch, and the k6 ingestion scenario now uses batches of 25.
+
+### Fixed
+
+- `test_config.py` no longer reads a developer's `.env`, which could mask two production-safety cases (#457).
+
+### Documentation
+
+- TASK-093 is Done, with the v1.0.1 fallback video (#457). TASK-054 is Done: the owner accepted the first-request
+  latency floor and kept the per-request token-revocation check uncached (ADR-0021, #343). TASK-055 is Done
+  (ADR-0055).
+
 ## [1.0.1] - 2026-11-04
 
 A patch release on top of 1.0.0, tagged `v1.0.1` on `main` on 4 November 2026. The plain-language summary is in
