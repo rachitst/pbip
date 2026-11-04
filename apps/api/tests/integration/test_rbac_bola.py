@@ -51,6 +51,7 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("post", f"/api/v1/transfers/scheduled/{uuid.uuid4()}/pause"),
         ("post", f"/api/v1/transfers/scheduled/{uuid.uuid4()}/resume"),
         ("get", "/api/v1/loans"),
+        ("get", "/api/v1/loans/offers"),
         ("post", "/api/v1/loans/apply"),
         ("get", f"/api/v1/loans/{uuid.uuid4()}"),
         ("get", "/api/v1/wealth/products"),
@@ -243,6 +244,7 @@ def test_staff_have_no_customer_profile(
         == 403
     )
     assert client.get("/api/v1/recommendations", headers=analyst.headers).status_code == 403
+    assert client.get("/api/v1/loans/offers", headers=analyst.headers).status_code == 403
     assert (
         client.post(
             "/api/v1/assistant/chat", headers=analyst.headers, json={"message": "balance"}
@@ -607,6 +609,13 @@ def test_bola_loans_are_only_visible_to_their_borrower(
     for name, response in attempts.items():
         assert response.status_code == 404, f"{name}: expected 404 got {response.status_code}"
     assert client.get("/api/v1/loans", headers=h).json() == []
+    # UC-06 offers are assessed on the CALLER's own figures; a customer id in the query is ignored.
+    offers = client.get(
+        "/api/v1/loans/offers", headers=h, params={"customer_id": str(alice.customer_id)}
+    )
+    assert offers.status_code == 200
+    assert offers.json()["monthly_income_minor"] == 0  # Mallory's one-off deposit, not Alice's pay
+    assert {o["status"] for o in offers.json()["offers"]} == {"NOT_ELIGIBLE"}
     own = client.get(f"/api/v1/accounts/{alice.account_id}", headers=alice.headers).json()
     assert own["ledger_balance_minor"] == 3_00_000_00  # 2 salaries + one loan, nothing from Mallory
 

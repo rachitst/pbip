@@ -1208,6 +1208,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/loans/offers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every catalogue loan assessed on my own income, spending and balance (UC-06)
+         * @description Read-only. The customer is the authenticated one; nothing is taken from the request.
+         */
+        get: operations["loan_offers_api_v1_loans_offers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/loans/products": {
         parameters: {
             query?: never;
@@ -2989,6 +3009,12 @@ export interface components {
         /** EligibilityOut */
         EligibilityOut: {
             /**
+             * Available Balance Minor
+             * @description Available balance across my accounts (ADR-0056, rule 5)
+             * @default 0
+             */
+            available_balance_minor: number;
+            /**
              * Dti Existing
              * @description Existing repayments / income
              */
@@ -3014,6 +3040,12 @@ export interface components {
              */
             monthly_income_minor: number;
             /**
+             * Monthly Spend Minor
+             * @description Average monthly spending from the ledger (ADR-0056, rule 4)
+             * @default 0
+             */
+            monthly_spend_minor: number;
+            /**
              * Product Id
              * Format: uuid
              */
@@ -3027,6 +3059,18 @@ export interface components {
             reasons: string[];
             /** Requested Amount Minor */
             requested_amount_minor: number;
+            /**
+             * Rules Version
+             * @description Version of the eligibility rules applied
+             * @default loan-eligibility-v2
+             */
+            rules_version: string;
+            /**
+             * Spending With Loan Ratio
+             * @description (Spending + active PBIP EMIs + proposed EMI) / income; limit 0.90
+             * @default 0
+             */
+            spending_with_loan_ratio: number;
             /**
              * Status
              * @enum {string}
@@ -4142,6 +4186,72 @@ export interface components {
              */
             status: "PAID" | "DUE" | "OVERDUE";
         };
+        /**
+         * LoanOfferOut
+         * @description UC-06: one catalogue loan assessed on my own figures. Amounts are 0 when not eligible.
+         */
+        LoanOfferOut: {
+            /**
+             * Annual Rate Bps
+             * @description Indicative annual rate in basis points
+             */
+            annual_rate_bps: number;
+            /**
+             * Emi At Max Minor
+             * @description EMI at the suggested maximum
+             */
+            emi_at_max_minor: number;
+            /**
+             * Loan Type
+             * @enum {string}
+             */
+            loan_type: "PERSONAL" | "AUTO" | "HOME";
+            /** Name */
+            name: string;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /**
+             * Reasons
+             * @description Why, quoting my own income, spending and balance
+             */
+            reasons: string[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ELIGIBLE" | "NOT_ELIGIBLE";
+            /**
+             * Suggested Max Amount Minor
+             * @description The largest amount the eligibility rules allow at ``tenure_months``
+             */
+            suggested_max_amount_minor: number;
+            /**
+             * Suggested Min Amount Minor
+             * @description The product's smallest amount
+             */
+            suggested_min_amount_minor: number;
+            /**
+             * Tenure Months
+             * @description The tenor the offer is sized at
+             */
+            tenure_months: number;
+        };
+        /** LoanOffersOut */
+        LoanOffersOut: {
+            /** Available Balance Minor */
+            available_balance_minor: number;
+            /** Monthly Income Minor */
+            monthly_income_minor: number;
+            /** Monthly Spend Minor */
+            monthly_spend_minor: number;
+            /** Offers */
+            offers: components["schemas"]["LoanOfferOut"][];
+            /** Rules Version */
+            rules_version: string;
+        };
         /** LoanOut */
         LoanOut: {
             /**
@@ -4887,6 +4997,8 @@ export interface components {
              * @description Summary description of the product offer
              */
             description: string;
+            /** @description Set when the product is a catalogue loan (product_id is the loan catalogue id): its eligibility, suggested range and EMI (UC-06, ADR-0056) */
+            loan?: components["schemas"]["RecommendedLoanOut"] | null;
             /**
              * Model Version
              * @description Recommendation model version identifier
@@ -4900,7 +5012,7 @@ export interface components {
             product_id: string;
             /**
              * Product Type
-             * @description Product category: SAVINGS, LOAN, INVESTMENT, or INSURANCE
+             * @description Product kind: SAVINGS, LOAN, INVESTMENT, or INSURANCE. With product_id it is stable across responses, for wiring card actions
              */
             product_type: string;
             /**
@@ -5000,6 +5112,48 @@ export interface components {
              * @description Human-readable label of what ordered the list, e.g. 'sim-propensity-v2 (trained on simulated uptake, not real customer behaviour)'
              */
             score_version: string;
+        };
+        /**
+         * RecommendedLoanOut
+         * @description UC-06 (ADR-0056): the loans module's assessment of a recommended catalogue loan.
+         */
+        RecommendedLoanOut: {
+            /**
+             * Annual Rate Bps
+             * @description Indicative annual rate in basis points
+             */
+            annual_rate_bps: number;
+            /**
+             * Eligibility Status
+             * @description Only loans the eligibility rules allow are recommended
+             * @constant
+             */
+            eligibility_status: "ELIGIBLE";
+            /**
+             * Emi At Max Minor
+             * @description EMI at the suggested maximum
+             */
+            emi_at_max_minor: number;
+            /**
+             * Loan Type
+             * @enum {string}
+             */
+            loan_type: "PERSONAL" | "AUTO" | "HOME";
+            /**
+             * Suggested Max Amount Minor
+             * @description The largest amount the eligibility rules allow at tenure_months
+             */
+            suggested_max_amount_minor: number;
+            /**
+             * Suggested Min Amount Minor
+             * @description The product's smallest amount
+             */
+            suggested_min_amount_minor: number;
+            /**
+             * Tenure Months
+             * @description The tenor the range is sized at
+             */
+            tenure_months: number;
         };
         /**
          * RecommendedProduct
@@ -9734,6 +9888,40 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    loan_offers_api_v1_loans_offers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoanOffersOut"];
+                };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

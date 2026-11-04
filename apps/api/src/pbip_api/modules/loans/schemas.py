@@ -75,6 +75,46 @@ class EligibilityOut(BaseModel):
     max_eligible_amount_minor: int = Field(description="Largest amount at the requested tenure")
     tenor_options: list[TenorOption]
     reasons: list[str] = Field(min_length=1, description="Why, in plain words with the figures")
+    monthly_spend_minor: int = Field(
+        default=0, description="Average monthly spending from the ledger (ADR-0056, rule 4)"
+    )
+    available_balance_minor: int = Field(
+        default=0, description="Available balance across my accounts (ADR-0056, rule 5)"
+    )
+    spending_with_loan_ratio: float = Field(
+        default=0.0,
+        description="(Spending + active PBIP EMIs + proposed EMI) / income; limit 0.90",
+    )
+    rules_version: str = Field(
+        default="loan-eligibility-v2", description="Version of the eligibility rules applied"
+    )
+
+
+class LoanOfferOut(BaseModel):
+    """UC-06: one catalogue loan assessed on my own figures. Amounts are 0 when not eligible."""
+
+    product_id: UUID
+    loan_type: Literal["PERSONAL", "AUTO", "HOME"]
+    name: str
+    annual_rate_bps: int = Field(description="Indicative annual rate in basis points")
+    status: Literal["ELIGIBLE", "NOT_ELIGIBLE"]
+    suggested_min_amount_minor: int = Field(description="The product's smallest amount")
+    suggested_max_amount_minor: int = Field(
+        description="The largest amount the eligibility rules allow at ``tenure_months``"
+    )
+    tenure_months: int = Field(description="The tenor the offer is sized at")
+    emi_at_max_minor: int = Field(description="EMI at the suggested maximum")
+    reasons: list[str] = Field(
+        min_length=1, description="Why, quoting my own income, spending and balance"
+    )
+
+
+class LoanOffersOut(BaseModel):
+    offers: list[LoanOfferOut]
+    monthly_income_minor: int
+    monthly_spend_minor: int
+    available_balance_minor: int
+    rules_version: str
 
 
 class LoanApplyRequest(BaseModel):

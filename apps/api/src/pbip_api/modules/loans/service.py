@@ -1,14 +1,19 @@
 """Loan catalogue, EMI calculation, eligibility, applications and repayments (TASK-045/046/047).
 
-Eligibility uses the customer's own ledger figures: average monthly income (analytics cash flow)
-and the share of it already going to loan repayments (health score). The rules, in order:
+Eligibility uses the customer's own figures (``loan-eligibility-v2``, ADR-0056): average monthly
+income and spending (analytics cash flow), the share of income already going to loan repayments
+(health score) and the available balance across the customer's accounts. The rules, in order:
 1. A lockout from repeated failed sign-ins in the last 90 days refuses the check (account risk).
-2. Debt-to-income (existing repayments + the new EMI) above 50% refuses the loan.
-3. Otherwise the largest affordable amount per tenor keeps total repayments within 50% of income.
-Every result explains itself with the figures it used. "Existing repayments" also include the
-EMIs of the customer's active PBIP loans, so loans cannot be stacked before the first EMI posts.
+2. No regular income refuses it.
+3. Debt-to-income (existing repayments + the new EMI) above 50% refuses the loan.
+4. Spending + active PBIP EMIs + the new EMI above 90% of income refuses it (UC-06 spending).
+5. An available balance below one new EMI refuses it (UC-06 balances: the first EMI is covered).
+The largest affordable amount per tenor uses the tightest of the budgets of rules 3-5, so a
+suggested maximum always passes them. Every result explains itself with the figures it used.
+"Existing repayments" also include the EMIs of the customer's active PBIP loans, so loans cannot
+be stacked before the first EMI posts.
 Without an amount (FR-38, the assistant's "can I afford a loan?"), :func:`suggest_loan` offers
-the rule-3 maximum, or says why it cannot.
+the rules 3-5 maximum, or says why it cannot.
 
 Applying (TASK-047, ADR-0024) re-runs eligibility under the per-user lock and, in ONE database
 transaction, disburses through the ledger, stores the loan and its full schedule and creates the
@@ -32,7 +37,6 @@ from pbip_api.core.db import utcnow
 from pbip_api.core.errors import ConflictError, NotFoundError, UnprocessableError
 from pbip_api.core.metrics import IDEMPOTENT_REPLAYS_TOTAL
 from pbip_api.core.money import format_minor
-from pbip_api.modules.accounts import service as accounts_service
 from pbip_api.modules.accounts.models import AccountStatus
 from pbip_api.modules.accounts.policy import get_owned_account
 from pbip_api.modules.analytics import service as analytics_service
@@ -51,6 +55,8 @@ from pbip_api.modules.loans.schemas import (
     InstalmentOut,
     LoanApplyRequest,
     LoanInstalmentOut,
+    LoanOfferOut,
+    LoanOffersOut,
     LoanOut,
     LoanProductOut,
     LoanSummaryOut,
@@ -63,7 +69,66 @@ from pbip_api.modules.payments.service import (
 )
 
 MAX_DTI = 0.50
+MAX_SPENDING_PERCENT = 90  # rule 4: spending, PBIP EMIs and the new EMI, as a share of income
+MIN_BALANCE_EMIS = 1  # rule 5: the available balance covers at least this many new EMIs
+RULES_VERSION = "loan-eligibility-v2"
 LOCKOUT_LOOKBACK = timedelta(days=90)
+# The tenor a loan offer is sized at (``loan_offers``): the middle of each product's range, a
+# common term for that kind of loan. A longer offered tenor is used only if none fits here.
+OFFER_TENURE_MONTHS: dict[LoanType, int] = {
+    LoanType.PERSONAL: 36,
+    LoanType.AUTO: 60,
+    LoanType.HOME: 240,
+}
+
+
+@dataclass(frozen=True, slots=True)
+class EligibilityFigures:
+    """The customer's own figures every eligibility rule reads (ADR-0056). Minor units."""
+
+    income_minor: int
+    existing_emi_minor: int  # rule 3: ledger repayments + active PBIP EMIs
+    active_loan_emi_minor: int  # PBIP EMIs alone, added to spending in rule 4 (safe side)
+    monthly_spend_minor: int
+    available_balance_minor: int
+
+    @property
+    def dti_room_minor(self) -> int:
+        return int(self.income_minor * MAX_DTI) - self.existing_emi_minor
+
+    @property
+    def spending_room_minor(self) -> int:
+        cap = self.income_minor * MAX_SPENDING_PERCENT // 100
+        return cap - self.monthly_spend_minor - self.active_loan_emi_minor
+
+    @property
+    def balance_room_minor(self) -> int:
+        return self.available_balance_minor // MIN_BALANCE_EMIS
+
+    @property
+    def budget_minor(self) -> int:
+        """The largest new EMI rules 3-5 all allow."""
+        return max(min(self.dti_room_minor, self.spending_room_minor, self.balance_room_minor), 0)
+
+
+def figures_from(
+    *,
+    income_minor: int,
+    emi_to_income: float,
+    monthly_spend_minor: int,
+    active_loan_emi_minor: int,
+    available_balance_minor: int,
+) -> EligibilityFigures:
+    """The one formula for the figures, used by the checks here and by the recommendation engine's
+    cached inputs (ADR-0054, ADR-0056), so both always assess a loan alike."""
+    existing = round(emi_to_income * income_minor) + active_loan_emi_minor
+    return EligibilityFigures(
+        income_minor=income_minor,
+        existing_emi_minor=existing,
+        active_loan_emi_minor=active_loan_emi_minor,
+        monthly_spend_minor=monthly_spend_minor,
+        available_balance_minor=available_balance_minor,
+    )
 
 
 def list_products() -> list[LoanProductOut]:
@@ -129,16 +194,19 @@ def _tenor_options(product: LoanProduct, budget_minor: int) -> list[TenorOption]
     return options
 
 
-def _income_and_debt(session: Session, customer_id: UUID, now: datetime) -> tuple[int, int]:
-    accounts = accounts_service.list_accounts(session, customer_id)
-    if not accounts:
-        return 0, 0
-    primary = accounts[0]
-    cash = analytics_service.get_cash_flow_profile(session, customer_id, primary.id, now)
-    health = analytics_service.get_financial_health_score(session, customer_id, primary.id, now)
-    income = cash.monthly_income_minor
-    existing = round(health.components.emi_to_income.metric_value * income)
-    return income, existing + _active_loan_emis(session, customer_id)
+def _figures(session: Session, customer_id: UUID, now: datetime) -> EligibilityFigures:
+    """Income, spending and the repayment ratio of the first account (one entries pass, #343),
+    and the available balance of all the customer's accounts."""
+    profile = analytics_service.get_customer_financial_profile(session, customer_id, now)
+    if profile is None:
+        return EligibilityFigures(0, 0, 0, 0, 0)
+    return figures_from(
+        income_minor=profile.cash_flow.monthly_income_minor,
+        emi_to_income=profile.health.components.emi_to_income.metric_value,
+        monthly_spend_minor=profile.cash_flow.monthly_spend_minor,
+        active_loan_emi_minor=_active_loan_emis(session, customer_id),
+        available_balance_minor=sum(account.available_balance for account in profile.accounts),
+    )
 
 
 def _active_loan_emis(session: Session, customer_id: UUID) -> int:
@@ -164,48 +232,100 @@ def check_eligibility(
 ) -> EligibilityOut:
     now = now or utcnow()
     product = _product(product_id, amount_minor, tenure_months)
-    income, existing = _income_and_debt(session, customer_id, now)
+    figures = _figures(session, customer_id, now)
+    lockouts = recent_lockouts(session, user_id, now - LOCKOUT_LOOKBACK)
+    return assess(product, amount_minor, tenure_months, figures, lockouts)
+
+
+def _inr(minor: int) -> str:
+    return format_minor(minor, "INR")
+
+
+def _debt_failure(figures: EligibilityFigures, proposed: int, dti_existing: float) -> str:
+    income = figures.income_minor
+    if dti_existing > MAX_DTI:
+        return (
+            f"Loan repayments already take {dti_existing:.0%} of your income of {_inr(income)} "
+            "a month, above the 50% limit."
+        )
+    dti_with_loan = (figures.existing_emi_minor + proposed) / income
+    return (
+        f"With an EMI of {_inr(proposed)}, repayments would take {dti_with_loan:.0%} of your "
+        f"income of {_inr(income)}, above the 50% limit."
+    )
+
+
+def _spending_reason(figures: EligibilityFigures, proposed: int, ok: bool) -> str:
+    committed = figures.monthly_spend_minor + figures.active_loan_emi_minor + proposed
+    share = committed / figures.income_minor
+    limit = f"{MAX_SPENDING_PERCENT}% limit"
+    if ok:
+        return (
+            f"Your spending of {_inr(figures.monthly_spend_minor)} a month plus this EMI comes to "
+            f"{share:.1%} of your income, within the {limit}."
+        )
+    return (
+        f"Your spending of {_inr(figures.monthly_spend_minor)} a month plus an EMI of "
+        f"{_inr(proposed)} would take {share:.1%} of your income of "
+        f"{_inr(figures.income_minor)}, above the {limit}."
+    )
+
+
+def _balance_reason(figures: EligibilityFigures, proposed: int, ok: bool) -> str:
+    balance = _inr(figures.available_balance_minor)
+    if ok:
+        return f"Your balance of {balance} already covers the first EMI of {_inr(proposed)}."
+    return (
+        f"Your balance of {balance} does not cover one EMI of {_inr(proposed)}; we look for at "
+        "least the first EMI in your accounts before lending."
+    )
+
+
+def assess(
+    product: LoanProduct,
+    amount_minor: int,
+    tenure_months: int,
+    figures: EligibilityFigures,
+    lockouts: int,
+) -> EligibilityOut:
+    """Rules 1-5 on the customer's figures (pure: no I/O). ``check_eligibility``, ``suggest_loan``
+    and ``loan_offers`` all decide through here, so they cannot disagree (ADR-0056)."""
+    income, existing = figures.income_minor, figures.existing_emi_minor
     proposed = emi_math.emi(amount_minor, product.annual_rate_bps, tenure_months)
     dti_existing = round(existing / income, 4) if income else 0.0
     dti_with_loan = round((existing + proposed) / income, 4) if income else 1.0
-    budget = max(int(income * MAX_DTI) - existing, 0)
-    options = _tenor_options(product, budget)
+    committed = figures.monthly_spend_minor + figures.active_loan_emi_minor + proposed
+    spending_ratio = round(committed / income, 4) if income else 1.0
+    spending_ok = committed <= income * MAX_SPENDING_PERCENT // 100
+    balance_ok = figures.available_balance_minor >= proposed * MIN_BALANCE_EMIS
+    options = _tenor_options(product, figures.budget_minor)
     at_tenure = next((o.max_amount_minor for o in options if o.tenure_months == tenure_months), 0)
 
     reasons: list[str] = []
-    eligible = True
-    lockouts = recent_lockouts(session, user_id, now - LOCKOUT_LOOKBACK)
     if lockouts:
-        eligible = False
         reasons.append(
             f"Your account was locked {lockouts} time(s) in the last 90 days after repeated "
             "failed sign-ins; loan checks resume 90 days after the last lockout."
         )
     if income == 0:
-        eligible = False
         reasons.append("We could not find regular income in your account history.")
-    elif dti_with_loan > MAX_DTI:
-        eligible = False
-        if dti_existing > MAX_DTI:
-            reasons.append(
-                f"Loan repayments already take {dti_existing:.0%} of your income of "
-                f"{format_minor(income, 'INR')} a month, above the 50% limit."
-            )
-        else:
-            reasons.append(
-                f"With an EMI of {format_minor(proposed, 'INR')}, repayments would take "
-                f"{dti_with_loan:.0%} of your income of {format_minor(income, 'INR')}, above the "
-                "50% limit."
-            )
+    else:
+        if dti_with_loan > MAX_DTI:
+            reasons.append(_debt_failure(figures, proposed, dti_existing))
+        if not spending_ok:
+            reasons.append(_spending_reason(figures, proposed, ok=False))
+        if not balance_ok:
+            reasons.append(_balance_reason(figures, proposed, ok=False))
+    eligible = not reasons
     if eligible:
-        reasons.append(
-            f"An EMI of {format_minor(proposed, 'INR')} brings repayments to {dti_with_loan:.0%} "
-            f"of your income of {format_minor(income, 'INR')}, within the 50% limit."
-        )
+        reasons += [
+            f"An EMI of {_inr(proposed)} brings repayments to {dti_with_loan:.0%} of your income "
+            f"of {_inr(income)}, within the 50% limit.",
+            _spending_reason(figures, proposed, ok=True),
+            _balance_reason(figures, proposed, ok=True),
+        ]
     if at_tenure and amount_minor > at_tenure:
-        reasons.append(
-            f"Over {tenure_months} months you could borrow up to {format_minor(at_tenure, 'INR')}."
-        )
+        reasons.append(f"Over {tenure_months} months you could borrow up to {_inr(at_tenure)}.")
     return EligibilityOut(
         status="ELIGIBLE" if eligible else "NOT_ELIGIBLE",
         product_id=product.id,
@@ -219,6 +339,10 @@ def check_eligibility(
         max_eligible_amount_minor=at_tenure if eligible or not lockouts else 0,
         tenor_options=options if not lockouts else [],
         reasons=reasons,
+        monthly_spend_minor=figures.monthly_spend_minor,
+        available_balance_minor=figures.available_balance_minor,
+        spending_with_loan_ratio=spending_ratio,
+        rules_version=RULES_VERSION,
     )
 
 
@@ -262,26 +386,16 @@ def suggest_loan(
             "can't work out a loan amount for you until 90 days after the last lockout."
         )
         return LoanSuggestion("ASK_AMOUNT", product, tenure_months, 0, 0, [reason])
-    income, existing = _income_and_debt(session, customer_id, now)
-    if income == 0:
+    figures = _figures(session, customer_id, now)
+    if figures.income_minor == 0:
         reason = "We could not find regular income in your account history to base an amount on."
         return LoanSuggestion("ASK_AMOUNT", product, tenure_months, 0, 0, [reason])
-    options = _tenor_options(product, max(int(income * MAX_DTI) - existing, 0))
-    pick = next((o for o in options if o.tenure_months == tenure_months), None)
-    pick = pick or next((o for o in options if o.tenure_months > tenure_months), None)
+    pick = _pick_tenor(product, figures, tenure_months)
     if pick is None:
         return LoanSuggestion(
-            "NOT_AFFORDABLE", product, tenure_months, 0, 0, [_no_room(product, income, existing)]
+            "NOT_AFFORDABLE", product, tenure_months, 0, 0, [_no_room(product, figures)]
         )
-    check = check_eligibility(
-        session,
-        customer_id=customer_id,
-        user_id=user_id,
-        product_id=product.id,
-        amount_minor=pick.max_amount_minor,
-        tenure_months=pick.tenure_months,
-        now=now,
-    )
+    check = assess(product, pick.max_amount_minor, pick.tenure_months, figures, lockouts=0)
     if check.status != "ELIGIBLE":  # cannot happen with the same figures; never suggest anyway
         return LoanSuggestion("NOT_AFFORDABLE", product, tenure_months, 0, 0, check.reasons)
     return LoanSuggestion(
@@ -294,13 +408,102 @@ def suggest_loan(
     )
 
 
-def _no_room(product: LoanProduct, income: int, existing: int) -> str:
-    share = existing / income
+def _pick_tenor(
+    product: LoanProduct, figures: EligibilityFigures, tenure_months: int
+) -> TenorOption | None:
+    """The largest affordable amount at ``tenure_months``, else at the next longer tenor that has
+    one; ``None`` when no tenor fits the smallest amount."""
+    options = _tenor_options(product, figures.budget_minor)
+    pick = next((o for o in options if o.tenure_months == tenure_months), None)
+    return pick or next((o for o in options if o.tenure_months > tenure_months), None)
+
+
+def _no_room(product: LoanProduct, figures: EligibilityFigures) -> str:
+    """Names the rule that binds: the smallest of the three budgets (ties: the debt rule)."""
+    income = figures.income_minor
+    smallest = f"the smallest {product.name.lower()} ({_inr(product.min_amount_minor)})"
+    rooms = (figures.dti_room_minor, figures.spending_room_minor, figures.balance_room_minor)
+    if figures.dti_room_minor == min(rooms):
+        share = figures.existing_emi_minor / income
+        return (
+            f"Loan repayments already take {share:.0%} of your income of {_inr(income)} a month, "
+            f"which leaves no room for {smallest} within the 50% limit."
+        )
+    if figures.spending_room_minor == min(rooms):
+        share = (figures.monthly_spend_minor + figures.active_loan_emi_minor) / income
+        return (
+            f"Your spending of {_inr(figures.monthly_spend_minor)} a month already takes "
+            f"{share:.1%} of your income of {_inr(income)}, which leaves no room for {smallest} "
+            f"within the {MAX_SPENDING_PERCENT}% limit."
+        )
     return (
-        f"Loan repayments already take {share:.0%} of your income of "
-        f"{format_minor(income, 'INR')} a month, which leaves no room for the smallest "
-        f"{product.name.lower()} ({format_minor(product.min_amount_minor, 'INR')}) within the "
-        "50% limit."
+        f"Your balance of {_inr(figures.available_balance_minor)} does not cover the first EMI "
+        f"of {smallest}; we look for at least the first EMI in your accounts before lending."
+    )
+
+
+def loan_offers(
+    session: Session, *, customer_id: UUID, user_id: UUID, now: datetime | None = None
+) -> LoanOffersOut:
+    """UC-06: every catalogue loan, assessed on the customer's own figures (read-only)."""
+    now = now or utcnow()
+    figures = _figures(session, customer_id, now)
+    lockouts = recent_lockouts(session, user_id, now - LOCKOUT_LOOKBACK)
+    return offers_from(figures, lockouts)
+
+
+def recent_lockout_count(session: Session, user_id: UUID, now: datetime) -> int:
+    """Rule 1's input, for callers that bring their own cached figures (recommendations)."""
+    return recent_lockouts(session, user_id, now - LOCKOUT_LOOKBACK)
+
+
+def offers_from(figures: EligibilityFigures, lockouts: int) -> LoanOffersOut:
+    """Pure: one offer per catalogue product, sized at its offer tenor (ADR-0056)."""
+    return LoanOffersOut(
+        offers=[_offer(product, figures, lockouts) for product in PRODUCTS],
+        monthly_income_minor=figures.income_minor,
+        monthly_spend_minor=figures.monthly_spend_minor,
+        available_balance_minor=figures.available_balance_minor,
+        rules_version=RULES_VERSION,
+    )
+
+
+def _offer(product: LoanProduct, figures: EligibilityFigures, lockouts: int) -> LoanOfferOut:
+    tenure = OFFER_TENURE_MONTHS[product.loan_type]
+    pick = None if lockouts or figures.income_minor == 0 else _pick_tenor(product, figures, tenure)
+    if pick is None:
+        check = assess(product, product.min_amount_minor, tenure, figures, lockouts)
+        reasons = check.reasons if check.status == "NOT_ELIGIBLE" else [_no_room(product, figures)]
+        return _offer_out(product, tenure, reasons)
+    check = assess(product, pick.max_amount_minor, pick.tenure_months, figures, lockouts)
+    if check.status != "ELIGIBLE":  # cannot happen with the same figures; never offer anyway
+        return _offer_out(product, pick.tenure_months, check.reasons)
+    return LoanOfferOut(
+        product_id=product.id,
+        loan_type=product.loan_type.value,
+        name=product.name,
+        annual_rate_bps=product.annual_rate_bps,
+        status="ELIGIBLE",
+        suggested_min_amount_minor=product.min_amount_minor,
+        suggested_max_amount_minor=pick.max_amount_minor,
+        tenure_months=pick.tenure_months,
+        emi_at_max_minor=pick.emi_at_max_minor,
+        reasons=check.reasons,
+    )
+
+
+def _offer_out(product: LoanProduct, tenure: int, reasons: list[str]) -> LoanOfferOut:
+    return LoanOfferOut(
+        product_id=product.id,
+        loan_type=product.loan_type.value,
+        name=product.name,
+        annual_rate_bps=product.annual_rate_bps,
+        status="NOT_ELIGIBLE",
+        suggested_min_amount_minor=0,
+        suggested_max_amount_minor=0,
+        tenure_months=tenure,
+        emi_at_max_minor=0,
+        reasons=reasons,
     )
 
 
