@@ -66,6 +66,20 @@ def segment_customers_task() -> int:
     return result.total_customers_assigned
 
 
+@celery_app.task(name="pbip.analytics.build_behaviour_profiles")
+def build_behaviour_profiles_task() -> int:
+    """Rebuild consenting customers' behavioural profiles (daily via beat; ADR-0057).
+
+    Idempotent: each profile is replaced under its unique key, and an advisory lock makes an
+    overlapping run do nothing. Returns how many customers were profiled.
+    """
+    from pbip_api.core.db import utcnow
+    from pbip_api.modules.analytics.profile_job import run_behaviour_profile_job
+
+    with session_scope() as session:
+        return run_behaviour_profile_job(session, utcnow()).profiled
+
+
 @celery_app.task(name="pbip.events.ensure_partitions")
 def ensure_clickstream_partitions_task() -> list[str]:
     """Create the coming months' clickstream partitions ahead (daily via beat). Idempotent."""

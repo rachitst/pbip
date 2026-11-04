@@ -21,6 +21,7 @@ from pbip_api.modules.loans.schemas import (
     EmiOut,
     EmiRequest,
     LoanApplyRequest,
+    LoanOffersOut,
     LoanOut,
     LoanProductOut,
     LoanSummaryOut,
@@ -75,6 +76,20 @@ def check_eligibility(
         amount_minor=body.amount_minor,
         tenure_months=body.tenure_months,
     )
+
+
+@router.get(
+    "/offers",
+    response_model=LoanOffersOut,
+    summary="Every catalogue loan assessed on my own income, spending and balance (UC-06)",
+)
+def loan_offers(
+    customer: Customer = Depends(get_current_customer),
+    principal: Principal = Depends(get_current_principal),
+    session: Session = Depends(get_session),
+) -> LoanOffersOut:
+    """Read-only. The customer is the authenticated one; nothing is taken from the request."""
+    return service.loan_offers(session, customer_id=customer.id, user_id=principal.user_id)
 
 
 @router.post(

@@ -41,6 +41,7 @@ import { MeContext, useCurrentUser } from "./MeContext";
 // Recharts is large: load the Insights page (and the chart library) only when it is opened.
 const Insights = lazy(() => import("../pages/Insights"));
 const BehaviourAnalytics = lazy(() => import("../pages/staff/BehaviourAnalytics"));
+const FraudDashboard = lazy(() => import("../pages/staff/FraudDashboard"));
 // The Wealth page draws its allocation chart with Recharts too: also loaded on first visit.
 const Wealth = lazy(() => import("../pages/Wealth"));
 // The comparison reuses the Wealth page's formatters, so it shares that lazily loaded chunk.
@@ -72,6 +73,7 @@ function staffNav(me: UserOut, demoLabEnabled: boolean): NavItem[] {
   const items: NavItem[] = [{ to: "/staff", label: "Overview", end: true }];
   if (canReviewFraud(me)) {
     items.push({ to: "/staff/monitoring", label: "Security monitoring" });
+    items.push({ to: "/staff/fraud-dashboard", label: "Fraud dashboard" });
     items.push({ to: "/staff/fraud", label: "Fraud alerts" });
   }
   if (canAccessRMInsights(me)) {
@@ -286,6 +288,14 @@ export const routes: RouteObject[] = [
           { path: "fraud/:alertId", element: <FraudAlert /> },
           { path: "fraud-lab", element: <FraudDemoLab /> },
           { path: "monitoring", element: <SecurityMonitoring /> },
+          {
+            path: "fraud-dashboard",
+            element: (
+              <Suspense fallback={<LoadingState label="Loading the fraud dashboard..." />}>
+                <FraudDashboard />
+              </Suspense>
+            ),
+          },
           { path: "insights", element: <RMInsights /> },
           { path: "compliance", element: <ComplianceDashboard /> },
           {

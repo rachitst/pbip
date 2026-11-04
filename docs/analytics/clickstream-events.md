@@ -40,15 +40,22 @@ references, search terms or any other free text. The API refuses free text and u
 
 ## Consent
 
-PBIP records no analytics consent for customers yet (the customer profile has none; ADR-0015 covers consent
-to use the date of birth for recommendations, TASK-107). The tracker has a consent switch
-(`clickstream.setConsent`): refusing stops collection and clears the buffer. Today the switch follows the
-browser's Global Privacy Control signal; when an analytics consent is recorded for the customer, the shell
-sets the switch from it.
+Analytics is off until the customer turns it on (Profile page, `PUT /api/v1/customers/me/analytics-consent`;
+ADR-0057). The decision is stored with its time and policy version and audited. The API stores no event for a
+customer whose consent is off: the batch is answered 202 with `accepted: 0` and `not_recorded: n`. Turning it off
+erases the customer's stored events and behavioural profile. The tracker also refuses when the browser sends the
+Global Privacy Control signal.
+
+## Sessions and the behavioural profile
+
+A session is the events of one `session_id` in time order, split wherever more than 30 minutes pass without an
+event; its length is last event minus first event. A daily job turns each consenting customer's last 90 days into
+a behavioural profile: sessions, mean session length, pages per session, last activity and product interests
+(recency-weighted: a recommendation card opened weighs 3, the loan calculator 2, a visit to `/loans`, `/wealth` or
+`/wealth/compare` 1, halving every 14 days). ADR-0057 has the full rules.
 
 ## Limits
 
 * Product clicks are counted only once TASK-062 renders recommendation cards and calls `trackProductClicked`.
-* Session length is derived from the first and last event of a `session_id`, so a visit with one event
-  counts as 0 s.
+* Session length is derived from the first and last event of a session, so a visit with one event counts as 0 s.
 * Events still in the buffer when the customer signs out are discarded.

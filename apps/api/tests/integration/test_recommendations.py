@@ -115,9 +115,10 @@ def engine_inputs(monkeypatch: pytest.MonkeyPatch) -> list[CustomerRecommendatio
         ctx: CustomerRecommendationContext,
         top_k: int = 3,
         propensity: PropensityModel | None = None,
+        apply_risk_band: bool = True,
     ) -> list[Recommendation]:
         seen.append(ctx)
-        return real(ctx, top_k=top_k, propensity=propensity)
+        return real(ctx, top_k=top_k, propensity=propensity, apply_risk_band=apply_risk_band)
 
     monkeypatch.setattr(recommendations_service, "generate_recommendations", spy)
     return seen
@@ -313,7 +314,7 @@ def test_recommendations_equal_those_built_from_the_separate_reads(
     assert served.recommendations  # ranked from that context by the unchanged engine
 
 
-def test_recommendation_context_is_six_queries_and_the_request_seven(
+def test_recommendation_context_is_seven_queries_and_the_request_eight(
     client: TestClient,
     make_customer: Callable[..., Actor],
     migrated_engine: Engine,
@@ -322,6 +323,9 @@ def test_recommendation_context_is_six_queries_and_the_request_seven(
     over the entries, segment, age band, loans, fixed deposits. Over HTTP the age band reads the
     customer that authentication has just loaded, so the request is 7: token check, customer, then
     the five. A new query here is a latency budget decision.
+
+    ADR-0056 (UC-06) adds one live statement to every count: the lockout count for the loans
+    module's rule 1, which changes without touching an account (7 and 8 cold, 4 and 5 warm).
 
     ADR-0054: that is the cold build. While the accounts' row versions are unchanged, the entries,
     loans and deposits come from the cache: 3 for the service (accounts, segment, age band) and 4
@@ -337,13 +341,13 @@ def test_recommendation_context_is_six_queries_and_the_request_seven(
         session.rollback()
         with count_statements(migrated_engine) as service_warm:
             recommendations_service.get_customer_recommendations(session, alice.customer_id)
-    assert (len(service), len(service_warm)) == (6, 3), (service, service_warm)
+    assert (len(service), len(service_warm)) == (7, 4), (service, service_warm)
     recommendations_service.clear_context_cache()
     with count_statements(migrated_engine) as http:
         assert client.get("/api/v1/recommendations", headers=alice.headers).status_code == 200
     with count_statements(migrated_engine) as http_warm:
         assert client.get("/api/v1/recommendations", headers=alice.headers).status_code == 200
-    assert (len(http), len(http_warm)) == (7, 4), (http, http_warm)
+    assert (len(http), len(http_warm)) == (8, 5), (http, http_warm)
     for sent in (http, http_warm):  # no second customer read
         assert not any("FROM customers" in sql for sql in sent[2:]), sent
 
@@ -374,6 +378,6 @@ def test_a_customer_with_a_loan_adds_only_the_instalments_query(
         recommendations_service.clear_context_cache()  # the cold build (ADR-0054)
         with count_statements(migrated_engine) as sent:
             recommendations_service.get_customer_recommendations(session, alice.customer_id)
-    assert len(sent) == 7, sent
+    assert len(sent) == 8, sent  # 7 + the live lockout count (ADR-0056)
     kinds = [[held.kind.value for held in ctx.held_products] for ctx in engine_inputs]
     assert kinds == [["SAVINGS_ACCOUNT", "PERSONAL_LOAN"]] * 2

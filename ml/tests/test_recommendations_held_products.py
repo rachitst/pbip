@@ -161,7 +161,9 @@ def test_only_reasons_change_the_output_shape_stays_the_same() -> None:
         "title",
         "description",
         "cta_label",
+        "loan",  # ADR-0056: additive, None for every non-loan product
     }
+    assert rec.loan is None
     assert rec.model_version == "rules-v1"
 
 

@@ -1,4 +1,5 @@
-"""Fraud telemetry for analysts (TASK-035): decision trends, hold rate, rule triggers, risky payees.
+"""Fraud telemetry for analysts (TASK-035): decision trends, hold rate, rule triggers, risky payees,
+the risk-score distribution and the alert outcomes the fraud dashboard charts.
 
 Aggregates only: counts, rates, rule codes and MASKED destination accounts. No customer names, no
 full account numbers. Results are cached in Redis for 60 seconds per window, so a dashboard that
@@ -16,7 +17,7 @@ from sqlalchemy import ColumnElement, Date, and_, cast, func, literal_column, se
 from sqlalchemy.orm import Session
 
 from pbip_api.modules.accounts.service import mask_account_number
-from pbip_api.modules.fraud.models import FraudEvent
+from pbip_api.modules.fraud.models import AlertStatus, FraudAlert, FraudEvent
 from pbip_api.modules.fraud.structuring_monitor import MONITOR_VERSION
 from pbip_api.modules.ledger.models import Transaction
 from pbip_api.modules.payees.models import Payee
@@ -27,10 +28,13 @@ CACHE_TTL_SECONDS = 60
 DECISIONS = ("ALLOW", "STEP_UP", "REVIEW", "BLOCK")
 TOP_N = 10
 RISKY_AT = 60  # REVIEW and above
+BAND_WIDTH = 10  # risk-score histogram: 0-9, 10-19, ..., 90-100 (100 joins the top band)
+BANDS = 10
 
 
 def _cache_key(days: int) -> str:
-    return f"fraud:stats:v1:{days}"
+    # v2 added risk_bands and alerts: a v1 payload cached before a deploy would fail validation.
+    return f"fraud:stats:v2:{days}"
 
 
 def fraud_stats(session: Session, redis_client: Redis, days: int, now: datetime) -> dict[str, Any]:
@@ -83,7 +87,38 @@ def compute(session: Session, days: int, now: datetime) -> dict[str, Any]:
             or 0
         ),
         "latency_p95_ms": _p95(session, since),
+        "risk_bands": _risk_bands(session, in_window),
+        "alerts": _alerts(session, since),
     }
+
+
+def _risk_bands(session: Session, in_window: ColumnElement[bool]) -> list[dict[str, int]]:
+    """How many payment decisions fell in each 10-point risk band; every band, zeros included."""
+    band = func.least(FraudEvent.risk_score // BAND_WIDTH, BANDS - 1)
+    counts = {
+        int(b): int(n)
+        for b, n in session.execute(select(band, func.count()).where(in_window).group_by(band))
+    }
+    return [
+        {
+            "low": i * BAND_WIDTH,
+            "high": 100 if i == BANDS - 1 else (i + 1) * BAND_WIDTH - 1,
+            "count": counts.get(i, 0),
+        }
+        for i in range(BANDS)
+    ]
+
+
+def _alerts(session: Session, since: datetime) -> dict[str, int]:
+    """Alerts raised in the window by where they stand now: open, confirmed fraud or released."""
+    counts = dict.fromkeys((s.value for s in AlertStatus), 0)
+    for status, n in session.execute(
+        select(FraudAlert.status, func.count())
+        .where(FraudAlert.created_at >= since)
+        .group_by(FraudAlert.status)
+    ):
+        counts[AlertStatus(status).value] = int(n)
+    return counts
 
 
 def _top_rules(session: Session, since: datetime) -> list[dict[str, Any]]:

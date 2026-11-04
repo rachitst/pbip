@@ -10,7 +10,8 @@ before it can be relied on.
 Conventions: `<placeholder>` values are yours to fill in; never paste secrets, tokens or customer data into tickets,
 chat or this document; every command is run on the deployment host from `~/pbip` unless stated otherwise.
 
-Related: [`docs/security/threat-model.md`](../security/threat-model.md) (controls and residual risks),
+Related: [deployment guide](deployment-guide.md) (entry point for releases), [support guide](support-guide.md)
+(L1/L2 triage and escalation), [`docs/security/threat-model.md`](../security/threat-model.md) (controls and residual risks),
 [`docs/SETUP_GUIDE.md`](../SETUP_GUIDE.md) (local setup), [`README.md`](../../README.md) (deploy trigger),
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md). Backup and restore drills are scripted (TASK-083, §4); the staging VM
 pipeline is TASK-082 (#105).
@@ -26,8 +27,8 @@ pipeline is TASK-082 (#105).
 | `web` | `${IMAGE_PREFIX}/web:${IMAGE_TAG}` (nginx, unprivileged) | Terminates TLS (`${PUBLIC_HTTPS_PORT:-443}` → 8443); HTTP (`${PUBLIC_PORT:-80}` → 8080) only redirects and answers ACME challenges; static React build; proxies `/api/` to `api`. The only published ports | unless-stopped | `./certs/web`, `./acme` (read-only) |
 | `api` | `${IMAGE_PREFIX}/api:${IMAGE_TAG}` | FastAPI (uvicorn) | unless-stopped | none |
 | `migrate` | same as `api` | One-shot `alembic upgrade head`; `api` waits for it to complete | no | none |
-| `worker` | same as `api` | Celery worker (outbox relay) | unless-stopped | none |
-| `beat` | same as `api` | Celery beat: `pbip.outbox.relay` every 10 s | unless-stopped | schedule file in `/tmp` |
+| `worker` | same as `api` | Celery worker: runs every scheduled job (outbox relay, scheduled transfers, step-up expiry, fixed-deposit payouts, drift and structuring monitors, analytics, purges) | unless-stopped | none |
+| `beat` | same as `api` | Celery beat, single instance: publishes the jobs on the schedule in `worker/celery_app.py` (outbox relay every 10 s; the full list is in the [component diagram](../diagrams/component.md)) | unless-stopped | schedule file in `/tmp` |
 | `db` | `postgres:16-alpine` | PostgreSQL 16; not published; TLS required for every TCP client (`tls-entrypoint.sh`) | unless-stopped | volume `pgdata`, `./certs/db` (read-only) |
 | `redis` | `redis:7-alpine` (`--appendonly yes`) | Rate-limit counters, Celery broker/result backend | unless-stopped | volume `redisdata` |
 

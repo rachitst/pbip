@@ -19,6 +19,9 @@ whole journey a customer or an analyst depends on.
 | 6 | BOLA: another customer's account, payee and transfer ids in a URL give 404 `not_found`, exactly like ids that do not exist; a deep link with them opens nothing | `journey-bola.spec.ts`: "another customer's ids in a URL give Not found, like ids that do not exist" |
 | 7 | Administration (TASK-108): an ADMIN signs in with MFA, changes the standing-order cap with a reason and restores it, creates a staff user and clears its lockout; an RM gets no link, a restricted page and 403 `forbidden` from the admin API | `journey-admin.spec.ts` (#359) |
 | 8 | Compare products (TASK-098) at 1280 and 360 px: the product checkboxes keep their size and the names get the row (a layout guard jsdom cannot give), then two products open the comparison table | `journey-compare.spec.ts` (#360) |
+| 9 | Statements (TASK-074): the deposit is on Accounts -> Transactions with its running balance; Statements downloads the default period as a real PDF (`%PDF-` header) and as CSV with the deposit row in the credit column | `journey-statements.spec.ts`: "a statement is viewed on screen and downloaded as PDF and CSV" |
+| 10 | Bill payment (TASK-020): a seeded biller, consumer number and amount through review to the receipt (201), listed under recent bill payments, and the account debited once | `journey-bills.spec.ts`: "a bill is paid through review to a receipt and shows in history" |
+| 11 | Loans (TASK-046/051): the eligibility pre-check says Eligible, the application is reviewed and disbursed (201, receipt), and after a reload the loan is tracked with 0 of 12 EMIs paid, its upcoming EMIs and the money on the account | `journey-loans.spec.ts`: "a loan is checked, applied for, disbursed and tracked" |
 
 The older specs stay: `smoke.spec.ts`, `sprint1.spec.ts` (account opening, devices, password change),
 `shell.spec.ts` (routing, roles, phone width) and `perf.spec.ts` (TASK-102 page and login budgets).
@@ -34,6 +37,9 @@ The older specs stay: `smoke.spec.ts`, `sprint1.spec.ts` (account opening, devic
   outside `example.com` (so it can never touch a demo or real customer) and amounts above INR 10,00,000. The
   API image ships no `scripts/`, so the helper pipes the file into the API container:
   `docker compose exec -T api python - <email> <amount_minor> < scripts/e2e_fund.py`.
+  With `--salary <minor>` it first credits that salary at 10:00 IST on the 1st of each of the two previous
+  months (back-dated through `ledger.deposit(posted_at=...)`, ADR-0048, as `make seed` builds the demo
+  salaries), so the customer has regular income (ADR-0043) and the loan journey's pre-check is Eligible.
 * **Fraud decisions.** The engine is not stubbed or bypassed. Each money journey uses a fresh customer whose
   first transfer goes to a payee added seconds earlier, with no failed sign-ins and no history, so the inputs
   are the same on every run:
@@ -115,7 +121,10 @@ APP_ENV is `local`; it never prints it. CI has no trained model files, so the AP
 
 * The fraud journeys prove the decisions for the inputs above; the engine's behaviour on other inputs is
   covered by `test_fraud_hybrid.py` and the behaviour-regression suite (TASK-080), not here.
-* Statements, bill payments and loans have no E2E journey yet (unit and integration tests only).
+* The loan journey covers the personal loan at its minimum amount and shortest tenure; other products,
+  refusals and repayments are covered by `test_loan_applications.py` and the loans unit tests.
+* The statement journey does not wait for the "statement downloaded" notification: the outbox relay is a
+  worker job, and waiting on it would be a timed wait (covered by `test_outbox_relay.py`).
 * Prompt injection against the assistant (blueprint section 13 lists it for E2E) is covered by the API's
   adversarial suite (`test_assistant_adversarial.py`), not by a browser journey.
 * The suite needs Docker on the machine that runs Playwright (for `docker compose exec`).

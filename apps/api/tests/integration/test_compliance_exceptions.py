@@ -9,12 +9,15 @@ import threading
 import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pbip_api.core.config import Settings
+from pbip_api.core.db import utcnow
 from pbip_api.core.errors import ConflictError
 from pbip_api.modules.auth.models import RoleName
 from pbip_api.modules.compliance.exceptions import (
@@ -30,9 +33,17 @@ from pbip_api.modules.compliance.exceptions import (
 from pbip_api.modules.compliance.models import AuditLog
 from pbip_api.modules.compliance.service import AuditService
 from pbip_api.modules.fraud.dependencies import get_fraud_scorer
+from pbip_api.modules.notifications.models import OutboxEvent
+from pbip_api.modules.notifications.service import RetryPolicy, relay_outbox
+from pbip_api.modules.payments import scheduled_service
+from pbip_api.modules.payments.models import ScheduledTransfer, ScheduleFrequency
+from pbip_api.modules.payments.scheduled_service import (
+    ScheduledExecutionOutcome,
+    execute_scheduled_instruction,
+)
 from pbip_ml.fraud.contract import FraudDecision
 from pbip_ml.fraud.testing import FixedDecisionScorer
-from pbip_test_support import PASSWORD, Actor, age_payee
+from pbip_test_support import PASSWORD, Actor, FakeClock, age_payee
 from sqlalchemy import Engine, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -40,6 +51,13 @@ pytestmark = pytest.mark.integration
 
 URL = "/api/v1/compliance/exceptions"
 NO_EXCEPTIONS = {"OPEN": 0, "ACKNOWLEDGED": 0, "RESOLVED": 0}
+ALL_KINDS = (
+    "BLOCKED_TRANSFER",
+    "ACCOUNT_LOCKOUT",
+    "AUDIT_CHAIN_FAILURE",
+    "NOTIFICATION_DEAD_LETTER",
+    "SCHEDULED_TRANSFER_FAILURE",
+)
 
 
 @pytest.fixture(autouse=True)
@@ -134,7 +152,7 @@ def test_empty_dashboard_is_all_zeros_with_a_valid_chain(
         0,
         None,
     )
-    assert ind["by_kind"] == dict.fromkeys(("BLOCKED_TRANSFER", "ACCOUNT_LOCKOUT", "AUDIT_CHAIN_FAILURE"), NO_EXCEPTIONS)  # fmt: skip
+    assert ind["by_kind"] == dict.fromkeys(ALL_KINDS, NO_EXCEPTIONS)
     assert body["audit_chain"]["valid"] is True and body["audit_chain"]["first_invalid_seq"] is None
     assert body["items"] == []
 
@@ -411,3 +429,182 @@ def test_concurrent_acknowledgements_record_exactly_one(
     with migrated_engine.connect() as connection:
         n = connection.execute(text("SELECT count(*) FROM audit_logs WHERE action = :a"), {"a": ACKNOWLEDGED_ACTION}).scalar_one()  # fmt: skip
     assert n == 1
+
+
+# ---------------------------------------------------------------- system exceptions (section 5)
+
+
+def dead_letter(db: Session, user_id: uuid.UUID) -> tuple[str, str]:
+    """A real dead letter: the relay fails an unhandled event on its only attempt (ADR-0040).
+    Returns (audit seq of the dead-letter row, outbox event id)."""
+    event = OutboxEvent(event_type="NOT_A_HANDLED_TYPE", payload={"user_id": str(user_id)})
+    db.add(event)
+    db.commit()
+    assert relay_outbox(db, now=utcnow(), policy=RetryPolicy(max_attempts=1)) == 1
+    db.commit()
+    seq = db.scalars(
+        select(AuditLog.seq).where(AuditLog.action == "OUTBOX_EVENT_DEAD_LETTERED")
+    ).one()
+    return str(seq), str(event.id)
+
+
+def missed_occurrence(
+    engine: Engine, sender: Actor, payee: dict[str, Any], settings: Settings
+) -> tuple[str, str]:
+    """A real missed occurrence: unfunded yesterday, recovered as MISSED today (ADR-0023). The
+    amount is above the sender's balance but inside the per-transfer and daily limits.
+    Returns (audit seq of the MISSED row, scheduled transfer id)."""
+    today = utcnow().date()
+    yesterday = today - timedelta(days=1)
+    with Session(engine) as session:
+        order = ScheduledTransfer(
+            customer_id=sender.customer_id, user_id=sender.user_id,
+            from_account_id=sender.account_id, payee_id=uuid.UUID(str(payee["id"])),
+            amount=15_000_000, currency="INR", reference="rent", frequency=ScheduleFrequency.DAILY,
+            start_date=yesterday, next_run_date=yesterday,
+        )  # fmt: skip
+        session.add(order)
+        session.commit()
+        order_id = order.id
+    with patch.object(scheduled_service, "get_settings", lambda: settings):
+        for day, expected in (
+            (yesterday, ScheduledExecutionOutcome.RETRYABLE_FAILURE),
+            (today, ScheduledExecutionOutcome.RECOVERED),
+        ):
+            with Session(engine) as session:
+                assert execute_scheduled_instruction(session, order_id, today_utc=day) == expected
+    with Session(engine) as session:
+        seq = session.scalars(
+            select(AuditLog.seq).where(AuditLog.action == "SCHEDULED_TRANSFER_MISSED")
+        ).one()
+    return str(seq), str(order_id)
+
+
+def test_dead_lettered_notifications_are_exceptions_without_their_payload(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_staff: Callable[..., Actor],
+    db: Session,
+) -> None:
+    alice = make_customer()
+    seq, event_id = dead_letter(db, alice.user_id)
+    officer = make_staff(RoleName.COMPLIANCE_OFFICER)
+
+    body = client.get(URL, headers=officer.headers).json()
+
+    assert body["indicators"]["by_kind"]["NOTIFICATION_DEAD_LETTER"] == {**NO_EXCEPTIONS, "OPEN": 1}
+    assert body["indicators"]["unresolved_exceptions"] == 1
+    (item,) = body["items"]
+    assert (item["id"], item["kind"], item["ref"]) == (
+        f"NOTIFICATION_DEAD_LETTER:{seq}", "NOTIFICATION_DEAD_LETTER", seq,
+    )  # fmt: skip
+    assert (item["subject_id"], item["event_type"], item["attempts"], item["error_type"]) == (
+        event_id, "NOT_A_HANDLED_TYPE", 1, "NoOutboxHandlerError",
+    )  # fmt: skip
+    assert str(alice.user_id) not in str(item)  # the payload is never shown
+    assert item["failure"] is None and item["amount_minor"] is None
+
+    acked = client.post(
+        f"{URL}/NOTIFICATION_DEAD_LETTER/{seq}/acknowledge",
+        headers=officer.headers,
+        json={"reason": "Handler missing; raised with the platform team"},
+    )
+    assert acked.status_code == 200, acked.text
+    assert acked.json()["status"] == "ACKNOWLEDGED" and acked.json()["subject_id"] == event_id
+    rows = db.scalars(
+        select(AuditLog).where(AuditLog.resource_type == RESOURCE_TYPE)
+    ).all()  # fmt: skip
+    assert [(r.action, r.actor_user_id, r.resource_id) for r in rows] == [
+        (ACKNOWLEDGED_ACTION, officer.user_id, f"NOTIFICATION_DEAD_LETTER:{seq}")
+    ]
+    listed = client.get(f"{URL}?kind=NOTIFICATION_DEAD_LETTER&status=ACKNOWLEDGED", headers=officer.headers)  # fmt: skip
+    assert [i["ref"] for i in listed.json()["items"]] == [seq]
+
+
+def test_missed_and_auto_paused_scheduled_transfers_are_exceptions(
+    client: TestClient,
+    make_staff: Callable[..., Actor],
+    migrated_engine: Engine,
+    db: Session,
+    settings: Settings,
+    payer: tuple[Actor, dict[str, Any]],
+) -> None:
+    sender, payee = payer
+    missed_seq, order_id = missed_occurrence(migrated_engine, sender, payee, settings)
+    # The permanent-failure path (payments.scheduled_service) writes this row; recorded here the
+    # same way, because forcing a permanent transfer failure needs a broken account.
+    paused = AuditService(db).record(
+        None, "SCHEDULED_TRANSFER_AUTO_PAUSED", "scheduled_transfer", order_id,
+        details={"actor": "scheduler", "channel": "SCHEDULED", "reason": "account_not_active"},
+    )  # fmt: skip
+    db.commit()
+    officer = make_staff(RoleName.ADMIN)
+
+    body = client.get(f"{URL}?kind=SCHEDULED_TRANSFER_FAILURE", headers=officer.headers).json()
+
+    assert body["indicators"]["by_kind"]["SCHEDULED_TRANSFER_FAILURE"]["OPEN"] == 2
+    paused_item, missed_item = body["items"]
+    assert (paused_item["ref"], paused_item["failure"], paused_item["failure_reason"]) == (
+        str(paused.seq), "AUTO_PAUSED", "account_not_active",
+    )  # fmt: skip
+    assert paused_item["occurrence_date"] is None
+    assert missed_item["ref"] == missed_seq and missed_item["subject_id"] == order_id
+    assert (missed_item["failure"], missed_item["failure_reason"]) == (
+        "MISSED",
+        "insufficient_funds",
+    )
+    assert missed_item["occurrence_date"] == (utcnow().date() - timedelta(days=1)).isoformat()
+    assert missed_item["failed_attempts"] == 1
+
+    done = client.post(
+        f"{URL}/SCHEDULED_TRANSFER_FAILURE/{missed_seq}/resolve",
+        headers=officer.headers,
+        json={"reason": "Customer told; order continues"},
+    )
+    assert done.status_code == 200 and done.json()["status"] == "RESOLVED"
+    again = client.post(f"{URL}/SCHEDULED_TRANSFER_FAILURE/{missed_seq}/resolve", headers=officer.headers, json={"reason": "again"})  # fmt: skip
+    assert again.status_code == 409
+
+
+def test_a_system_exception_reference_must_be_a_matching_audit_row(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_staff: Callable[..., Actor],
+    db: Session,
+) -> None:
+    """Wrong kind, a sequence of an unrelated audit row, or a malformed or huge number: 404."""
+    seq, _ = dead_letter(db, make_customer().user_id)
+    officer = make_staff(RoleName.COMPLIANCE_OFFICER)
+    unrelated = db.scalars(
+        select(AuditLog.seq).where(AuditLog.action != "OUTBOX_EVENT_DEAD_LETTERED")
+    ).first()
+    assert unrelated is not None
+    for kind, ref in (
+        ("SCHEDULED_TRANSFER_FAILURE", seq),  # it is a dead letter, not a scheduled failure
+        ("NOTIFICATION_DEAD_LETTER", str(unrelated)),
+        ("NOTIFICATION_DEAD_LETTER", "0"),
+        ("NOTIFICATION_DEAD_LETTER", "9" * 30),  # beyond bigint: no row, and no SQL error
+        ("NOTIFICATION_DEAD_LETTER", "abc"),
+        ("BLOCKED_TRANSFER", seq),  # a sequence is not a fraud event id
+    ):
+        r = client.post(f"{URL}/{kind}/{ref}/acknowledge", headers=officer.headers, json={"reason": "check"})  # fmt: skip
+        assert r.status_code == 404, (kind, ref, r.text)
+
+
+def test_system_exceptions_follow_the_window(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    make_staff: Callable[..., Actor],
+    db: Session,
+    clock: FakeClock,
+) -> None:
+    """The audit row is append-only, so the clock moves instead: 31 days on, it is outside 30."""
+    dead_letter(db, make_customer().user_id)
+    officer = make_staff(RoleName.COMPLIANCE_OFFICER)
+    clock.advance(31 * 24 * 3600)
+    month = client.get(URL, headers=officer.headers).json()
+    quarter = client.get(f"{URL}?days=90", headers=officer.headers).json()
+    assert month["indicators"]["by_kind"]["NOTIFICATION_DEAD_LETTER"] == NO_EXCEPTIONS
+    assert month["items"] == []
+    assert quarter["indicators"]["by_kind"]["NOTIFICATION_DEAD_LETTER"]["OPEN"] == 1
+    assert quarter["indicators"]["unacknowledged_past_sla"] == 1

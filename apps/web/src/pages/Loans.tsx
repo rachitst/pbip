@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import type {
   AccountOut,
   EligibilityOut,
+  LoanOfferOut,
   LoanOut,
   LoanProductOut,
   LoanSummaryOut,
@@ -209,6 +210,85 @@ function ActiveLoans() {
   );
 }
 
+/** UC-06 (ADR-0056): every catalogue loan with my own eligibility, suggested range and reasons.
+ * Nothing is computed here: statuses, amounts and reasons are shown as the API sent them. */
+function LoanOffers() {
+  const offers = useQuery({ queryKey: ["loan-offers"], queryFn: api.loanOffers });
+  if (offers.isPending) return <LoadingState label="Checking which loans suit you..." />;
+  if (offers.isError) {
+    return (
+      <ErrorState
+        message={errorMessage(offers.error, "Could not load your loan offers.")}
+        onRetry={() => {
+          void offers.refetch();
+        }}
+      />
+    );
+  }
+  if (offers.data.offers.length === 0) {
+    return <EmptyState message="No loan products are available right now." />;
+  }
+  return (
+    <>
+      <p className="muted">
+        Based on your income of {formatMinor(offers.data.monthly_income_minor, "INR")} a month,
+        spending of {formatMinor(offers.data.monthly_spend_minor, "INR")} a month and balance of{" "}
+        {formatMinor(offers.data.available_balance_minor, "INR")}.
+      </p>
+      <div className="loan-list">
+        {offers.data.offers.map((offer) => (
+          <LoanOfferCard key={offer.product_id} offer={offer} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function LoanOfferCard({ offer }: { offer: LoanOfferOut }) {
+  const headingId = useId();
+  const eligible = offer.status === "ELIGIBLE";
+  return (
+    <section className="loan-card" aria-labelledby={headingId}>
+      <h3 id={headingId}>{offer.name}</h3>
+      <StatusBadge
+        status={
+          eligible
+            ? { label: "Eligible", tone: "success" }
+            : { label: "Not eligible", tone: "danger" }
+        }
+      />
+      <dl className="details">
+        {eligible && (
+          <>
+            <div className="details__row">
+              <dt>You could borrow</dt>
+              <dd>
+                {formatMinor(offer.suggested_min_amount_minor, "INR")} to{" "}
+                {formatMinor(offer.suggested_max_amount_minor, "INR")}
+              </dd>
+            </div>
+            <div className="details__row">
+              <dt>EMI at the top of the range</dt>
+              <dd>
+                {formatMinor(offer.emi_at_max_minor, "INR")} over {offer.tenure_months} months
+              </dd>
+            </div>
+          </>
+        )}
+        <div className="details__row">
+          <dt>Interest rate</dt>
+          <dd>from {formatRate(offer.annual_rate_bps)}</dd>
+        </div>
+      </dl>
+      <ul>
+        {offer.reasons.map((reason) => (
+          <li key={reason}>{reason}</li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 // ---------------------------------------------------------------- calculator
 function EmiSummary({ terms }: { terms: Terms }) {
   const emi = useQuery({
@@ -392,6 +472,7 @@ function Calculator({
       await queryClient.invalidateQueries({ queryKey: ["loans"] });
       await queryClient.invalidateQueries({ queryKey: ["accounts"] });
       await queryClient.invalidateQueries({ queryKey: ["loan-eligibility"] });
+      await queryClient.invalidateQueries({ queryKey: ["loan-offers"] });
     } catch (caught) {
       setApplyError(errorMessage(caught, "The application could not be completed. Try again."));
     } finally {
@@ -581,6 +662,10 @@ export function Loans() {
       <section aria-labelledby="active-loans-title">
         <h2 id="active-loans-title">Your loans</h2>
         <ActiveLoans />
+      </section>
+      <section aria-labelledby="loan-offers-title">
+        <h2 id="loan-offers-title">Loans for you</h2>
+        <LoanOffers />
       </section>
       <section aria-labelledby="apply-title">
         <h2 id="apply-title">Apply for a loan</h2>

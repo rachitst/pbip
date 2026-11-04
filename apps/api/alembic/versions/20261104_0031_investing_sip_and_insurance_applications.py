@@ -1,7 +1,7 @@
 """Investing (funds, stocks, bonds), fund SIPs and insurance applications (ADR-0058).
 
 Revision ID: 0031
-Revises: 0029
+Revises: 0030
 Create Date: 2026-11-04 18:05:04.996997+00:00
 
 ``investment_instruments`` is reference data seeded here, identical in every environment: a
@@ -21,7 +21,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0031"
-down_revision: str | None = "0029"
+down_revision: str | None = "0030"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
