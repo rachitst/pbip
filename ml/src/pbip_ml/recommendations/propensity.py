@@ -1,8 +1,9 @@
-"""Serving side of the simulated-uptake propensity model (TASK-054, ADR-0049). Inference-safe.
+"""Serving side of the simulated-uptake propensity model (TASK-054, ADR-0049, ADR-0053).
+Inference-safe.
 
 The model is one logistic regression per catalogue product, trained offline by
 ``pbip_ml.recommendations.train`` on a **simulation** of product uptake
-(``pbip_ml.recommendations.simulation``), never on real customer behaviour. Its probabilities are
+(``pbip_datagen.uptake``, uptake-sim-2), never on real customer behaviour. Its probabilities are
 "probability of uptake next month under the simulation's documented assumptions", nothing more,
 and every response that uses them says so (``SCORE_LABEL``).
 
@@ -24,8 +25,8 @@ from uuid import UUID
 
 from pbip_ml.recommendations.contract import CustomerRecommendationContext, HeldProductKind
 
-MODEL_VERSION: Final = "sim-propensity-v1"
-SCORE_LABEL: Final = "sim-propensity-v1 (trained on simulated uptake, not real customer behaviour)"
+MODEL_VERSION: Final = "sim-propensity-v2"
+SCORE_LABEL: Final = "sim-propensity-v2 (trained on simulated uptake, not real customer behaviour)"
 ARTIFACT_FORMAT: Final = "pbip-propensity-logreg-json-1"
 MODEL_FILE: Final = "propensity_model.json"
 REPORT_FILE: Final = "report.json"

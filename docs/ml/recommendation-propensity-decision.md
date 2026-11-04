@@ -1,5 +1,28 @@
 # Decision: no trained propensity model for product recommendations yet (TASK-054)
 
+> **Update 2026-11-04, final attempt (ADR-0053): criterion 2 met on SIMULATED data.** On the owner's
+> direction the uptake simulation was rebuilt in data-gen (`uptake-sim-2`), driven by income stability,
+> savings rate, spending mix, life-stage age band, holdings, clickstream interest and noise, with no rules-v1
+> score or rule feeding the labels (an import-linter contract and tests enforce it). A LightGBM `lambdarank`
+> ranker and a logistic-regression baseline were trained with a time-based split (train months 2-11, validate
+> 13-14, test 16-22) and tracked in MLflow. The gate was fixed before the first run.
+>
+> | Held-out test months (simulated) | NDCG@3 | hit-rate@3 | p95 scoring per request |
+> |---|---|---|---|
+> | `rules-v1` | 0.499 | 0.741 | 0.041 ms |
+> | logistic regression (`sim-propensity-v2`) | **0.721** (+0.222, 95% CI +0.200 to +0.244) | **0.873** (+0.132, +0.106 to +0.155) | 0.076 ms (+0.035 ms) |
+> | LightGBM ranker (`sim-lgbm-ranker-v2`) | 0.707 (+0.208, +0.188 to +0.230) | 0.868 (+0.126, +0.103 to +0.150) | 5.9 ms |
+>
+> Verdict: **promoted** (the logistic regression, the validation winner): it beats rules-v1 on both metrics with
+> bootstrap intervals above zero, the real engine with it showed 0 ineligible products and 0 changed reasons
+> over 2,000 test contexts, and it adds 0.035 ms p95 (gate 2 ms of the 40 ms budget; measured on a 2-CPU
+> Celeron N4500 with the 1-minute load average at 3.7-3.8). It is served where `models/recommendations` holds the artefact that
+> `make recommendation-model` produces; rules-v1 stays the fallback. Read the result for what it is: the labels
+> are our formula, a popularity ordering alone closes most of the hit-rate gap, base rates are inflated, and none
+> of it is evidence about real customers. Every number, assumption and limit is in the
+> [model card](model-cards/recommendation-propensity.md). Section "What would be needed to train a propensity
+> model later" below still describes what real data would need.
+
 > **Update 2026-11-04 (ADR-0049).** On the owner's direction a propensity model was trained on a documented,
 > clearly labelled simulation of uptake and compared with `rules-v1` on the same simulated data. It did not pass
 > its promotion gate, so `rules-v1` is still served. See
@@ -70,7 +93,7 @@ outcomes exist, not to fit invented ones.
 | Acceptance criterion (TASK-054) | Status | Evidence |
 |---|---|---|
 | Eligibility rules first | Met | `evaluate_eligibility` runs before ranking in `generate_recommendations`; tests `test_eligibility_exclusion_*` in `ml/tests/test_recommendations.py` |
-| Scores propensity with logistic regression / gradient boosting | **Not met** | This document. The score is a fixed, hand-weighted relevance formula and is labelled "not a probability" in the contract and API schema |
+| Scores propensity with logistic regression / gradient boosting | **Met on simulated data only** (2026-11-04, ADR-0053) | `sim-propensity-v2` passed its pre-set gate against rules-v1 on simulated uptake (model card); without the model artefact, rules-v1's hand-weighted formula orders the products, labelled "not a probability" |
 | Top 3 with human-readable reasons | Met | `top_k=3` default; every `Recommendation` has `reasons` (min 1) built from the customer's own figures in INR; integration tests in `apps/api/tests/integration/test_recommendations.py` |
 | `GET /api/v1/recommendations` < 40 ms | Engine: met. Endpoint: **not demonstrated** | See below |
 

@@ -37,7 +37,7 @@ _TRAINING_ONLY = (
     "pbip_ml.fraud.training",
     "pbip_ml.fraud.evaluation",
     "pbip_ml.fraud.promotion",
-    "pbip_ml.recommendations.simulation",
+    "pbip_ml.recommendations.panel",
     "pbip_ml.recommendations.training",
     "pbip_ml.recommendations.train",
 )
@@ -89,7 +89,7 @@ def test_the_recommendation_model_loads_without_sklearn_or_its_training_code(
     tmp_path: Path,
 ) -> None:
     """ADR-0049: with RECOMMENDATION_MODEL_DIR set, the API imports the JSON propensity scorer
-    only; the uptake simulation, the training job and scikit-learn stay out of the process."""
+    only; the panel builder, the training job and scikit-learn stay out of the process."""
     loaded = _loaded_modules(
         tmp_path,
         FRAUD_SCORER="rules",
