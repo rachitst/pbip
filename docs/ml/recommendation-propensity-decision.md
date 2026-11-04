@@ -177,7 +177,7 @@ unchanged. Tests: `test_recommendation_context_cache.py`; the statement counts (
 
 **Measured, main vs this change.** Scratch PostgreSQL 16 (seeded with `scripts/seed_dev.py`, Alice: 42 entries),
 real HTTP to one uvicorn process (keep-alive client, one login, 20 warm-up then 2 x 150 requests per endpoint), one
-server at a time, each run started only when the 1-minute load average was below 4 (the lead's rule for this
+server at a time, each run started only when the 1-minute load average was below 4 (the team's measurement rule for this
 machine). Machine: 2-CPU Celeron N4500, shared.
 
 | p50 / p95 (ms), load at start | main | this change |
