@@ -36,7 +36,7 @@ code, with HTTPS through nginx and TLS to PostgreSQL.
   CI on repository-controlled input. None ships: production uses only the static build behind nginx (AGENTS.md:
   Node is build tooling only), and `npm audit --omit=dev` reports 0. The fix is a major-version bump of the
   lint stack, and AGENTS.md rule 6 keeps dependency bumps out of feature PRs. Dependabot (`.github/dependabot.yml`)
-  proposes it; review it before 2026-12-01.
+  proposes it; review it before 2026-12-01. Update 4 Nov: #434 fixed 10 of the 13; the remaining 3 (one chain through `openapi-typescript`) are accepted by the owner as [RA-1](risk-acceptances.md).
 - **A-2, gitleaks false positives (16).** `scripts/smoke_test.py` and `scripts/smoke_test.sh` send a deliberately
   wrong password (`definitely-wrong-123`) to prove bad credentials are rejected. 13 hits are `hashed_secret` entries
   in `.secrets.baseline`: SHA-1 fingerprints detect-secrets stores so it can recognise audited values, not secrets.
