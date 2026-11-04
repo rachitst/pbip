@@ -75,7 +75,11 @@ def _respond(result: TransferResult) -> JSONResponse:
     "",
     response_model=TransferOut,
     status_code=201,
-    responses={202: {"model": TransferOut}, 403: {"model": TransferOut}},
+    responses={
+        404: {"description": "The account or payee is not mine (problem+json)"},
+        202: {"model": TransferOut},
+        403: {"model": TransferOut},
+    },
     summary="Create a transfer (idempotent)",
 )
 def create_transfer(
@@ -173,11 +177,13 @@ def get_scheduled_transfer(
     "/scheduled/{scheduled_transfer_id}/cancel",
     response_model=ScheduledTransferOut,
     summary="Cancel a scheduled transfer",
+    responses={409: {"description": "Not in a state that can be cancelled (problem+json)"}},
 )
 @router.delete(
     "/scheduled/{scheduled_transfer_id}",
     response_model=ScheduledTransferOut,
     summary="Cancel a scheduled transfer (DELETE alias)",
+    responses={409: {"description": "Not in a state that can be cancelled (problem+json)"}},
 )
 def cancel_scheduled_transfer(
     scheduled_transfer_id: UUID,
@@ -200,6 +206,7 @@ def cancel_scheduled_transfer(
     "/scheduled/{scheduled_transfer_id}/pause",
     response_model=ScheduledTransferOut,
     summary="Pause an active scheduled transfer",
+    responses={409: {"description": "Not active, so it cannot be paused (problem+json)"}},
 )
 def pause_scheduled_transfer(
     scheduled_transfer_id: UUID,
@@ -222,6 +229,7 @@ def pause_scheduled_transfer(
     "/scheduled/{scheduled_transfer_id}/resume",
     response_model=ScheduledTransferOut,
     summary="Resume a paused scheduled transfer",
+    responses={409: {"description": "Not paused, so it cannot be resumed (problem+json)"}},
 )
 def resume_scheduled_transfer(
     scheduled_transfer_id: UUID,
@@ -256,6 +264,7 @@ def get_transfer(
     "/{transfer_id}/step-up",
     response_model=TransferOut,
     summary="Complete a flagged transfer with a TOTP code (idempotent)",
+    responses={409: {"description": "The transfer is not waiting for a step-up (problem+json)"}},
 )
 def confirm_step_up(
     transfer_id: UUID,

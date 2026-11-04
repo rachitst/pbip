@@ -5376,6 +5376,20 @@ export interface operations {
                     "application/json": components["schemas"]["AccountOut"][];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     open_my_account_api_v1_accounts_post: {
@@ -5399,6 +5413,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AccountOut"];
                 };
+            };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -5429,6 +5464,20 @@ export interface operations {
                     "application/json": components["schemas"]["AccountsSummaryOut"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     get_my_account_api_v1_accounts__account_id__get: {
@@ -5450,6 +5499,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AccountOut"];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
@@ -5495,6 +5558,20 @@ export interface operations {
                     "application/pdf": unknown;
                     "text/csv": unknown;
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
@@ -5552,6 +5629,20 @@ export interface operations {
                     "application/json": components["schemas"]["EntriesPage"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
                 headers: {
@@ -5588,6 +5679,20 @@ export interface operations {
                     "application/json": components["schemas"]["RuntimeSettingsOut"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     change_runtime_setting_api_v1_admin_settings__key__put: {
@@ -5613,6 +5718,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RuntimeSettingOut"];
                 };
+            };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
@@ -5654,6 +5780,27 @@ export interface operations {
                     "application/json": components["schemas"]["UserOut"];
                 };
             };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -5684,6 +5831,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["LockoutStatusOut"];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
@@ -5722,6 +5883,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["UnlockResultOut"];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
@@ -5764,6 +5939,27 @@ export interface operations {
                     "application/json": components["schemas"]["BalanceForecastResponse"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such account of mine, or no segment yet (problem+json) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -5796,6 +5992,27 @@ export interface operations {
                     "application/json": components["schemas"]["FinancialHealthScoreResponse"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such account of mine, or no segment yet (problem+json) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -5825,6 +6042,27 @@ export interface operations {
                     "application/json": components["schemas"]["CustomerSegmentResponse"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such account of mine, or no segment yet (problem+json) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     get_customer_spending_api_v1_analytics_spending_get: {
@@ -5851,6 +6089,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SpendingBreakdownResponse"];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such account of mine, or no segment yet (problem+json) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -5888,6 +6147,27 @@ export interface operations {
                     "application/json": components["schemas"]["SpendingTrendsResponse"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such account of mine, or no segment yet (problem+json) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -5921,6 +6201,27 @@ export interface operations {
                     "application/json": components["schemas"]["ChatResponse"];
                 };
             };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -5929,6 +6230,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Too many requests in the limiter's window (problem+json) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -5960,6 +6268,27 @@ export interface operations {
                     };
                 };
             };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -5968,6 +6297,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Too many requests in the limiter's window (problem+json) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -5990,6 +6326,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AssistantHistory"];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -6024,6 +6374,20 @@ export interface operations {
                     "application/json": components["schemas"]["TokenResponse"];
                 };
             };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Wrong email or password (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -6032,6 +6396,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Account temporarily locked (problem+json) */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Too many requests in the limiter's window (problem+json) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -6048,6 +6426,13 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6082,6 +6467,13 @@ export interface operations {
                     "application/json": components["schemas"]["UserOut"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     confirm_mfa_api_v1_auth_mfa_confirm_post: {
@@ -6105,6 +6497,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RecoveryCodesOut"];
                 };
+            };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description MFA already enabled, or enrolment not started (problem+json) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -6135,6 +6548,20 @@ export interface operations {
                     "application/json": components["schemas"]["MfaEnrollmentOut"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description MFA is already enabled (problem+json) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     verify_mfa_api_v1_auth_mfa_verify_post: {
@@ -6159,6 +6586,20 @@ export interface operations {
                     "application/json": components["schemas"]["TokenResponse"];
                 };
             };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid or expired challenge or code (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -6167,6 +6608,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Too many requests in the limiter's window (problem+json) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -6190,6 +6638,27 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Incorrect current password (problem+json; 403, not 401) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -6198,6 +6667,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Account temporarily locked (problem+json) */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Too many requests in the limiter's window (problem+json) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -6230,6 +6713,13 @@ export interface operations {
             };
             /** @description The refresh cookie is invalid, expired, revoked or reused */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6268,6 +6758,27 @@ export interface operations {
                     "application/json": components["schemas"]["UserOut"];
                 };
             };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Self-registration is disabled here (problem+json) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An account with this email already exists (problem+json) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -6276,6 +6787,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Too many requests in the limiter's window (problem+json) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -6299,6 +6817,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["BillerOut"][];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -6338,6 +6863,34 @@ export interface operations {
                     "application/json": components["schemas"]["BillPaymentOut"];
                 };
             };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such biller, or the account is not mine (problem+json) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -6369,6 +6922,20 @@ export interface operations {
                     "application/json": components["schemas"]["BillPaymentOut"][];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -6399,6 +6966,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["BillPaymentOut"];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
@@ -6439,6 +7020,20 @@ export interface operations {
                     "application/json": components["schemas"]["AuditLogOut"][];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -6468,6 +7063,20 @@ export interface operations {
                     "application/json": components["schemas"]["ChainStatusOut"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     list_exceptions_api_v1_compliance_exceptions_get: {
@@ -6495,6 +7104,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ComplianceExceptionsOut"];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -6532,6 +7155,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ExceptionOut"];
                 };
+            };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description No such exception */
             404: {
@@ -6584,6 +7228,27 @@ export interface operations {
                     "application/json": components["schemas"]["ExceptionOut"];
                 };
             };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description No such exception */
             404: {
                 headers: {
@@ -6627,6 +7292,20 @@ export interface operations {
                     "application/json": components["schemas"]["DeviceOut"][];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     register_device_api_v1_customers_devices_post: {
@@ -6652,6 +7331,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DeviceOut"];
                 };
+            };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -6683,6 +7383,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DeviceOut"];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
@@ -6720,6 +7434,20 @@ export interface operations {
                     "application/json": components["schemas"]["CustomerProfileOut"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     put_my_date_of_birth_api_v1_customers_me_date_of_birth_put: {
@@ -6743,6 +7471,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DemographicsOut"];
                 };
+            };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -6771,6 +7520,20 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     get_my_demographics_api_v1_customers_me_demographics_get: {
@@ -6790,6 +7553,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DemographicsOut"];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -6815,6 +7592,27 @@ export interface operations {
                     "application/json": components["schemas"]["CustomerProfileOut"];
                 };
             };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -6823,6 +7621,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Too many requests in the limiter's window (problem+json) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -6837,6 +7642,27 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Too many requests in the limiter's window (problem+json) */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6865,6 +7691,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DemographicsOut"];
                 };
+            };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -6895,6 +7742,20 @@ export interface operations {
                     "application/json": components["schemas"]["RiskProfileOut"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     put_my_risk_profile_api_v1_customers_me_risk_profile_put: {
@@ -6918,6 +7779,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RiskProfileOut"];
                 };
+            };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -6952,6 +7834,27 @@ export interface operations {
                     "application/json": components["schemas"]["EventBatchResponse"];
                 };
             };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -6960,6 +7863,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Too many requests in the limiter's window (problem+json) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -6986,6 +7896,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AlertSummary"][];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -7017,6 +7941,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AlertDetail"];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
@@ -7061,6 +7999,27 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
                 headers: {
@@ -7097,6 +8056,20 @@ export interface operations {
                     "application/json": components["schemas"]["DemoLabStatus"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Not a local/test environment: the lab does not exist here */
             404: {
                 headers: {
@@ -7124,6 +8097,20 @@ export interface operations {
                     "application/json": components["schemas"]["SecurityMonitoring"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     clear_scheduled_transfer_fraud_block_api_v1_fraud_scheduled_transfers__scheduled_transfer_id__clear_post: {
@@ -7149,6 +8136,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ScheduledClearOut"];
                 };
+            };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description No such standing order */
             404: {
@@ -7195,6 +8203,20 @@ export interface operations {
                     "application/json": components["schemas"]["FraudStats"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -7228,6 +8250,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["BehaviourAnalyticsResponse"];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -7271,6 +8307,20 @@ export interface operations {
                     "application/json": components["schemas"]["CustomerInsightsListResponse"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -7301,6 +8351,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["CustomerInsightDetail"];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description No such customer, or not assigned to the calling RM */
             404: {
@@ -7344,6 +8408,27 @@ export interface operations {
                     "application/json": components["schemas"]["RmAssignmentOut"];
                 };
             };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description No such customer */
             404: {
                 headers: {
@@ -7373,6 +8458,20 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7419,6 +8518,20 @@ export interface operations {
                     "application/json": components["schemas"]["InteractionListResponse"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description No such customer, or not assigned to the calling RM */
             404: {
                 headers: {
@@ -7461,6 +8574,27 @@ export interface operations {
                     "application/json": components["schemas"]["InteractionOut"];
                 };
             };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description No such customer, or not assigned to the calling RM */
             404: {
                 headers: {
@@ -7497,6 +8631,20 @@ export interface operations {
                     "application/json": components["schemas"]["RelationshipManagerListResponse"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     list_loans_api_v1_loans_get: {
@@ -7516,6 +8664,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["LoanSummaryOut"][];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -7543,6 +8705,34 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["LoanOut"];
                 };
+            };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such loan product, or the account is not mine (problem+json) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not eligible (plain reasons) or invalid request */
             422: {
@@ -7574,6 +8764,34 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["EmiOut"];
                 };
+            };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such loan product (problem+json) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -7608,6 +8826,34 @@ export interface operations {
                     "application/json": components["schemas"]["EligibilityOut"];
                 };
             };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such loan product (problem+json) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -7637,6 +8883,20 @@ export interface operations {
                     "application/json": components["schemas"]["LoanProductOut"][];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     get_loan_api_v1_loans__loan_id__get: {
@@ -7658,6 +8918,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["LoanOut"];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
@@ -7699,6 +8973,13 @@ export interface operations {
                     "application/json": components["schemas"]["NotificationsPage"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -7728,6 +9009,13 @@ export interface operations {
                     "application/json": components["schemas"]["BulkMarkReadResponse"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     read_notification_api_v1_notifications__notification_id__read_post: {
@@ -7743,6 +9031,13 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7784,6 +9079,20 @@ export interface operations {
                     "application/json": components["schemas"]["PayeeOut"][];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     create_payee_api_v1_payees_post: {
@@ -7807,6 +9116,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PayeeOut"];
                 };
+            };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -7839,6 +9169,20 @@ export interface operations {
                     "application/json": components["schemas"]["PayeeOut"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
                 headers: {
@@ -7870,6 +9214,20 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7917,6 +9275,27 @@ export interface operations {
                     "application/json": components["schemas"]["PayeeOut"];
                 };
             };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
                 headers: {
@@ -7955,6 +9334,20 @@ export interface operations {
                     "application/json": components["schemas"]["PayeeVerificationOut"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
                 headers: {
@@ -7990,6 +9383,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RecommendationsResponse"];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -8029,6 +9436,20 @@ export interface operations {
                     "application/json": components["schemas"]["TransferOut"];
                 };
             };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Forbidden */
             403: {
                 headers: {
@@ -8037,6 +9458,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TransferOut"];
                 };
+            };
+            /** @description The account or payee is not mine (problem+json) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -8071,6 +9499,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ScheduledTransferOut"][];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -8108,6 +9550,27 @@ export interface operations {
                     "application/json": components["schemas"]["ScheduledTransferOut"];
                 };
             };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -8138,6 +9601,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ScheduledTransferOut"];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
@@ -8177,8 +9654,29 @@ export interface operations {
                     "application/json": components["schemas"]["ScheduledTransferOut"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not in a state that can be cancelled (problem+json) */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8215,8 +9713,29 @@ export interface operations {
                     "application/json": components["schemas"]["ScheduledTransferOut"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not in a state that can be cancelled (problem+json) */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8253,8 +9772,29 @@ export interface operations {
                     "application/json": components["schemas"]["ScheduledTransferOut"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not active, so it cannot be paused (problem+json) */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8291,8 +9831,29 @@ export interface operations {
                     "application/json": components["schemas"]["ScheduledTransferOut"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not paused, so it cannot be resumed (problem+json) */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8328,6 +9889,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TransferOut"];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
@@ -8374,8 +9942,29 @@ export interface operations {
                     "application/json": components["schemas"]["TransferOut"];
                 };
             };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The transfer is not waiting for a step-up (problem+json) */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8410,6 +9999,20 @@ export interface operations {
                     "application/json": components["schemas"]["FixedDepositOut"][];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     book_fixed_deposit_api_v1_wealth_fixed_deposits_book_post: {
@@ -8436,6 +10039,34 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["FixedDepositOut"];
                 };
+            };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such wealth product, or the account is not mine (problem+json) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Insufficient funds, terms not offered or invalid request */
             422: {
@@ -8468,6 +10099,34 @@ export interface operations {
                     "application/json": components["schemas"]["DepositQuoteOut"];
                 };
             };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such wealth product (problem+json) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -8498,6 +10157,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["FixedDepositOut"];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
@@ -8539,6 +10212,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["FixedDepositOut"];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
             404: {
@@ -8584,6 +10271,20 @@ export interface operations {
                     "application/json": components["schemas"]["InsuranceProductOut"][];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -8613,6 +10314,20 @@ export interface operations {
                     "application/json": components["schemas"]["PortfolioOut"];
                 };
             };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     list_products_api_v1_wealth_products_get: {
@@ -8635,6 +10350,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["WealthProductOut"][];
                 };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

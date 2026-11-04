@@ -22,11 +22,15 @@ from scripts.fuzz import (
     FuzzIdentity,
     FuzzResult,
     Target,
+    _build_harness,
+    _error_type,
     _make_executor,
     _request_data,
     _Tally,
     main,
     run_fuzz,
+    staff_operations,
+    use_owned_ids,
 )
 
 pytestmark = pytest.mark.unit
@@ -324,3 +328,64 @@ def test_identity_gives_up_when_login_keeps_failing(monkeypatch: pytest.MonkeyPa
     target.login_statuses = [429, 429]
     with pytest.raises(RuntimeError, match="HTTP 429"):
         FuzzIdentity(target).provision()
+
+
+def test_about_half_of_the_generated_ids_become_owned_ones_and_the_choice_is_reproducible() -> None:
+    owned = {"payee_id": ["p1", "p2"], "account_id": ["a1"]}
+    generated = [f"00000000-0000-4000-8000-{i:012d}" for i in range(200)]
+    swapped = []
+    for value in generated:
+        case = SimpleNamespace(path_parameters={"payee_id": value, "kind": "x"})
+        use_owned_ids(case, owned)  # type: ignore[arg-type]  # a Case's path_parameters only
+        assert case.path_parameters["kind"] == "x"  # names without owned ids are left alone
+        swapped.append(case.path_parameters["payee_id"])
+    owned_hits = sum(v in owned["payee_id"] for v in swapped)
+    assert 60 < owned_hits < 140  # some cases reach the owned resource, the rest test the 404
+    again = []
+    for value in generated:
+        case = SimpleNamespace(path_parameters={"payee_id": value})
+        use_owned_ids(case, owned)  # type: ignore[arg-type]
+        again.append(case.path_parameters["payee_id"])
+    assert again == swapped
+
+
+def test_a_case_without_path_parameters_is_left_alone() -> None:
+    case = SimpleNamespace(path_parameters=None)
+    use_owned_ids(case, {"payee_id": ["p1"]})  # type: ignore[arg-type]
+    assert case.path_parameters is None
+
+
+def test_staff_operations_are_the_role_gated_routes_only() -> None:
+    staff = staff_operations()
+    assert {"GET /api/v1/fraud/alerts", "GET /api/v1/admin/settings",
+            "GET /api/v1/compliance/audit-logs", "GET /api/v1/insights/customers"} <= staff  # fmt: skip
+    assert "GET /api/v1/accounts" not in staff and "GET /api/v1/auth/me" not in staff
+
+
+def test_an_undocumented_status_code_is_its_own_failure_kind() -> None:
+    from schemathesis.openapi.checks import UndefinedStatusCode
+
+    undefined = UndefinedStatusCode(
+        operation="GET /x",
+        status_code=418,
+        defined_status_codes=["200"],
+        allowed_status_codes=[200],
+        message="Undocumented status code",
+    )
+    assert _error_type(BaseExceptionGroup("checks", [undefined]), 418) == "UndocumentedStatusCode"
+    assert _error_type(BaseExceptionGroup("checks", [ValueError("body")]), 200) == (
+        "ResponseSchemaViolation"
+    )
+    assert _error_type(BaseExceptionGroup("checks", [undefined]), 500) == "UnhandledServerError"
+    tally = _Tally(goal=1)
+    tally.record(_case(), 418, FuzzFailure("GET", "/x", 418, "UndocumentedStatusCode", "418"))
+    assert tally.undocumented_status_codes == 1 and tally.schema_violations == 0
+
+
+def test_the_harness_never_creates_an_admin_on_a_deployed_configuration() -> None:
+    from pbip_api.core.config import get_settings
+
+    deployed = SimpleNamespace(is_deployed=True)
+    app = SimpleNamespace(dependency_overrides={get_settings: lambda: deployed})
+    with pytest.raises(RuntimeError, match="staging/production"):
+        _build_harness(Target(app=app), app, None, {})  # type: ignore[arg-type]

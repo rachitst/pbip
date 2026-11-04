@@ -56,6 +56,10 @@ def _token_response(tokens: SessionTokens) -> TokenResponse:
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(register_limiter)],
     summary="Self-register a retail customer (disabled in production by configuration)",
+    responses={
+        403: {"description": "Self-registration is disabled here (problem+json)"},
+        409: {"description": "An account with this email already exists (problem+json)"},
+    },
 )
 def register(
     body: RegisterRequest,
@@ -78,6 +82,10 @@ def register(
     response_model=TokenResponse,
     dependencies=[Depends(login_limiter)],
     summary="Password login. Returns tokens, or an MFA challenge if MFA is enabled",
+    responses={
+        401: {"description": "Wrong email or password (problem+json)"},
+        423: {"description": "Account temporarily locked (problem+json)"},
+    },
 )
 def login(
     body: LoginRequest,
@@ -99,6 +107,7 @@ def login(
     response_model=TokenResponse,
     dependencies=[Depends(login_limiter)],
     summary="Complete login with a TOTP (or recovery) code",
+    responses={401: {"description": "Invalid or expired challenge or code (problem+json)"}},
 )
 def verify_mfa(
     body: MfaVerifyRequest,
@@ -175,7 +184,12 @@ def me(
     )
 
 
-@router.post("/mfa/enroll", response_model=MfaEnrollmentOut, summary="Start TOTP enrolment")
+@router.post(
+    "/mfa/enroll",
+    response_model=MfaEnrollmentOut,
+    summary="Start TOTP enrolment",
+    responses={409: {"description": "MFA is already enabled (problem+json)"}},
+)
 def enroll_mfa(
     principal: Principal = Depends(get_current_principal),
     service: AuthService = Depends(get_auth_service),
@@ -188,6 +202,9 @@ def enroll_mfa(
     "/mfa/confirm",
     response_model=RecoveryCodesOut,
     summary="Confirm TOTP enrolment, get recovery codes",
+    responses={
+        409: {"description": "MFA already enabled, or enrolment not started (problem+json)"}
+    },
 )
 def confirm_mfa(
     body: MfaConfirmRequest,
@@ -204,6 +221,10 @@ def confirm_mfa(
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(password_change_limiter)],
     summary="Change user password and invalidate all active session tokens",
+    responses={
+        403: {"description": "Incorrect current password (problem+json; 403, not 401)"},
+        423: {"description": "Account temporarily locked (problem+json)"},
+    },
 )
 def change_password(
     body: PasswordChangeRequest,

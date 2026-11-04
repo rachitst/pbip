@@ -83,7 +83,9 @@ jobs:
       - name: Wait for API readiness probe
         run: |
           curl --fail --silent --retry 30 --retry-delay 2 --retry-all-errors http://127.0.0.1:8000/api/health/ready
-      # Authenticated by default: the runner registers a disposable customer on the ephemeral database.
+      # Authenticated by default: the runner registers a disposable customer on the ephemeral database,
+      # seeds resources it owns (their ids feed the path parameters) and bootstraps an MFA ADMIN through
+      # the service layer on TEST_DATABASE_URL, the server's database, for the staff routes (#175 M11).
       # The run number is the Hypothesis seed, so a failing night can be replayed with --seed.
       - name: Execute property-based API fuzzing (>= 500 cases, positive and negative inputs)
         env:
