@@ -12,6 +12,7 @@ import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
 import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
+import { AnalyticsConsentSection } from "./AnalyticsConsentSection";
 import { DemographicsSection } from "./DemographicsSection";
 import { MfaEnrolment } from "./MfaEnrolment";
 import { PhoneSection } from "./PhoneSection";
@@ -25,6 +26,7 @@ export function Profile() {
       <PhoneSection />
       <RiskProfileSection />
       <DemographicsSection />
+      <AnalyticsConsentSection />
       <MfaEnrolment />
       <Devices />
       <ChangePassword />

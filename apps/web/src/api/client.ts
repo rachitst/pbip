@@ -20,6 +20,9 @@ export type DeviceOut = components["schemas"]["DeviceOut"];
 export type RiskProfileOut = components["schemas"]["RiskProfileOut"];
 export type RiskQuestionnaire = components["schemas"]["RiskQuestionnaire"];
 export type DemographicsOut = components["schemas"]["DemographicsOut"];
+export type AnalyticsConsentOut = components["schemas"]["AnalyticsConsentOut"];
+export type BehaviourProfileResponse = components["schemas"]["BehaviourProfileResponse"];
+export type BehaviourProfile = components["schemas"]["BehaviourProfile"];
 export type EntriesPage = components["schemas"]["EntriesPage"];
 export type EntryOut = components["schemas"]["EntryOut"];
 /** TASK-017 query filters, from the generated contract (amounts in paise, dates YYYY-MM-DD IST). */
@@ -320,6 +323,13 @@ export const api = {
       body: JSON.stringify(answers),
     }),
   demographics: () => apiFetch<DemographicsOut>("/api/v1/customers/me/demographics"),
+  /** ADR-0057: clickstream and behavioural profiling only with this consent. */
+  analyticsConsent: () => apiFetch<AnalyticsConsentOut>("/api/v1/customers/me/analytics-consent"),
+  setAnalyticsConsent: (granted: boolean) =>
+    apiFetch<AnalyticsConsentOut>("/api/v1/customers/me/analytics-consent", {
+      method: "PUT",
+      body: JSON.stringify({ granted }),
+    }),
   setDateOfBirth: (dateOfBirth: string) =>
     apiFetch<DemographicsOut>("/api/v1/customers/me/date-of-birth", {
       method: "PUT",
@@ -615,6 +625,10 @@ export const api = {
   },
   customerInsightDetail: (customerId: string) =>
     apiFetch<CustomerInsightDetail>(`/api/v1/insights/customers/${encodeURIComponent(customerId)}`),
+  customerBehaviourProfile: (customerId: string) =>
+    apiFetch<BehaviourProfileResponse>(
+      `/api/v1/insights/customers/${encodeURIComponent(customerId)}/behaviour-profile`,
+    ),
   customerInteractions: (customerId: string, limit = 20) =>
     apiFetch<InteractionListResponse>(
       `/api/v1/insights/customers/${encodeURIComponent(customerId)}/interactions?limit=${String(limit)}`,
