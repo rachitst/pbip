@@ -1,0 +1,9 @@
+{
+  "model_version": "hybrid-lgbm-iforest-3",
+  "bundle_name": "pbip-fraud-hybrid-lgbm-iforest-3.tar.gz",
+  "bundle_sha256": "f0ee1c590be7dd48c63a84cb225fd02208f689deb9cf87a7d05b006ffb9ecdab",
+  "manifest_sha256": "9f3a861929e2d3095b97dc0b0f74e52ed47b9501e714554181fd7c20609c4dc9",
+  "url": "https://github.com/rachitst/pbip/releases/download/v1.0.0/pbip-fraud-hybrid-lgbm-iforest-3.tar.gz",
+  "registry": {"registered_model": "pbip-fraud", "version": "1", "alias": "champion", "run_id": "4d3a1ae903c4430d8745e9bb20fda674"},
+  "packed_with": "make fraud-bundle (python -m pbip_ml.fraud.bundle pack --model-dir models/fraud --out dist/pbip-fraud-hybrid-lgbm-iforest-3.tar.gz)"
+}

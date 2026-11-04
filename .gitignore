@@ -38,6 +38,8 @@ ml/artifacts/
 data-gen/output/
 mlruns/
 models/
+# TASK-084: the reviewed lock file that pins the served fraud bundle (not the model files)
+!ml/models/
 data/fraud/
 mlartifacts/
 *.parquet
