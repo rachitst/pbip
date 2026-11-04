@@ -162,3 +162,34 @@ load average below 4 (the runs themselves push it a little higher):
 Both are within budget. An earlier pair taken with other jobs running (load 7-8.4) gave a COPY median of 13.97 s and a
 scoring p95 of 176.3 ms; that was the CPU, not the query (the cost test shows the work does not grow with the number
 of credits), and those numbers are not used. A scoring run that started at load 4.54 (p95 77.0 ms) was discarded.
+
+## The mule-scoring test moved to the benchmark too; hang guards for two long unit tests
+
+`test_scoring_stays_fast_with_1000_inbound_transfers` (`test_fraud_mule.py`, p95 < 100 ms over 40 calls) failed at
+load 8 with 103 ms. It is now `test_scoring_cost_does_not_grow_with_1000_inbound_transfers`: 1,000 inbound
+transfers cost the same SQL statements as 3, no statement returns more than 20 rows, the two inbound look-ups are
+index scans on `ix_transactions_credit_account_id_created_at` and the repeat-episode count on
+`ix_transactions_debit_account_id_created_at` (EXPLAIN on fresh statistics), and MULE_PASS_THROUGH fires on both
+with the same total, count, 90% ratio and 20 capped ids. Breaking the scorer locally failed it each time: no
+`LIMIT` on the id list, an unindexable predicate on the credit or on the debit side, and an extra query per inbound
+row. The time is measured by the structuring benchmark's mule mode, on a scratch database only:
+
+```bash
+uv run python scripts/benchmark_structuring_scoring.py --database-url "$BENCH_DATABASE_URL" --rule mule --calls 200
+```
+
+Measured on 4 Nov 2026 on the 2-CPU Celeron team laptop, at a low load, one job at a time:
+
+| Benchmark | Load average (1 / 5 / 15 min) | Result | Budget |
+|---|---|---|---|
+| Rules scoring with 1,000 inbound transfers (MULE_PASS_THROUGH fires), 200 calls after 3 warm-up | 1.21 / 1.88 / 2.34 before, 1.19 / 1.87 / 2.33 after | p50 23.0, p95 29.2, p99 35.3, max 109.5 ms | p95 < 100 ms |
+| Rules scoring with 1,000 near-threshold inbound transfers (STRUCTURING fires), same run settings | 1.16 / 1.82 / 2.31 before, 1.15 / 1.81 / 2.31 after | p50 24.4, p95 27.5, p99 33.7, max 71.5 ms | p95 < 100 ms |
+
+Two unit tests kept reaching pytest-timeout's 60 s default under load, and are legitimately long, so they carry a
+per-test `@pytest.mark.timeout(240)` as a hang guard, not a speed bar:
+`test_same_seed_reproduces_the_inputs_and_every_operation_is_fuzzed_in_both_modes` (three complete fuzz passes over
+the contract, 11-14 s idle) and `test_the_served_scorer_uses_the_compiled_forest_and_decides_identically` (model
+training plus 300 single-row scikit-learn scorings, about 10 s idle). The identical trained model that
+`test_fraud_compiled_forest.py` and `test_fraud_inference.py` each trained is now one session fixture
+(`ml/tests/conftest.py`), which saves one training (about 5 s idle) per run. No other unit test took over 30 s
+(`pytest -m unit --durations=15` at load 1.0-1.9: the slowest was 12.8 s).

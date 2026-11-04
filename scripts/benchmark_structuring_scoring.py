@@ -1,12 +1,15 @@
-"""Benchmark of rules scoring with 1,000 near-threshold inbound transfers (STRUCTURING, F7, #274).
+"""Benchmark of rules scoring with 1,000 inbound transfers (STRUCTURING F7, MULE_PASS_THROUGH F6).
 
 Real latency is hardware-dependent, so it is measured here, outside the test suite (no CI job runs
-this). ``test_scoring_cost_does_not_grow_with_1000_near_threshold_inbound_transfers`` asserts the
+this). ``test_scoring_cost_does_not_grow_with_1000_near_threshold_inbound_transfers`` and
+``test_scoring_cost_does_not_grow_with_1000_inbound_transfers`` (test_fraud_mule.py) assert the
 cost instead (the same SQL statements as for 3 credits, at most 20 rows per statement, index
 scans). The script migrates a scratch database to head, opens two customers through the API's own
-``AuthService``, posts ``--inbound`` transfers of INR 99,500.00 from one to the other through the
-ledger, then scores ``--calls`` transfers from the receiver with the API's ``BaselineRulesScorer``
-(every rule, database look-ups included; no Redis, so the counters read PostgreSQL too). It
+``AuthService``, posts ``--inbound`` transfers from one to the other through the ledger, then
+scores ``--calls`` transfers from the receiver with the API's ``BaselineRulesScorer`` (every rule,
+database look-ups included; no Redis, so the counters read PostgreSQL too). ``--rule structuring``
+posts INR 99,500.00 credits and scores INR 5,000.00; ``--rule mule`` posts INR 100.00 credits and
+scores 90% of what came in, so MULE_PASS_THROUGH fires and its repeat-episode look-up runs too. It
 reports p50/p95/p99/max of the scorer's own ``latency_ms`` against AGENTS.md section 8's p95 of
 100 ms, after ``--warmup`` unrecorded calls. The load average is printed before and after.
 
@@ -14,7 +17,7 @@ The customers and transfers stay in the scratch database (ledger rows are immuta
 
 Usage (a scratch database only: its name must start with ``pbip_test`` or ``pbip_bench``):
     uv run python scripts/benchmark_structuring_scoring.py \\
-        --database-url "$BENCH_DATABASE_URL" \\
+        --database-url "$BENCH_DATABASE_URL" [--rule structuring|mule] \\
         [--inbound 1000] [--calls 200] [--warmup 3] [--json results.json]
 Exit code 0 on a completed run (whatever the latency), 2 if the database is not a scratch database.
 """
@@ -26,6 +29,7 @@ import json
 import secrets
 import sys
 import uuid
+from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -35,8 +39,30 @@ from benchmark_synthetic_load import environment, load_average, migrate, scratch
 from measure_analytics_latency import summarise
 
 JUST_UNDER = 9_950_000  # INR 99,500.00: inside the 90-100% band of the INR 1,00,000.00 threshold
-SCORED_AMOUNT = 500_000  # INR 5,000.00, the amount the test scores
+SCORED_AMOUNT = 500_000  # INR 5,000.00, the amount the structuring test scores
+MULE_INBOUND = 10_000  # INR 100.00 per credit: 1,000 of them pass the INR 10,000.00 minimum
+MULE_FORWARD_PERCENT = 90  # of the inbound total, above the 80% ratio, as the mule test sends
 P95_LIMIT_MS = 100.0  # AGENTS.md section 8
+
+
+@dataclass(frozen=True)
+class Rule:
+    """What one benchmark mode posts, scores and reports."""
+
+    code: str
+    inbound_amount: int
+    count_feature: str
+
+    def scored_amount(self, inbound: int) -> int:
+        if self.code == "MULE_PASS_THROUGH":
+            return inbound * self.inbound_amount * MULE_FORWARD_PERCENT // 100
+        return SCORED_AMOUNT
+
+
+RULES = {
+    "structuring": Rule("STRUCTURING", JUST_UNDER, "structuring_received_count"),
+    "mule": Rule("MULE_PASS_THROUGH", MULE_INBOUND, "mule_inbound_count"),
+}
 
 
 def _open_customer(session: Any, settings: Any, label: str) -> tuple[uuid.UUID, uuid.UUID]:
@@ -63,8 +89,8 @@ def _open_customer(session: Any, settings: Any, label: str) -> tuple[uuid.UUID, 
     return customer.id, list_accounts(session, customer.id)[0].id
 
 
-def seed(engine: Any, settings: Any, inbound: int) -> tuple[uuid.UUID, uuid.UUID]:
-    """A receiver with ``inbound`` near-threshold credits from another customer, all just posted."""
+def seed(engine: Any, settings: Any, inbound: int, rule: Rule) -> tuple[uuid.UUID, uuid.UUID]:
+    """A receiver with ``inbound`` credits from another customer for ``rule``, all just posted."""
     from pbip_api.modules.ledger import service as ledger
     from pbip_api.modules.ledger.models import TransactionType
     from sqlalchemy.orm import sessionmaker
@@ -73,12 +99,12 @@ def seed(engine: Any, settings: Any, inbound: int) -> tuple[uuid.UUID, uuid.UUID
         _, sender = _open_customer(session, settings, "sender")
         customer, receiver = _open_customer(session, settings, "receiver")
         session.commit()
-        ledger.deposit(session, sender, inbound * JUST_UNDER)
+        ledger.deposit(session, sender, inbound * rule.inbound_amount)
         for _ in range(inbound):
             txn = ledger.create_transaction(
                 session,
                 type_=TransactionType.TRANSFER,
-                amount=JUST_UNDER,
+                amount=rule.inbound_amount,
                 currency="INR",
                 debit_account_id=sender,
                 credit_account_id=receiver,
@@ -89,8 +115,9 @@ def seed(engine: Any, settings: Any, inbound: int) -> tuple[uuid.UUID, uuid.UUID
 
 
 def measure(engine: Any, settings: Any, customer: uuid.UUID, account: uuid.UUID,
-            calls: int, warmup: int) -> tuple[list[float], dict[str, Any]]:  # fmt: skip
-    """The scorer's ``latency_ms`` per scoring, and the last result's STRUCTURING facts."""
+            rule: Rule, amount: int, calls: int,
+            warmup: int) -> tuple[list[float], dict[str, Any]]:  # fmt: skip
+    """The scorer's ``latency_ms`` per scoring, and the last result's facts for ``rule``."""
     from pbip_api.core.db import utcnow
     from pbip_api.modules.fraud.baseline import BaselineRulesScorer
     from pbip_ml.fraud.contract import TransactionContext
@@ -106,18 +133,20 @@ def measure(engine: Any, settings: Any, customer: uuid.UUID, account: uuid.UUID,
                     transaction_id=uuid.uuid4(),
                     customer_id=customer,
                     account_id=account,
-                    amount_minor=SCORED_AMOUNT,
+                    amount_minor=amount,
                     currency="INR",
                     occurred_at=fixed,
                 )
             )
         if call >= warmup:
             samples.append(result.latency_ms)
-        facts = {
-            "structuring_received_count": result.features["structuring_received_count"],
-            "structuring_fired": any(r.code == "STRUCTURING" for r in result.reasons),
-        }
+        facts = rule_facts(rule, result.features, [r.code for r in result.reasons])
     return samples, facts
+
+
+def rule_facts(rule: Rule, features: dict[str, Any], codes: list[str]) -> dict[str, Any]:
+    """The counted inbound and whether the rule fired: a run that never fired measured nothing."""
+    return {"rule": rule.code, "counted": features[rule.count_feature], "fired": rule.code in codes}
 
 
 def benchmark_settings() -> Any:
@@ -140,6 +169,7 @@ def benchmark_settings() -> Any:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--database-url", required=True)
+    parser.add_argument("--rule", choices=sorted(RULES), default="structuring")
     parser.add_argument("--inbound", type=int, default=1000)
     parser.add_argument("--calls", type=int, default=200)
     parser.add_argument("--warmup", type=int, default=3)
@@ -156,12 +186,17 @@ def main(argv: list[str] | None = None) -> int:
     migrate(url)
     engine = create_engine(url)
     settings = benchmark_settings()
-    customer, account = seed(engine, settings, args.inbound)
+    rule = RULES[args.rule]
+    amount = rule.scored_amount(args.inbound)
+    customer, account = seed(engine, settings, args.inbound, rule)
     before = environment()
-    samples, facts = measure(engine, settings, customer, account, args.calls, args.warmup)
+    samples, facts = measure(
+        engine, settings, customer, account, rule, amount, args.calls, args.warmup
+    )
     stats = summarise(samples)
     result = {
         "inbound": args.inbound,
+        "scored_amount_minor": amount,
         **facts,
         **stats,
         "p95_limit_ms": P95_LIMIT_MS,

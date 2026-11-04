@@ -15,15 +15,7 @@ from pbip_ml.fraud import inference as inf
 from pbip_ml.fraud import training as t
 from pbip_ml.fraud.artifacts import AnomalyModel, load_anomaly_model
 from pbip_ml.fraud.features import PastTransfer
-from pbip_ml.fraud.train import HYBRID_VERSION, load_export, run
-
-
-@pytest.fixture(scope="module")
-def artifacts(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    data, out = tmp_path_factory.mktemp("data"), tmp_path_factory.mktemp("model")
-    _export_fraud(GeneratorConfig(seed=42, customers=600, months=4), data)
-    run(data, out)
-    return out
+from pbip_ml.fraud.train import HYBRID_VERSION, load_export
 
 
 def test_training_writes_a_manifest_that_load_verifies(artifacts: Path) -> None:
