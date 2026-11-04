@@ -129,7 +129,7 @@ job red on timing alone. Their output is in the `perf-results` artifact (`events
 Four `workflow_dispatch` runs, 04 Nov, on GitHub-hosted runners (4 vCPU, 16 GB). Each run used the full compose
 stack with two API replicas behind nginx TLS and the load-test rate limits. The steps ran right after the main k6
 suite, and the runner's 1-minute load average was 0.7 to 1.2 during the measurement steps (recorded by the
-script). The "before" runs used `diag/events-latency-baseline` (b6daf54). That branch is `origin/main` (efadfc9)
+script). The "before" runs used `diag/events-latency-baseline` (b6daf54; the branch is deleted, the commit is kept as tag `archive/events-latency-baseline`). That branch is `origin/main` (efadfc9)
 plus only this PR's workflow steps and script, so it measures the old insert. The "after" runs used this branch
 (f309fc8). The runner CPU is assigned at random and differs between runs. The CPU column matters: the
 EPYC 9V45 is clearly faster than the other two (see `performance-2026-11-04.md`).
@@ -198,7 +198,7 @@ the analysis. In short: a PostgreSQL outbox row is the same durable insert and s
 to lose, the only durable copy of acknowledged events, and it cannot report `duplicates`. So the batch is capped at
 **25 events**, the web tracker's own batch size; 26 or more gets a 422.
 
-### Choosing the cap: two diagnostic runs (branch `diag/events-async-floor`, never merged)
+### Choosing the cap: two diagnostic runs (branch `diag/events-async-floor`, never merged; deleted, the commit is kept as tag `archive/events-async-floor`, 43a7de2)
 
 That branch added two endpoints with the same auth, rate limit and validation as the real one: one that stores
 nothing (the floor of any design) and one that does a single Redis `XADD` of the batch after `CONFIG SET
