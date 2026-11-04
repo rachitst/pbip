@@ -90,13 +90,13 @@ jobs:
         if: always() && hashFiles('perf-results/invariants-before.json') != ''
         run: docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < infra/k6/top-statements.sql | tee perf-results/pg-stat-statements.txt
       # TASK-055 (#78): 500 events/s through the clickstream endpoint (k6 thresholds gate), then the
-      # sequential per-request latency for 1, 10 and 100 events (recorded, not gated: a measurement).
+      # sequential per-request latency for 1, 10 and 25 events (the cap, ADR-0055) (recorded, not gated: a measurement).
       - name: Clickstream ingestion, 500 events/s (k6)
         env:
           BASE_URL: https://localhost:8443
           USERS: ${{ env.LOAD_USERS }}
         run: python scripts/dev.py load-events --summary-export /results/k6-events-summary.json
-      - name: Clickstream per-request latency (batch sizes 1, 10, 100)
+      - name: Clickstream per-request latency (batch sizes 1, 10, 25)
         run: >-
           uv run python scripts/measure_events_latency.py http --base-url https://localhost:8443
           --ca infra/certs/ca.crt --email load0001@perf.pbip --requests 300

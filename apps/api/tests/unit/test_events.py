@@ -1,16 +1,21 @@
 """Unit tests for clickstream and telemetry events ingestion (TASK-055)."""
 
+import re
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from pbip_api.modules.events.schemas import (
+    MAX_BATCH_EVENTS,
     EventBatchRequest,
     EventBatchResponse,
     TelemetryEventIn,
     TelemetryEventType,
 )
 from pydantic import ValidationError
+
+from scripts.measure_events_latency import API_MAX_BATCH
 
 pytestmark = pytest.mark.unit
 
@@ -119,7 +124,7 @@ def test_reject_oversized_property_value_string() -> None:
 
 
 def test_event_batch_request_bounds() -> None:
-    """Batch must contain between 1 and 100 events."""
+    """Batch must contain between 1 and 25 events (ADR-0055: 25 keeps p95 under 15 ms)."""
     now = datetime.now(UTC)
     single_event = TelemetryEventIn(
         event_type=TelemetryEventType.TRANSFER_INITIATED,
@@ -136,9 +141,23 @@ def test_event_batch_request_bounds() -> None:
     req = EventBatchRequest(events=[single_event])
     assert len(req.events) == 1
 
-    # Over 100 events rejected
-    with pytest.raises(ValidationError):
-        EventBatchRequest(events=[single_event] * 101)
+    # The cap is accepted, one over it is rejected
+    assert MAX_BATCH_EVENTS == 25
+    assert len(EventBatchRequest(events=[single_event] * 25).events) == 25
+    with pytest.raises(ValidationError) as exc:
+        EventBatchRequest(events=[single_event] * 26)
+    assert exc.value.errors()[0]["type"] == "too_long"
+
+
+_TRACKER = Path(__file__).resolve().parents[4] / "apps" / "web" / "src" / "telemetry" / "tracker.ts"
+
+
+def test_the_web_tracker_and_the_latency_script_stay_within_the_api_batch_cap() -> None:
+    """Lowering the cap must not make the web app's own batches fail with 422 (ADR-0055)."""
+    match = re.search(r"^export const MAX_BATCH_SIZE = (\d+);$", _TRACKER.read_text(), re.M)
+    assert match is not None
+    assert 1 <= int(match.group(1)) <= MAX_BATCH_EVENTS
+    assert API_MAX_BATCH == MAX_BATCH_EVENTS
 
 
 def test_event_batch_response_model() -> None:

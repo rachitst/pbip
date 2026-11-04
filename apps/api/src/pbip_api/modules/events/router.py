@@ -27,5 +27,5 @@ def ingest_events_batch(
     session: Session = Depends(get_session),
     _limited: None = Depends(events_limiter),
 ) -> EventBatchResponse:
-    """Store up to 100 events for the authenticated customer; committed before the response."""
+    """Store up to 25 events for the authenticated customer; committed before the response."""
     return service.ingest_event_batch(session=session, request=payload, customer_id=customer.id)

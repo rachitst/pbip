@@ -40,7 +40,11 @@ from typing import Any
 
 import httpx
 
-DEFAULT_SIZES = (1, 10, 100)
+# The API accepts at most MAX_BATCH_EVENTS = 25 (ADR-0055). The sizes above it that chose the cap
+# (40, 50, 75, 100) were measured before it was lowered; ``db`` can still time them (no API limit).
+DEFAULT_SIZES = (1, 10, 25)
+API_MAX_BATCH = 25  # pbip_api.modules.events.schemas.MAX_BATCH_EVENTS; a unit test keeps them equal
+DB_MAX_BATCH = 100
 
 
 def percentile(samples: list[float], pct: float) -> float:
@@ -238,8 +242,9 @@ def main() -> int:
     http_parser.add_argument("--pace", type=float, default=0.0, help="Seconds between requests")
     sub.choices["db"].add_argument("--batches", type=int, default=300)
     args = parser.parse_args()
-    if any(not 1 <= size <= 100 for size in args.sizes):
-        parser.error("batch sizes must be 1-100 (MAX_BATCH_EVENTS)")
+    limit = API_MAX_BATCH if args.mode == "http" else DB_MAX_BATCH
+    if any(not 1 <= size <= limit for size in args.sizes):
+        parser.error(f"{args.mode} batch sizes must be 1-{limit}")
 
     load_before = _load_average()
     results = run_http(args) if args.mode == "http" else run_db(args)

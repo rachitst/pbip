@@ -2698,14 +2698,14 @@
       },
       "EventBatchRequest": {
         "additionalProperties": false,
-        "description": "Batch payload containing up to 100 telemetry events.",
+        "description": "Batch payload of 1 to 25 telemetry events (ADR-0055 explains the limit).",
         "properties": {
           "events": {
-            "description": "Telemetry events to ingest (1 to 100 per batch)",
+            "description": "Telemetry events to ingest (1 to 25 per batch)",
             "items": {
               "$ref": "#/components/schemas/TelemetryEventIn"
             },
-            "maxItems": 100,
+            "maxItems": 25,
             "minItems": 1,
             "title": "Events",
             "type": "array"
@@ -10775,7 +10775,7 @@
     },
     "/api/v1/events/batch": {
       "post": {
-        "description": "Store up to 100 events for the authenticated customer; committed before the response.",
+        "description": "Store up to 25 events for the authenticated customer; committed before the response.",
         "operationId": "ingest_events_batch_api_v1_events_batch_post",
         "requestBody": {
           "content": {

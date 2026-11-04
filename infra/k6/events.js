@@ -6,9 +6,10 @@
 //   BASE_URL=https://localhost:8443 EVENTS_PER_SECOND=500 DURATION=2m python scripts/dev.py load-events
 //
 // A constant-arrival-rate scenario starts ceil(EVENTS_PER_SECOND / BATCH_SIZE) batches per second
-// (default 5 batches of 100 events), each from the next seeded customer in turn. Every event is valid
-// against the API schema and the web catalogue (apps/web/src/telemetry/catalogue.ts): an allow-listed
-// type, a route template as page_url and only the property keys and values the catalogue lists.
+// (default 20 batches of 25 events, the API's cap since ADR-0055), each from the next seeded
+// customer in turn. Every event is valid against the API schema and the web catalogue
+// (apps/web/src/telemetry/catalogue.ts): an allow-listed type, a route template as page_url and
+// only the property keys and values the catalogue lists.
 // The stack must run with the load-test rate limits (infra/k6/README.md): every batch comes from one IP.
 //
 // Pass/fail: k6 exits non-zero when a threshold below is crossed. `dropped_iterations` counts batches
@@ -22,12 +23,12 @@ import exec from "k6/execution";
 const BASE_URL = (__ENV.BASE_URL || "http://localhost:8000").replace(/\/$/, "");
 const USERS = Number(__ENV.USERS || 20);
 const EVENTS_PER_SECOND = Number(__ENV.EVENTS_PER_SECOND || 500);
-const BATCH_SIZE = Number(__ENV.BATCH_SIZE || 100); // the API's MAX_BATCH_EVENTS
+const BATCH_SIZE = Number(__ENV.BATCH_SIZE || 25); // the API's MAX_BATCH_EVENTS (ADR-0055)
 const DURATION = __ENV.DURATION || "1m"; // keep under the 15 min access-token lifetime
 const PASSWORD = __ENV.LOAD_PASSWORD || "Load-Test-Password-2026!"; // pragma: allowlist secret (local seed_load.py constant)
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
-if (!(BATCH_SIZE >= 1 && BATCH_SIZE <= 100)) throw new Error("BATCH_SIZE must be 1-100");
+if (!(BATCH_SIZE >= 1 && BATCH_SIZE <= 25)) throw new Error("BATCH_SIZE must be 1-25");
 if (!(EVENTS_PER_SECOND > 0)) throw new Error("EVENTS_PER_SECOND must be positive");
 const BATCHES_PER_SECOND = Math.ceil(EVENTS_PER_SECOND / BATCH_SIZE);
 
