@@ -19,6 +19,7 @@ import { Button } from "../ui/Button";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Field } from "../ui/Field";
 import { MoneyInput } from "../ui/MoneyInput";
+import { StartSip } from "./StartSip";
 import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 
@@ -186,117 +187,120 @@ function OrderForm({
 
   if (order) return <Receipt order={order} />;
   return (
-    <section className="loan-card" aria-label="Order">
-      <Field label="Investment">
-        {(control) => (
-          <select
-            {...control}
-            value={instrument.id}
-            onChange={(e) => {
-              setInstrumentId(e.target.value);
-              setIntentKey(crypto.randomUUID());
-              setError(null);
-            }}
-          >
-            {instruments.map((i) => (
-              <option key={i.id} value={i.id}>
-                {i.name} · {KIND_LABEL[i.kind]}
-              </option>
-            ))}
-          </select>
-        )}
-      </Field>
-      <p>{instrument.description}</p>
-      <dl className="details">
-        <div className="details__row">
-          <dt>Today&apos;s simulated price</dt>
-          <dd>{formatMinor(instrument.price_minor, "INR")} a unit</dd>
-        </div>
-        <div className="details__row">
-          <dt>Risk</dt>
-          <dd>{instrument.risk_level.toLowerCase()}</dd>
-        </div>
-      </dl>
-      <p className="muted">
-        {instrument.notes} {SIMULATED_PRICE_NOTE}
-      </p>
-      <SuitabilityNote suitability={suitability} instrument={instrument} />
-      {byAmount ? (
-        <Field label="Amount" hint={`At least ${formatMinor(min, "INR")}`} error={amountError}>
+    <>
+      <section className="loan-card" aria-label="Order">
+        <Field label="Investment">
           {(control) => (
-            <MoneyInput
+            <select
               {...control}
-              currency="INR"
-              value={amountText}
-              onValueChange={(value) => {
-                setAmountText(value);
-                setError(null);
-              }}
-            />
-          )}
-        </Field>
-      ) : (
-        <Field label="Units" hint="Whole units" error={unitsError}>
-          {(control) => (
-            <input
-              {...control}
-              inputMode="numeric"
-              value={unitsText}
+              value={instrument.id}
               onChange={(e) => {
-                setUnitsText(e.target.value);
+                setInstrumentId(e.target.value);
+                setIntentKey(crypto.randomUUID());
                 setError(null);
               }}
-            />
+            >
+              {instruments.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.name} · {KIND_LABEL[i.kind]}
+                </option>
+              ))}
+            </select>
           )}
         </Field>
-      )}
-      <Field label="Pay from">
-        {(control) => (
-          <select
-            {...control}
-            value={accountId}
-            onChange={(e) => {
-              setAccountId(e.target.value);
-            }}
-          >
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {accountLabel(a)} · {formatMinor(a.available_minor, a.currency)} available
-              </option>
-            ))}
-          </select>
+        <p>{instrument.description}</p>
+        <dl className="details">
+          <div className="details__row">
+            <dt>Today&apos;s simulated price</dt>
+            <dd>{formatMinor(instrument.price_minor, "INR")} a unit</dd>
+          </div>
+          <div className="details__row">
+            <dt>Risk</dt>
+            <dd>{instrument.risk_level.toLowerCase()}</dd>
+          </div>
+        </dl>
+        <p className="muted">
+          {instrument.notes} {SIMULATED_PRICE_NOTE}
+        </p>
+        <SuitabilityNote suitability={suitability} instrument={instrument} />
+        {byAmount ? (
+          <Field label="Amount" hint={`At least ${formatMinor(min, "INR")}`} error={amountError}>
+            {(control) => (
+              <MoneyInput
+                {...control}
+                currency="INR"
+                value={amountText}
+                onValueChange={(value) => {
+                  setAmountText(value);
+                  setError(null);
+                }}
+              />
+            )}
+          </Field>
+        ) : (
+          <Field label="Units" hint="Whole units" error={unitsError}>
+            {(control) => (
+              <input
+                {...control}
+                inputMode="numeric"
+                value={unitsText}
+                onChange={(e) => {
+                  setUnitsText(e.target.value);
+                  setError(null);
+                }}
+              />
+            )}
+          </Field>
         )}
-      </Field>
-      <Button
-        disabled={!valid || accountId === ""}
-        onClick={() => {
-          setError(null);
-          setReviewing(true);
-        }}
-      >
-        Review order
-      </Button>
-      <ConfirmDialog
-        open={reviewing}
-        title="Confirm your order"
-        items={orderItems(
-          draft,
-          accounts.find((a) => a.id === accountId),
-        )}
-        confirmLabel="Buy now"
-        busy={busy}
-        error={error}
-        onConfirm={() => void submit()}
-        onCancel={() => {
-          setReviewing(false);
-          setError(null);
-        }}
-      />
-    </section>
+        <Field label="Pay from">
+          {(control) => (
+            <select
+              {...control}
+              value={accountId}
+              onChange={(e) => {
+                setAccountId(e.target.value);
+              }}
+            >
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {accountLabel(a)} · {formatMinor(a.available_minor, a.currency)} available
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+        <Button
+          disabled={!valid || accountId === ""}
+          onClick={() => {
+            setError(null);
+            setReviewing(true);
+          }}
+        >
+          Review order
+        </Button>
+        <ConfirmDialog
+          open={reviewing}
+          title="Confirm your order"
+          items={orderItems(
+            draft,
+            accounts.find((a) => a.id === accountId),
+          )}
+          confirmLabel="Buy now"
+          busy={busy}
+          error={error}
+          onConfirm={() => void submit()}
+          onCancel={() => {
+            setReviewing(false);
+            setError(null);
+          }}
+        />
+      </section>
+      {byAmount && <StartSip key={instrument.id} fund={instrument} accounts={accounts} />}
+    </>
   );
 }
 
-/** ADR-0058: buy funds by amount and whole stocks or bonds, at the
+/** ADR-0058: buy funds by amount (once, or monthly as a SIP) and whole stocks or bonds, at the
  * day's SIMULATED price, through the ledger. `?product=<id>` preselects an instrument. */
 export default function Invest() {
   const instruments = useQuery({ queryKey: ["wealth-instruments"], queryFn: api.instruments });

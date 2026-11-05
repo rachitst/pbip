@@ -112,6 +112,8 @@ export type BuyRequest = components["schemas"]["BuyRequest"];
 export type SellRequest = components["schemas"]["SellRequest"];
 export type OrderOut = components["schemas"]["OrderOut"];
 export type HoldingOut = components["schemas"]["HoldingOut"];
+export type SipCreateRequest = components["schemas"]["SipCreateRequest"];
+export type SipOut = components["schemas"]["SipOut"];
 export type InsuranceQuoteRequest = components["schemas"]["InsuranceQuoteRequest"];
 export type InsuranceQuoteOut = components["schemas"]["InsuranceQuoteOut"];
 export type InsuranceApplicationOut = components["schemas"]["InsuranceApplicationOut"];
@@ -526,6 +528,18 @@ export const api = {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(body),
+    }),
+  /** ADR-0058 section 7: monthly fund SIPs. Creating one moves no money. */
+  sips: () => apiFetch<SipOut[]>("/api/v1/wealth/sips"),
+  createSip: (body: SipCreateRequest, idempotencyKey: string) =>
+    apiFetch<SipOut>("/api/v1/wealth/sips", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(body),
+    }),
+  cancelSip: (sipId: string) =>
+    apiFetch<SipOut>(`/api/v1/wealth/sips/${encodeURIComponent(sipId)}/cancel`, {
+      method: "POST",
     }),
   quoteInsurance: (body: InsuranceQuoteRequest) =>
     apiFetch<InsuranceQuoteOut>("/api/v1/wealth/insurance/quote", {

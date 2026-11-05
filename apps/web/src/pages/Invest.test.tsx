@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { InstrumentOut, OrderOut, SuitabilityOut } from "../api/client";
+import type { InstrumentOut, OrderOut, SipOut, SuitabilityOut } from "../api/client";
 import { account, json, urlOf } from "../test-utils";
 import Invest, { preselected } from "./Invest";
 
@@ -69,6 +69,21 @@ const order: OrderOut = {
   created_at: "2026-11-05T06:00:00Z",
 };
 
+const sip: SipOut = {
+  id: "sip-1",
+  instrument_id: indexFund.id,
+  instrument_code: indexFund.code,
+  instrument_name: indexFund.name,
+  account_id: account.id,
+  amount_minor: 2_000_00,
+  day_of_month: 10,
+  status: "ACTIVE",
+  next_run_on: "2026-11-10",
+  created_at: "2026-11-05T06:00:00Z",
+  cancelled_at: null,
+  runs: [],
+};
+
 function mockApi() {
   return vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
     const url = urlOf(input);
@@ -76,6 +91,7 @@ function mockApi() {
     if (url === "/api/v1/wealth/instruments") return Promise.resolve(json(200, [stock, indexFund]));
     if (url === "/api/v1/wealth/suitability") return Promise.resolve(json(200, moderate));
     if (url === "/api/v1/wealth/investments/buy") return Promise.resolve(json(201, order));
+    if (url === "/api/v1/wealth/sips") return Promise.resolve(json(201, sip));
     return Promise.resolve(json(404, { title: "not mocked" }));
   });
 }
@@ -152,5 +168,35 @@ describe("Invest (ADR-0058)", () => {
       account_id: account.id,
       units: 2,
     });
+  });
+
+  it("starts a monthly SIP for a fund after review, with one key, moving no money", async () => {
+    const user = userEvent.setup({ delay: null });
+    const fetchMock = mockApi();
+    renderPage(`/wealth/invest?product=${indexFund.id}`);
+    const form = within(await screen.findByRole("region", { name: "Start a monthly SIP" }));
+    await user.type(form.getByLabelText("Monthly amount"), "2000");
+    await user.selectOptions(form.getByLabelText("Day of the month"), "10");
+    await user.click(form.getByRole("button", { name: "Review SIP" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "Confirm your monthly SIP" }));
+    expect(dialog.getByText("INR 2,000.00")).toBeInTheDocument();
+    await user.click(dialog.getByRole("button", { name: "Start SIP" }));
+    expect(await form.findByRole("status")).toHaveTextContent("nothing is debited today");
+    expect(bodyOf(fetchMock, "/api/v1/wealth/sips")).toEqual({
+      instrument_id: indexFund.id,
+      account_id: account.id,
+      amount_minor: 2_000_00,
+      day_of_month: 10,
+    });
+    const call = fetchMock.mock.calls.find(([i]) => urlOf(i) === "/api/v1/wealth/sips");
+    expect(new Headers(call?.[1]?.headers).get("Idempotency-Key")).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([i]) => urlOf(i).endsWith("/investments/buy"))).toBe(false);
+  });
+
+  it("offers no SIP for a stock", async () => {
+    mockApi();
+    renderPage(`/wealth/invest?product=${stock.id}`);
+    await screen.findByRole("region", { name: "Order" });
+    expect(screen.queryByRole("region", { name: "Start a monthly SIP" })).toBeNull();
   });
 });

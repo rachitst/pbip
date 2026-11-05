@@ -1,9 +1,9 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api/client";
-import type { AccountOut, HoldingOut } from "../api/client";
+import type { AccountOut, HoldingOut, SipOut } from "../api/client";
 import { errorMessage } from "../lib/errors";
-import { accountTypeLabel } from "../lib/format";
+import { accountTypeLabel, formatDate } from "../lib/format";
 import {
   SIMULATED_PRICE_NOTE,
   formatGainBps,
@@ -207,6 +207,124 @@ export function HoldingsSection() {
                 )}
               </td>
               <td>{usable.length > 0 && <SellHolding holding={h} accounts={usable} />}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function CancelSip({ sip }: { sip: SipOut }) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function confirm() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.cancelSip(sip.id);
+      setOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ["wealth-sips"] });
+    } catch (caught) {
+      setError(errorMessage(caught, "The SIP could not be cancelled. Try again."));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={() => {
+          setOpen(true);
+        }}
+      >
+        Cancel SIP
+      </Button>
+      <ConfirmDialog
+        open={open}
+        title="Cancel this SIP"
+        items={[
+          { label: "Fund", value: sip.instrument_name },
+          { label: "Monthly amount", value: formatMinor(sip.amount_minor, "INR") },
+        ]}
+        confirmLabel="Cancel future instalments"
+        tone="danger"
+        busy={busy}
+        error={error}
+        onConfirm={() => void confirm()}
+        onCancel={() => {
+          setOpen(false);
+        }}
+      />
+    </>
+  );
+}
+
+const RECENT_RUNS = 3;
+
+function RecentRuns({ sip }: { sip: SipOut }) {
+  if (sip.runs.length === 0) return <span className="muted">No instalment yet</span>;
+  return (
+    <ul aria-label={`Recent runs of ${sip.instrument_name}`}>
+      {sip.runs.slice(0, RECENT_RUNS).map((run) => (
+        <li key={run.run_on}>
+          {formatDate(run.run_on)}: {run.status === "EXECUTED" ? "EXECUTED" : "FAILED"}
+          {run.status === "FAILED" && run.failure_reason ? ` (${run.failure_reason})` : ""}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** ADR-0058 section 7: monthly fund SIPs, their next date and recent instalments. */
+export function SipsSection() {
+  const sips = useQuery({ queryKey: ["wealth-sips"], queryFn: api.sips });
+  if (sips.isPending) return <LoadingState label="Loading your SIPs..." />;
+  if (sips.isError) {
+    return (
+      <ErrorState
+        message={errorMessage(sips.error, "Could not load your SIPs.")}
+        onRetry={() => {
+          void sips.refetch();
+        }}
+      />
+    );
+  }
+  const active = sips.data.filter((s) => s.status === "ACTIVE");
+  if (active.length === 0) return <EmptyState message="You have no active SIPs." />;
+  return (
+    <div className="entries">
+      <table>
+        <caption className="sr-only">My active monthly SIPs</caption>
+        <thead>
+          <tr>
+            <th scope="col">Fund</th>
+            <th scope="col" className="right">
+              Monthly
+            </th>
+            <th scope="col">Next instalment</th>
+            <th scope="col">Recent runs</th>
+            <th scope="col">
+              <span className="sr-only">Actions</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {active.map((s) => (
+            <tr key={s.id}>
+              <td>{s.instrument_name}</td>
+              <td className="right">{formatMinor(s.amount_minor, "INR")}</td>
+              <td>{s.next_run_on ? formatDate(s.next_run_on) : "-"}</td>
+              <td>
+                <RecentRuns sip={s} />
+              </td>
+              <td>
+                <CancelSip sip={s} />
+              </td>
             </tr>
           ))}
         </tbody>

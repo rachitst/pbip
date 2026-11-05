@@ -204,7 +204,7 @@ def get_instrument(session: Session, instrument_id: UUID) -> InvestmentInstrumen
     return instrument
 
 
-def _require_funding_account(account: Account) -> None:
+def require_funding_account(account: Account) -> None:
     if account.status != AccountStatus.ACTIVE:
         raise UnprocessableError("the account must be active")
     if account.currency != CURRENCY:
@@ -245,7 +245,7 @@ def execute_purchase(
 ) -> InvestmentOrder:
     """Steps 3-5 of ADR-0058 section 6, shared by a customer order and a SIP instalment. The
     caller holds the user lock and the idempotency key, and owns the commit."""
-    _require_funding_account(account)
+    require_funding_account(account)
     instrument = purchase.instrument
     holding = _locked_holding_for_purchase(session, customer_id, instrument.id)
     payment = ledger.buy_investment(
@@ -282,7 +282,7 @@ def execute_purchase(
     return order
 
 
-def _notify(session: Session, event_type: str, user_id: UUID, order: InvestmentOrder) -> None:
+def notify_order(session: Session, event_type: str, user_id: UUID, order: InvestmentOrder) -> None:
     notifications.enqueue(
         session,
         event_type,
@@ -341,7 +341,7 @@ def buy(
         purchase=purchase,
         today=today,
     )
-    _notify(session, notifications.INVESTMENT_BOUGHT, user_id, order)
+    notify_order(session, notifications.INVESTMENT_BOUGHT, user_id, order)
     AuditService(session).record(
         user_id,
         "INVESTMENT_BOUGHT",
@@ -397,7 +397,7 @@ def sell(
     if proceeds <= 0:
         raise OrderTooSmallError("these units are worth less than one paisa at today's price")
     account = get_owned_account(session, customer_id, request.account_id)
-    _require_funding_account(account)
+    require_funding_account(account)
     cost = pricing.cost_removed(holding.cost_basis_minor, holding.units_micro, units)
     payout = ledger.sell_investment(
         session,
@@ -428,7 +428,7 @@ def sell(
     session.add(order)
     session.flush()
     session.refresh(order)
-    _notify(session, notifications.INVESTMENT_SOLD, user_id, order)
+    notify_order(session, notifications.INVESTMENT_SOLD, user_id, order)
     AuditService(session).record(
         user_id,
         "INVESTMENT_SOLD",

@@ -8125,6 +8125,215 @@
         "title": "SettingUnit",
         "type": "string"
       },
+      "SipCreateRequest": {
+        "additionalProperties": false,
+        "description": "A monthly fund purchase. No date or price from the client: the first instalment is the\nnext ``day_of_month`` (today if it is today), at that day's simulated NAV.",
+        "properties": {
+          "account_id": {
+            "description": "One of MY accounts: pays every instalment",
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "amount_minor": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 10000000000.0,
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "day_of_month": {
+            "description": "1 to 28, so every month has the day",
+            "maximum": 28.0,
+            "minimum": 1.0,
+            "title": "Day Of Month",
+            "type": "integer"
+          },
+          "instrument_id": {
+            "description": "A mutual fund from GET /wealth/instruments",
+            "format": "uuid",
+            "title": "Instrument Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "account_id",
+          "amount_minor",
+          "day_of_month"
+        ],
+        "title": "SipCreateRequest",
+        "type": "object"
+      },
+      "SipOut": {
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "amount_minor": {
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "cancelled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancelled At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "day_of_month": {
+            "title": "Day Of Month",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "instrument_code": {
+            "title": "Instrument Code",
+            "type": "string"
+          },
+          "instrument_id": {
+            "format": "uuid",
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "instrument_name": {
+            "title": "Instrument Name",
+            "type": "string"
+          },
+          "next_run_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Next instalment; None once cancelled",
+            "title": "Next Run On"
+          },
+          "runs": {
+            "description": "The latest instalments, newest first (up to 12)",
+            "items": {
+              "$ref": "#/components/schemas/SipRunOut"
+            },
+            "title": "Runs",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "CANCELLED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "instrument_id",
+          "instrument_code",
+          "instrument_name",
+          "account_id",
+          "amount_minor",
+          "day_of_month",
+          "status",
+          "next_run_on",
+          "created_at",
+          "cancelled_at",
+          "runs"
+        ],
+        "title": "SipOut",
+        "type": "object"
+      },
+      "SipRunOut": {
+        "properties": {
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why a FAILED instalment was not bought, e.g. insufficient_funds",
+            "title": "Failure Reason"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "price_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Minor"
+          },
+          "run_on": {
+            "format": "date",
+            "title": "Run On",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "EXECUTED",
+              "FAILED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "units_micro": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Units Micro"
+          }
+        },
+        "required": [
+          "run_on",
+          "status",
+          "order_id",
+          "units_micro",
+          "price_minor",
+          "failure_reason"
+        ],
+        "title": "SipRunOut",
+        "type": "object"
+      },
       "SpendIncomePattern": {
         "properties": {
           "currency": {
@@ -16032,6 +16241,221 @@
           }
         ],
         "summary": "Wealth catalogue: fixed deposits, mutual funds and the sovereign gold bond",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/sips": {
+      "get": {
+        "operationId": "list_sips_api_v1_wealth_sips_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SipOut"
+                  },
+                  "title": "Response List Sips Api V1 Wealth Sips Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "My fund SIPs with their latest runs",
+        "tags": [
+          "wealth"
+        ]
+      },
+      "post": {
+        "operationId": "create_sip_api_v1_wealth_sips_post",
+        "parameters": [
+          {
+            "description": "Unique per logical request; retrying with the same key never duplicates.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Unique per logical request; retrying with the same key never duplicates.",
+              "maxLength": 128,
+              "minLength": 8,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SipCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SipOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The request body is not valid JSON (problem+json)"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          },
+          "404": {
+            "description": "No such instrument, or the account is not mine (problem+json)"
+          },
+          "422": {
+            "description": "Not a fund, below the fund's minimum, or invalid request"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set up a monthly fund purchase from one of my accounts (idempotent; moves no money)",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/sips/{sip_id}": {
+      "get": {
+        "operationId": "get_sip_api_v1_wealth_sips__sip_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sip_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Sip Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SipOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "One of my fund SIPs",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/sips/{sip_id}/cancel": {
+      "post": {
+        "operationId": "cancel_sip_api_v1_wealth_sips__sip_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sip_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Sip Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SipOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel one of my fund SIPs (no further instalments; safe to repeat)",
         "tags": [
           "wealth"
         ]

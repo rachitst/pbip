@@ -29,7 +29,7 @@ import { StatusBadge } from "../ui/StatusBadge";
 import { CHART_COLORS, TOOLTIP_STYLE } from "./insightsChart";
 import { formatRate } from "./Loans";
 import "./LoanCard.css";
-import { HoldingsSection } from "./WealthHoldings";
+import { HoldingsSection, SipsSection } from "./WealthHoldings";
 
 /** Wait for typing to settle before asking the server for a maturity quote. */
 export const QUOTE_DEBOUNCE_MS = 300;
@@ -822,6 +822,10 @@ export function Wealth() {
           <Link to="/wealth/invest">Invest in funds, stocks or bonds</Link>.
         </p>
         <HoldingsSection />
+      </section>
+      <section aria-labelledby="sips-title">
+        <h2 id="sips-title">Your SIPs</h2>
+        <SipsSection />
       </section>
       <section aria-labelledby="catalogue-title">
         <h2 id="catalogue-title">Products</h2>
