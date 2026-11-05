@@ -3,9 +3,15 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { InsuranceProductOut, WealthProductOut } from "../api/client";
+import type { InsuranceProductOut, SuitabilityOut, WealthProductOut } from "../api/client";
 import { json, urlOf } from "../test-utils";
-import { FIELDS, NOT_APPLICABLE, WealthCompare, selectionMessage } from "./WealthCompare";
+import {
+  FIELDS,
+  NOT_APPLICABLE,
+  SUITABILITY_ROW,
+  WealthCompare,
+  selectionMessage,
+} from "./WealthCompare";
 import type { Comparable } from "./WealthCompare";
 
 const regular: WealthProductOut = {
@@ -111,7 +117,15 @@ const health: InsuranceProductOut = {
 interface Options {
   products?: () => Response;
   insurance?: () => Response;
+  suitability?: () => Response;
 }
+
+const noBand: SuitabilityOut = {
+  band: null,
+  questionnaire_version: null,
+  assessed_at: null,
+  items: [],
+};
 
 function mockApi(options: Options = {}) {
   return vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
@@ -121,6 +135,9 @@ function mockApi(options: Options = {}) {
     }
     if (url === "/api/v1/wealth/insurance") {
       return Promise.resolve(options.insurance?.() ?? json(200, [term, health]));
+    }
+    if (url === "/api/v1/wealth/suitability") {
+      return Promise.resolve(options.suitability?.() ?? json(200, noBand));
     }
     return Promise.resolve(json(404, { title: "not mocked" }));
   });
@@ -241,6 +258,61 @@ describe("WealthCompare (TASK-098)", () => {
       "tabindex",
       "0",
     );
+  });
+
+  it("marks products suitable or not for my risk band, with the reason (ADR-0058)", async () => {
+    const moderate: SuitabilityOut = {
+      band: "MODERATE",
+      questionnaire_version: "RTQ-1",
+      assessed_at: "2026-11-02T09:30:00Z",
+      items: [
+        {
+          product_id: regular.id,
+          kind: "WEALTH_PRODUCT",
+          risk_level: "LOW",
+          suitable: true,
+          reason: "Low risk is within your moderate risk band.",
+        },
+        {
+          product_id: elss.id,
+          kind: "WEALTH_PRODUCT",
+          risk_level: "HIGH",
+          suitable: false,
+          reason: "High risk is above your moderate risk band.",
+        },
+      ],
+    };
+    mockApi({ suitability: () => json(200, moderate) });
+    const user = userEvent.setup();
+    renderPage();
+    expect(await screen.findByRole("note")).toHaveTextContent("Your risk band is moderate (RTQ-1");
+    for (const name of [regular.name, elss.name, term.name]) {
+      await user.click(await screen.findByRole("checkbox", { name }));
+    }
+    const table = screen.getByRole("table");
+    expect(rowCells(table, SUITABILITY_ROW)).toEqual([
+      "Yes: Low risk is within your moderate risk band.",
+      "No: High risk is above your moderate risk band.",
+      NOT_APPLICABLE,
+    ]);
+  });
+
+  it("says when no risk band is recorded instead of rating products", async () => {
+    mockApi();
+    const user = userEvent.setup();
+    renderPage();
+    expect(await screen.findByRole("note")).toHaveTextContent("No risk band recorded");
+    expect(screen.getByRole("link", { name: "Answer the risk questionnaire" })).toHaveAttribute(
+      "href",
+      "/profile",
+    );
+    for (const name of [regular.name, term.name]) {
+      await user.click(await screen.findByRole("checkbox", { name }));
+    }
+    expect(rowCells(screen.getByRole("table"), SUITABILITY_ROW)).toEqual([
+      "No risk band recorded",
+      NOT_APPLICABLE,
+    ]);
   });
 
   it("allows at most four products and lets one be removed to add another", async () => {

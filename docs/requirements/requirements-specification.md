@@ -4,7 +4,7 @@
 |---|---|
 | Task | TASK-104 (#187) |
 | Source | *PBIP Use Case Document v0.2*: sections 5 (scope), 6 (actors), 7 (UC-01 to UC-13), 8 (non-functional), 9 to 11 (deliverables, practices, success criteria) |
-| Status checked against | `main` at `775ec1a` (5 Nov 2026), plus the PRs merging on 5 Nov: #474 (batch L #481) and the wealth scope of ADR-0058: investing in funds, stocks and bonds through the ledger (#465), the insurance quote and application with the web Invest, Insurance and Holdings pages (#483), and fund SIPs with an hourly job (#484) and their web screens (#487). A row whose evidence is only in one of those PRs names it |
+| Status checked against | `main` at `60b1af4` (5 Nov 2026), which includes #474 (batch N #488) and the wealth scope of ADR-0058: investing in funds, stocks and bonds through the ledger (#465), the insurance quote and application with the web Invest, Insurance and Holdings pages (#483), and fund SIPs with an hourly job (#484) and their web screens (#487).  |
 | Companion documents | [Use cases as built](use-cases.md) (flows, screens and tests per use case), [user stories](user-stories.md) (acceptance criteria and tests per story), [traceability](traceability.md) (requirement to code, tests and gaps), [HLD](../architecture/HLD.md) |
 
 Every requirement below is derived from a sentence in the use-case document. Its **Source** column says which one.
@@ -101,7 +101,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | FR-37 | The customer shall ask natural-language questions about their own balances, transactions, spending and forecast, in a chat drawer with streamed answers. | UC-08, section 5 "natural language queries", "spending analysis explanations" | Implemented | TASK-057 to TASK-061 | |
 | FR-38 | The assistant shall answer "Can I afford a personal loan?" | UC-08 example | Implemented | TASK-057, TASK-046, TASK-110 (#284, merged #331) | Without an amount the assistant suggests the largest eligible amount or asks for one and says why (#331) |
 | FR-39 | The assistant shall answer "Show unusual expenses." | UC-08 example | Implemented | TASK-110 (#284, merged #331) | |
-| FR-40 | The assistant shall suggest investment options, support product discovery and answer FAQs. | UC-08 example, section 5 | Implemented | TASK-105 (#335); #474 | `get_faq_answer`, `list_products` and `get_investment_suggestions` (risk band and engine output). With #474 (in review): FAQ-2 covers every customer feature and `list_products` lists the simulated insurance plans |
+| FR-40 | The assistant shall suggest investment options, support product discovery and answer FAQs. | UC-08 example, section 5 | Implemented | TASK-105 (#335); #474 | `get_faq_answer`, `list_products` and `get_investment_suggestions` (risk band and engine output). With #474: FAQ-2 covers every customer feature and `list_products` lists the simulated insurance plans |
 | FR-41 | The assistant shall be read-only, act only on the authenticated customer's data, refuse money movement, other-customer, SQL and instruction-override requests, and audit every tool call. | Section 8 security (applied to UC-08) | Implemented | TASK-059, TASK-067, TASK-076 | |
 
 ### 2.6 Fraud (UC-09, UC-10, section 5)

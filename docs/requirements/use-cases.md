@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Source | *PBIP Use Case Document v0.2*, section 7 (UC-01 to UC-13), with the actors of section 6 |
-| Describes | `main` at `775ec1a` (5 Nov 2026), which includes #461 (risk band), #463 and #477 (behavioural profile and analytics consent), #464 (fraud dashboard), #466 (compliance system exceptions), #470 (catalogue loan recommendations) and #472 (E2E journeys); plus, merging on 5 Nov, #474 (assistant FAQ for every feature and insurance discovery, batch L #481) and the wealth scope of ADR-0058: investing in funds, stocks and bonds through the ledger (#465), the insurance quote and application with the web Invest, Insurance and Holdings pages (#483), and fund SIPs with an hourly job (#484) and their web screens (#487). A use case that depends on an unmerged PR says which one |
+| Describes | `main` at `60b1af4` (5 Nov 2026), which includes #461 (risk band), #463 and #477 (behavioural profile and analytics consent), #464 (fraud dashboard), #466 (compliance system exceptions), #470 (catalogue loan recommendations) and #472 (E2E journeys); #474 (assistant FAQ for every feature and insurance discovery, batch N #488) and the wealth scope of ADR-0058: investing in funds, stocks and bonds through the ledger (#465), the insurance quote and application with the web Invest, Insurance and Holdings pages (#483), and fund SIPs with an hourly job (#484) and their web screens (#487).  |
 | Companion documents | [Requirements specification](requirements-specification.md) (numbered FR/NFR), [traceability](traceability.md) (requirement to code, tests and gaps), [user stories](user-stories.md), [diagrams](../diagrams/README.md), [user manual](../user-manual/README.md) |
 
 Each use case below gives the objective from the use-case document, the actors, the preconditions, the main and
@@ -330,7 +330,7 @@ simulated and labelled so on every screen and response.
    redacts account numbers, tokens and e-mails. Examples from the use-case document: spending last month
    (`get_spend`), "Can I afford a personal loan?" (`get_loan_affordability`), "Show unusual expenses"
    (`get_unusual_expenses`), "Suggest investment options" (`get_investment_suggestions`).
-4. With #474 (batch L, in review): FAQ-2 answers how every customer feature works (`get_faq_answer`), and product
+4. FAQ-2 and insurance discovery (#474): FAQ-2 answers how every customer feature works (`get_faq_answer`), and product
    discovery (`list_products`) also lists the simulated insurance plans with their indicative premiums, saying they
    are not quotes.
 
@@ -345,8 +345,7 @@ model; a model that fails, times out or answers badly falls back to the rules; 4
 `integration/test_assistant_adversarial.py`: `test_direct_jailbreaks_are_refused_before_the_model`,
 `test_indirect_injection_in_a_transaction_reference_cannot_steer_anything`,
 `test_cross_customer_probes_never_return_the_victims_data`; `integration/test_assistant_groq.py`:
-`test_when_both_models_fail_the_rules_still_answer`; `unit/test_assistant_faq.py`; with #474:
-`test_every_customer_feature_has_an_faq_entry`, `test_every_page_in_the_customer_menu_is_explained_by_some_answer`,
+`test_when_both_models_fail_the_rules_still_answer`; `unit/test_assistant_faq.py`; `test_every_customer_feature_has_an_faq_entry`, `test_every_page_in_the_customer_menu_is_explained_by_some_answer`,
 `unit/test_assistant_discovery.py` (insurance listing); E2E `journey-assistant.spec.ts`.
 
 **Screenshots.**

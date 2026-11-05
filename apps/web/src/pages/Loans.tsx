@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import { api } from "../api/client";
 import type {
   AccountOut,
@@ -12,6 +13,7 @@ import type {
 import { errorMessage } from "../lib/errors";
 import { accountTypeLabel, formatDate } from "../lib/format";
 import { formatMinor } from "../lib/money";
+import { PRODUCT_PARAM } from "../lib/recommendations";
 import type { Tone } from "../lib/status";
 import { trackLoanCalculatorUsed } from "../telemetry/tracker";
 import { Alert } from "../ui/Alert";
@@ -392,12 +394,17 @@ function Receipt({ loan, account }: { loan: LoanOut; account: AccountOut | undef
 function Calculator({
   products,
   accounts,
+  initialProductId,
 }: {
   products: LoanProductOut[];
   accounts: AccountOut[];
+  /** `?product=<id>` from a recommendation card; ignored unless it is a catalogue loan. */
+  initialProductId: string | null;
 }) {
   const queryClient = useQueryClient();
-  const [productId, setProductId] = useState(products[0]?.id ?? "");
+  const [productId, setProductId] = useState(
+    () => products.find((p) => p.id === initialProductId)?.id ?? products[0]?.id ?? "",
+  );
   const product = products.find((p) => p.id === productId) ?? products[0];
   const [amountMinor, setAmountMinor] = useState(product?.min_amount_minor ?? 0);
   const [tenureIndex, setTenureIndex] = useState(0);
@@ -607,6 +614,7 @@ function EmiFigure({ terms }: { terms: Terms }) {
 }
 
 function ApplySection() {
+  const [params] = useSearchParams();
   const products = useQuery({ queryKey: ["loan-products"], queryFn: api.loanProducts });
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts });
   const failed = products.isError ? products.error : accounts.isError ? accounts.error : null;
@@ -633,7 +641,13 @@ function ApplySection() {
   if (catalogue.length === 0) {
     return <EmptyState message="No loan products are available right now." />;
   }
-  return <Calculator products={catalogue} accounts={usable} />;
+  return (
+    <Calculator
+      products={catalogue}
+      accounts={usable}
+      initialProductId={params.get(PRODUCT_PARAM)}
+    />
+  );
 }
 
 /** TASK-051: loan calculator, eligibility pre-check, application with disbursal receipt, and the

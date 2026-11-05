@@ -326,6 +326,15 @@ def test_assistant_tool_output_never_contains_the_date_of_birth(
         m.get("tool")
         for m in client.get("/api/v1/assistant/messages", headers=alice.headers).json()["items"]
     }
-    assert len(tools_used - {None}) == 5  # every tool really ran
+    # Every data tool really ran; "what is my date of birth?" gets the consent FAQ (FAQ-2), which
+    # says the assistant never sees the date, and "how old am I" gets no tool.
+    assert tools_used - {None} == {
+        "get_account_summary",
+        "get_recent_transactions",
+        "get_spend",
+        "get_balance_forecast",
+        "get_loan_affordability",
+        "get_faq_answer",
+    }
     history = client.get("/api/v1/assistant/messages", headers=alice.headers)
     assert SENIOR_DOB not in history.text

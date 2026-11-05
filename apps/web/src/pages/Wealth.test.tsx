@@ -7,6 +7,7 @@ import type {
   AccountOut,
   DepositQuoteOut,
   FixedDepositOut,
+  HoldingOut,
   PortfolioOut,
   WealthProductOut,
 } from "../api/client";
@@ -189,6 +190,8 @@ interface Options {
   products?: (url: string) => Response;
   book?: () => Response;
   close?: () => Response;
+  holdings?: () => Response;
+  sips?: () => Response;
 }
 
 type Body = Record<string, number | string>;
@@ -219,6 +222,12 @@ function mockApi(options: Options = {}) {
     if (url === "/api/v1/wealth/fixed-deposits/book") {
       return Promise.resolve(options.book?.() ?? json(201, active));
     }
+    if (url === "/api/v1/wealth/holdings") {
+      return Promise.resolve(options.holdings?.() ?? json(200, []));
+    }
+    if (url.endsWith("/sell")) return Promise.resolve(json(200, {}));
+    if (url === "/api/v1/wealth/sips") return Promise.resolve(options.sips?.() ?? json(200, []));
+    if (url.endsWith("/sips/sip-1/cancel")) return Promise.resolve(json(200, {}));
     if (url.endsWith("/close")) {
       return Promise.resolve(options.close?.() ?? json(200, { ...active, status: "CLOSED" }));
     }
@@ -243,6 +252,116 @@ function renderPage(path = "/wealth") {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+describe("Wealth holdings (ADR-0058)", () => {
+  const holding: HoldingOut = {
+    id: "h-1",
+    instrument_id: "50000000-0000-4000-a000-000000000004",
+    instrument_code: "STK-SIMINFRA",
+    instrument_name: "Simulated Infrastructure Ltd (fictional)",
+    kind: "STOCK",
+    risk_level: "HIGH",
+    units_micro: 3_000_000,
+    price_minor: 900_00,
+    price_date: "2026-11-05",
+    price_source: "SIMULATED",
+    value_minor: 2_700_00,
+    cost_basis_minor: 2_536_50,
+    gain_minor: 163_50,
+    gain_bps: 645,
+  };
+
+  it("shows holdings with value, cost and gain, and sells whole units after review", async () => {
+    const user = userEvent.setup({ delay: null });
+    const fetchMock = mockApi({ holdings: () => json(200, [holding]) });
+    renderPage();
+    const table = await screen.findByRole("table", {
+      name: "My fund, stock and bond holdings",
+    });
+    const row = within(table).getByText(holding.instrument_name).closest("tr");
+    expect(row).toHaveTextContent("INR 2,700.00");
+    expect(row).toHaveTextContent("+6.45%");
+    expect(screen.getByText(/one price per day\. They are not market data/)).toBeInTheDocument();
+    const units = within(table).getByLabelText(`Units of ${holding.instrument_name} to sell`);
+    await user.type(units, "1.5");
+    expect(within(table).getByRole("button", { name: "Sell" })).toBeDisabled();
+    await user.clear(units);
+    await user.type(units, "2");
+    await user.click(within(table).getByRole("button", { name: "Sell" }));
+    const dialog = within(
+      await screen.findByRole("dialog", { name: `Sell ${holding.instrument_name}` }),
+    );
+    expect(dialog.getByText("INR 1,800.00")).toBeInTheDocument();
+    await user.click(dialog.getByRole("button", { name: "Sell now" }));
+    const sell = callsTo(fetchMock, "/api/v1/wealth/holdings/h-1/sell");
+    expect(sell).toHaveLength(1);
+    expect(bodyOf(sell[0]?.[1])).toEqual({ account_id: account.id, units_micro: 2_000_000 });
+    expect(new Headers(sell[0]?.[1]?.headers).get("Idempotency-Key")).toBeTruthy();
+  });
+});
+
+describe("Your SIPs (ADR-0058 section 7)", () => {
+  const sip = {
+    id: "sip-1",
+    instrument_id: "50000000-0000-4000-a000-000000000001",
+    instrument_code: "MF-LIQUID",
+    instrument_name: "Liquid fund (illustrative)",
+    account_id: account.id,
+    amount_minor: 5_000_00,
+    day_of_month: 10,
+    status: "ACTIVE",
+    next_run_on: "2026-12-10",
+    created_at: "2026-10-01T06:00:00Z",
+    cancelled_at: null,
+    runs: [
+      {
+        run_on: "2026-11-10",
+        status: "FAILED",
+        order_id: null,
+        units_micro: null,
+        price_minor: null,
+        failure_reason: "insufficient_funds",
+      },
+      {
+        run_on: "2026-10-10",
+        status: "EXECUTED",
+        order_id: "order-1",
+        units_micro: 4_900_000,
+        price_minor: 1_020_00,
+        failure_reason: null,
+      },
+    ],
+  };
+
+  it("lists active SIPs with the next run and recent runs, and cancels after confirming", async () => {
+    const user = userEvent.setup({ delay: null });
+    const fetchMock = mockApi({ sips: () => json(200, [sip]) });
+    renderPage();
+    const region = within(await screen.findByRole("region", { name: "Your SIPs" }));
+    const table = await region.findByRole("table", { name: "My active monthly SIPs" });
+    expect(table).toHaveTextContent("INR 5,000.00");
+    const runs = within(table).getByRole("list", { name: `Recent runs of ${sip.instrument_name}` });
+    expect(
+      within(runs)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual([
+      expect.stringContaining("FAILED (insufficient_funds)"),
+      expect.stringContaining("EXECUTED"),
+    ]);
+    await user.click(within(table).getByRole("button", { name: "Cancel SIP" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "Cancel this SIP" }));
+    await user.click(dialog.getByRole("button", { name: "Cancel future instalments" }));
+    expect(callsTo(fetchMock, "/api/v1/wealth/sips/sip-1/cancel")).toHaveLength(1);
+  });
+
+  it("says so when there are no active SIPs", async () => {
+    mockApi();
+    renderPage();
+    const region = within(await screen.findByRole("region", { name: "Your SIPs" }));
+    expect(await region.findByText("You have no active SIPs.")).toBeInTheDocument();
+  });
 });
 
 describe("Wealth (TASK-065)", () => {
