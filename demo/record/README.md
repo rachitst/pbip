@@ -96,6 +96,22 @@ Environment: `PBIP_DEMO_PASSWORD` (else the `APP_ENV=local` constant in `scripts
 `scripts/totp.py --unused` through `docker compose exec`), `E2E_BASE_URL`, `DEMO_GRAFANA_URL` (default
 `http://localhost:3000`), `DEMO_PACE` (scales every hold; default 1), `DEMO_CAPTIONS=0` (no overlay).
 
+### When a take fails part-way
+
+Each rerun changes the demo data (a second step-up on the same seed can be held instead), so a take
+that failed late still holds good steps. `DEMO_SKIP` (step names separated by `|`) records a run without
+the steps another take already holds, and `merge-takes.py` builds one timeline from several takes, step
+ranges by name:
+
+```bash
+python demo/record/merge-takes.py "a.timeline.json::::fixed deposit booking" \
+  "b.timeline.json::investing: a fund, a monthly SIP and a stock::" merged.timeline.json
+python demo/record/edit-walkthrough.py merged.timeline.json --out ~/Desktop/Rachit/pbip-video
+```
+
+The takes' videos must sit next to the merged timeline. `DEMO_STILLS_DIR` also saves the docs stills
+(1920x1080 PNG, without the caption overlay) as the pages go by.
+
 ### How the edit is made
 
 The recorder writes a timeline next to the raw video: the chapters, every step's start and end (seconds on
