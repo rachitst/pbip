@@ -198,7 +198,7 @@ every minute. Every chart has a text summary and a table with the same figures.
 - **Alerts raised in the period:** still open, confirmed fraud and released, with a link to the alert queue.
 - **Destinations behind flagged payments:** masked payee accounts that received flagged payments.
 
-Screenshot to capture on the v1.1.0 stack: `images/42b-fraud-dashboard.png`.
+![Fraud dashboard](images/42b-fraud-dashboard.png)
 
 ## 7. Fraud demo lab (local and test only)
 
@@ -288,8 +288,9 @@ customers). Open **Behavioural analytics** and pick a **Period** (30, 90 or 180 
   events by type. Only customers who turned usage analytics on are counted: nothing is recorded for the
   others.
 
-Screenshots to capture on the v1.1.0 stack: `images/62c-behaviour-interest-chart.png` (this page) and
-`images/61b-rm-behaviour-profile.png` (the behavioural profile in the customer details panel).
+![Product interest by category](images/62c-behaviour-interest-chart.png)
+
+![Behavioural profile in the customer details](images/61b-rm-behaviour-profile.png)
 
 ## 10. Administration
 

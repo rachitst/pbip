@@ -3,14 +3,14 @@
 | | |
 |---|---|
 | Source | *PBIP Use Case Document v0.2*, section 7 (UC-01 to UC-13), with the actors of section 6 |
-| Describes | `main` at `775ec1a` (5 Nov 2026), which includes #461 (risk band), #463 and #477 (behavioural profile and analytics consent), #464 (fraud dashboard), #466 (compliance system exceptions), #470 (catalogue loan recommendations) and #472 (E2E journeys); plus, merging on 5 Nov, #474 (assistant FAQ for every feature and insurance discovery, batch L #481) and the wealth scope of ADR-0058: investing in funds, stocks and bonds through the ledger (#465), the insurance quote and application with the web Invest, Insurance and Holdings pages (#483), and fund SIPs with an hourly job (#484). A use case that depends on an unmerged PR says which one |
+| Describes | `main` at `775ec1a` (5 Nov 2026), which includes #461 (risk band), #463 and #477 (behavioural profile and analytics consent), #464 (fraud dashboard), #466 (compliance system exceptions), #470 (catalogue loan recommendations) and #472 (E2E journeys); plus, merging on 5 Nov, #474 (assistant FAQ for every feature and insurance discovery, batch L #481) and the wealth scope of ADR-0058: investing in funds, stocks and bonds through the ledger (#465), the insurance quote and application with the web Invest, Insurance and Holdings pages (#483), and fund SIPs with an hourly job (#484) and their web screens (#487). A use case that depends on an unmerged PR says which one |
 | Companion documents | [Requirements specification](requirements-specification.md) (numbered FR/NFR), [traceability](traceability.md) (requirement to code, tests and gaps), [user stories](user-stories.md), [diagrams](../diagrams/README.md), [user manual](../user-manual/README.md) |
 
 Each use case below gives the objective from the use-case document, the actors, the preconditions, the main and
 alternative flows with the real routes (all under `/api/v1` unless they start with `/api/health`) and web screens,
 the diagrams that draw it, the automated tests that prove it, and screenshots. Test paths are relative to
-`apps/api/tests/` (Python), `apps/web/src/` (Vitest) and `apps/web/e2e/` (Playwright). Screenshots marked
-**(to capture)** are named in [the list at the end](#screenshots-to-capture-on-the-v110-stack) and will be taken on the final v1.1.0 stack.
+`apps/api/tests/` (Python), `apps/web/src/` (Vitest) and `apps/web/e2e/` (Playwright). Screenshots still
+to capture are named in [the list at the end](#screenshots-to-capture-on-the-v110-stack) and will be taken on the final v1.1.0 stack.
 
 ## Actors and use case diagram
 
@@ -251,7 +251,7 @@ decides through the same rules.
 
 ![Loans](../user-manual/images/22-loans.png)
 
-Loans for you **(to capture)**: `docs/user-manual/images/22b-loans-for-you.png`.
+![Loans for you](../user-manual/images/22b-loans-for-you.png)
 
 ---
 
@@ -274,8 +274,8 @@ Loans for you **(to capture)**: `docs/user-manual/images/22b-loans-for-you.png`.
    at today's simulated price (`GET /wealth/instruments`, `POST /wealth/investments/buy` with an `Idempotency-Key`);
    the holdings on `/wealth` show value and gain and sell back (`GET /wealth/holdings`,
    `POST /wealth/holdings/{id}/sell`); the portfolio (`GET /wealth/portfolio`) adds funds, stocks and bonds.
-6. Fund SIPs (#484, API only): `POST /wealth/sips` sets up a monthly purchase on a day from 1 to 28; the hourly job
-   `run-fund-sips` buys each instalment exactly once; `POST /wealth/sips/{id}/cancel` stops it.
+6. Fund SIPs (#484 API, #487 web): "Start a monthly SIP" on `/wealth/invest` for a fund (`POST /wealth/sips`) sets up a monthly purchase on a day from 1 to 28; the hourly job
+   `run-fund-sips` buys each instalment exactly once; "Your SIPs" on `/wealth` lists them, and "Cancel SIP" (`POST /wealth/sips/{id}/cancel`) stops one.
 7. Insurance (#483): `/wealth/insurance` gives a simulated quote (`POST /wealth/insurance/quote`) from the declared
    cover, term and age band, and records an application (`POST /wealth/insurance/applications`) as
    APPROVED_SIMULATED, SUBMITTED (referred) or DECLINED; no policy is issued and nothing is charged.
@@ -287,7 +287,7 @@ closed. Another customer's deposit, holding, SIP or application: 404. A SIP inst
 account) is recorded as FAILED, notified, and the SIP moves to next month.
 
 **Simulated by design** (ADR-0058, accepted at the owner's direction): prices, premiums and acceptance rules are
-simulated and labelled so on every screen and response. Fund SIPs have no web screen.
+simulated and labelled so on every screen and response.
 
 **Diagrams.** [Fixed deposit booking and payout](../diagrams/activity.md#7-fixed-deposit-booking-and-maturity-payout),
 [fixed deposit lifecycle](../diagrams/state.md#4-fixed-deposit-lifecycle).
@@ -309,6 +309,8 @@ simulated and labelled so on every screen and response. Fund SIPs have no web sc
 ![Wealth](../user-manual/images/23-wealth.png)
 ![Book a fixed deposit](../user-manual/images/24-fd-book.png)
 ![Compare products](../user-manual/images/26-compare.png)
+![Invest](../user-manual/images/23b-wealth-invest.png)
+![Compare with the risk-band row](../user-manual/images/26b-compare-suitability.png)
 
 ---
 
@@ -465,8 +467,9 @@ Vitest `pages/AnalyticsConsentSection.test.tsx`, `telemetry/tracker.test.ts`, `t
 
 ![Behavioural analytics](../user-manual/images/62-behavioural-analytics.png)
 
-Analytics consent setting and the RM flyout profile **(to capture)**: `docs/user-manual/images/30b-analytics-consent.png`,
-`docs/user-manual/images/61b-rm-behaviour-profile.png`.
+![App usage analytics](../user-manual/images/30b-analytics-consent.png)
+![Behavioural profile in the RM flyout](../user-manual/images/61b-rm-behaviour-profile.png)
+![Product interest by category](../user-manual/images/62c-behaviour-interest-chart.png)
 
 ---
 
@@ -536,27 +539,19 @@ Carousel with a catalogue loan **(to capture)**: `docs/user-manual/images/27b-re
 ![Compliance dashboard](../user-manual/images/50-compliance-dashboard.png)
 ![Audit log verified](../user-manual/images/52-audit-log-verified.png)
 
-Fraud dashboard and system exceptions **(to capture)**: `docs/user-manual/images/42b-fraud-dashboard.png`,
-`docs/user-manual/images/50b-compliance-system-exceptions.png`.
+![Fraud dashboard](../user-manual/images/42b-fraud-dashboard.png)
+![Compliance & risk with the system exception kinds](../user-manual/images/50b-compliance-system-exceptions.png)
 
 ---
 
 ## Screenshots to capture on the v1.1.0 stack
 
-These files do not exist yet. Capture them on the final stack, at the same width as the existing ones, with the seeded
-demo users, and save them under these names so the slots above need no edit beyond turning each name into an image:
+Captured on 5 Nov 2026 on the rebuilt v1.1.0 stack: `22b`, `23b`, `26b`, `30b`, `42b`, `50b`, `61b`, `62c` (shown
+above and in the user manual). Still to capture, under these names:
 
 | File | Screen | Use case |
 |---|---|---|
-| `docs/user-manual/images/22b-loans-for-you.png` | `/loans`, "Loans for you" with eligible and not-eligible offers | UC-06 |
-| `docs/user-manual/images/27b-recommendations-loan-offer.png` | `/accounts` carousel showing a catalogue loan card with its figures | UC-06, UC-12 |
-| `docs/user-manual/images/23b-wealth-invest.png` | `/wealth/invest` buying a fund, stock or bond | UC-07 |
-| `docs/user-manual/images/23c-wealth-holdings.png` | `/wealth` holdings with gain and the sell action | UC-07 |
+| `docs/user-manual/images/23c-wealth-holdings.png` | `/wealth` holdings with gain, the sell action and "Your SIPs" | UC-07 |
 | `docs/user-manual/images/23d-insurance-apply.png` | `/wealth/insurance` quote and application recorded | UC-07 |
-| `docs/user-manual/images/26b-compare-suitability.png` | `/wealth/compare` with the "Suits your risk band" row | UC-07 |
+| `docs/user-manual/images/27b-recommendations-loan-offer.png` | `/accounts` carousel showing a catalogue loan card with its figures | UC-06, UC-12 |
 | `docs/user-manual/images/28b-assistant-insurance.png` | The assistant listing insurance plans (#474) | UC-08 |
-| `docs/user-manual/images/62c-behaviour-interest-chart.png` | `/staff/behaviour` product-interest and sessions charts | UC-11 |
-| `docs/user-manual/images/30b-analytics-consent.png` | Profile page, "App usage analytics" setting | UC-11 |
-| `docs/user-manual/images/61b-rm-behaviour-profile.png` | `/staff/insights` customer detail with the behaviour profile | UC-11 |
-| `docs/user-manual/images/42b-fraud-dashboard.png` | `/staff/fraud-dashboard` | UC-13 |
-| `docs/user-manual/images/50b-compliance-system-exceptions.png` | `/staff/compliance` filtered to undelivered notifications and failed standing orders | UC-13 |

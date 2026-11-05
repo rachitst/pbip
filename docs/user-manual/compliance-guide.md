@@ -53,7 +53,7 @@ by fraud analysts in the alert queue, not here.
 | **Undelivered notification** | A customer notification could not be delivered after every retry (dead-lettered). | The event type, the number of attempts and the error class; never the message itself |
 | **Scheduled transfer failure** | A standing order missed an occurrence, or the scheduler paused it. | "Order paused by the scheduler" or "Occurrence *date* not paid", the reason and the order id |
 
-Screenshot to capture on the v1.1.0 stack: `images/50b-compliance-system-exceptions.png` (filtered to the two new kinds).
+![Compliance & risk with the system exception kinds](images/50b-compliance-system-exceptions.png)
 
 ## 3. Acknowledge and resolve exceptions
 

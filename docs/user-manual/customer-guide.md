@@ -408,7 +408,7 @@ of ... a month and balance of ..."). For an eligible loan it shows **You could b
 the top of the range** over a reference tenure, the **Interest rate** and the reasons; for a loan you are not
 eligible for, it says why.
 
-Screenshot to capture on the v1.1.0 stack: `images/22b-loans-for-you.png` ("Loans for you").
+![Loans for you](images/22b-loans-for-you.png)
 
 **Borrow:**
 
@@ -462,12 +462,14 @@ day to day and is not market data.
 3. **Order executed** shows the investment, units, price, amount and a **Reference**. The money leaves your
    account at once and the holding appears under your holdings.
 
-Screenshots to capture on the v1.1.0 stack: `images/23b-wealth-invest.png` (Invest) and
-`images/23c-wealth-holdings.png` (holdings with Sell).
+![Invest](images/23b-wealth-invest.png)
 
-**Monthly fund SIPs:** a SIP buys a fund for a fixed amount on the same day each month (day 1 to 28). It can
-be set up and cancelled through the API only; there is no screen for it yet. Each month's purchase is made
-once, automatically; if the account cannot pay that day, you get a notification and the SIP tries again the
+Screenshot to capture: `images/23c-wealth-holdings.png` (holdings with Sell).
+
+**Monthly fund SIPs:** a SIP buys a fund for a fixed amount on the same day each month (day 1 to 28). On
+**Invest**, choose a fund and **Start a monthly SIP**; nothing is taken until the first instalment day. **Your
+SIPs** on **Wealth** lists them with the next instalment date; **Cancel SIP** stops future instalments. Each
+month's purchase is made once, automatically; if the account cannot pay that day, you get a notification and the SIP tries again the
 next month (a missed month is not caught up).
 
 **Withdraw:** when a deposit has matured, choose **Withdraw** and then **Withdraw to my account**. A
@@ -493,7 +495,7 @@ Open **Wealth** and choose **Compare products side by side ...**.
 questions ("Yes" or "No" with the reason); without a risk band it says so. Insurance is protection, not an
 investment, so it is not rated. Insurance premiums in the table are indicative for a reference profile.
 
-Screenshot to capture on the v1.1.0 stack: `images/26b-compare-suitability.png`.
+![Compare with the risk-band row](images/26b-compare-suitability.png)
 
 ## 13a. Insurance quote and application
 
@@ -508,7 +510,7 @@ Screenshot to capture on the v1.1.0 stack: `images/26b-compare-suitability.png`.
 
 Everything here is simulated: no policy is issued and no premium is taken from your account.
 
-Screenshot to capture on the v1.1.0 stack: `images/23d-insurance-apply.png`.
+Screenshot to capture: `images/23d-insurance-apply.png`.
 
 ## 14. Recommendations
 
@@ -539,7 +541,7 @@ Recommendations use your age band only if you gave consent, and your risk band i
 questions (see [Profile and security](#17-profile-and-security)): with a Low or Moderate risk band, PBIP does not
 suggest the high-risk index-fund SIP, and the last reason on an investment card names your band.
 
-Screenshot to capture on the v1.1.0 stack: `images/27b-recommendations-loan-offer.png` (a catalogue loan card).
+Screenshot to capture: `images/27b-recommendations-loan-offer.png` (a catalogue loan card).
 
 ## 15. The PBIP assistant
 
@@ -577,7 +579,9 @@ under a second; a local model on an ordinary computer can take much longer). Wit
 screenshot) the rule-based helper still answers, so the facts are the same; only the wording is plainer.
 Insurance plans are listed as simulated: the premium is an indication for a reference profile, not a quote.
 
-Screenshot to capture on the v1.1.0 stack: `images/28b-assistant-insurance.png` (the assistant listing insurance plans). If you send many messages quickly, it asks you to wait a minute.
+Screenshot to capture: `images/28b-assistant-insurance.png` (the assistant listing insurance plans).
+
+If you send many messages quickly, it asks you to wait a minute.
 
 ## 16. Notifications
 
@@ -635,7 +639,7 @@ Open **Profile & security**.
 
 There is no "forgot password" link: contact the bank if you cannot sign in.
 
-Screenshot to capture on the v1.1.0 stack: `images/30b-analytics-consent.png` (the App usage analytics section).
+![App usage analytics](images/30b-analytics-consent.png)
 
 ## 18. Using PBIP on a phone
 
