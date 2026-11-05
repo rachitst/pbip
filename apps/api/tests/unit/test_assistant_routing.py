@@ -239,6 +239,7 @@ def test_guard_lets_ordinary_questions_through(message: str) -> None:
         ("how do I change my password", ToolName.FAQ_ANSWER, {"topic": "account_security"}),
         ("how do I switch to dark mode", ToolName.FAQ_ANSWER, {"topic": "settings"}),
         ("how do I withdraw my consent", ToolName.FAQ_ANSWER, {"topic": "consent"}),
+        ("are you tracking my activity", ToolName.FAQ_ANSWER, {"topic": "consent"}),
         ("how is the health score worked out", ToolName.FAQ_ANSWER,
          {"topic": "spending_insights"}),
         ("what can you do", ToolName.FAQ_ANSWER, {"topic": "assistant"}),
