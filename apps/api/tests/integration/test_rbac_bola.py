@@ -62,6 +62,20 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         ("post", f"/api/v1/wealth/fixed-deposits/{uuid.uuid4()}/close"),
         ("get", "/api/v1/wealth/portfolio"),
         ("get", "/api/v1/wealth/insurance"),
+        ("get", "/api/v1/wealth/instruments"),
+        ("post", "/api/v1/wealth/investments/buy"),
+        ("get", "/api/v1/wealth/holdings"),
+        ("get", f"/api/v1/wealth/holdings/{uuid.uuid4()}"),
+        ("post", f"/api/v1/wealth/holdings/{uuid.uuid4()}/sell"),
+        ("post", "/api/v1/wealth/sips"),
+        ("get", "/api/v1/wealth/sips"),
+        ("get", f"/api/v1/wealth/sips/{uuid.uuid4()}"),
+        ("post", f"/api/v1/wealth/sips/{uuid.uuid4()}/cancel"),
+        ("post", "/api/v1/wealth/insurance/quote"),
+        ("post", "/api/v1/wealth/insurance/applications"),
+        ("get", "/api/v1/wealth/insurance/applications"),
+        ("get", f"/api/v1/wealth/insurance/applications/{uuid.uuid4()}"),
+        ("get", "/api/v1/wealth/suitability"),
         ("get", "/api/v1/fraud/alerts"),
         ("get", "/api/v1/fraud/stats"),
         ("get", "/api/v1/fraud/monitoring"),
@@ -659,6 +673,120 @@ def test_bola_fixed_deposits_are_only_visible_to_their_owner(
     assert own["ledger_balance_minor"] == 1_00_000_00  # only her own booking moved her money
     mine = client.get(f"/api/v1/wealth/fixed-deposits/{deposit_id}", headers=alice.headers)
     assert mine.status_code == 200 and mine.json()["status"] == "ACTIVE"
+
+
+def test_bola_investment_holdings_are_only_visible_to_their_owner(
+    client: TestClient, make_customer: Callable[..., Actor]
+) -> None:
+    """ADR-0058: holdings are read through wealth/policy with the AUTHENTICATED customer id; an
+    order cannot be paid from, read, sold or paid into someone else's account or holding."""
+    alice = make_customer(funds=2_00_000_00)
+    mallory = make_customer(funds=2_00_000_00)
+    stock = "50000000-0000-4000-a000-000000000004"  # STK-SIMINFRA (seeded, migration 0031)
+
+    def buy(actor: Actor, account_id: str) -> Any:
+        return client.post(
+            "/api/v1/wealth/investments/buy",
+            headers={**actor.headers, "Idempotency-Key": uuid.uuid4().hex},
+            json={"instrument_id": stock, "account_id": account_id, "units": 3},
+        )
+
+    def sell(actor: Actor, holding_id: str, account_id: str) -> Any:
+        return client.post(
+            f"/api/v1/wealth/holdings/{holding_id}/sell",
+            headers={**actor.headers, "Idempotency-Key": uuid.uuid4().hex},
+            json={"account_id": account_id, "units_micro": 1_000_000},
+        )
+
+    victim = buy(alice, str(alice.account_id))
+    assert victim.status_code == 201, victim.text
+    holding_id = victim.json()["holding_id"]
+    own = buy(mallory, str(mallory.account_id))
+    assert own.status_code == 201, own.text
+    h = mallory.headers
+    attempts = {
+        "get victim holding": client.get(f"/api/v1/wealth/holdings/{holding_id}", headers=h),
+        "get non-existent holding": client.get(
+            f"/api/v1/wealth/holdings/{uuid.uuid4()}", headers=h
+        ),
+        "sell victim holding": sell(mallory, holding_id, str(mallory.account_id)),
+        "sell non-existent holding": sell(mallory, str(uuid.uuid4()), str(mallory.account_id)),
+        "buy FROM victim account": buy(mallory, str(alice.account_id)),
+        "sell own holding INTO victim account": sell(
+            mallory, own.json()["holding_id"], str(alice.account_id)
+        ),
+    }
+    for name, response in attempts.items():
+        assert response.status_code == 404, f"{name}: expected 404 got {response.status_code}"
+    listed = client.get("/api/v1/wealth/holdings", headers=h).json()
+    assert [x["id"] for x in listed] == [own.json()["holding_id"]]
+    after = client.get(f"/api/v1/accounts/{alice.account_id}", headers=alice.headers).json()
+    assert after["ledger_balance_minor"] == 2_00_000_00 - victim.json()["amount_minor"]
+    mine = client.get(f"/api/v1/wealth/holdings/{holding_id}", headers=alice.headers)
+    assert mine.status_code == 200 and mine.json()["units_micro"] == 3_000_000
+
+
+def test_bola_sips_are_only_visible_to_their_owner(
+    client: TestClient, make_customer: Callable[..., Actor]
+) -> None:
+    """ADR-0058 section 7: SIPs are read through wealth/policy with the AUTHENTICATED customer
+    id; a SIP cannot be read, cancelled or paid from someone else's account."""
+    alice, mallory = make_customer(funds=1_00_000_00), make_customer(funds=1_00_000_00)
+
+    def create(actor: Actor, account_id: object) -> Any:
+        return client.post(
+            "/api/v1/wealth/sips",
+            headers={**actor.headers, "Idempotency-Key": uuid.uuid4().hex},
+            json={
+                "instrument_id": "50000000-0000-4000-a000-000000000001",  # MF-LIQUID
+                "account_id": str(account_id),
+                "amount_minor": 5_000_00,
+                "day_of_month": 10,
+            },
+        )
+
+    sip = create(alice, alice.account_id).json()
+    h = mallory.headers
+    attempts = {
+        "get victim sip": client.get(f"/api/v1/wealth/sips/{sip['id']}", headers=h),
+        "get non-existent sip": client.get(f"/api/v1/wealth/sips/{uuid.uuid4()}", headers=h),
+        "cancel victim sip": client.post(f"/api/v1/wealth/sips/{sip['id']}/cancel", headers=h),
+        "sip FROM victim account": create(mallory, alice.account_id),
+    }
+    for name, resp in attempts.items():
+        assert resp.status_code == 404, f"{name}: expected 404 got {resp.status_code}"
+    assert client.get("/api/v1/wealth/sips", headers=h).json() == []
+    mine = client.get(f"/api/v1/wealth/sips/{sip['id']}", headers=alice.headers)
+    assert mine.status_code == 200 and mine.json()["status"] == "ACTIVE"
+
+
+def test_bola_insurance_applications_are_only_visible_to_their_owner(
+    client: TestClient, make_customer: Callable[..., Actor]
+) -> None:
+    """ADR-0058 section 8: applications are read through wealth/policy with the AUTHENTICATED
+    customer id; someone else's and a missing one are the same 404."""
+    alice, mallory = make_customer(), make_customer()
+    applied = client.post(
+        "/api/v1/wealth/insurance/applications",
+        headers={**alice.headers, "Idempotency-Key": uuid.uuid4().hex},
+        json={
+            "product_id": "30000000-0000-4000-a000-000000000001",  # TERM-LIFE-CLASSIC
+            "cover_minor": 1_00_00_000_00,
+            "term_years": 30,
+            "age_band": "26-35",
+            "age_band_consent": True,
+        },
+    )
+    assert applied.status_code == 201, applied.text
+    h = mallory.headers
+    victim = client.get(f"/api/v1/wealth/insurance/applications/{applied.json()['id']}", headers=h)
+    missing = client.get(f"/api/v1/wealth/insurance/applications/{uuid.uuid4()}", headers=h)
+    assert victim.status_code == missing.status_code == 404
+    assert client.get("/api/v1/wealth/insurance/applications", headers=h).json() == []
+    mine = client.get(
+        f"/api/v1/wealth/insurance/applications/{applied.json()['id']}", headers=alice.headers
+    )
+    assert mine.status_code == 200
 
 
 def test_bola_forecast_neither_reads_nor_alerts_for_another_customers_account(

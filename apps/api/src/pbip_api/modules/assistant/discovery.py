@@ -24,7 +24,7 @@ from pbip_api.core.money import format_minor
 from pbip_api.modules.assistant.faq import percent
 from pbip_api.modules.assistant.sanitize import untrusted_block
 from pbip_api.modules.loans.catalogue import LoanProduct
-from pbip_api.modules.wealth.schemas import WealthProductOut
+from pbip_api.modules.wealth.schemas import InsuranceProductOut, WealthProductOut
 
 
 class ProductCategory(StrEnum):
@@ -32,6 +32,7 @@ class ProductCategory(StrEnum):
     LOANS = "loans"
     DEPOSITS = "deposits"
     INVESTMENTS = "investments"  # mutual funds and the gold bond
+    INSURANCE = "insurance"  # the simulated term-life and health catalogue (ADR-0028)
 
 
 _RISK_ORDER = {"LOW": 0, "MODERATE": 1, "HIGH": 2}
@@ -82,7 +83,9 @@ def wealth_line(product: WealthProductOut) -> str:
         parts.append(_months(product.tenures_months))
     if product.min_lock_in_months:
         parts.append(f"locked in for {product.min_lock_in_months} months")
-    if not product.bookable:
+    if product.investable:
+        parts.append("can be bought online at a simulated price")
+    elif not product.bookable:
         parts.append("not sold online")
     return ", ".join(parts) + "."
 
@@ -95,15 +98,53 @@ def _wealth_footer(products: Sequence[WealthProductOut]) -> str:
     if not products:
         return ""
     footer = f"Wealth catalogue {_versions(products)}: rates are indicative, simulated PBIP rates."
-    if any(not p.bookable for p in products):
-        footer += " Products marked illustrative are listed for comparison, not sold online."
+    if any(p.investable for p in products):
+        footer += " Fund prices are simulated by PBIP, not market data."
+    if any(not p.bookable and not p.investable for p in products):
+        footer += " Products not sold online are listed for comparison only."
     return footer
+
+
+_INSURANCE_TYPE = {"TERM_LIFE": "term life", "HEALTH": "health"}
+NO_INSURANCE_TEXT = "No insurance plans are listed at the moment."
+
+
+def _terms_text(years: Sequence[int]) -> str:
+    if list(years) == [1]:
+        return "renewed yearly"
+    if len(years) == 1:
+        return f"{years[0]}-year term"
+    return f"{years[0]} to {years[-1]}-year terms"
+
+
+def insurance_line(product: InsuranceProductOut) -> str:
+    """One plan: cover, terms, entry ages and the indicative premium with its reference profile."""
+    premium = product.indicative_premium
+    kind = _INSURANCE_TYPE.get(product.insurance_type, product.insurance_type.lower())
+    return (
+        f"- {untrusted_block(product.name)}: {kind}, cover "
+        f"{format_minor(product.cover_min_minor)} to {format_minor(product.cover_max_minor)}, "
+        f"{_terms_text(product.policy_terms_years)}, entry ages "
+        f"{product.eligibility.min_entry_age} to {product.eligibility.max_entry_age}; indicative "
+        f"premium {format_minor(premium.annual_premium_minor)} a year for "
+        f"{format_minor(premium.reference_cover_minor)} cover at age {premium.reference_age}."
+    )
+
+
+def _insurance_footer(plans: Sequence[InsuranceProductOut]) -> str:
+    versions = ", ".join(sorted({p.catalogue_version for p in plans}))
+    return (
+        f"Insurance catalogue {versions}: simulated plans, not issued by a real insurer. "
+        "Premiums are for the example customer shown, not a quote for you; nothing is "
+        "underwritten."
+    )
 
 
 def product_list(
     category: ProductCategory,
     loans: Sequence[LoanProduct],
     wealth: Sequence[WealthProductOut],
+    insurance: Sequence[InsuranceProductOut] = (),
 ) -> str:
     """The catalogue for one category, every figure exactly as stored."""
     deposits = [p for p in wealth if p.product_type == _DEPOSIT]
@@ -121,8 +162,18 @@ def product_list(
         sections.append("Funds and bonds:")
         sections.extend(wealth_line(p) for p in investments)
         shown.extend(investments)
-    footer = _wealth_footer(shown)
-    return "\n".join([*sections, footer] if footer else sections)
+    footers = [_wealth_footer(shown)]
+    if category is ProductCategory.INSURANCE:
+        sections.append("Insurance (simulated, see the Wealth page):")
+        sections.extend(insurance_line(p) for p in insurance)
+        footers.append(_insurance_footer(insurance) if insurance else NO_INSURANCE_TEXT)
+    elif category is ProductCategory.ALL and insurance:
+        # One line, not every plan: the whole catalogue must fit one stored message (2,000 chars).
+        footers.append(
+            f"Insurance (simulated): {len(insurance)} term life and health plans; ask me about "
+            "insurance for their cover and indicative premiums."
+        )
+    return "\n".join([*sections, *(f for f in footers if f)])
 
 
 # The recommendation engine's investment products and the catalogue rows that carry them.

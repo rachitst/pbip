@@ -21,15 +21,32 @@ from pbip_api.modules.auth.dependencies import (
 from pbip_api.modules.auth.service import RequestMeta
 from pbip_api.modules.customers.dependencies import get_current_customer
 from pbip_api.modules.customers.models import Customer
-from pbip_api.modules.wealth import service
+from pbip_api.modules.wealth import (
+    insurance_service,
+    investing_service,
+    service,
+    sip_service,
+    suitability_service,
+)
 from pbip_api.modules.wealth.models import InsuranceType, RiskLevel
 from pbip_api.modules.wealth.schemas import (
+    BuyRequest,
     DepositBookRequest,
     DepositQuoteOut,
     DepositTermsRequest,
     FixedDepositOut,
+    HoldingOut,
+    InstrumentOut,
+    InsuranceApplicationOut,
     InsuranceProductOut,
+    InsuranceQuoteOut,
+    InsuranceQuoteRequest,
+    OrderOut,
     PortfolioOut,
+    SellRequest,
+    SipCreateRequest,
+    SipOut,
+    SuitabilityOut,
     WealthProductOut,
 )
 
@@ -198,3 +215,266 @@ def get_portfolio(
     clock: Callable[[], float] = Depends(get_clock),
 ) -> PortfolioOut:
     return service.get_portfolio(session, customer.id, _now(clock))
+
+
+# ------------------------------------------------------------------ investing (ADR-0058)
+@router.get(
+    "/instruments",
+    response_model=list[InstrumentOut],
+    summary="Investable funds, stocks and bonds with today's SIMULATED price (not market data)",
+)
+def list_instruments(
+    _customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> list[InstrumentOut]:
+    return investing_service.list_instruments(session, _now(clock))
+
+
+@router.post(
+    "/investments/buy",
+    response_model=OrderOut,
+    status_code=201,
+    summary="Buy fund units by amount, or whole stocks or bonds, from one of my accounts",
+    responses={
+        404: {"description": "No such instrument, or the account is not mine (problem+json)"},
+        422: {"description": "Insufficient funds, wrong quantity kind or too small an order"},
+    },
+)
+def buy_investment(
+    body: BuyRequest,
+    idempotency_key: IdempotencyKeyHeader,
+    customer: Customer = Depends(get_current_customer),
+    principal: Principal = Depends(get_current_principal),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    meta: RequestMeta = Depends(get_request_meta),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> JSONResponse:
+    return _replayable(
+        investing_service.buy(
+            session,
+            settings,
+            customer_id=customer.id,
+            user_id=principal.user_id,
+            request=body,
+            idempotency_key=idempotency_key,
+            meta=meta,
+            now=_now(clock),
+        )
+    )
+
+
+@router.get(
+    "/holdings",
+    response_model=list[HoldingOut],
+    summary="My fund, stock and bond holdings at today's simulated price, with gain or loss",
+)
+def list_holdings(
+    customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> list[HoldingOut]:
+    return investing_service.list_holdings(session, customer.id, _now(clock))
+
+
+@router.get("/holdings/{holding_id}", response_model=HoldingOut, summary="One of my holdings")
+def get_holding(
+    holding_id: UUID,
+    customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> HoldingOut:
+    return investing_service.get_holding(session, customer.id, holding_id, _now(clock))
+
+
+@router.post(
+    "/holdings/{holding_id}/sell",
+    response_model=OrderOut,
+    summary="Sell units of one of my holdings into one of my accounts (idempotent)",
+    responses={
+        404: {"description": "The holding or the account is not mine (problem+json)"},
+        422: {"description": "More units than held, part of a stock or bond, or too small"},
+    },
+)
+def sell_investment(
+    holding_id: UUID,
+    body: SellRequest,
+    idempotency_key: IdempotencyKeyHeader,
+    customer: Customer = Depends(get_current_customer),
+    principal: Principal = Depends(get_current_principal),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    meta: RequestMeta = Depends(get_request_meta),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> JSONResponse:
+    return _replayable(
+        investing_service.sell(
+            session,
+            settings,
+            customer_id=customer.id,
+            user_id=principal.user_id,
+            holding_id=holding_id,
+            request=body,
+            idempotency_key=idempotency_key,
+            meta=meta,
+            now=_now(clock),
+        )
+    )
+
+
+# ------------------------------------------------------------------ fund SIPs (ADR-0058 s. 7)
+@router.post(
+    "/sips",
+    response_model=SipOut,
+    status_code=201,
+    summary="Set up a monthly fund purchase from one of my accounts (idempotent; moves no money)",
+    responses={
+        404: {"description": "No such instrument, or the account is not mine (problem+json)"},
+        422: {"description": "Not a fund, below the fund's minimum, or invalid request"},
+    },
+)
+def create_sip(
+    body: SipCreateRequest,
+    idempotency_key: IdempotencyKeyHeader,
+    customer: Customer = Depends(get_current_customer),
+    principal: Principal = Depends(get_current_principal),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    meta: RequestMeta = Depends(get_request_meta),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> JSONResponse:
+    return _replayable(
+        sip_service.create_sip(
+            session,
+            settings,
+            customer_id=customer.id,
+            user_id=principal.user_id,
+            request=body,
+            idempotency_key=idempotency_key,
+            meta=meta,
+            now=_now(clock),
+        )
+    )
+
+
+@router.get("/sips", response_model=list[SipOut], summary="My fund SIPs with their latest runs")
+def list_sips(
+    customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+) -> list[SipOut]:
+    return sip_service.list_sips(session, customer.id)
+
+
+@router.get("/sips/{sip_id}", response_model=SipOut, summary="One of my fund SIPs")
+def get_sip(
+    sip_id: UUID,
+    customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+) -> SipOut:
+    return sip_service.get_sip(session, customer.id, sip_id)
+
+
+@router.post(
+    "/sips/{sip_id}/cancel",
+    response_model=SipOut,
+    summary="Cancel one of my fund SIPs (no further instalments; safe to repeat)",
+)
+def cancel_sip(
+    sip_id: UUID,
+    customer: Customer = Depends(get_current_customer),
+    principal: Principal = Depends(get_current_principal),
+    session: Session = Depends(get_session),
+    meta: RequestMeta = Depends(get_request_meta),
+) -> SipOut:
+    return sip_service.cancel_sip(
+        session, customer_id=customer.id, user_id=principal.user_id, sip_id=sip_id, meta=meta
+    )
+
+
+# ------------------------------------- insurance quote and application (ADR-0058 section 8)
+@router.post(
+    "/insurance/quote",
+    response_model=InsuranceQuoteOut,
+    summary="Simulated insurance quote from my declared age band (no underwriting; stores nothing)",
+    responses={
+        404: {"description": "No such insurance product (problem+json)"},
+        422: {"description": "Cover or term not offered, or consent not given"},
+    },
+)
+def quote_insurance(
+    body: InsuranceQuoteRequest,
+    _customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+) -> InsuranceQuoteOut:
+    return insurance_service.quote(session, body)
+
+
+@router.post(
+    "/insurance/applications",
+    response_model=InsuranceApplicationOut,
+    status_code=201,
+    summary="Apply for an insurance plan (simulated; no policy is issued and nothing is charged)",
+    responses={
+        404: {"description": "No such insurance product (problem+json)"},
+        422: {"description": "Cover or term not offered, or consent not given"},
+    },
+)
+def apply_for_insurance(
+    body: InsuranceQuoteRequest,
+    idempotency_key: IdempotencyKeyHeader,
+    customer: Customer = Depends(get_current_customer),
+    principal: Principal = Depends(get_current_principal),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    meta: RequestMeta = Depends(get_request_meta),
+) -> JSONResponse:
+    return _replayable(
+        insurance_service.apply(
+            session,
+            settings,
+            customer_id=customer.id,
+            user_id=principal.user_id,
+            request=body,
+            idempotency_key=idempotency_key,
+            meta=meta,
+        )
+    )
+
+
+@router.get(
+    "/insurance/applications",
+    response_model=list[InsuranceApplicationOut],
+    summary="My insurance applications with their status",
+)
+def list_insurance_applications(
+    customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+) -> list[InsuranceApplicationOut]:
+    return insurance_service.list_applications(session, customer.id)
+
+
+@router.get(
+    "/insurance/applications/{application_id}",
+    response_model=InsuranceApplicationOut,
+    summary="One of my insurance applications",
+)
+def get_insurance_application(
+    application_id: UUID,
+    customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+) -> InsuranceApplicationOut:
+    return insurance_service.get_application(session, customer.id, application_id)
+
+
+# ------------------------------------------------- suitability by risk band (ADR-0058 s. 9)
+@router.get(
+    "/suitability",
+    response_model=SuitabilityOut,
+    summary="Which wealth products suit my recorded risk band (RTQ-1), with the reason",
+)
+def get_suitability(
+    customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+) -> SuitabilityOut:
+    return suitability_service.suitability(session, customer.id)

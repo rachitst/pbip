@@ -8,7 +8,12 @@ import type {
   RecommendationsResponse,
   WealthProductOut,
 } from "../api/client";
-import { NOT_AVAILABLE_NOTE, SIMULATED_ORDER_NOTE, productTypeLabel } from "../lib/recommendations";
+import {
+  NOT_AVAILABLE_NOTE,
+  NO_CARDS_NOTE,
+  SIMULATED_ORDER_NOTE,
+  productTypeLabel,
+} from "../lib/recommendations";
 import { account, customerMe, json, renderApp, urlOf } from "../test-utils";
 import { ProductRecommendations } from "./ProductRecommendations";
 
@@ -61,6 +66,17 @@ const familyCover: ProductRecommendationItem = {
   cta_label: "Get a quote",
 };
 
+const rewardsCard: ProductRecommendationItem = {
+  product_id: "00000000-0000-4000-a000-000000000004",
+  product_type: "LOAN",
+  title: "Rewards credit card",
+  description: "Cashback on everyday spending.",
+  score: 0.5,
+  reasons: ["You spend regularly on groceries."],
+  model_version: "rules-v1",
+  cta_label: "Apply",
+};
+
 /** A bookable deposit from the wealth catalogue (TASK-063), for the FD card's deep link. */
 const catalogueDeposit: WealthProductOut = {
   id: "fd-regular",
@@ -79,6 +95,7 @@ const catalogueDeposit: WealthProductOut = {
   premature_closure_allowed: true,
   premature_penalty_bps: 100,
   bookable: true,
+  investable: false,
   notes: "Indicative, simulated rate set by PBIP, not a real bank's offer.",
   catalogue_version: "2026-11-v1",
 };
@@ -255,18 +272,30 @@ describe("product recommendations on the accounts page", () => {
     expect(window.location.pathname).toBe("/loans");
   });
 
-  it("offers no action for a product PBIP cannot open yet", async () => {
-    recommendations = () => Promise.resolve(json(200, response([familyCover])));
+  it("says plainly that PBIP issues no cards instead of offering a dead button", async () => {
+    recommendations = () => Promise.resolve(json(200, response([rewardsCard])));
     renderApp();
     const region = await section();
     const card = within(
-      (await region.findByRole("heading", { name: "Family protection cover" })).closest("li") ??
+      (await region.findByRole("heading", { name: "Rewards credit card" })).closest("li") ??
         document.body,
     );
-    expect(card.getByText(NOT_AVAILABLE_NOTE)).toBeInTheDocument();
+    expect(card.getByText(NO_CARDS_NOTE)).toBeInTheDocument();
     expect(card.getAllByRole("button").map((b) => b.textContent)).toEqual([
       "Why this was recommended for you",
     ]);
+  });
+
+  it("takes the family cover card to the insurance quote", async () => {
+    const user = userEvent.setup();
+    recommendations = () => Promise.resolve(json(200, response([familyCover])));
+    renderApp();
+    const region = await section();
+    const heading = await region.findByRole("heading", { name: "Family protection cover" });
+    const card = within(heading.closest("li") ?? heading);
+    expect(card.queryByText(NOT_AVAILABLE_NOTE)).toBeNull();
+    await user.click(card.getByRole("button", { name: "Get a quote: Family protection cover" }));
+    expect(window.location.pathname).toBe("/wealth/insurance");
   });
 
   it("opens the wealth page's booking dialog straight from the fixed deposit card", async () => {

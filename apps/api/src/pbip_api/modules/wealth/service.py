@@ -33,19 +33,25 @@ from pbip_api.modules.ledger import service as ledger
 from pbip_api.modules.ledger.models import IdempotencyKey
 from pbip_api.modules.notifications import service as notifications
 from pbip_api.modules.payments.service import IdempotencyKeyReuseError
-from pbip_api.modules.wealth import deposit_math, insurance
+from pbip_api.modules.wealth import deposit_math, insurance, pricing
 from pbip_api.modules.wealth.models import (
     ClosureKind,
     FixedDeposit,
     FixedDepositStatus,
+    InstrumentKind,
     InsuranceProduct,
     InsuranceType,
+    InvestmentInstrument,
     ProductType,
     RiskLevel,
     WealthProduct,
     YieldBasis,
 )
-from pbip_api.modules.wealth.policy import get_owned_fixed_deposit, list_owned_fixed_deposits
+from pbip_api.modules.wealth.policy import (
+    get_owned_fixed_deposit,
+    list_owned_fixed_deposits,
+    list_owned_holdings,
+)
 from pbip_api.modules.wealth.schemas import (
     AgeBandHintOut,
     AllocationSlice,
@@ -85,7 +91,7 @@ def _product_apy(product: WealthProduct) -> int | None:
     return product.annual_rate_bps  # a coupon is paid out, not compounded
 
 
-def _product_out(product: WealthProduct) -> WealthProductOut:
+def _product_out(product: WealthProduct, investable: bool) -> WealthProductOut:
     return WealthProductOut(
         id=product.id,
         code=product.code,
@@ -103,6 +109,7 @@ def _product_out(product: WealthProduct) -> WealthProductOut:
         premature_closure_allowed=product.premature_penalty_bps is not None,
         premature_penalty_bps=product.premature_penalty_bps,
         bookable=product.bookable,
+        investable=investable,
         notes=product.notes,
         catalogue_version=product.catalogue_version,
     )
@@ -112,7 +119,14 @@ def list_products(session: Session, risk_level: RiskLevel | None) -> list[Wealth
     stmt = select(WealthProduct).order_by(WealthProduct.product_type, WealthProduct.code)
     if risk_level is not None:
         stmt = stmt.where(WealthProduct.risk_level == risk_level)
-    return [_product_out(p) for p in session.execute(stmt).scalars()]
+    investable = set(
+        session.execute(
+            select(InvestmentInstrument.wealth_product_id).where(
+                InvestmentInstrument.wealth_product_id.is_not(None)
+            )
+        ).scalars()
+    )
+    return [_product_out(p, p.id in investable) for p in session.execute(stmt).scalars()]
 
 
 def _insurance_out(product: InsuranceProduct) -> InsuranceProductOut:
@@ -318,6 +332,28 @@ def _allocation(values: dict[str, int]) -> list[AllocationSlice]:
     ]
 
 
+def _investments_by_kind(
+    session: Session, customer_id: UUID, today: date
+) -> tuple[dict[InstrumentKind, int], int]:
+    """Value of the customer's holdings by kind at today's simulated prices, and their cost."""
+    holdings = list_owned_holdings(session, customer_id)
+    by_kind = dict.fromkeys(InstrumentKind, 0)
+    if not holdings:
+        return by_kind, 0
+    ids = {h.instrument_id for h in holdings}
+    instruments = {
+        i.id: i
+        for i in session.execute(
+            select(InvestmentInstrument).where(InvestmentInstrument.id.in_(ids))
+        ).scalars()
+    }
+    for holding in holdings:
+        instrument = instruments[holding.instrument_id]
+        price = pricing.instrument_price(instrument, today)
+        by_kind[instrument.kind] += pricing.value_of_units(holding.units_micro, price)
+    return by_kind, sum(h.cost_basis_minor for h in holdings)
+
+
 def get_portfolio(session: Session, customer_id: UUID, now: datetime) -> PortfolioOut:
     today = bank_today(now)
     accounts = accounts_service.list_accounts(session, customer_id)
@@ -329,8 +365,11 @@ def get_portfolio(session: Session, customer_id: UUID, now: datetime) -> Portfol
     ]
     principal = sum(d.principal for d in open_deposits)
     accrued = sum(_accrued(d, today) for d in open_deposits)
-    funds = 0  # PBIP sells no fund units (ADR-0025): nobody holds any
     deposits_value = principal + accrued
+    by_kind, invested_cost = _investments_by_kind(session, customer_id, today)
+    funds = by_kind[InstrumentKind.MUTUAL_FUND]
+    stocks = by_kind[InstrumentKind.STOCK]
+    bonds = by_kind[InstrumentKind.BOND]
     return PortfolioOut(
         currency=CURRENCY,
         as_of=today,
@@ -340,9 +379,21 @@ def get_portfolio(session: Session, customer_id: UUID, now: datetime) -> Portfol
         deposits_value_minor=deposits_value,
         projected_maturity_value_minor=sum(d.maturity_amount for d in open_deposits),
         funds_minor=funds,
-        total_minor=cash + deposits_value + funds,
+        stocks_minor=stocks,
+        bonds_minor=bonds,
+        investments_cost_minor=invested_cost,
+        investments_gain_minor=funds + stocks + bonds - invested_cost,
+        total_minor=cash + deposits_value + funds + stocks + bonds,
         open_deposits=len(open_deposits),
-        allocation=_allocation({"CASH": max(cash, 0), "DEPOSITS": deposits_value, "FUNDS": funds}),
+        allocation=_allocation(
+            {
+                "CASH": max(cash, 0),
+                "DEPOSITS": deposits_value,
+                "FUNDS": funds,
+                "STOCKS": stocks,
+                "BONDS": bonds,
+            }
+        ),
     )
 
 
@@ -570,8 +621,9 @@ def _begin_idempotent(
 
 
 def _store_response(
-    session: Session, idem_id: UUID, outcome: WealthResult, transaction_id: UUID
+    session: Session, idem_id: UUID, outcome: WealthResult, transaction_id: UUID | None
 ) -> None:
+    """``transaction_id`` is None for a use case that posts nothing (a SIP or an application)."""
     row = session.get(IdempotencyKey, idem_id)
     if row is None:
         raise RuntimeError("idempotency row vanished")

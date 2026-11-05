@@ -37,12 +37,15 @@ from pbip_api.modules.ledger.models import (
 HEALTH_WINDOW_MONTHS = 12
 INCOME_TYPES = (TransactionType.DEPOSIT, TransactionType.TRANSFER)
 # Never income or spend. A REVERSAL returns money; a fixed deposit's booking and principal payout
-# move the customer's own money to and from their deposit (ADR-0025), like a move between own
-# accounts. Deposit interest (FD_INTEREST) stays visible as a credit.
+# move the customer's own money to and from their deposit (ADR-0025), and investment purchases and
+# sales to and from their own holdings (ADR-0058), like a move between own accounts. Deposit
+# interest (FD_INTEREST) stays visible as a credit.
 NOT_ACTIVITY_TYPES = (
     TransactionType.REVERSAL,
     TransactionType.FD_BOOKING,
     TransactionType.FD_CLOSURE,
+    TransactionType.INVESTMENT_PURCHASE,
+    TransactionType.INVESTMENT_SALE,
 )
 # Income is recurring inflow (ADR-0043): a source of credits (the paying account and the payment
 # reference without its dates and numbers) counts only when it paid in at least

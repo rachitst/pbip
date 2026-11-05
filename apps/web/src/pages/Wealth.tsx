@@ -14,7 +14,7 @@ import type {
 import { errorMessage } from "../lib/errors";
 import { accountTypeLabel, formatDate } from "../lib/format";
 import { formatMinor, parseToMinor } from "../lib/money";
-import { BOOK_FIXED_DEPOSIT, BOOK_PARAM } from "../lib/recommendations";
+import { BOOK_FIXED_DEPOSIT, BOOK_PARAM, PRODUCT_PARAM } from "../lib/recommendations";
 import type { StatusView } from "../lib/status";
 import { Alert } from "../ui/Alert";
 import { Amount } from "../ui/Amount";
@@ -29,6 +29,7 @@ import { StatusBadge } from "../ui/StatusBadge";
 import { CHART_COLORS, TOOLTIP_STYLE } from "./insightsChart";
 import { formatRate } from "./Loans";
 import "./LoanCard.css";
+import { HoldingsSection, SipsSection } from "./WealthHoldings";
 
 /** Wait for typing to settle before asking the server for a maturity quote. */
 export const QUOTE_DEBOUNCE_MS = 300;
@@ -37,6 +38,8 @@ const ASSET_LABEL: Record<AllocationSlice["asset_class"], string> = {
   CASH: "Cash",
   DEPOSITS: "Fixed deposits",
   FUNDS: "Funds",
+  STOCKS: "Stocks",
+  BONDS: "Bonds",
 };
 const RISK: Record<RiskLevel, StatusView> = {
   LOW: { label: "Low risk", tone: "success" },
@@ -193,6 +196,14 @@ function PortfolioSection() {
             <dd>{formatMinor(p.projected_maturity_value_minor, p.currency)}</dd>
           </div>
           <div className="details__row">
+            <dt>Funds, stocks and bonds</dt>
+            <dd>{formatMinor(p.funds_minor + p.stocks_minor + p.bonds_minor, p.currency)}</dd>
+          </div>
+          <div className="details__row">
+            <dt>Investment gain or loss</dt>
+            <dd>{formatMinor(p.investments_gain_minor, p.currency)}</dd>
+          </div>
+          <div className="details__row">
             <dt>Cash in your accounts</dt>
             <dd>{formatMinor(p.cash_minor, p.currency)}</dd>
           </div>
@@ -203,8 +214,8 @@ function PortfolioSection() {
         </dl>
         <p className="muted">
           {p.open_deposits === 1 ? "1 open deposit" : `${String(p.open_deposits)} open deposits`} ·
-          figures as of {formatDate(p.as_of)}. Funds are shown at {formatMinor(0, p.currency)}: PBIP
-          does not sell fund units online.
+          figures as of {formatDate(p.as_of)}. Funds, stocks and bonds are valued at today&apos;s
+          simulated prices, not market data.
         </p>
       </section>
       {p.total_minor > 0 ? (
@@ -681,6 +692,14 @@ function ProductCard({ product, onBook }: { product: WealthProductOut; onBook: (
           Book this deposit
         </Button>
       )}
+      {product.investable && (
+        <Link
+          className="btn btn--secondary btn--sm"
+          to={`/wealth/invest?${new URLSearchParams({ [PRODUCT_PARAM]: product.id }).toString()}`}
+        >
+          Invest in this fund
+        </Link>
+      )}
     </section>
   );
 }
@@ -797,11 +816,22 @@ export function Wealth() {
         <h2 id="deposits-title">Your fixed deposits</h2>
         <DepositsSection />
       </section>
+      <section aria-labelledby="investments-title">
+        <h2 id="investments-title">Your funds, stocks and bonds</h2>
+        <p>
+          <Link to="/wealth/invest">Invest in funds, stocks or bonds</Link>.
+        </p>
+        <HoldingsSection />
+      </section>
+      <section aria-labelledby="sips-title">
+        <h2 id="sips-title">Your SIPs</h2>
+        <SipsSection />
+      </section>
       <section aria-labelledby="catalogue-title">
         <h2 id="catalogue-title">Products</h2>
         <p>
           <Link to="/wealth/compare">Compare products side by side</Link>, including term life and
-          health insurance.
+          health insurance, or <Link to="/wealth/insurance">get a simulated insurance quote</Link>.
         </p>
         <CatalogueSection />
       </section>
