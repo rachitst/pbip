@@ -751,7 +751,11 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
     const table = page.getByRole("table", { name: "Product comparison" });
     await expect(table).toBeVisible();
     await w.reveal(table);
-    await w.hold(3000);
+    if (await table.getByText("Suits your risk band").count()) {
+      await w.say("Including whether each product suits her risk band", 3000);
+    } else {
+      await w.hold(3000);
+    }
     return ["PASS", "2 products compared"];
   });
 
@@ -892,40 +896,145 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
   return held;
 }
 
+/** The first INR amount in a field's hint ("At least INR 500.00", "INR 1,00,000.00 to ..."). */
+async function hintAmount(page: Page, label: string): Promise<number> {
+  const describedBy = await page
+    .getByLabel(label, { exact: true })
+    .getAttribute("aria-describedby");
+  const hintId = describedBy?.split(" ")[0];
+  if (!hintId) throw new Error(`the ${label} field has no hint`);
+  const hint = (await page.locator(`[id="${hintId}"]`).textContent()) ?? "";
+  const match = /INR ([\d,]+\.\d\d)/.exec(hint);
+  if (!match?.[1]) throw new Error(`no amount in the ${label} hint`);
+  return Number(match[1].replace(/,/g, ""));
+}
+
+/** Picks the first option of a select whose text matches. Returns false when there is none. */
+async function pick(page: Page, label: string, text: RegExp): Promise<boolean> {
+  const select = page.getByLabel(label, { exact: true });
+  const options = await select.locator("option").allTextContents();
+  const index = options.findIndex((o) => text.test(o));
+  if (index < 0) return false;
+  await select.selectOption({ index });
+  return true;
+}
+
 async function investing(w: Walkthrough, page: Page): Promise<void> {
-  const buy = page.getByRole("button", { name: /^(Buy|Invest)\b/ });
-  if (!(await w.dead(() => present(buy)))) {
-    w.pending(
-      "investing: funds, stocks and bonds",
-      "no Buy/Invest action on the Wealth page on this build",
+  await w.step("investing: a fund, a monthly SIP and a stock", {}, async () => {
+    await w.go("/wealth/invest", "Invest");
+    await w.say(
+      "Invest: funds, stocks and bonds at today's simulated price, through the ledger",
+      300,
     );
-    return;
-  }
-  await w.step("investing: funds, stocks and bonds", {}, async () => {
-    await w.reveal(buy);
-    await w.say("Funds, stocks and bonds: simulated buying through the ledger", 300);
-    await buy.first().click();
-    const dialog = page.getByRole("dialog");
-    await expect(dialog).toBeVisible();
-    await w.hold(3000);
-    await page.keyboard.press("Escape");
-    return ["DIFF", "investing dialog shown; the buy flow is written in phase 2"];
+    if (!(await pick(page, "Investment", /Mutual fund$/))) throw new Error("no fund to buy");
+    const min = await hintAmount(page, "Amount");
+    await page.getByLabel("Amount", { exact: true }).fill(Math.max(min, 5000).toFixed(2));
+    await page.getByRole("button", { name: "Review order" }).click();
+    const confirm = page.getByRole("dialog", { name: "Confirm your order" });
+    await expect(confirm).toBeVisible();
+    await w.hold(1500);
+    await w.api("POST", "/api/v1/wealth/investments/buy", () =>
+      confirm.getByRole("button", { name: "Buy now" }).click(),
+    );
+    await expect(page.getByRole("heading", { name: "Order executed" })).toBeVisible();
+    await w.say("Bought at today's price: units, price and a reference", 2500);
+    const sip = page.getByRole("heading", { name: "Start a monthly SIP" });
+    await w.reveal(sip);
+    await w.say("Or invest every month: a SIP", 300);
+    const sipMin = await hintAmount(page, "Monthly amount").catch(() => 1000);
+    await page
+      .getByLabel("Monthly amount", { exact: true })
+      .fill(Math.max(sipMin, 2000).toFixed(2));
+    await page.getByLabel("Day of the month", { exact: true }).fill("5");
+    await page.getByRole("button", { name: "Review SIP" }).click();
+    const sipConfirm = page.getByRole("dialog", { name: "Confirm your monthly SIP" });
+    await expect(sipConfirm).toBeVisible();
+    await w.hold(1200);
+    await w.api("POST", "/api/v1/wealth/sips", () =>
+      sipConfirm.getByRole("button", { name: "Start SIP" }).click(),
+    );
+    await w.hold(2000);
+    await w.dead(() => page.evaluate(() => window.scrollTo(0, 0)));
+    let stock = "";
+    if (await pick(page, "Investment", /(Stock|Bond)$/)) {
+      stock =
+        (
+          (await page
+            .getByLabel("Investment", { exact: true })
+            .locator("option:checked")
+            .textContent()) ?? ""
+        ).split(" · ")[0] ?? "";
+      await w.say("Stocks and bonds are bought in whole units", 300);
+      await page.getByLabel("Units", { exact: true }).fill("2");
+      await page.getByRole("button", { name: "Review order" }).click();
+      const second = page.getByRole("dialog", { name: "Confirm your order" });
+      await w.hold(1000);
+      await w.api("POST", "/api/v1/wealth/investments/buy", () =>
+        second.getByRole("button", { name: "Buy now" }).click(),
+      );
+      await expect(page.getByRole("heading", { name: "Order executed" })).toBeVisible();
+      await w.hold(2000);
+    }
+    sold.name = stock;
+    return ["PASS", `fund bought, SIP started${stock ? `, 2 units of ${stock}` : ""}`];
+  });
+
+  await w.step("holdings: sell, and the SIP list", {}, async () => {
+    await w.go("/wealth", "Wealth");
+    const holdings = page.getByRole("heading", { name: "Your funds, stocks and bonds" });
+    await w.reveal(holdings);
+    await w.say("Her holdings, with today's value and gain or loss", 2500);
+    let detail = "holdings shown";
+    if (sold.name) {
+      const units = page.getByLabel(`Units of ${sold.name} to sell`);
+      await units.first().fill("1");
+      const row = page.locator("li, tr, section").filter({ has: units.first() }).last();
+      await row.getByRole("button", { name: "Sell", exact: true }).click();
+      const dialog = page.getByRole("dialog", { name: `Sell ${sold.name}` });
+      await expect(dialog).toBeVisible();
+      await w.hold(1200);
+      await w.api("POST", /^\/api\/v1\/wealth\/holdings\/[^/]+\/sell$/, () =>
+        dialog.getByRole("button", { name: "Sell now" }).click(),
+      );
+      await w.say("Sold one unit back into her account", 2200);
+      detail = `sold 1 unit of ${sold.name}`;
+    }
+    await w.reveal(page.getByRole("heading", { name: "Your SIPs" }));
+    await expect(page.getByRole("button", { name: "Cancel SIP" }).first()).toBeVisible();
+    await w.say("Her SIPs: each can be cancelled; every monthly run is listed", 2500);
+    return ["PASS", detail];
   });
 }
 
+const sold = { name: "" };
+
 async function insuranceQuote(w: Walkthrough, page: Page): Promise<void> {
-  const quote = page.getByRole("button", { name: /quote/i });
-  if (!(await w.dead(() => present(quote)))) {
-    w.pending("insurance quote", "no quote action on the Wealth page on this build");
-    return;
-  }
-  await w.step("insurance quote", {}, async () => {
-    await w.reveal(quote);
-    await w.say("Insurance: an indicative quote", 300);
-    await quote.first().click();
-    await w.hold(3000);
-    await page.keyboard.press("Escape");
-    return ["DIFF", "quote shown; the full flow is written in phase 2"];
+  await w.step("insurance quote and application", {}, async () => {
+    await w.go("/wealth/insurance", "Insurance quote");
+    await w.say("Insurance: a simulated quote for term life or health cover", 300);
+    await page.getByLabel("Plan", { exact: true }).selectOption({ index: 0 });
+    const cover = await hintAmount(page, "Cover");
+    await page.getByLabel("Cover", { exact: true }).fill(cover.toFixed(2));
+    await page.getByLabel("Your age band", { exact: true }).selectOption({ index: 2 });
+    await page.getByRole("checkbox", { name: /age band being used/ }).check();
+    await w.hold(800);
+    const { body } = await w.api<{ outcome?: string }>(
+      "POST",
+      "/api/v1/wealth/insurance/quote",
+      () => page.getByRole("button", { name: "Get a quote" }).click(),
+    );
+    await expect(page.getByRole("region", { name: "Quote" })).toBeVisible();
+    await w.say(
+      `The quote: premium and outcome (${String(body.outcome ?? "?").toLowerCase()})`,
+      2800,
+    );
+    if (body.outcome === "DECLINED") return ["DIFF", "quote DECLINED; no application"];
+    await w.api("POST", "/api/v1/wealth/insurance/applications", () =>
+      page.getByRole("button", { name: "Apply", exact: true }).click(),
+    );
+    await expect(page.getByRole("heading", { name: "Application recorded" })).toBeVisible();
+    await w.say("Application recorded (simulated: no policy is issued)", 2500);
+    return ["PASS", `quote ${body.outcome ?? "?"}; applied`];
   });
 }
 
@@ -1186,21 +1295,19 @@ async function staffAnalyst(
     return ["PASS", `rejected ${decided.join(",") || "none open"}`];
   });
 
-  const stats = page
-    .getByRole("navigation", { name: "Main" })
-    .getByRole("link", { name: /statistic|fraud dashboard/i });
-  if (await w.dead(() => present(stats))) {
-    await w.step("fraud statistics dashboard", { highlight: true }, async () => {
-      await stats.first().click();
-      await w.say("Fraud statistics: decisions, outcomes and trends", 4000);
-      return ["DIFF", "page shown; phase 2 writes its checks"];
-    });
-  } else {
-    w.pending(
-      "fraud statistics dashboard",
-      "no fraud statistics page in the analyst's menu on this build",
+  await w.step("fraud dashboard: statistics charts", { highlight: true }, async () => {
+    await w.api("GET", "/api/v1/fraud/stats", () =>
+      w.go("/staff/fraud-dashboard", "Fraud dashboard"),
     );
-  }
+    await w.say("The fraud dashboard: payments scored, hold and block rates, scoring time", 3000);
+    await w.reveal(page.getByRole("heading", { name: "Decisions over time" }));
+    await w.say("Decisions per day, and the hold and block rates", 2800);
+    await w.reveal(page.getByRole("heading", { name: "Risk score distribution" }));
+    await w.hold(2200);
+    await w.reveal(page.getByRole("heading", { name: "Top reasons" }));
+    await w.say("The reasons behind them", 2500);
+    return ["PASS", "dashboard shown"];
+  });
   await w.signOut();
 }
 
@@ -1234,10 +1341,19 @@ async function staffCompliance(w: Walkthrough, page: Page): Promise<void> {
       dialog.getByRole("button", { name: "Acknowledge" }).click(),
     );
     await w.say("Acknowledged with a reason: stored in the hash-chained audit log", 2500);
-    const system = page.getByLabel("Kind").locator("option", {
-      hasText: /Undelivered notification|Scheduled transfer failure/,
-    });
-    if ((await system.count()) === 0) {
+    const kind = page.getByLabel("Kind");
+    const kinds = await kind.locator("option").allTextContents();
+    if (
+      kinds.some((k) => /Undelivered notification/.test(k)) &&
+      kinds.some((k) => /Scheduled transfer failure/.test(k))
+    ) {
+      await w.dead(() => page.evaluate(() => window.scrollTo(0, 0)));
+      await kind.selectOption({ label: "Scheduled transfer failure" });
+      await w.say("New kinds: failed scheduled transfers and undelivered notifications", 2500);
+      await kind.selectOption({ label: "Undelivered notification" });
+      await w.hold(2000);
+      await kind.selectOption({ index: 0 });
+    } else {
       w.pending(
         "compliance system exceptions",
         "no notification/scheduler exception kinds on this build",
