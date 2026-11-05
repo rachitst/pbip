@@ -20,6 +20,7 @@ today. PBIP is a simulated bank: all money, rates and products are for demonstra
 11. [Loans](#11-loans)
 12. [Wealth and fixed deposits](#12-wealth-and-fixed-deposits)
 13. [Compare investments and insurance](#13-compare-investments-and-insurance)
+    - [13a. Insurance quote and application](#13a-insurance-quote-and-application)
 14. [Recommendations](#14-recommendations)
 15. [The PBIP assistant](#15-the-pbip-assistant)
 16. [Notifications](#16-notifications)
@@ -393,11 +394,21 @@ repayments. Open **Loans**.
 2. Move the **Loan amount** and **Tenure** sliders. The calculator shows the **Monthly EMI**, **Total
    interest** and **Total payable**.
 3. The **Eligibility pre-check** shows **Eligible** or **Not eligible**, the maximum you could borrow over
-   that tenure, your interest rate and the reasons. All your repayments including the new EMI must stay
-   within 50% of your income, worked out from your own account history. Only regular income counts (see
+   that tenure, your interest rate and the reasons. PBIP checks five things from your own account history:
+   regular income; all your loan repayments including the new EMI within 50% of your income; your monthly
+   spending plus all EMIs within 90% of your income; enough available balance for the first EMI; and no
+   sign-in lockout in the last 90 days. The reasons quote your own income, spending and balance. Only regular income counts (see
    [section 10](#10-spending-financial-health-and-balance-forecast)); without it the pre-check says
    **Not eligible**, "We could not find regular income in your account history.", as in the screenshot of a
    new customer. A sign-in lockout in the last 90 days pauses loan checks.
+
+**Loans for you** lists every loan in the catalogue (personal, car and home) with **Eligible** or **Not
+eligible** for you today. It starts with the figures it used ("Based on your income of ... a month, spending
+of ... a month and balance of ..."). For an eligible loan it shows **You could borrow** (a range), the **EMI at
+the top of the range** over a reference tenure, the **Interest rate** and the reasons; for a loan you are not
+eligible for, it says why.
+
+![Loans for you](images/22b-loans-for-you.png)
 
 **Borrow:**
 
@@ -419,8 +430,10 @@ warns you and retries every day: keep enough money in the account.
 ![Wealth](images/23-wealth.png)
 
 - **Portfolio** shows invested capital, accrued returns, value at maturity, cash in your accounts and the
-  total, with a chart of cash, fixed deposits and funds. Funds show INR 0.00: PBIP does not sell fund
-  units online.
+  total, with a chart of cash, fixed deposits, funds, stocks and bonds, and your **Investment gain or loss**.
+- **My fund, stock and bond holdings** lists each holding with units, today's simulated price, value and
+  gain. **Sell** asks how much to sell (whole units for stocks and bonds, up to six decimals for funds, never
+  more than you hold) and which account to **Receive into**, shows **You receive**, and credits the account.
 - **Your fixed deposits** lists each deposit with principal, rate, maturity date (with "N days to go"),
   payout at maturity, interest earned so far and status (Active, Matured, Closed).
 - **Products** lists fixed deposits, mutual funds and sovereign gold bonds with risk level, rate or coupon,
@@ -438,6 +451,28 @@ warns you and retries every day: keep enough money in the account.
 ![Booking a fixed deposit](images/24-fd-book.png)
 
 ![Fixed deposit booked](images/25-fd-booked.png)
+
+**Invest in funds, stocks and bonds:** open **Invest** (or **Invest in this fund** on a fund). PBIP sells
+funds, fictional stocks and bonds at **Today's simulated price**: the price is the same all day, moves from
+day to day and is not market data.
+
+1. Choose the **Investment**. For a mutual fund enter an **Amount** (PBIP shows the **Units you get
+   (about)**); for a stock or bond enter **Whole units**.
+2. Choose the account to **Pay from** and **Confirm your order**.
+3. **Order executed** shows the investment, units, price, amount and a **Reference**. The money leaves your
+   account at once and the holding appears under your holdings.
+
+![Invest](images/23b-wealth-invest.png)
+
+![Holdings with Sell, and Your SIPs](images/23c-wealth-holdings.png)
+
+**Monthly fund SIPs:** a SIP buys a fund for a fixed amount on the same day each month (day 1 to 28). On
+**Invest**, choose a fund and **Start a monthly SIP**; nothing is taken until the first instalment day. **Your
+SIPs** on **Wealth** lists them with the next instalment date; **Cancel SIP** stops future instalments. Each
+month's purchase is made once, automatically; if the account cannot pay that day, you get a notification and the SIP tries again the
+next month (a missed month is not caught up).
+
+![Your SIPs with Cancel SIP](images/23e-fund-sip.png)
 
 **Withdraw:** when a deposit has matured, choose **Withdraw** and then **Withdraw to my account**. A
 matured deposit earns no more interest.
@@ -458,8 +493,26 @@ Open **Wealth** and choose **Compare products side by side ...**.
 
 ![Compare products](images/26-compare.png)
 
-Insurance premiums are indicative for a reference profile, not a quote. PBIP shows insurance for
-comparison only: you cannot buy a policy in the app.
+**Suits your risk band** says, for each investment, whether it is at or below the risk band from your risk
+questions ("Yes" or "No" with the reason); without a risk band it says so. Insurance is protection, not an
+investment, so it is not rated. Insurance premiums in the table are indicative for a reference profile.
+
+![Compare with the risk-band row](images/26b-compare-suitability.png)
+
+## 13a. Insurance quote and application
+
+**What it is for:** a simulated quote for term life or health insurance, and an application. Open
+**Insurance** (or **Get a quote** on an insurance card).
+
+1. Choose the **Plan**, the **Cover** and the **Policy term**, and **Your age band** (used only for this quote
+   and application).
+2. The **Quote** shows the **Simulated annual premium** and the outcome: **Approved (simulated)**, referred
+   (an insurer would need your exact age or a medical check), or not eligible, with the reason.
+3. Apply: **Application recorded** confirms it. **Your applications** lists them, newest first.
+
+Everything here is simulated: no policy is issued and no premium is taken from your account.
+
+![Insurance quote](images/23d-insurance-apply.png)
 
 ## 14. Recommendations
 
@@ -473,16 +526,24 @@ your balance or spending pattern. The button takes you to the right place:
 | Card | Button | Goes to |
 |---|---|---|
 | Savings account | Open ... | **Open an account**, with Savings selected |
-| Credit line | **See our loans** | **Loans** |
+| Personal, car or home loan | **Apply for this loan** | **Loans**, with that loan selected. The card shows **Eligible**, **You could borrow**, **EMI at the top of the range** and **Interest rate** |
+| Credit line (only when no catalogue loan is offered) | **See our loans** | **Loans** |
+| Index-fund SIP | **Invest in the index fund** | **Invest**, with the fund selected |
+| Other investments | **Invest** | **Invest** |
+| Family cover or other insurance | **Get a quote** | **Insurance** |
+| Rewards card | none | "PBIP does not issue cards yet, so there is nothing to apply for." |
 | Fixed deposit | **Book a fixed deposit** | **Wealth**, with the booking box open |
-| Anything else (for example insurance) | none | "You cannot apply for this in PBIP yet." |
 
 Most products need a regular income (see
 [section 10](#10-spending-financial-health-and-balance-forecast)) or a few months of history, so a new
 customer whose only credit is the opening deposit sees "No product recommendations for you right now.", as
 in the screenshot.
 
-Recommendations use your age band only if you gave consent (see [Profile and security](#17-profile-and-security)).
+Recommendations use your age band only if you gave consent, and your risk band if you answered the risk
+questions (see [Profile and security](#17-profile-and-security)): with a Low or Moderate risk band, PBIP does not
+suggest the high-risk index-fund SIP, and the last reason on an investment card names your band.
+
+![Recommended for you, with each card's action](images/27b-recommendations-card-actions.png)
 
 ## 15. The PBIP assistant
 
@@ -507,16 +568,22 @@ at your accounts but cannot move money.
 | Balance forecast (7, 14 or 30 days) | "What will my balance be next week?" |
 | Loan affordability | "Can I afford a personal loan of 2 lakh over 3 years?" |
 | Unusual spending | "Anything unusual in my spending?" |
-| How PBIP works | transfer limits, held payments, statements, MFA, lockout, scheduled transfers, loans, fixed deposits |
-| Products | "What fixed deposits do you have?", "Suggest investments for me" (uses your risk profile) |
+| How PBIP works | every feature: accounts, payees, transfers and their limits, held payments, bill payments, scheduled transfers, statements, loans, fixed deposits, investments, insurance, notifications, sign-in security and lockout, settings and consent, spending insights, and what the assistant can and cannot do |
+| Products | "What fixed deposits do you have?", "What insurance plans do you offer?", "Suggest investments for me" (uses your risk profile) |
 
 **What it will not do:** move money ("I can't move money. Use Transfers or Bill payments ..."), look at
 anyone else's accounts ("I can only help with your own accounts."), run database queries or change its
 instructions. If it does not understand, it lists what it can help with.
 
-The assistant uses a local language model when one is running. Without one (as in the screenshot) it
-answers the same questions with a built-in, rule-based helper, so the facts are the same; only the wording
-is plainer. If you send many messages quickly, it asks you to wait a minute.
+Clear questions are answered at once by a built-in, rule-based helper. For a question it cannot place, the
+assistant asks a language model only which kind of answer you want (the demo uses a hosted model, which takes
+under a second; a local model on an ordinary computer can take much longer). Without a model (as in the
+screenshot) the rule-based helper still answers, so the facts are the same; only the wording is plainer.
+Insurance plans are listed as simulated: the premium is an indication for a reference profile, not a quote.
+
+![The assistant listing insurance plans](images/28b-assistant-insurance.png)
+
+If you send many messages quickly, it asks you to wait a minute.
 
 ## 16. Notifications
 
@@ -557,6 +624,13 @@ Open **Profile & security**.
   senior-citizen deposit rates), never for credit pricing. Staff and the assistant never see the date.
   **Give consent** / **Withdraw consent** controls whether it is used for recommendations; **Delete date of
   birth** removes it.
+- **App usage analytics:** off until you turn it on with **Turn on usage analytics**. When it is on, PBIP
+  records which pages you visit, a few product clicks and how long you use the app, to build a usage profile
+  (sessions and product interests) that the bank may use for insights. It never records what you type,
+  amounts or account numbers. **Turn off usage analytics** asks you to confirm (**Turn off and erase**): PBIP
+  stops recording at once and erases the activity and profile it holds. The section shows when you decided
+  and the policy version. If your browser sends the Global Privacy Control signal, nothing is sent from that
+  browser whatever the setting says.
 - **Two-step sign-in:** see [section 2](#2-turn-on-two-step-sign-in-mfa).
 - **Your devices:** browsers you registered, with first and last seen dates, marked **Trusted** or **New
   (N days)**. **Register this browser** adds the one you are using and sends a **New device registered**
@@ -566,6 +640,8 @@ Open **Profile & security**.
   sign in again with the new password.
 
 There is no "forgot password" link: contact the bank if you cannot sign in.
+
+![App usage analytics](images/30b-analytics-consent.png)
 
 ## 18. Using PBIP on a phone
 

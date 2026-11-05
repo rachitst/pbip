@@ -13,6 +13,7 @@ officers have their own [compliance guide](compliance-guide.md).
 4. [Review an alert and its reasons (SHAP)](#4-review-an-alert-and-its-reasons-shap)
 5. [Release or reject a held payment](#5-release-or-reject-a-held-payment)
 6. [Security monitoring](#6-security-monitoring)
+   - [6a. Fraud dashboard](#6a-fraud-dashboard)
 7. [Fraud demo lab (local and test only)](#7-fraud-demo-lab-local-and-test-only)
 8. [Customer insights (relationship managers)](#8-customer-insights-relationship-managers)
 9. [Behavioural analytics](#9-behavioural-analytics)
@@ -180,6 +181,25 @@ minute and shows customer and user ids only, never names, e-mails or IP addresse
 A burst of failed sign-ins followed by a payment from a new device is the account-takeover pattern: check
 the customer's open alerts first.
 
+## 6a. Fraud dashboard
+
+**What it is for:** trends in the fraud engine's decisions. Open **Fraud dashboard** (fraud analysts and
+administrators, signed in with an authenticator code). Pick the period (7, 30 or 90 days); the page refreshes
+every minute. Every chart has a text summary and a table with the same figures.
+
+- **At a glance:** **Payments scored**, **Hold rate**, **Block rate**, **Extra verification** (payments that
+  asked for an authenticator code), **Rules-only decisions** (the model was unavailable, so the rules decided
+  alone) and **Scoring time (p95)**, each with its definition.
+- **Decisions over time:** allowed, extra verification, held for review and blocked per UTC day (a quiet day
+  shows zero), and the hold and block rates per day.
+- **Risk score distribution:** payments in ten score bands, with the decision thresholds explained (30 extra
+  verification, 60 review, 85 block).
+- **Top reasons:** the most frequent reason codes with their source (bank rule, model, unusual pattern).
+- **Alerts raised in the period:** still open, confirmed fraud and released, with a link to the alert queue.
+- **Destinations behind flagged payments:** masked payee accounts that received flagged payments.
+
+![Fraud dashboard](images/42b-fraud-dashboard.png)
+
 ## 7. Fraud demo lab (local and test only)
 
 **What it is for:** showing how the fraud engine reacts to known fraud patterns, for training and demos.
@@ -240,6 +260,10 @@ The details panel shows:
   and 45% from inactivity (60 days counts as fully inactive).
 - **Financial health**, **Last 30 days** (transactions, money in, money out) and **Eligible products** with
   the reasons.
+- **Behavioural profile:** only for a customer who turned app usage analytics on: segment, monthly income
+  and spend, app sessions in the last days, average session, pages per session, last active and product
+  interests (which kinds of product they looked at recently, with the rule explained). Without the
+  customer's consent it says that no profile is kept.
 - **Calls and notes:** choose the **Type** (Phone call, Meeting, Email, Note) and **Outcome**, write a
   **Note** and choose **Log it**. Notes stay on the customer record for the next manager and are audited.
 
@@ -256,8 +280,17 @@ customers). Open **Behavioural analytics** and pick a **Period** (30, 90 or 180 
 - **Spending patterns:** total and average spend per segment and the mix of transfers, bill payments and
   loan repayments.
 - **Product affinity:** share of each segment holding each product, and clicks on recommendations.
-- **Engagement:** active customers, sessions, events per session, session length and events by type, from
-  the app's page-view and click events.
+- **Product interest by category:** a chart of how many profiled customers showed interest in loans,
+  savings, investments and insurance, with a table (customers, share of profiled customers, average score,
+  signals).
+- **Engagement:** active customers, **Customers sharing analytics**, **Sessions** (a visit ends after 30
+  minutes without activity), events per session, **Average session length**, a sessions-per-day chart and
+  events by type. Only customers who turned usage analytics on are counted: nothing is recorded for the
+  others.
+
+![Product interest by category](images/62c-behaviour-interest-chart.png)
+
+![Behavioural profile in the customer details](images/61b-rm-behaviour-profile.png)
 
 ## 10. Administration
 

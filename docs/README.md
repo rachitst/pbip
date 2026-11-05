@@ -9,6 +9,7 @@ rules and the [blueprint](PROJECT_BLUEPRINT.md) for intent.
 | Document | What it covers |
 |---|---|
 | [Requirements specification](requirements/requirements-specification.md) | Functional and non-functional requirements derived from the use-case document |
+| [Use cases as built](requirements/use-cases.md) | UC-01 to UC-13 as implemented: actors, flows with routes and screens, diagrams, the tests that prove each, screenshots |
 | [User stories](requirements/user-stories.md) | UC-01 to UC-13 as user stories with acceptance criteria and the tests that prove them |
 | [Traceability matrix](requirements/traceability.md) | Every use case, scope item and non-functional requirement mapped to code, tests and remaining gaps |
 | [Use case diagram](diagrams/use-case.md) | The actors and UC-01 to UC-13 with the routes behind each |
