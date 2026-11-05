@@ -4,7 +4,7 @@
 |---|---|
 | Task | TASK-104 (#187) |
 | Source | *PBIP Use Case Document v0.2*: sections 5 (scope), 6 (actors), 7 (UC-01 to UC-13), 8 (non-functional), 9 to 11 (deliverables, practices, success criteria) |
-| Status checked against | `main` at `775ec1a` (5 Nov 2026), plus #474 (in review, batch L #481) and the wealth scope: investing API (#465), insurance and web (PR pending), fund SIPs (PR pending). A row whose evidence is only in one of those PRs names it |
+| Status checked against | `main` at `775ec1a` (5 Nov 2026), plus the PRs merging on 5 Nov: #474 (batch L #481) and the wealth scope of ADR-0058: investing in funds, stocks and bonds through the ledger (#465), the insurance quote and application with the web Invest, Insurance and Holdings pages (#483), and fund SIPs with an hourly job (#484). A row whose evidence is only in one of those PRs names it |
 | Companion documents | [Use cases as built](use-cases.md) (flows, screens and tests per use case), [user stories](user-stories.md) (acceptance criteria and tests per story), [traceability](traceability.md) (requirement to code, tests and gaps), [HLD](../architecture/HLD.md) |
 
 Every requirement below is derived from a sentence in the use-case document. Its **Source** column says which one.
@@ -91,7 +91,7 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 | FR-32 | The customer shall apply for a loan and track it. | Section 5 "loan applications, loan tracking" | Implemented | TASK-047, TASK-051 | API and web `/loans` (application, disbursal receipt, amortisation progress; ADR-0024) |
 | FR-33 | The system shall record the customer's risk tolerance. | UC-07 input | Implemented | TASK-097 | Five-question questionnaire, deterministic LOW/MODERATE/HIGH band, answers and assessment time stored and audited (`/api/v1/customers/me/risk-profile`) |
 | FR-34 | The system shall suggest investment products using risk tolerance, savings behaviour, income and available funds. | UC-07 | Implemented | TASK-054, TASK-097, TASK-105; #461 | Income, savings ratio, buffer and balance decide eligibility; the risk band is a suitability rule in the ranking (#461, ADR-0056) and in the assistant |
-| FR-35 | The customer shall browse fixed deposits, mutual funds, stocks and bonds, and insurance products. | Section 5 wealth | Partial | TASK-063, TASK-064, TASK-065, TASK-096; #465 | Catalogues, fixed deposits (with automatic payout) and comparison are implemented. In review: investing API (#465: buy and sell funds, stocks and bonds at a simulated daily price through the ledger, ADR-0058); insurance quote and application and the web screens (PR pending); fund SIPs (PR pending) |
+| FR-35 | The customer shall browse fixed deposits, mutual funds, stocks and bonds, and insurance products. | Section 5 wealth | Implemented | TASK-063, TASK-064, TASK-065, TASK-096; #465, #483, #484 | Fixed deposits with automatic payout; funds, stocks and bonds bought and sold at a simulated daily price through the ledger (#465) on `/wealth/invest` and the holdings (#483); monthly fund SIPs by an hourly job, API only (#484); simulated insurance quote and application with no premium debited (#483). Simulation is by the owner's direction (ADR-0058) |
 | FR-36 | The customer shall compare wealth and insurance products. | Section 5 "product comparison" | Implemented | TASK-098 (merged #337) | `/wealth/compare`: two to four products side by side, "Not applicable" where a field does not apply |
 
 ### 2.5 AI assistant (UC-08, section 5)
@@ -158,8 +158,8 @@ Every staff role (A2 to A5) must have completed TOTP in the current session to c
 
 | ID | Requirement | Status | Tasks | Gap |
 |---|---|---|---|---|
-| ER-01 | Responsive web application | Implemented | | Screens for every use case (`apps/web/src/shell/routes.tsx`). Investing, insurance-application and SIP screens wait for the wealth PRs |
-| ER-02 | Backend API and database implementation | Implemented | | 106 operations on `main` (111 with #465); migrations 0001-0030 (0031 with #465); [ER diagram](../architecture/er-diagram.md) |
+| ER-01 | Responsive web application | Implemented | | Screens for every use case (`apps/web/src/shell/routes.tsx`), including `/wealth/invest` and `/wealth/insurance` (#483). Fund SIPs have no screen (API only, #484) |
+| ER-02 | Backend API and database implementation | Implemented | | OpenAPI contract with the investing, insurance, suitability and SIP routes (#465, #483, #484); migrations 0001-0031; [ER diagram](../architecture/er-diagram.md) |
 | ER-03 | API documentation | Implemented | | `docs/api/openapi.json`, drift-checked in CI |
 | ER-04 | Automated tests, ≥ 70% coverage | Implemented | TASK-087 (report, #373; auth branch coverage 95.83% after #410) | CI coverage gate is 80% (backend); 96.71% in CI run 41689113122, 96.53% in run 41600683787 ([test strategy and report](../testing/test-strategy-and-report.md)) |
 | ER-05 | CI: build, test, quality scan, security scan | Implemented | | |
@@ -176,7 +176,7 @@ Requirements that are not fully met, and what they wait for.
 
 | Requirement | Missing part | Waits for |
 |---|---|---|
-| FR-35, ER-01 | Investing API, insurance application and the web screens, fund SIPs | #465 (in review), wealth insurance and web PR (pending), SIP PR (pending) |
+| FR-35, ER-01 | A web screen for fund SIPs | Not planned for v1.1.0 (#484 is API only) |
 | NFR-02 | At-rest encryption evidence on the deployment host | #399, #145 |
 | NFR-06, NFR-07, NFR-08 | Budgets measured on staging; load at 500 users; the assistant's model path (0.65-0.75 s with Groq, 12-50 s with Ollama on CPU) | TASK-102 (#185), TASK-078 (#101); ADR-0018 and ADR-0037 record the assistant figures |
 | NFR-09 | A month of availability on staging | TASK-103 (#186), #198 |

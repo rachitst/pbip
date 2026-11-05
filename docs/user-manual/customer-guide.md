@@ -20,6 +20,7 @@ today. PBIP is a simulated bank: all money, rates and products are for demonstra
 11. [Loans](#11-loans)
 12. [Wealth and fixed deposits](#12-wealth-and-fixed-deposits)
 13. [Compare investments and insurance](#13-compare-investments-and-insurance)
+    - [13a. Insurance quote and application](#13a-insurance-quote-and-application)
 14. [Recommendations](#14-recommendations)
 15. [The PBIP assistant](#15-the-pbip-assistant)
 16. [Notifications](#16-notifications)
@@ -429,8 +430,10 @@ warns you and retries every day: keep enough money in the account.
 ![Wealth](images/23-wealth.png)
 
 - **Portfolio** shows invested capital, accrued returns, value at maturity, cash in your accounts and the
-  total, with a chart of cash, fixed deposits and funds. Funds show INR 0.00: PBIP does not sell fund
-  units online.
+  total, with a chart of cash, fixed deposits, funds, stocks and bonds, and your **Investment gain or loss**.
+- **My fund, stock and bond holdings** lists each holding with units, today's simulated price, value and
+  gain. **Sell** asks how much to sell (whole units for stocks and bonds, up to six decimals for funds, never
+  more than you hold) and which account to **Receive into**, shows **You receive**, and credits the account.
 - **Your fixed deposits** lists each deposit with principal, rate, maturity date (with "N days to go"),
   payout at maturity, interest earned so far and status (Active, Matured, Closed).
 - **Products** lists fixed deposits, mutual funds and sovereign gold bonds with risk level, rate or coupon,
@@ -448,6 +451,24 @@ warns you and retries every day: keep enough money in the account.
 ![Booking a fixed deposit](images/24-fd-book.png)
 
 ![Fixed deposit booked](images/25-fd-booked.png)
+
+**Invest in funds, stocks and bonds:** open **Invest** (or **Invest in this fund** on a fund). PBIP sells
+funds, fictional stocks and bonds at **Today's simulated price**: the price is the same all day, moves from
+day to day and is not market data.
+
+1. Choose the **Investment**. For a mutual fund enter an **Amount** (PBIP shows the **Units you get
+   (about)**); for a stock or bond enter **Whole units**.
+2. Choose the account to **Pay from** and **Confirm your order**.
+3. **Order executed** shows the investment, units, price, amount and a **Reference**. The money leaves your
+   account at once and the holding appears under your holdings.
+
+Screenshots to capture on the v1.1.0 stack: `images/23b-wealth-invest.png` (Invest) and
+`images/23c-wealth-holdings.png` (holdings with Sell).
+
+**Monthly fund SIPs:** a SIP buys a fund for a fixed amount on the same day each month (day 1 to 28). It can
+be set up and cancelled through the API only; there is no screen for it yet. Each month's purchase is made
+once, automatically; if the account cannot pay that day, you get a notification and the SIP tries again the
+next month (a missed month is not caught up).
 
 **Withdraw:** when a deposit has matured, choose **Withdraw** and then **Withdraw to my account**. A
 matured deposit earns no more interest.
@@ -468,8 +489,26 @@ Open **Wealth** and choose **Compare products side by side ...**.
 
 ![Compare products](images/26-compare.png)
 
-Insurance premiums are indicative for a reference profile, not a quote. PBIP shows insurance for
-comparison only: you cannot buy a policy in the app.
+**Suits your risk band** says, for each investment, whether it is at or below the risk band from your risk
+questions ("Yes" or "No" with the reason); without a risk band it says so. Insurance is protection, not an
+investment, so it is not rated. Insurance premiums in the table are indicative for a reference profile.
+
+Screenshot to capture on the v1.1.0 stack: `images/26b-compare-suitability.png`.
+
+## 13a. Insurance quote and application
+
+**What it is for:** a simulated quote for term life or health insurance, and an application. Open
+**Insurance** (or **Get a quote** on an insurance card).
+
+1. Choose the **Plan**, the **Cover** and the **Policy term**, and **Your age band** (used only for this quote
+   and application).
+2. The **Quote** shows the **Simulated annual premium** and the outcome: **Approved (simulated)**, referred
+   (an insurer would need your exact age or a medical check), or not eligible, with the reason.
+3. Apply: **Application recorded** confirms it. **Your applications** lists them, newest first.
+
+Everything here is simulated: no policy is issued and no premium is taken from your account.
+
+Screenshot to capture on the v1.1.0 stack: `images/23d-insurance-apply.png`.
 
 ## 14. Recommendations
 
@@ -483,10 +522,13 @@ your balance or spending pattern. The button takes you to the right place:
 | Card | Button | Goes to |
 |---|---|---|
 | Savings account | Open ... | **Open an account**, with Savings selected |
-| Personal, car or home loan | none on the card | The card shows **Eligible**, **You could borrow**, **EMI at the top of the range** and **Interest rate**; apply from **Loans** ([section 11](#11-loans)) |
+| Personal, car or home loan | **Apply for this loan** | **Loans**, with that loan selected. The card shows **Eligible**, **You could borrow**, **EMI at the top of the range** and **Interest rate** |
 | Credit line (only when no catalogue loan is offered) | **See our loans** | **Loans** |
+| Index-fund SIP | **Invest in the index fund** | **Invest**, with the fund selected |
+| Other investments | **Invest** | **Invest** |
+| Family cover or other insurance | **Get a quote** | **Insurance** |
+| Rewards card | none | "PBIP does not issue cards yet, so there is nothing to apply for." |
 | Fixed deposit | **Book a fixed deposit** | **Wealth**, with the booking box open |
-| Anything else (for example insurance) | none | "You cannot apply for this in PBIP yet." |
 
 Most products need a regular income (see
 [section 10](#10-spending-financial-health-and-balance-forecast)) or a few months of history, so a new

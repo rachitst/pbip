@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Source | *PBIP Use Case Document v0.2*, section 7 (UC-01 to UC-13), with the actors of section 6 |
-| Describes | `main` at `775ec1a` (5 Nov 2026), which includes #461 (risk band), #463 and #477 (behavioural profile and analytics consent), #464 (fraud dashboard), #466 (compliance system exceptions), #470 (catalogue loan recommendations) and #472 (E2E journeys); plus, in review, #474 (assistant FAQ for every feature and insurance discovery, batch L #481) and the wealth scope: investing API (#465), insurance and web (PR pending), fund SIPs (PR pending). A use case that depends on an unmerged PR says which one |
+| Describes | `main` at `775ec1a` (5 Nov 2026), which includes #461 (risk band), #463 and #477 (behavioural profile and analytics consent), #464 (fraud dashboard), #466 (compliance system exceptions), #470 (catalogue loan recommendations) and #472 (E2E journeys); plus, merging on 5 Nov, #474 (assistant FAQ for every feature and insurance discovery, batch L #481) and the wealth scope of ADR-0058: investing in funds, stocks and bonds through the ledger (#465), the insurance quote and application with the web Invest, Insurance and Holdings pages (#483), and fund SIPs with an hourly job (#484). A use case that depends on an unmerged PR says which one |
 | Companion documents | [Requirements specification](requirements-specification.md) (numbered FR/NFR), [traceability](traceability.md) (requirement to code, tests and gaps), [user stories](user-stories.md), [diagrams](../diagrams/README.md), [user manual](../user-manual/README.md) |
 
 Each use case below gives the objective from the use-case document, the actors, the preconditions, the main and
@@ -270,15 +270,24 @@ Loans for you **(to capture)**: `docs/user-manual/images/22b-loans-for-you.png`.
 3. `/wealth` lists the catalogue (`GET /wealth/products`) and insurance (`GET /wealth/insurance`); `/wealth/compare`
    compares two to four products.
 4. Fixed deposits: `POST /wealth/fixed-deposits/quote`, `/book`, `/{id}/close`; automatic payout at maturity.
-5. Investing API (#465, in review): funds, stocks and bonds at a simulated daily price: `GET /wealth/instruments`,
-   `POST /wealth/investments/buy`, `GET /wealth/holdings`, `POST /wealth/holdings/{id}/sell`; the portfolio
-   (`GET /wealth/portfolio`) shows value and gain.
+5. Investing (#465, #483): on `/wealth/invest` the customer buys a fund by amount or stocks and bonds in whole units
+   at today's simulated price (`GET /wealth/instruments`, `POST /wealth/investments/buy` with an `Idempotency-Key`);
+   the holdings on `/wealth` show value and gain and sell back (`GET /wealth/holdings`,
+   `POST /wealth/holdings/{id}/sell`); the portfolio (`GET /wealth/portfolio`) adds funds, stocks and bonds.
+6. Fund SIPs (#484, API only): `POST /wealth/sips` sets up a monthly purchase on a day from 1 to 28; the hourly job
+   `run-fund-sips` buys each instalment exactly once; `POST /wealth/sips/{id}/cancel` stops it.
+7. Insurance (#483): `/wealth/insurance` gives a simulated quote (`POST /wealth/insurance/quote`) from the declared
+   cover, term and age band, and records an application (`POST /wealth/insurance/applications`) as
+   APPROVED_SIMULATED, SUBMITTED (referred) or DECLINED; no policy is issued and nothing is charged.
+8. `/wealth/compare` adds "Suits your risk band" from `GET /wealth/suitability`; every recommendation card now has
+   its action (apply for a loan, invest, get a quote), except the rewards card (PBIP issues no cards).
 
 **Alternative flows.** Insufficient funds or units: 422, nothing persists. A deposit inside its lock-in cannot be
-closed. Another customer's deposit or holding: 404.
+closed. Another customer's deposit, holding, SIP or application: 404. A SIP instalment that is refused (funds,
+account) is recorded as FAILED, notified, and the SIP moves to next month.
 
-**Wealth scope in review.** Investing API (#465); insurance quote and application and the web screens to buy and sell
-(PR pending); fund SIPs (PR pending). Until they merge, insurance is listed, not sold, and investing has no screen.
+**Simulated by design** (ADR-0058, accepted at the owner's direction): prices, premiums and acceptance rules are
+simulated and labelled so on every screen and response. Fund SIPs have no web screen.
 
 **Diagrams.** [Fixed deposit booking and payout](../diagrams/activity.md#7-fixed-deposit-booking-and-maturity-payout),
 [fixed deposit lifecycle](../diagrams/state.md#4-fixed-deposit-lifecycle).
@@ -290,7 +299,10 @@ closed. Another customer's deposit or holding: 404.
 `test_a_matured_deposit_is_paid_once_to_its_account_audited_and_notified`; `integration/test_investing.py`
 (#465): `test_buying_a_fund_debits_the_amount_and_credits_rounded_down_units`,
 `test_insufficient_funds_is_422_and_leaves_no_partial_state`, `test_idempotent_retry_replays_and_debits_once`,
-`test_concurrent_purchases_against_one_balance_never_overdraw`; E2E `journey-compare.spec.ts`.
+`test_concurrent_purchases_against_one_balance_never_overdraw`; `integration/test_insurance_applications.py`,
+`integration/test_wealth_suitability.py`, `unit/test_wealth_insurance.py` (#483); `integration/test_fund_sips.py`
+(#484); Vitest `pages/Invest.test.tsx`, `pages/InsuranceQuote.test.tsx`, `pages/Wealth.test.tsx`,
+`pages/WealthCompare.test.tsx`; E2E `journey-compare.spec.ts`.
 
 **Screenshots.**
 
@@ -538,10 +550,10 @@ demo users, and save them under these names so the slots above need no edit beyo
 |---|---|---|
 | `docs/user-manual/images/22b-loans-for-you.png` | `/loans`, "Loans for you" with eligible and not-eligible offers | UC-06 |
 | `docs/user-manual/images/27b-recommendations-loan-offer.png` | `/accounts` carousel showing a catalogue loan card with its figures | UC-06, UC-12 |
-| `docs/user-manual/images/23b-wealth-invest.png` | `/wealth` buying a fund, stock or bond (needs the wealth web PR) | UC-07 |
-| `docs/user-manual/images/23c-wealth-holdings.png` | `/wealth` holdings with gain and the sell action (needs the wealth web PR) | UC-07 |
-| `docs/user-manual/images/23d-insurance-apply.png` | Insurance quote and application (needs the wealth insurance PR) | UC-07 |
-| `docs/user-manual/images/23e-fund-sip.png` | Setting up a fund SIP (needs the SIP PR) | UC-07 |
+| `docs/user-manual/images/23b-wealth-invest.png` | `/wealth/invest` buying a fund, stock or bond | UC-07 |
+| `docs/user-manual/images/23c-wealth-holdings.png` | `/wealth` holdings with gain and the sell action | UC-07 |
+| `docs/user-manual/images/23d-insurance-apply.png` | `/wealth/insurance` quote and application recorded | UC-07 |
+| `docs/user-manual/images/26b-compare-suitability.png` | `/wealth/compare` with the "Suits your risk band" row | UC-07 |
 | `docs/user-manual/images/28b-assistant-insurance.png` | The assistant listing insurance plans (#474) | UC-08 |
 | `docs/user-manual/images/62c-behaviour-interest-chart.png` | `/staff/behaviour` product-interest and sessions charts | UC-11 |
 | `docs/user-manual/images/30b-analytics-consent.png` | Profile page, "App usage analytics" setting | UC-11 |
