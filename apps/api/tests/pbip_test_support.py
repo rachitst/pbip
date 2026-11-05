@@ -292,10 +292,27 @@ def _wealth_migration() -> ModuleType:
     return module
 
 
+def _investing_migration() -> ModuleType:
+    path = next(_VERSIONS.glob("*_0031_investing_sip_and_insurance_applications.py"))
+    spec = importlib.util.spec_from_file_location("investing_migration", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def seeded_catalogue() -> list[WealthProductOut]:
-    """The wealth catalogue exactly as migration 0018 seeds it, in the API's output shape."""
+    """The wealth catalogue exactly as migrations 0018 and 0031 (ADR-0058: investable funds'
+    notes and version) leave it, in the API's output shape."""
+    investing = _investing_migration()
+    investable = set(investing.INVESTABLE_FUND_CODES)
     out = []
     for row in _wealth_migration().PRODUCTS:
+        if row["code"] in investable:
+            row = row | {
+                "notes": investing.FUND_NOTE_AFTER,
+                "catalogue_version": investing.CATALOGUE_VERSION,
+            }
         rate = row["annual_rate_bps"]
         guaranteed = row["yield_basis"] == "GUARANTEED"
         out.append(
@@ -316,6 +333,7 @@ def seeded_catalogue() -> list[WealthProductOut]:
                 premature_closure_allowed=row["premature_penalty_bps"] is not None,
                 premature_penalty_bps=row["premature_penalty_bps"],
                 bookable=row["bookable"],
+                investable=row["code"] in investable,
                 notes=row["notes"],
                 catalogue_version=row["catalogue_version"],
             )

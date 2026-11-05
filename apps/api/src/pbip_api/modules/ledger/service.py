@@ -39,6 +39,8 @@ SYSTEM_CLEARING_ID = UUID("00000000-0000-0000-0000-0000000000c1")
 SYSTEM_FEES_ID = UUID("00000000-0000-0000-0000-0000000000c2")
 # The bank's liability for money held on fixed deposit (migration 0018, ADR-0025).
 SYSTEM_FIXED_DEPOSITS_ID = UUID("00000000-0000-0000-0000-0000000000c3")
+# The settlement counterparty of simulated fund, stock and bond orders (migration 0031, ADR-0058).
+SYSTEM_INVESTMENTS_ID = UUID("00000000-0000-0000-0000-0000000000c4")
 
 
 class InsufficientFundsError(UnprocessableError):
@@ -492,6 +494,64 @@ def pay_out_fixed_deposit(
     )
     post_transaction(session, paid, transfer_legs(paid))
     return DepositPayout(returned, paid)
+
+
+def buy_investment(
+    session: Session,
+    *,
+    account_id: UUID,
+    amount: int,
+    currency: str,
+    initiated_by_user_id: UUID,
+    reference: str,
+    channel: str = "WEB",
+) -> Transaction:
+    """Pay for a simulated fund, stock or bond order: DEBIT the customer, CREDIT
+    ``SYS-INVESTMENTS`` (``INVESTMENT_PURCHASE``, ADR-0058 section 4).
+
+    Raises ``InsufficientFundsError`` like any debit. Locks both accounts (sorted) before the
+    header. ``channel`` is ``SCHEDULED`` for a fund SIP instalment.
+    """
+    transaction = create_transaction(
+        session,
+        type_=TransactionType.INVESTMENT_PURCHASE,
+        amount=amount,
+        currency=currency,
+        debit_account_id=account_id,
+        credit_account_id=SYSTEM_INVESTMENTS_ID,
+        initiated_by_user_id=initiated_by_user_id,
+        reference=reference,
+        channel=channel,
+    )
+    post_transaction(session, transaction, transfer_legs(transaction))
+    return transaction
+
+
+def sell_investment(
+    session: Session,
+    *,
+    account_id: UUID,
+    amount: int,
+    currency: str,
+    initiated_by_user_id: UUID,
+    reference: str,
+) -> Transaction:
+    """Pay out a simulated sale: DEBIT ``SYS-INVESTMENTS``, CREDIT the customer
+    (``INVESTMENT_SALE``, ADR-0058 section 4). The system account may go below zero when the
+    proceeds exceed what was paid in (the simulated market pays the gain), as clearing does.
+    """
+    transaction = create_transaction(
+        session,
+        type_=TransactionType.INVESTMENT_SALE,
+        amount=amount,
+        currency=currency,
+        debit_account_id=SYSTEM_INVESTMENTS_ID,
+        credit_account_id=account_id,
+        initiated_by_user_id=initiated_by_user_id,
+        reference=reference,
+    )
+    post_transaction(session, transaction, transfer_legs(transaction))
+    return transaction
 
 
 def reverse_transaction(

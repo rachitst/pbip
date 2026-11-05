@@ -33,6 +33,8 @@ class TransactionType(StrEnum):
     FD_BOOKING = "FD_BOOKING"  # customer -> SYS-FIXED-DEPOSITS (ADR-0025); not spend
     FD_CLOSURE = "FD_CLOSURE"  # SYS-FIXED-DEPOSITS -> customer, the principal back; not income
     FD_INTEREST = "FD_INTEREST"  # clearing -> customer, deposit interest (ADR-0025)
+    INVESTMENT_PURCHASE = "INVESTMENT_PURCHASE"  # customer -> SYS-INVESTMENTS (ADR-0058); not spend
+    INVESTMENT_SALE = "INVESTMENT_SALE"  # SYS-INVESTMENTS -> customer (ADR-0058); not income
 
 
 class TransactionStatus(StrEnum):

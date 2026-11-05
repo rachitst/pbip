@@ -82,7 +82,9 @@ def wealth_line(product: WealthProductOut) -> str:
         parts.append(_months(product.tenures_months))
     if product.min_lock_in_months:
         parts.append(f"locked in for {product.min_lock_in_months} months")
-    if not product.bookable:
+    if product.investable:
+        parts.append("can be bought online at a simulated price")
+    elif not product.bookable:
         parts.append("not sold online")
     return ", ".join(parts) + "."
 
@@ -95,8 +97,10 @@ def _wealth_footer(products: Sequence[WealthProductOut]) -> str:
     if not products:
         return ""
     footer = f"Wealth catalogue {_versions(products)}: rates are indicative, simulated PBIP rates."
-    if any(not p.bookable for p in products):
-        footer += " Products marked illustrative are listed for comparison, not sold online."
+    if any(p.investable for p in products):
+        footer += " Fund prices are simulated by PBIP, not market data."
+    if any(not p.bookable and not p.investable for p in products):
+        footer += " Products not sold online are listed for comparison only."
     return footer
 
 
