@@ -42,6 +42,10 @@ Other diagrams that already exist and stay where they are:
 | [Investment holding](state.md#5-investment-holding) | state | Zero, held and sold-out positions; BUY and SELL orders | [SVG](svg/state-investment-holding.svg), [PNG](png/state-investment-holding.png) |
 | [Compliance exception](state.md#6-compliance-exception) | state | OPEN, ACKNOWLEDGED, RESOLVED, read from the audit log | [SVG](svg/state-compliance-exception.svg), [PNG](png/state-compliance-exception.png) |
 | [Analytics consent](state.md#7-analytics-consent) | state | Not decided, granted, withdrawn (erases data) | [SVG](svg/state-analytics-consent.svg), [PNG](png/state-analytics-consent.png) |
+| [Fund SIP set-up and instalment](activity.md#13-fund-sip-set-up-and-monthly-instalment) | activity | Set-up without money, hourly exactly-once instalment, failures moved to next month | [SVG](svg/activity-fund-sip.svg), [PNG](png/activity-fund-sip.png) |
+| [Insurance quote and application](activity.md#14-insurance-quote-and-application) | activity | Simulated decision rules, premium factors, no ledger | [SVG](svg/activity-insurance-application.svg), [PNG](png/activity-insurance-application.png) |
+| [Fund SIP lifecycle](state.md#8-fund-sip-and-its-instalments) | state | ACTIVE, CANCELLED; instalment EXECUTED or FAILED | [SVG](svg/state-fund-sip.svg), [PNG](png/state-fund-sip.png) |
+| [Insurance application](state.md#9-insurance-application) | state | DECLINED, SUBMITTED, APPROVED_SIMULATED | [SVG](svg/state-insurance-application.svg), [PNG](png/state-insurance-application.png) |
 | [Layers inside a module](module.md#1-layers-inside-a-module) | class | router, service, policy, repository, models, schemas | [SVG](svg/module-layers.svg), [PNG](png/module-layers.png) |
 | [Module dependencies](module.md#2-module-dependencies) | module | Which API module imports which | [SVG](svg/module-dependencies.svg), [PNG](png/module-dependencies.png) |
 | [Import contracts](module.md#3-import-contracts) | module | The five import-linter contracts CI enforces | [SVG](svg/module-import-contracts.svg), [PNG](png/module-import-contracts.png) |

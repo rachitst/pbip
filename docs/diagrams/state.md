@@ -12,6 +12,8 @@ transition tables with the proving tests, plus the hold, bill payment and schedu
 | [4. Fixed deposit](#4-fixed-deposit-lifecycle) | `FixedDepositStatus`, `ClosureKind` in `modules/wealth/models.py` | `modules/wealth/service.py`, `modules/wealth/maturity_service.py` |
 | [5. Investment holding](#5-investment-holding) | `OrderSide` in `modules/wealth/models.py` (PR #465) | `modules/wealth/investing_service.py` |
 | [6. Compliance exception](#6-compliance-exception) | `ExceptionKind`, `ExceptionStatus` in `modules/compliance/exceptions.py` (PR #466) | `compliance/exceptions.py` (`apply_action`) |
+| [8. Fund SIP](#8-fund-sip-and-its-instalments) | `SipStatus`, `SipRunStatus` in `modules/wealth/models.py` (#484) | `modules/wealth/sip_service.py` |
+| [9. Insurance application](#9-insurance-application) | `InsuranceApplicationStatus` in `modules/wealth/models.py` (#483) | `modules/wealth/insurance_service.py`, `wealth/insurance.py` |
 | [7. Analytics consent](#7-analytics-consent) | `analytics_consent` columns in `modules/customers/models.py` (#463) | `modules/customers/service.py` (`set_analytics_consent`) |
 
 ## 1. Transaction lifecycle
@@ -199,6 +201,49 @@ stateDiagram-v2
         behavioural profile built (daily job at 03:40).
         The same decision under the same policy is not
         re-audited.
+    end note
+```
+
+## 8. Fund SIP and its instalments
+
+Exports: [SVG](svg/state-fund-sip.svg), [PNG](png/state-fund-sip.png).
+`SipStatus` and `SipRunStatus` in `modules/wealth/models.py`, transitions in `modules/wealth/sip_service.py` (#484).
+
+<!-- diagram: state-fund-sip -->
+```mermaid
+stateDiagram-v2
+    state "SIP (fund_sips.status)" as Sip {
+        [*] --> ACTIVE: POST /wealth/sips, no money moved
+        ACTIVE --> ACTIVE: instalment executed or failed, next_run_on moves to next month
+        ACTIVE --> CANCELLED: POST /wealth/sips/id/cancel
+        CANCELLED --> [*]
+    }
+    state "Instalment (fund_sip_runs.status), one per SIP and day" as Run {
+        [*] --> EXECUTED: units bought through the ledger
+        [*] --> FAILED: refused, reason stored, nothing bought
+        EXECUTED --> [*]
+        FAILED --> [*]
+    }
+```
+
+## 9. Insurance application
+
+Exports: [SVG](svg/state-insurance-application.svg), [PNG](png/state-insurance-application.png).
+`InsuranceApplicationStatus` in `modules/wealth/models.py`; the status is decided once, when the application is
+recorded, by `wealth/insurance.py` `decide` (#483). Simulated: no policy is issued and no premium is debited.
+
+<!-- diagram: state-insurance-application -->
+```mermaid
+stateDiagram-v2
+    [*] --> DECLINED: band outside the entry ages, or the term runs past the maximum cover age
+    [*] --> SUBMITTED: referred, exact age or medical underwriting needed
+    [*] --> APPROVED_SIMULATED: meets the simulated acceptance rules
+    DECLINED --> [*]
+    SUBMITTED --> [*]
+    APPROVED_SIMULATED --> [*]
+    note right of SUBMITTED
+        No later transition exists in the code:
+        there is no insurer to complete a referral.
     end note
 ```
 

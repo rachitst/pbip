@@ -18,6 +18,8 @@ the attempt persists, including the idempotency row, so the client may retry wit
 | [9. Behavioural profile and analytics consent](#9-behavioural-profile-and-analytics-consent-uc-11) | `modules/customers/service.py` (`set_analytics_consent`), `modules/events/service.py`, `modules/analytics/profile_job.py`, `analytics/profiling.py`, ADR-0057 (#463) |
 | [10. Loan recommendations](#10-loan-recommendations-uc-06) | `modules/loans/service.py` (`assess`, `loan_offers`), `modules/recommendations/service.py`, ADR-0056 (PR #470) |
 | [11. Fraud monitoring dashboard](#11-fraud-monitoring-dashboard) | `modules/fraud/stats.py`, `fraud/router.py`, `apps/web/src/pages/staff/FraudDashboard.tsx` (PR #464) |
+| [13. Fund SIP](#13-fund-sip-set-up-and-monthly-instalment) | `modules/wealth/sip_service.py`, beat `run-fund-sips` (#484) |
+| [14. Insurance quote and application](#14-insurance-quote-and-application) | `modules/wealth/insurance_service.py`, `wealth/insurance.py` (#483) |
 | [12. Compliance exceptions](#12-compliance-exceptions) | `modules/compliance/exceptions.py`, `compliance/router.py`, ADR-0027 (PR #466) |
 
 All paths are relative to `apps/api/src/pbip_api/` unless they start with `apps/`.
@@ -517,9 +519,9 @@ flowchart TD
     sacct -- yes --> sold --> snote --> r200
 ```
 
-Wealth scope: investing API (#465, in review); insurance and web (PR pending); fund SIPs (PR pending). The
-`fund_sips`, `fund_sip_runs` and `insurance_applications` tables exist in #465's migration `0031`, but no route,
-service or job uses them in that PR, so no SIP or insurance application flow is drawn yet.
+Wealth scope (ADR-0058): investing (#465, this diagram), insurance quote and application with the web Invest,
+Insurance and Holdings pages (#483, [diagram 14](#14-insurance-quote-and-application)), and fund SIPs with an hourly
+job (#484, [diagram 13](#13-fund-sip-set-up-and-monthly-instalment)).
 
 ## 9. Behavioural profile and analytics consent (UC-11)
 
@@ -681,6 +683,99 @@ flowchart TD
     exists -- yes --> allowed
     allowed -- no --> r409
     allowed -- yes --> audit --> r200
+```
+
+## 13. Fund SIP: set-up and monthly instalment
+
+Exports: [SVG](svg/activity-fund-sip.svg), [PNG](png/activity-fund-sip.png).
+Source: `modules/wealth/sip_service.py`, `wealth/router.py` (`/api/v1/wealth/sips`), beat entry `run-fund-sips`
+(hourly at minute 50), ADR-0058 section 7 (#484). Setting up or cancelling a SIP moves no money. Each instalment is
+one use case in one transaction, exactly once per SIP and day: the key `fund-sip/{sip_id}/{run_on}` (which no client
+can send) and `UNIQUE (sip_id, run_on)`. A refused instalment is recorded as FAILED and the SIP moves to next month;
+missed months are never caught up. There is no SIP web screen.
+
+<!-- diagram: activity-fund-sip -->
+```mermaid
+flowchart TD
+    create(["Customer sets up a SIP<br/>POST /api/v1/wealth/sips with Idempotency-Key:<br/>fund, account, amount, day of month 1 to 28"])
+    clock["Per-user advisory lock, idempotency key<br/>a replay returns the stored 201"]
+    fund{"Instrument is a mutual fund<br/>and the amount fits its rules?"}
+    r422[["422 not a fund, or amount refused"]]
+    acct{"Account owned and can fund purchases?"}
+    r4a[["404 or 422"]]
+    saved["fund_sips row ACTIVE, next_run_on = this month's day<br/>if still ahead, else next month; audit FUND_SIP_CREATED, commit"]
+    r201[["201 SIP, no money moved"]]
+    cancel(["POST /api/v1/wealth/sips/id/cancel"])
+    cstate["ACTIVE becomes CANCELLED, audited;<br/>an already cancelled SIP is unchanged"]
+
+    beat(["Beat: run-fund-sips, hourly at minute 50"])
+    due["Select ACTIVE SIPs with next_run_on on or before the bank date"]
+    lock["Per-user lock; claim key fund-sip/sip/run_on"]
+    rep{"Key already answered?"}
+    replay[["REPLAY"]]
+    still{"SIP still ACTIVE and due<br/>on that day, under row lock?"}
+    skip[["SKIPPED: cancelled or already run"]]
+    buy{"Purchase at the day's simulated price:<br/>account owned and active, funds available?"}
+    bought["Same purchase path as a customer order:<br/>INVESTMENT_PURCHASE posted, units added to the holding;<br/>fund_sip_runs EXECUTED; next_run_on = next month;<br/>notify INVESTMENT_BOUGHT, audit FUND_SIP_INSTALMENT_BOUGHT, commit"]
+    failed["Rolled back; new transaction:<br/>fund_sip_runs FAILED with the reason; next_run_on = next month;<br/>notify FUND_SIP_INSTALMENT_FAILED, audit, commit"]
+
+    create --> clock --> fund
+    fund -- no --> r422
+    fund -- yes --> acct
+    acct -- no --> r4a
+    acct -- yes --> saved --> r201
+    cancel --> cstate
+
+    beat --> due --> lock --> rep
+    rep -- yes --> replay
+    rep -- no --> still
+    still -- no --> skip
+    still -- yes --> buy
+    buy -- yes --> bought
+    buy -- "no: insufficient funds, inactive or unavailable account" --> failed
+```
+
+## 14. Insurance quote and application
+
+Exports: [SVG](svg/activity-insurance-application.svg), [PNG](png/activity-insurance-application.png).
+Source: `modules/wealth/insurance_service.py`, `wealth/insurance.py` (`decide`), `wealth/router.py`, web
+`/wealth/insurance` (`InsuranceQuote.tsx`), ADR-0058 section 8 (#483). Quotes and applications are simulated: the
+premium uses documented age-band and term factors, no policy is issued, no premium is debited and nothing touches the
+ledger. A quote reads only the catalogue row and what the customer declares (cover, term, age band with explicit
+consent), never the profile.
+
+<!-- diagram: activity-insurance-application -->
+```mermaid
+flowchart TD
+    pick(["Customer opens /wealth/insurance, picks a plan,<br/>declares cover, term and age band (with consent)"])
+    quote["POST /api/v1/wealth/insurance/quote"]
+    plan{"Plan exists, cover in range,<br/>term offered?"}
+    r4q[["404 or 422"]]
+    band{"Any age in the band within<br/>the plan's entry ages?"}
+    maxage{"At the youngest eligible age, does<br/>the term stay within the maximum cover age?"}
+    declined["DECLINED, with the reason, no premium"]
+    premium["Indicative premium = reference premium<br/>scaled by cover, age-band factor and term factor"]
+    refer{"Only part of the band can apply, the term may run past<br/>the maximum cover age, or cover above twice the reference?"}
+    submitted["SUBMITTED: referred, an insurer would need<br/>the exact age or medical underwriting"]
+    approved["APPROVED_SIMULATED: meets the simulated rules,<br/>no policy issued, nothing charged"]
+    shown[["Quote shown with outcome, reason, premium and factors"]]
+    apply(["Customer applies<br/>POST /api/v1/wealth/insurance/applications with Idempotency-Key"])
+    save["Per-user lock, idempotency key; decision re-run;<br/>insurance_applications row with the quote and status;<br/>audited, commit"]
+    r201[["201 application; listed under GET /wealth/insurance/applications"]]
+
+    pick --> quote --> plan
+    plan -- no --> r4q
+    plan -- yes --> band
+    band -- no --> declined
+    band -- yes --> maxage
+    maxage -- no --> declined
+    maxage -- yes --> premium --> refer
+    refer -- yes --> submitted
+    refer -- no --> approved
+    declined --> shown
+    submitted --> shown
+    approved --> shown
+    shown --> apply --> save --> r201
 ```
 
 **Extension point.** A new flow gets its own numbered section with a `<!-- diagram: activity-... -->` marker, a row in

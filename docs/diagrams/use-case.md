@@ -24,7 +24,7 @@ flowchart LR
         uc04("UC-04 Transfer money")
         uc05("UC-05 Manage payees")
         uc06("UC-06 Loan recommendation<br/>catalogue offers, eligibility and apply")
-        uc07("UC-07 Investment recommendation<br/>risk profile, fixed deposits,<br/>simulated funds, stocks and bonds")
+        uc07("UC-07 Investment recommendation<br/>risk profile, fixed deposits, simulated funds,<br/>stocks, bonds, SIPs and insurance")
         uc08("UC-08 Ask the AI assistant")
         uc09("UC-09 Score a payment for fraud")
         uc10("UC-10 Manage fraud alerts")
@@ -85,7 +85,7 @@ flowchart LR
 | UC-04 | customer, fraud engine | `POST /api/v1/transfers`, `POST /api/v1/transfers/{id}/step-up`, `/transfers/scheduled`; web `/accounts` (Send money), `/scheduled` |
 | UC-05 | customer | `/api/v1/payees` (add, list, edit, verify, delete); web `/payees` |
 | UC-06 | customer, AI assistant | `/api/v1/loans/products`, `/calculate-emi`, `/check-eligibility`, `GET /loans/offers` (#470), `/apply`; recommendations carousel; web `/loans` |
-| UC-07 | customer, AI assistant | `/api/v1/customers/me/risk-profile`, `/api/v1/wealth/*` including `GET /wealth/instruments`, `POST /wealth/investments/buy`, `GET /wealth/holdings`, `POST /wealth/holdings/{id}/sell` (investing API, #465 in review; insurance and web, PR pending; fund SIPs, PR pending); web `/wealth`, `/wealth/compare` |
+| UC-07 | customer, AI assistant | `/api/v1/customers/me/risk-profile`, `/api/v1/wealth/*` including `GET /wealth/instruments`, `POST /wealth/investments/buy`, `GET /wealth/holdings`, `POST /wealth/holdings/{id}/sell` (#465), `POST /wealth/insurance/quote`, `/wealth/insurance/applications`, `GET /wealth/suitability` (#483), `/wealth/sips` (#484); web `/wealth` (portfolio and holdings with sell), `/wealth/invest`, `/wealth/insurance`, `/wealth/compare` (#483) |
 | UC-08 | customer, AI assistant | `POST /api/v1/assistant/chat`, `/chat/stream`, `GET /messages`; chat drawer on every customer page |
 | UC-09 | fraud engine | in-process `FraudScorer.score` on every transfer and bill payment; hourly structuring monitor |
 | UC-10 | fraud analyst, admin | `GET /api/v1/fraud/alerts`, `/alerts/{id}`, `POST /alerts/{id}/decision`; web `/staff/fraud` |
