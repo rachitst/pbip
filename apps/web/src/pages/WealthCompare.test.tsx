@@ -25,6 +25,7 @@ const regular: WealthProductOut = {
   premature_closure_allowed: true,
   premature_penalty_bps: 100,
   bookable: true,
+  investable: false,
   notes: "Indicative, simulated rate.",
   catalogue_version: "2026-11-v1",
 };
@@ -45,6 +46,7 @@ const elss: WealthProductOut = {
   premature_closure_allowed: false,
   premature_penalty_bps: null,
   bookable: false,
+  investable: false,
 };
 const gold: WealthProductOut = {
   ...regular,
@@ -61,6 +63,7 @@ const gold: WealthProductOut = {
   min_amount_minor: null,
   max_amount_minor: null,
   bookable: false,
+  investable: false,
 };
 const term: InsuranceProductOut = {
   id: "term-classic",

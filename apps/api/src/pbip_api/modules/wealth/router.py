@@ -21,15 +21,20 @@ from pbip_api.modules.auth.dependencies import (
 from pbip_api.modules.auth.service import RequestMeta
 from pbip_api.modules.customers.dependencies import get_current_customer
 from pbip_api.modules.customers.models import Customer
-from pbip_api.modules.wealth import service
+from pbip_api.modules.wealth import investing_service, service
 from pbip_api.modules.wealth.models import InsuranceType, RiskLevel
 from pbip_api.modules.wealth.schemas import (
+    BuyRequest,
     DepositBookRequest,
     DepositQuoteOut,
     DepositTermsRequest,
     FixedDepositOut,
+    HoldingOut,
+    InstrumentOut,
     InsuranceProductOut,
+    OrderOut,
     PortfolioOut,
+    SellRequest,
     WealthProductOut,
 )
 
@@ -198,3 +203,109 @@ def get_portfolio(
     clock: Callable[[], float] = Depends(get_clock),
 ) -> PortfolioOut:
     return service.get_portfolio(session, customer.id, _now(clock))
+
+
+# ------------------------------------------------------------------ investing (ADR-0058)
+@router.get(
+    "/instruments",
+    response_model=list[InstrumentOut],
+    summary="Investable funds, stocks and bonds with today's SIMULATED price (not market data)",
+)
+def list_instruments(
+    _customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> list[InstrumentOut]:
+    return investing_service.list_instruments(session, _now(clock))
+
+
+@router.post(
+    "/investments/buy",
+    response_model=OrderOut,
+    status_code=201,
+    summary="Buy fund units by amount, or whole stocks or bonds, from one of my accounts",
+    responses={
+        404: {"description": "No such instrument, or the account is not mine (problem+json)"},
+        422: {"description": "Insufficient funds, wrong quantity kind or too small an order"},
+    },
+)
+def buy_investment(
+    body: BuyRequest,
+    idempotency_key: IdempotencyKeyHeader,
+    customer: Customer = Depends(get_current_customer),
+    principal: Principal = Depends(get_current_principal),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    meta: RequestMeta = Depends(get_request_meta),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> JSONResponse:
+    return _replayable(
+        investing_service.buy(
+            session,
+            settings,
+            customer_id=customer.id,
+            user_id=principal.user_id,
+            request=body,
+            idempotency_key=idempotency_key,
+            meta=meta,
+            now=_now(clock),
+        )
+    )
+
+
+@router.get(
+    "/holdings",
+    response_model=list[HoldingOut],
+    summary="My fund, stock and bond holdings at today's simulated price, with gain or loss",
+)
+def list_holdings(
+    customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> list[HoldingOut]:
+    return investing_service.list_holdings(session, customer.id, _now(clock))
+
+
+@router.get("/holdings/{holding_id}", response_model=HoldingOut, summary="One of my holdings")
+def get_holding(
+    holding_id: UUID,
+    customer: Customer = Depends(get_current_customer),
+    session: Session = Depends(get_session),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> HoldingOut:
+    return investing_service.get_holding(session, customer.id, holding_id, _now(clock))
+
+
+@router.post(
+    "/holdings/{holding_id}/sell",
+    response_model=OrderOut,
+    summary="Sell units of one of my holdings into one of my accounts (idempotent)",
+    responses={
+        404: {"description": "The holding or the account is not mine (problem+json)"},
+        422: {"description": "More units than held, part of a stock or bond, or too small"},
+    },
+)
+def sell_investment(
+    holding_id: UUID,
+    body: SellRequest,
+    idempotency_key: IdempotencyKeyHeader,
+    customer: Customer = Depends(get_current_customer),
+    principal: Principal = Depends(get_current_principal),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    meta: RequestMeta = Depends(get_request_meta),
+    clock: Callable[[], float] = Depends(get_clock),
+) -> JSONResponse:
+    return _replayable(
+        investing_service.sell(
+            session,
+            settings,
+            customer_id=customer.id,
+            user_id=principal.user_id,
+            holding_id=holding_id,
+            request=body,
+            idempotency_key=idempotency_key,
+            meta=meta,
+            now=_now(clock),
+        )
+    )

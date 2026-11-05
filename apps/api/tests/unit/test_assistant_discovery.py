@@ -106,9 +106,14 @@ def test_product_list_by_category_quotes_the_catalogues() -> None:
         "- “ELSS tax-saver fund (illustrative)”: high risk, market-linked, no rate shown, from "
         "INR 500.00, locked in for 36 months, not sold online."
     ) in investments
+    assert (
+        "- “Nifty 50 index fund (illustrative)”: high risk, market-linked, no rate shown, from "
+        "INR 500.00, can be bought online at a simulated price."
+    ) in investments  # ADR-0058
     assert investments.endswith(
-        "Wealth catalogue 2026-11-v1: rates are indicative, simulated PBIP rates. Products marked "
-        "illustrative are listed for comparison, not sold online."
+        "Wealth catalogue 2026-11-v1, 2026-11-v2: rates are indicative, simulated PBIP rates. "
+        "Fund prices are simulated by PBIP, not market data. Products not sold online are "
+        "listed for comparison only."
     )
     deposits = discovery.product_list(ProductCategory.DEPOSITS, LOAN_PRODUCTS, wealth)
     assert "- “Fixed deposit, 6 to 9 months”: low risk, 6.50% a year (annual yield 6.66%), " in (

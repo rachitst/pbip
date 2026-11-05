@@ -79,6 +79,7 @@ const catalogueDeposit: WealthProductOut = {
   premature_closure_allowed: true,
   premature_penalty_bps: 100,
   bookable: true,
+  investable: false,
   notes: "Indicative, simulated rate set by PBIP, not a real bank's offer.",
   catalogue_version: "2026-11-v1",
 };

@@ -41,6 +41,9 @@ FIXED_DEPOSIT_CLOSED = "FIXED_DEPOSIT_CLOSED"
 # Automatic maturity payout (ADR-0029): paid, or held because the account is not active.
 FIXED_DEPOSIT_MATURED = "FIXED_DEPOSIT_MATURED"
 FIXED_DEPOSIT_PAYOUT_HELD = "FIXED_DEPOSIT_PAYOUT_HELD"
+# Simulated investing (ADR-0058): an order executed through the ledger.
+INVESTMENT_BOUGHT = "INVESTMENT_BOUGHT"
+INVESTMENT_SOLD = "INVESTMENT_SOLD"
 # Security notifications for events the auth and customers modules already record (#45).
 PASSWORD_CHANGED = "PASSWORD_CHANGED"  # noqa: S105  # pragma: allowlist secret - an event type name
 MFA_ENABLED = "MFA_ENABLED"
@@ -61,6 +64,8 @@ _TRANSFER_TYPES = {
     FIXED_DEPOSIT_BOOKED,
     FIXED_DEPOSIT_CLOSED,
     FIXED_DEPOSIT_MATURED,
+    INVESTMENT_BOUGHT,
+    INVESTMENT_SOLD,
 }
 _SCHEDULED_TRANSFER_TYPES = {
     SCHEDULED_TRANSFER_FAILED,
@@ -265,6 +270,10 @@ def _deposit_text(event: OutboxEvent, amount: str) -> tuple[str, str] | None:
             f"Your fixed deposit matured. {amount}, including {interest} interest, was credited "
             "to your account.",
         )
+    if event.event_type == INVESTMENT_BOUGHT:
+        return "Investment bought", f"{amount} was debited for your investment order."
+    if event.event_type == INVESTMENT_SOLD:
+        return "Investment sold", f"{amount} from your sale was credited to your account."
     return None
 
 

@@ -37,6 +37,8 @@ const ASSET_LABEL: Record<AllocationSlice["asset_class"], string> = {
   CASH: "Cash",
   DEPOSITS: "Fixed deposits",
   FUNDS: "Funds",
+  STOCKS: "Stocks",
+  BONDS: "Bonds",
 };
 const RISK: Record<RiskLevel, StatusView> = {
   LOW: { label: "Low risk", tone: "success" },
@@ -193,6 +195,14 @@ function PortfolioSection() {
             <dd>{formatMinor(p.projected_maturity_value_minor, p.currency)}</dd>
           </div>
           <div className="details__row">
+            <dt>Funds, stocks and bonds</dt>
+            <dd>{formatMinor(p.funds_minor + p.stocks_minor + p.bonds_minor, p.currency)}</dd>
+          </div>
+          <div className="details__row">
+            <dt>Investment gain or loss</dt>
+            <dd>{formatMinor(p.investments_gain_minor, p.currency)}</dd>
+          </div>
+          <div className="details__row">
             <dt>Cash in your accounts</dt>
             <dd>{formatMinor(p.cash_minor, p.currency)}</dd>
           </div>
@@ -203,8 +213,8 @@ function PortfolioSection() {
         </dl>
         <p className="muted">
           {p.open_deposits === 1 ? "1 open deposit" : `${String(p.open_deposits)} open deposits`} ·
-          figures as of {formatDate(p.as_of)}. Funds are shown at {formatMinor(0, p.currency)}: PBIP
-          does not sell fund units online.
+          figures as of {formatDate(p.as_of)}. Funds, stocks and bonds are valued at today&apos;s
+          simulated prices, not market data.
         </p>
       </section>
       {p.total_minor > 0 ? (

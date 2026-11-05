@@ -1610,6 +1610,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/wealth/holdings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My fund, stock and bond holdings at today's simulated price, with gain or loss */
+        get: operations["list_holdings_api_v1_wealth_holdings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/holdings/{holding_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One of my holdings */
+        get: operations["get_holding_api_v1_wealth_holdings__holding_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/holdings/{holding_id}/sell": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sell units of one of my holdings into one of my accounts (idempotent) */
+        post: operations["sell_investment_api_v1_wealth_holdings__holding_id__sell_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/instruments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Investable funds, stocks and bonds with today's SIMULATED price (not market data) */
+        get: operations["list_instruments_api_v1_wealth_instruments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/wealth/insurance": {
         parameters: {
             query?: never;
@@ -1621,6 +1689,23 @@ export interface paths {
         get: operations["list_insurance_api_v1_wealth_insurance_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wealth/investments/buy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Buy fund units by amount, or whole stocks or bonds, from one of my accounts */
+        post: operations["buy_investment_api_v1_wealth_investments_buy_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1897,7 +1982,7 @@ export interface components {
              * Asset Class
              * @enum {string}
              */
-            asset_class: "CASH" | "DEPOSITS" | "FUNDS";
+            asset_class: "CASH" | "DEPOSITS" | "FUNDS" | "STOCKS" | "BONDS";
             /**
              * Share Bps
              * @description Share of the total; the slices sum to 10000 (0 if empty)
@@ -2285,6 +2370,28 @@ export interface components {
              * @description Number of notifications marked as read
              */
             updated_count: number;
+        };
+        /**
+         * BuyRequest
+         * @description Exactly one of ``amount_minor`` (funds) or ``units`` (stocks and bonds). No price from
+         *     the client: the price is the simulated price of the bank day the order executes.
+         */
+        BuyRequest: {
+            /**
+             * Account Id
+             * Format: uuid
+             * @description One of MY accounts: pays for the order
+             */
+            account_id: string;
+            /** Amount Minor */
+            amount_minor?: number | null;
+            /**
+             * Instrument Id
+             * Format: uuid
+             */
+            instrument_id: string;
+            /** Units */
+            units?: number | null;
         };
         /**
          * CategoryInterest
@@ -3701,6 +3808,71 @@ export interface components {
             /** Open Alerts */
             open_alerts: number;
         };
+        /** HoldingOut */
+        HoldingOut: {
+            /**
+             * Cost Basis Minor
+             * @description Average cost of the units held
+             */
+            cost_basis_minor: number;
+            /**
+             * Gain Bps
+             * @description Gain as basis points of the cost basis
+             */
+            gain_bps: number | null;
+            /**
+             * Gain Minor
+             * @description Value minus cost basis (unrealised)
+             */
+            gain_minor: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Instrument Code */
+            instrument_code: string;
+            /**
+             * Instrument Id
+             * Format: uuid
+             */
+            instrument_id: string;
+            /** Instrument Name */
+            instrument_name: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "MUTUAL_FUND" | "STOCK" | "BOND";
+            /**
+             * Price Date
+             * Format: date
+             */
+            price_date: string;
+            /** Price Minor */
+            price_minor: number;
+            /**
+             * Price Source
+             * @description Always SIMULATED: PBIP's deterministic price model, not market data
+             * @constant
+             */
+            price_source: "SIMULATED";
+            /**
+             * Risk Level
+             * @enum {string}
+             */
+            risk_level: "LOW" | "MODERATE" | "HIGH";
+            /**
+             * Units Micro
+             * @description 1 unit = 1,000,000 micro-units
+             */
+            units_micro: number;
+            /**
+             * Value Minor
+             * @description Units at today's simulated price, rounded down
+             */
+            value_minor: number;
+        };
         /**
          * IndicativePremiumOut
          * @description ONE illustrative figure at a stated reference profile, never a quote for this customer
@@ -3753,6 +3925,72 @@ export interface components {
             payment_minor: number;
             /** Principal Minor */
             principal_minor: number;
+        };
+        /** InstrumentOut */
+        InstrumentOut: {
+            /** Catalogue Version */
+            catalogue_version: string;
+            /** Code */
+            code: string;
+            /**
+             * Currency
+             * @constant
+             */
+            currency: "INR";
+            /** Description */
+            description: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "MUTUAL_FUND" | "STOCK" | "BOND";
+            /**
+             * Min Order Minor
+             * @description Smallest fund purchase; None for units
+             */
+            min_order_minor: number | null;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes: string;
+            /**
+             * Order Mode
+             * @description AMOUNT: funds are bought by amount; UNITS: stocks and bonds in whole units
+             * @enum {string}
+             */
+            order_mode: "AMOUNT" | "UNITS";
+            /**
+             * Price Date
+             * Format: date
+             * @description The bank day the price is for (one price a day)
+             */
+            price_date: string;
+            /**
+             * Price Minor
+             * @description Price of one unit today, in paise
+             */
+            price_minor: number;
+            /**
+             * Price Source
+             * @description Always SIMULATED: PBIP's deterministic price model, not market data
+             * @constant
+             */
+            price_source: "SIMULATED";
+            /**
+             * Risk Level
+             * @enum {string}
+             */
+            risk_level: "LOW" | "MODERATE" | "HIGH";
+            /**
+             * Wealth Product Id
+             * @description The fund's catalogue row; None otherwise
+             */
+            wealth_product_id: string | null;
         };
         /**
          * InsuranceEligibilityOut
@@ -4437,6 +4675,80 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** OrderOut */
+        OrderOut: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /**
+             * Amount Minor
+             * @description Debited (BUY) or credited (SELL), in paise
+             */
+            amount_minor: number;
+            /**
+             * Cost Basis Minor
+             * @description Cost added (BUY) or taken out (SELL)
+             */
+            cost_basis_minor: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Holding Id
+             * Format: uuid
+             */
+            holding_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Instrument Code */
+            instrument_code: string;
+            /**
+             * Instrument Id
+             * Format: uuid
+             */
+            instrument_id: string;
+            /** Instrument Name */
+            instrument_name: string;
+            /**
+             * Price Date
+             * Format: date
+             */
+            price_date: string;
+            /** Price Minor */
+            price_minor: number;
+            /**
+             * Price Source
+             * @description Always SIMULATED: PBIP's deterministic price model, not market data
+             * @constant
+             */
+            price_source: "SIMULATED";
+            /**
+             * Realised Gain Minor
+             * @description SELL only: proceeds minus cost taken out
+             */
+            realised_gain_minor: number | null;
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "BUY" | "SELL";
+            /** Sip Id */
+            sip_id: string | null;
+            /**
+             * Transaction Id
+             * Format: uuid
+             */
+            transaction_id: string;
+            /** Units Micro */
+            units_micro: number;
+        };
         /**
          * PageDirection
          * @enum {string}
@@ -4562,6 +4874,11 @@ export interface components {
              */
             as_of: string;
             /**
+             * Bonds Minor
+             * @description Bond holdings at today's simulated price
+             */
+            bonds_minor: number;
+            /**
              * Cash Minor
              * @description Ledger balance of my INR accounts
              */
@@ -4578,7 +4895,7 @@ export interface components {
             deposits_value_minor: number;
             /**
              * Funds Minor
-             * @description Fund holdings: PBIP sells no fund units, so always 0
+             * @description Fund holdings at today's simulated NAV (ADR-0058)
              */
             funds_minor: number;
             /**
@@ -4586,10 +4903,25 @@ export interface components {
              * @description Principal of my open fixed deposits
              */
             invested_principal_minor: number;
+            /**
+             * Investments Cost Minor
+             * @description Cost basis of fund, stock and bond holdings
+             */
+            investments_cost_minor: number;
+            /**
+             * Investments Gain Minor
+             * @description Value of fund, stock and bond holdings minus their cost basis (unrealised)
+             */
+            investments_gain_minor: number;
             /** Open Deposits */
             open_deposits: number;
             /** Projected Maturity Value Minor */
             projected_maturity_value_minor: number;
+            /**
+             * Stocks Minor
+             * @description Stock holdings at today's simulated price
+             */
+            stocks_minor: number;
             /** Total Minor */
             total_minor: number;
         };
@@ -5311,6 +5643,20 @@ export interface components {
             /** Transactions */
             transactions: number;
         };
+        /** SellRequest */
+        SellRequest: {
+            /**
+             * Account Id
+             * Format: uuid
+             * @description One of MY accounts: receives the proceeds
+             */
+            account_id: string;
+            /**
+             * Units Micro
+             * @description Micro-units to sell (1 unit = 1,000,000); whole units for stocks and bonds
+             */
+            units_micro: number;
+        };
         /**
          * SettingUnit
          * @enum {string}
@@ -5736,6 +6082,11 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Investable
+             * @description A fund that can be bought online at a simulated price (ADR-0058)
+             */
+            investable: boolean;
             /** Max Amount Minor */
             max_amount_minor: number | null;
             /** Min Amount Minor */
@@ -10959,6 +11310,190 @@ export interface operations {
             };
         };
     };
+    list_holdings_api_v1_wealth_holdings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldingOut"][];
+                };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_holding_api_v1_wealth_holdings__holding_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                holding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldingOut"];
+                };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found (problem+json). A resource that exists but is not the caller's is also 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sell_investment_api_v1_wealth_holdings__holding_id__sell_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical request; retrying with the same key never duplicates. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                holding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SellRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderOut"];
+                };
+            };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The holding or the account is not mine (problem+json) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description More units than held, part of a stock or bond, or too small */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_instruments_api_v1_wealth_instruments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstrumentOut"][];
+                };
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     list_insurance_api_v1_wealth_insurance_get: {
         parameters: {
             query?: {
@@ -11002,6 +11537,68 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    buy_investment_api_v1_wealth_investments_buy_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical request; retrying with the same key never duplicates. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BuyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderOut"];
+                };
+            };
+            /** @description The request body is not valid JSON (problem+json) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token (problem+json) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such instrument, or the account is not mine (problem+json) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Insufficient funds, wrong quantity kind or too small an order */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
