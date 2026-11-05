@@ -46,6 +46,9 @@ const FraudDashboard = lazy(() => import("../pages/staff/FraudDashboard"));
 const Wealth = lazy(() => import("../pages/Wealth"));
 // The comparison reuses the Wealth page's formatters, so it shares that lazily loaded chunk.
 const WealthCompare = lazy(() => import("../pages/WealthCompare"));
+// ADR-0058: the invest and insurance-quote flows, loaded on first visit like the other wealth pages.
+const Invest = lazy(() => import("../pages/Invest"));
+const InsuranceQuote = lazy(() => import("../pages/InsuranceQuote"));
 
 const HOME_PATH: Record<Area, string> = { customer: "/accounts", staff: "/staff", none: "/" };
 
@@ -244,6 +247,22 @@ export const routes: RouteObject[] = [
             element: (
               <Suspense fallback={<LoadingState label="Loading product comparison..." />}>
                 <WealthCompare />
+              </Suspense>
+            ),
+          },
+          {
+            path: "wealth/invest",
+            element: (
+              <Suspense fallback={<LoadingState label="Loading investments..." />}>
+                <Invest />
+              </Suspense>
+            ),
+          },
+          {
+            path: "wealth/insurance",
+            element: (
+              <Suspense fallback={<LoadingState label="Loading insurance quote..." />}>
+                <InsuranceQuote />
               </Suspense>
             ),
           },

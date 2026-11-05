@@ -42,6 +42,15 @@ def test_beat_pays_out_matured_deposits_hourly_through_a_registered_task() -> No
     assert "pbip.wealth.pay_out_matured_deposits" in celery_app.tasks
 
 
+def test_beat_runs_fund_sips_hourly_through_a_registered_task() -> None:
+    """ADR-0058 section 7: one hourly entry at :50 on the existing beat, pointing at a real task."""
+    schedule = celery_app.conf.beat_schedule
+    entries = [e for e in schedule.values() if e["task"] == "pbip.wealth.run_fund_sips"]
+    assert len(entries) == 1
+    assert entries[0]["schedule"] == crontab(minute=50)
+    assert "pbip.wealth.run_fund_sips" in celery_app.tasks
+
+
 def test_beat_expires_stale_step_ups_every_minute_and_purges_keys_daily() -> None:
     """Issue #314 / ADR-0036: two entries on the existing beat, each pointing at a real task."""
     schedule = celery_app.conf.beat_schedule

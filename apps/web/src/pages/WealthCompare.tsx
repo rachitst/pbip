@@ -3,8 +3,14 @@ import { useId, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { api } from "../api/client";
-import type { InsuranceProductOut, RiskLevel, WealthProductOut } from "../api/client";
+import type {
+  InsuranceProductOut,
+  RiskLevel,
+  SuitabilityOut,
+  WealthProductOut,
+} from "../api/client";
 import { errorMessage } from "../lib/errors";
+import { formatDate } from "../lib/format";
 import { formatMinor } from "../lib/money";
 import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
@@ -125,6 +131,39 @@ export const FIELDS: { label: string; value: (item: Comparable) => string }[] = 
   },
 ];
 
+export const SUITABILITY_ROW = "Suits your risk band";
+
+/** ADR-0058 section 9: the server's rating for the customer's RTQ-1 band, as one table cell. */
+export function suitabilityText(item: Comparable, suitability: SuitabilityOut | undefined): string {
+  if (item.kind === "INSURANCE") return NOT_APPLICABLE;
+  if (suitability === undefined) return "Not available";
+  const rated = suitability.items.find((i) => i.product_id === item.product.id);
+  if (rated === undefined || rated.suitable === null) return "No risk band recorded";
+  return `${rated.suitable ? "Yes" : "No"}: ${rated.reason}`;
+}
+
+function BandNote({ suitability }: { suitability: SuitabilityOut | undefined }) {
+  if (suitability === undefined) return null;
+  if (suitability.band === null) {
+    return (
+      <p role="note">
+        No risk band recorded, so products are not marked as suitable or not.{" "}
+        <Link to="/profile">Answer the risk questionnaire</Link> to see which suit you.
+      </p>
+    );
+  }
+  const assessed = suitability.assessed_at
+    ? `, assessed ${formatDate(suitability.assessed_at)}`
+    : "";
+  return (
+    <p role="note">
+      Your risk band is <strong>{RISK_LABEL[suitability.band].toLowerCase()}</strong> (
+      {suitability.questionnaire_version ?? "RTQ-1"}
+      {assessed}). Products above it are marked unsuitable.
+    </p>
+  );
+}
+
 /** What the selection status line says; null when a comparison can be shown with nothing to add. */
 export function selectionMessage(count: number): string {
   if (count < MIN_COMPARE) {
@@ -176,7 +215,13 @@ function ProductPicker({
   );
 }
 
-function ComparisonTable({ items }: { items: Comparable[] }) {
+function ComparisonTable({
+  items,
+  suitability,
+}: {
+  items: Comparable[];
+  suitability: SuitabilityOut | undefined;
+}) {
   const captionId = useId();
   return (
     <div className="compare-scroll" role="region" aria-labelledby={captionId} tabIndex={0}>
@@ -208,6 +253,17 @@ function ComparisonTable({ items }: { items: Comparable[] }) {
               })}
             </tr>
           ))}
+          <tr>
+            <th scope="row">{SUITABILITY_ROW}</th>
+            {items.map((item) => {
+              const text = suitabilityText(item, suitability);
+              return (
+                <td key={item.key} className={text === NOT_APPLICABLE ? "muted" : undefined}>
+                  {text}
+                </td>
+              );
+            })}
+          </tr>
         </tbody>
       </table>
     </div>
@@ -222,6 +278,8 @@ export function WealthCompare() {
     queryFn: () => api.wealthProducts(),
   });
   const insurance = useQuery({ queryKey: ["insurance-products"], queryFn: api.insuranceProducts });
+  // A failure here only hides the band: the comparison itself still works.
+  const suitability = useQuery({ queryKey: ["wealth-suitability"], queryFn: api.suitability });
   const [selected, setSelected] = useState<string[]>([]);
 
   function toggle(key: string) {
@@ -279,7 +337,9 @@ export function WealthCompare() {
           <p role="status" className="compare-status">
             {selectionMessage(chosen.length)}
           </p>
-          {chosen.length >= MIN_COMPARE && <ComparisonTable items={chosen} />}
+          {chosen.length >= MIN_COMPARE && (
+            <ComparisonTable items={chosen} suitability={suitability.data} />
+          )}
         </>
       );
   }
@@ -296,6 +356,7 @@ export function WealthCompare() {
         reference profile shown, not a quote: PBIP does no underwriting. Market-linked funds show no
         yield because PBIP has no market data.
       </p>
+      <BandNote suitability={suitability.data} />
       {body}
     </div>
   );
