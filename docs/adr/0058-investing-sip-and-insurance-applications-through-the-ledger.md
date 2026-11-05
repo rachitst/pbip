@@ -1,7 +1,6 @@
 # ADR 0058: Simulated investing (funds, stocks, bonds), fund SIPs and insurance applications
-- Status: Proposed (needs the lead's decision: condition 5 of the owner's standing approval says "no invented
-  rates". The prices and the insurance quote factors below are simulated by design, as the task asks, and are
-  labelled "simulated" everywhere they are shown)
+- Status: Accepted (owner-directed simulation in the v1.1.0 brief, 2026-11-05). The prices and the insurance quote
+  factors below are simulated at the owner's request and labelled "simulated" everywhere they are shown.
 - Date: 2026-11-04
 - Deciders: Architecture Team (section 5 "Wealth Management"; FR-35, FR-36; follow-up to ADR-0025 and ADR-0028)
 
