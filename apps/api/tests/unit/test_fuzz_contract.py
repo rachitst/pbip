@@ -24,6 +24,7 @@ from scripts.fuzz import (
     Target,
     _build_harness,
     _error_type,
+    _load_operations,
     _make_executor,
     _request_data,
     _Tally,
@@ -98,16 +99,31 @@ def test_same_seed_reproduces_the_inputs_and_every_operation_is_fuzzed_in_both_m
     assert first.is_success and first.authenticated is False
 
 
-# Hang guard, not a speed bar (as #446, #454): two fuzz passes over the whole contract take about
-# 37 s on an idle 2-CPU laptop and passed pytest-timeout's 60 s default only without other load.
-@pytest.mark.timeout(240)
-def test_a_short_first_pass_is_topped_up_to_the_floor_not_repeated_in_full() -> None:
+def test_a_short_first_pass_is_topped_up_to_the_floor_not_repeated_in_full(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """#175: a floor just above one pass made the old loop run a second full pass (about twice the
-    budget). The top-up pass stops once the floor is reached."""
+    budget). The top-up pass stops once the floor is reached.
+
+    The loop's arithmetic does not depend on how many operations there are, so this runs on a slice
+    of the real contract (the health probes, which have no input to corrupt, plus the accounts
+    operations). Over the whole contract it took 23-37 s on a 2-CPU laptop and grew with load, and
+    a pytest-timeout that fires inside a Hypothesis run is reported as a FlakyFailure: Hypothesis
+    replays the "failing" example, the replay passes, and the timeout is mislabelled as flakiness.
+    Every operation in every mode is covered by the reproducibility test above."""
+    operations = [
+        op
+        for op in _load_operations(SPEC_PATH)
+        if op.path.startswith(("/api/health/", "/api/v1/accounts"))
+    ]
+    monkeypatch.setattr("scripts.fuzz._load_operations", lambda _spec_path: operations)
     one_pass = run_fuzz(
         spec_path=SPEC_PATH, app=NOT_AN_APP, auth=False, min_cases=1, seed=3, execute=_ok
     ).total_cases  # one case per operation and mode that has an input
     floor = one_pass + 2
+    # The scenario of #175: the floor fits inside one pass's slots, so the first pass asks one case
+    # per slot, falls short (the probes have no negative input), and a top-up pass must follow.
+    assert one_pass < floor <= len(operations) * len(GENERATION_MODES)
     result = run_fuzz(
         spec_path=SPEC_PATH, app=NOT_AN_APP, auth=False, min_cases=floor, seed=3, execute=_ok
     )
