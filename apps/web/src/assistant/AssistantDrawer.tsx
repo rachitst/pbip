@@ -38,6 +38,8 @@ const ROUTABLE = new Set([
   "/wealth",
   "/statements",
   "/scheduled",
+  "/payees",
+  "/bills",
 ]);
 
 interface Message {
