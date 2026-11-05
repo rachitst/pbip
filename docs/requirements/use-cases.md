@@ -9,8 +9,8 @@
 Each use case below gives the objective from the use-case document, the actors, the preconditions, the main and
 alternative flows with the real routes (all under `/api/v1` unless they start with `/api/health`) and web screens,
 the diagrams that draw it, the automated tests that prove it, and screenshots. Test paths are relative to
-`apps/api/tests/` (Python), `apps/web/src/` (Vitest) and `apps/web/e2e/` (Playwright). Screenshots still
-to capture are named in [the list at the end](#screenshots-to-capture-on-the-v110-stack) and will be taken on the final v1.1.0 stack.
+`apps/api/tests/` (Python), `apps/web/src/` (Vitest) and `apps/web/e2e/` (Playwright). Screenshots of the
+v1.1.0 screens are listed [at the end](#screenshots-of-the-v110-screens).
 
 ## Actors and use case diagram
 
@@ -311,6 +311,8 @@ simulated and labelled so on every screen and response.
 ![Compare products](../user-manual/images/26-compare.png)
 ![Invest](../user-manual/images/23b-wealth-invest.png)
 ![Compare with the risk-band row](../user-manual/images/26b-compare-suitability.png)
+![Holdings with Sell, and Your SIPs](../user-manual/images/23c-wealth-holdings.png)
+![Insurance quote](../user-manual/images/23d-insurance-apply.png)
 
 ---
 
@@ -350,6 +352,7 @@ model; a model that fails, times out or answers badly falls back to the rules; 4
 **Screenshots.**
 
 ![Assistant](../user-manual/images/28-assistant.png)
+![The assistant listing insurance plans](../user-manual/images/28b-assistant-insurance.png)
 
 ---
 
@@ -503,7 +506,7 @@ Vitest `pages/AnalyticsConsentSection.test.tsx`, `telemetry/tracker.test.ts`, `t
 ![Recommendations](../user-manual/images/27-recommendations.png)
 ![RM customer detail](../user-manual/images/61-rm-customer-flyout.png)
 
-Carousel with a catalogue loan **(to capture)**: `docs/user-manual/images/27b-recommendations-loan-offer.png`.
+![Recommended for you, with each card's action](../user-manual/images/27b-recommendations-card-actions.png)
 
 ---
 
@@ -544,14 +547,8 @@ Carousel with a catalogue loan **(to capture)**: `docs/user-manual/images/27b-re
 
 ---
 
-## Screenshots to capture on the v1.1.0 stack
+## Screenshots of the v1.1.0 screens
 
-Captured on 5 Nov 2026 on the rebuilt v1.1.0 stack: `22b`, `23b`, `26b`, `30b`, `42b`, `50b`, `61b`, `62c` (shown
-above and in the user manual). Still to capture, under these names:
-
-| File | Screen | Use case |
-|---|---|---|
-| `docs/user-manual/images/23c-wealth-holdings.png` | `/wealth` holdings with gain, the sell action and "Your SIPs" | UC-07 |
-| `docs/user-manual/images/23d-insurance-apply.png` | `/wealth/insurance` quote and application recorded | UC-07 |
-| `docs/user-manual/images/27b-recommendations-loan-offer.png` | `/accounts` carousel showing a catalogue loan card with its figures | UC-06, UC-12 |
-| `docs/user-manual/images/28b-assistant-insurance.png` | The assistant listing insurance plans (#474) | UC-08 |
+All v1.1.0 screenshots were captured on 5 Nov 2026 on the rebuilt v1.1.0 stack and are shown above and in the user
+manual: `22b`, `23b`, `23c`, `23d`, `23e`, `26b`, `27b`, `28b`, `30b`, `42b`, `50b`, `61b`, `62c` (files under
+`docs/user-manual/images/`).

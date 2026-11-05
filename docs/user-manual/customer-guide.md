@@ -464,13 +464,15 @@ day to day and is not market data.
 
 ![Invest](images/23b-wealth-invest.png)
 
-Screenshot to capture: `images/23c-wealth-holdings.png` (holdings with Sell).
+![Holdings with Sell, and Your SIPs](images/23c-wealth-holdings.png)
 
 **Monthly fund SIPs:** a SIP buys a fund for a fixed amount on the same day each month (day 1 to 28). On
 **Invest**, choose a fund and **Start a monthly SIP**; nothing is taken until the first instalment day. **Your
 SIPs** on **Wealth** lists them with the next instalment date; **Cancel SIP** stops future instalments. Each
 month's purchase is made once, automatically; if the account cannot pay that day, you get a notification and the SIP tries again the
 next month (a missed month is not caught up).
+
+![Your SIPs with Cancel SIP](images/23e-fund-sip.png)
 
 **Withdraw:** when a deposit has matured, choose **Withdraw** and then **Withdraw to my account**. A
 matured deposit earns no more interest.
@@ -510,7 +512,7 @@ investment, so it is not rated. Insurance premiums in the table are indicative f
 
 Everything here is simulated: no policy is issued and no premium is taken from your account.
 
-Screenshot to capture: `images/23d-insurance-apply.png`.
+![Insurance quote](images/23d-insurance-apply.png)
 
 ## 14. Recommendations
 
@@ -541,7 +543,7 @@ Recommendations use your age band only if you gave consent, and your risk band i
 questions (see [Profile and security](#17-profile-and-security)): with a Low or Moderate risk band, PBIP does not
 suggest the high-risk index-fund SIP, and the last reason on an investment card names your band.
 
-Screenshot to capture: `images/27b-recommendations-loan-offer.png` (a catalogue loan card).
+![Recommended for you, with each card's action](images/27b-recommendations-card-actions.png)
 
 ## 15. The PBIP assistant
 
@@ -579,7 +581,7 @@ under a second; a local model on an ordinary computer can take much longer). Wit
 screenshot) the rule-based helper still answers, so the facts are the same; only the wording is plainer.
 Insurance plans are listed as simulated: the premium is an indication for a reference profile, not a quote.
 
-Screenshot to capture: `images/28b-assistant-insurance.png` (the assistant listing insurance plans).
+![The assistant listing insurance plans](images/28b-assistant-insurance.png)
 
 If you send many messages quickly, it asks you to wait a minute.
 

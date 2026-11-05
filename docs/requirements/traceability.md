@@ -93,7 +93,7 @@ and `ml/tests/`.
 | Requirements specification, user stories, use case document | Verified | [requirements-specification.md](requirements-specification.md), [user-stories.md](user-stories.md), [use-cases.md](use-cases.md) | |
 | HLD, LLD, ER diagram, API specifications | Verified | [HLD](../architecture/HLD.md), [LLD](../architecture/LLD.md), [ER diagram](../architecture/er-diagram.md) (drift-checked in CI), [diagrams](../diagrams/README.md), OpenAPI | The HLD and LLD are checked by review, not by a CI test |
 | Deployment guide, support guide | Verified | [deployment guide](../operations/deployment-guide.md), [support guide](../operations/support-guide.md), [runbook](../operations/runbook.md) (`unit/test_runbook_references.py`), [Oracle guide](../operations/deploy-oracle-cloud-arm.md) | |
-| User manual | Partial | [User manual](../user-manual/README.md): customer, staff and compliance guides with screenshots, and sections for the v1.1.0 screens | Screenshots of the v1.1.0 screens are taken on the final stack (list in [use-cases.md](use-cases.md#screenshots-to-capture-on-the-v110-stack)) |
+| User manual | Verified | [User manual](../user-manual/README.md): customer, staff and compliance guides, including the v1.1.0 screens with screenshots captured on the v1.1.0 stack ([list](use-cases.md#screenshots-of-the-v110-screens)) | |
 
 ## Engineering practices (section 10)
 
@@ -124,7 +124,7 @@ and `ml/tests/`.
 | CI/CD pipeline fully functional | Partial | CI verified; deployment to a host not yet run (#198) |
 | Secure authentication and authorization | Verified | NFR table |
 | Code adheres to coding standards | Verified | Practices table |
-| Documentation complete and professionally presented | Partial | Documentation index ([docs/README.md](../README.md)); v1.1.0 screens and screenshots pending |
+| Documentation complete and professionally presented | Verified | Documentation index ([docs/README.md](../README.md)), user manual with the v1.1.0 screens, link check in CI |
 | Repeatable automated deployment | Unverified | Tagged release, Deploy workflow and `deploy.sh`; not yet run against the staging host (#198) |
 
 ## Gaps that need the staging server
