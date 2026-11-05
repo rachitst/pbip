@@ -48,6 +48,7 @@ const QUESTIONS: {
   text: string;
   caption: string;
   want: "answer" | "refuse" | "llm";
+  still?: string;
 }[] = [
   {
     text: "what's my balance?",
@@ -78,6 +79,12 @@ const QUESTIONS: {
     text: "how do I download a statement?",
     caption: "A how-to question from the FAQ",
     want: "answer",
+  },
+  {
+    text: "what insurance plans do you have?",
+    caption: "Products: the insurance plans on offer",
+    want: "answer",
+    still: "28b-assistant-insurance",
   },
   {
     text: "am I doing ok money-wise?",
@@ -247,6 +254,28 @@ function wanted(part: string): boolean {
 }
 
 async function story(w: Walkthrough, page: Page, outDir: string): Promise<void> {
+  if (PARTS.includes("assistant-still")) {
+    // Only the docs still of the assistant answering a product question (not part of the film).
+    await w.dead(() => page.goto("/"));
+    w.chapter("Assistant still");
+    await w.step("assistant still", {}, async () => {
+      await w.signInWithCode(ALICE, "/", "My accounts");
+      await page.getByRole("button", { name: "Ask the PBIP assistant" }).click();
+      const drawer = page.getByRole("dialog", { name: "PBIP assistant" });
+      const before = await drawer.locator(".assistant-msg--assistant").count();
+      await drawer
+        .getByRole("textbox", { name: "Message" })
+        .fill("what insurance plans do you have?");
+      await w.api("POST", /^\/api\/v1\/assistant\/chat/, () =>
+        drawer.getByRole("button", { name: "Send" }).click(),
+      );
+      const reply = drawer.locator(".assistant-msg--assistant").nth(before);
+      await expect(reply).not.toHaveAttribute("aria-busy", "true", { timeout: 45_000 });
+      await w.still("28b-assistant-insurance");
+      return ["PASS", ((await reply.textContent()) ?? "").slice(0, 80)];
+    });
+    return;
+  }
   if (!wanted("onboarding")) await w.dead(() => page.goto("/"));
   const newcomer = wanted("onboarding") ? await onboarding(w, page) : null;
   const held = wanted("customer") ? await customerBanking(w, page) : null;
@@ -763,6 +792,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
     await w.go("/accounts", "My accounts");
     const heading = page.getByRole("heading", { name: "Recommended for you" });
     await w.reveal(heading);
+    await w.still("27b-carousel-loan-card");
     const why = page.getByRole("button", {
       name: "Why this was recommended for you",
     });
@@ -805,6 +835,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
       if (q.want === "refuse" && !text.includes("only help with your own")) {
         throw new Error(`"${q.text}" was not refused`);
       }
+      if (q.still) await w.still(q.still);
       await w.hold(3200);
     }
     await drawer.getByRole("button", { name: "Close assistant" }).click();
@@ -929,23 +960,17 @@ async function investing(w: Walkthrough, page: Page): Promise<void> {
     if (!(await pick(page, "Investment", /Mutual fund$/))) throw new Error("no fund to buy");
     const min = await hintAmount(page, "Amount");
     await page.getByLabel("Amount", { exact: true }).fill(Math.max(min, 5000).toFixed(2));
-    await page.getByRole("button", { name: "Review order" }).click();
-    const confirm = page.getByRole("dialog", { name: "Confirm your order" });
-    await expect(confirm).toBeVisible();
-    await w.hold(1500);
-    await w.api("POST", "/api/v1/wealth/investments/buy", () =>
-      confirm.getByRole("button", { name: "Buy now" }).click(),
-    );
-    await expect(page.getByRole("heading", { name: "Order executed" })).toBeVisible();
-    await w.say("Bought at today's price: units, price and a reference", 2500);
+    await w.still("23b-invest");
+    // A fund can also be bought every month: the SIP form sits under the order (the order's
+    // receipt replaces both, so the SIP comes first).
     const sip = page.getByRole("heading", { name: "Start a monthly SIP" });
     await w.reveal(sip);
-    await w.say("Or invest every month: a SIP", 300);
+    await w.say("A fund can be bought every month: a SIP", 300);
     const sipMin = await hintAmount(page, "Monthly amount").catch(() => 1000);
     await page
       .getByLabel("Monthly amount", { exact: true })
       .fill(Math.max(sipMin, 2000).toFixed(2));
-    await page.getByLabel("Day of the month", { exact: true }).fill("5");
+    await page.getByLabel("Day of the month", { exact: true }).selectOption("5");
     await page.getByRole("button", { name: "Review SIP" }).click();
     const sipConfirm = page.getByRole("dialog", { name: "Confirm your monthly SIP" });
     await expect(sipConfirm).toBeVisible();
@@ -955,6 +980,18 @@ async function investing(w: Walkthrough, page: Page): Promise<void> {
     );
     await w.hold(2000);
     await w.dead(() => page.evaluate(() => window.scrollTo(0, 0)));
+    await w.say("Or buy once, at today's price", 300);
+    await page.getByRole("button", { name: "Review order" }).click();
+    const confirm = page.getByRole("dialog", { name: "Confirm your order" });
+    await expect(confirm).toBeVisible();
+    await w.hold(1500);
+    await w.api("POST", "/api/v1/wealth/investments/buy", () =>
+      confirm.getByRole("button", { name: "Buy now" }).click(),
+    );
+    await expect(page.getByRole("heading", { name: "Order executed" })).toBeVisible();
+    await w.say("Bought at today's price: units, amount and a reference", 2500);
+    await w.dead(() => w.go("/wealth", "Wealth")); // a fresh order form
+    await w.go("/wealth/invest", "Invest");
     let stock = "";
     if (await pick(page, "Investment", /(Stock|Bond)$/)) {
       stock =
@@ -984,6 +1021,7 @@ async function investing(w: Walkthrough, page: Page): Promise<void> {
     const holdings = page.getByRole("heading", { name: "Your funds, stocks and bonds" });
     await w.reveal(holdings);
     await w.say("Her holdings, with today's value and gain or loss", 2500);
+    await w.still("23c-holdings");
     let detail = "holdings shown";
     if (sold.name) {
       const units = page.getByLabel(`Units of ${sold.name} to sell`);
@@ -1002,6 +1040,7 @@ async function investing(w: Walkthrough, page: Page): Promise<void> {
     await w.reveal(page.getByRole("heading", { name: "Your SIPs" }));
     await expect(page.getByRole("button", { name: "Cancel SIP" }).first()).toBeVisible();
     await w.say("Her SIPs: each can be cancelled; every monthly run is listed", 2500);
+    await w.still("23d-sip");
     return ["PASS", detail];
   });
 }
@@ -1023,7 +1062,8 @@ async function insuranceQuote(w: Walkthrough, page: Page): Promise<void> {
       "/api/v1/wealth/insurance/quote",
       () => page.getByRole("button", { name: "Get a quote" }).click(),
     );
-    await expect(page.getByRole("region", { name: "Quote" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Quote", exact: true })).toBeVisible();
+    await w.still("28b-insurance-quote");
     await w.say(
       `The quote: premium and outcome (${String(body.outcome ?? "?").toLowerCase()})`,
       2800,
@@ -1341,7 +1381,7 @@ async function staffCompliance(w: Walkthrough, page: Page): Promise<void> {
       dialog.getByRole("button", { name: "Acknowledge" }).click(),
     );
     await w.say("Acknowledged with a reason: stored in the hash-chained audit log", 2500);
-    const kind = page.getByLabel("Kind");
+    const kind = page.getByLabel("Kind", { exact: true });
     const kinds = await kind.locator("option").allTextContents();
     if (
       kinds.some((k) => /Undelivered notification/.test(k)) &&

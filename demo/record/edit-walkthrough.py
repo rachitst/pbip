@@ -52,6 +52,8 @@ class Clip:
     speed: float
     step: int
     frame: tuple[int, int] | None = None  # (width, height) of a smaller viewport, top-left
+    source: str = ""  # another raw video (a timeline merged from two takes); "" is the default
+    offset: float = 0.0  # what that take's times were shifted by in the merged timeline
 
     @property
     def duration(self) -> float:
@@ -82,6 +84,7 @@ def split_step(step: dict[str, Any], index: int, min_len: float = MIN_SEGMENT) -
     start, end = float(step["start"]), float(step["end"])
     box = step.get("frame")
     frame = (int(box["width"]), int(box["height"])) if box else None
+    take = (str(step.get("video", "")), float(step.get("offset", 0.0)))
     marks = step.get("marks", [])
     cuts = sorted({start, end} | {float(m[k]) for m in marks for k in ("s", "e")})
     cuts = [t for t in cuts if start <= t <= end]
@@ -93,9 +96,9 @@ def split_step(step: dict[str, Any], index: int, min_len: float = MIN_SEGMENT) -
             continue
         speed = FAST_SPEED if "fast" in covering else 1.0
         if clips and clips[-1].speed == speed and abs(clips[-1].e - s) < 1e-6:
-            clips[-1] = Clip(clips[-1].s, e, speed, index, frame)
+            clips[-1] = Clip(clips[-1].s, e, speed, index, frame, *take)
         else:
-            clips.append(Clip(s, e, speed, index, frame))
+            clips.append(Clip(s, e, speed, index, frame, *take))
     return [c for c in clips if c.e - c.s >= min_len]
 
 
@@ -114,7 +117,7 @@ def _trim_head(clips: list[Clip], keep: float) -> list[Clip]:
         if keep <= 0:
             break
         take = min(c.duration, keep)
-        out.append(Clip(c.s, c.s + take * c.speed, c.speed, c.step, c.frame))
+        out.append(Clip(c.s, c.s + take * c.speed, c.speed, c.step, c.frame, c.source, c.offset))
         keep -= take
     return out
 
@@ -126,7 +129,7 @@ def _trim_tail(clips: list[Clip], skip: float) -> list[Clip]:
         if skip >= c.duration:
             skip -= c.duration
             continue
-        out.append(Clip(c.s + skip * c.speed, c.e, c.speed, c.step, c.frame))
+        out.append(Clip(c.s + skip * c.speed, c.e, c.speed, c.step, c.frame, c.source, c.offset))
         skip = 0
     return out
 
@@ -306,7 +309,9 @@ def render_items(ffmpeg: str, raw: Path, items: Sequence[Item], work: Path, labe
             source = ["-f", "lavfi", "-i", f"color=c=0x0f172a:s=1920x1080:r={FPS}:d={item.seconds}"]
             vf = f"subtitles=card{n:04d}.ass:fontsdir={FONT_DIR},format=yuv420p"
         else:
-            source = ["-ss", f"{item.s:.3f}", "-t", f"{item.e - item.s:.3f}", "-i", str(raw)]
+            video = raw.parent / item.source if item.source else raw
+            start = item.s - item.offset
+            source = ["-ss", f"{start:.3f}", "-t", f"{item.e - item.s:.3f}", "-i", str(video)]
             vf = clip_filter(item)
         _run(ffmpeg, [*source, "-vf", vf, *H264, name], work)
         names.append(name)

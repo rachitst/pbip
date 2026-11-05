@@ -47,6 +47,8 @@ export interface Timeline {
 
 /** Sign-in and MFA verify share 10 requests per minute per IP; stay one below it. */
 const SIGN_IN_BUDGET = 9;
+/** DEMO_SKIP: step names (|-separated) not to record, when another take is merged in for them. */
+const SKIP = (process.env.DEMO_SKIP ?? "").split("|").filter((n) => n !== "");
 /** The shortest a feature may be on screen in the edited film (the owner's 10-20 seconds). */
 const MIN_STEP_SECONDS = Number(process.env.DEMO_MIN_STEP_SECONDS ?? "10");
 const SIGN_IN_PATHS = new Set(["/api/v1/auth/login", "/api/v1/auth/mfa/verify"]);
@@ -167,6 +169,7 @@ export class Walkthrough {
     opts: { highlight?: boolean; frame?: { width: number; height: number } },
     body: () => Promise<[Outcome, string]>,
   ): Promise<void> {
+    if (SKIP.includes(name)) return; // DEMO_SKIP: a step another take already holds
     const entry: TimelineStep = {
       chapter: this.chapters.length - 1,
       name,
@@ -326,6 +329,20 @@ export class Walkthrough {
       el.scrollIntoView({ behavior: "smooth", block: "start" });
     });
     await this.hold(700);
+  }
+
+  /** A 1920x1080 PNG for the docs (DEMO_STILLS_DIR), without the caption overlay. Cut. */
+  async still(name: string): Promise<void> {
+    const dir = process.env.DEMO_STILLS_DIR;
+    if (!dir) return;
+    await this.dead(async () => {
+      const overlay = this.page.locator("#pbip-demo-caption");
+      const shown = (await overlay.count()) > 0;
+      if (shown) await overlay.evaluate((el) => el.style.setProperty("display", "none"));
+      await this.page.waitForTimeout(300);
+      await this.page.screenshot({ path: `${dir}/${name}.png` });
+      if (shown) await overlay.evaluate((el) => el.style.removeProperty("display"));
+    });
   }
 
   // ---------------------------------------------------------------------------- API checks

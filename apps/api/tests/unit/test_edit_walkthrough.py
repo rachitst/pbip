@@ -174,3 +174,12 @@ def test_a_phone_viewport_is_cropped_and_centred() -> None:
     [desktop] = ew.split_step(_step(0, 0.0, 5.0), 0)
     assert "crop" not in ew.clip_filter(desktop)
     assert "scale=1920:1080" in ew.clip_filter(desktop)
+
+
+def test_a_step_from_another_take_keeps_its_video_and_offset() -> None:
+    step = _step(0, 100_010.0, 100_015.0)
+    step["video"] = "take-2.webm"
+    step["offset"] = 100_000.0
+    [clip] = ew.split_step(step, 0)
+    assert (clip.source, clip.offset) == ("take-2.webm", 100_000.0)
+    assert (clip.s - clip.offset, clip.e - clip.offset) == (10.0, 15.0)
