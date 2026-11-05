@@ -4,6 +4,42 @@ All notable changes to PBIP are listed here. The format follows [Keep a Changelo
 and the project uses [Semantic Versioning](https://semver.org/). Numbers in brackets are the pull requests that made
 each change. The plain-language summaries are in [`docs/release/`](docs/release/).
 
+## [1.1.0] - 2026-11-05
+
+The release that completes the use-case document's functional scope (sections 5 and 7) and its deliverables (sections
+9 to 11). Tagged `v1.1.0` on `main` on 5 November 2026; the summary is in
+[`docs/release/v1.1.0.md`](docs/release/v1.1.0.md).
+
+### Added
+
+- **UC-06 loan recommendations:** catalogue loans (personal, car, home) are recommended with an eligibility
+  assessment from balances, income and spending, a suggested range and EMI, and reasons; `GET /api/v1/loans/offers`;
+  eligibility v2 adds a spending rule and a balance rule (ADR-0056, #470).
+- **UC-07 risk tolerance:** the RTQ-1 band is a suitability rule in `/recommendations` and shown in `/wealth/compare`
+  (ADR-0056, #461, #483).
+- **UC-11 behaviour analytics:** privacy-safe session duration, product interests, a per-customer behavioural profile
+  (customer API, RM/admin view), recorded analytics consent with erasure on withdrawal, and staff charts for product
+  affinity and engagement (ADR-0057, migration 0030, #463, #477).
+- **Wealth:** simulated investing in funds (lump sum and monthly SIP), stocks and bonds through the ledger,
+  idempotent and audited, with holdings, sell and gain/loss in the portfolio; a simulated insurance quote and
+  application (no premium debited); every recommendation card has a working action (ADR-0058, migration 0031, #465,
+  #483, #484, #487).
+- **Staff dashboards:** a fraud monitoring dashboard charting `/fraud/stats` with accessible charts (ADR-0016, #464);
+  dead-lettered notifications and failed scheduled transfers in compliance exception management (#466).
+- **Assistant:** insurance in product discovery and an FAQ that covers every customer feature (#474, #482).
+- **Tests:** E2E journeys for statements, bill payments and loans (TASK-077, #472).
+- **Docs:** 25+ diagrams with SVG/PNG exports (#462, #478), use cases UC-01 to UC-13 as built with screenshots,
+  traceability against final `main`, support and deployment guides, README landing page, docs index, review process
+  and peer-review requests (#467, #468, #469, #476); a Markdown link check in CI (#469).
+- **Demo:** a Playwright walkthrough recorder and editor (#480); the A-to-Z walkthrough and highlights videos are
+  attached to the release.
+
+### Fixed
+
+- Load-sensitive tests: the ReDoS growth test times both sizes alternately; hang guards on long fuzz and model tests;
+  the bundle tests share the trained model; the velocity concurrency test warms the fakeredis keyspace (a test-double
+  race, not a production bug) (#475, #479, #485).
+
 ## [1.0.2] - 2026-11-04
 
 A patch release on top of 1.0.1, tagged `v1.0.2` on `main` on 4 November 2026. The plain-language summary is in
