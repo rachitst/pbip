@@ -18,7 +18,7 @@ service.run()
         └─ refusal ──────────────────────────────────────────────────────────────┐
   3. router: llm.llm_route (Ollama, JSON-schema grammar, temperature 0, fixed URL, 4 s timeout)
         │   optional, LLM_PROVIDER=groq (ADR-0037): Groq function calling FIRST, redacted question only,
-        │   5 s timeout, then Ollama (§6)
+        │   2.5 s wall-clock deadline (a timeout goes straight to the rules), else Ollama (§6)
         └─ any failure / invalid output ─► fallback.route (deterministic keyword rules)
   4. tools.invoke in a PostgreSQL READ ONLY transaction, ToolContext(customer_id from token)
         └─ same service/policy functions as the REST API (ownership re-checked)
@@ -143,7 +143,7 @@ Invented arguments are the main LLM-path risk on the smaller model. `_grounded` 
 ## 6. Optional hosted router: Groq (ADR-0037)
 
 Off by default (`LLM_PROVIDER=ollama`). With `LLM_PROVIDER=groq`, an unclear question goes to Groq first, then
-Ollama, then the keyword rules (`providers.ModelChain`). Everything above still holds; this section lists what
+Ollama, then the keyword rules (`providers.ModelChain`); a Groq timeout skips Ollama (ADR-0037 addendum, 2026-11-08). Everything above still holds; this section lists what
 changes when data leaves the stack.
 
 | Control | Enforcement | Proof (tests) |
@@ -151,7 +151,7 @@ changes when data leaves the stack.
 | Only the redacted routing question leaves | `sanitize.redact_for_provider`: UUIDs, 12-19 digit numbers, Indian mobile numbers, emails, JWTs and the signed-in customer's own name removed; system prompt and function schemas are static; no tool results, retrieved text or history (ADR-0018); Groq's `user` field not sent | `test_outgoing_question_has_no_identifiers_or_pii`, `test_groq_routes_the_unclear_question_and_nothing_identifying_leaves`, the adversarial suite's `groq` variant checks every outgoing body |
 | Same registry, same validation | One function per `REGISTRY` tool (same schemas as the Ollama grammar) + `none`, `tool_choice=required`; exactly one call; `parse_choice` + the tool's Pydantic model | `test_functions_are_exactly_the_approved_registry_plus_none`, `test_injected_tool_calls_are_rejected_and_the_chain_falls_back` |
 | Reasoning never surfaces | `include_reasoning: false` (GPT-OSS) / `reasoning_format: hidden`; only `tool_calls` is read | `test_reasoning_text_is_never_requested` |
-| Fail safe, no retry storm | Timeout 5 s, one attempt, 429 cooldown (≤ 60 s, process-wide), per-customer budget failing closed; every failure → Ollama → rules | `test_every_groq_failure_falls_back_to_ollama`, `test_any_groq_failure_falls_back_to_ollama_and_is_audited`, `test_when_both_models_fail_the_rules_still_answer`, `test_a_429_stops_groq_calls_from_this_process_for_a_while`, `test_the_per_customer_groq_budget_sends_the_rest_to_ollama` |
+| Fail safe, no retry storm | `GROQ_TIMEOUT_SECONDS` (2.5 s, bounds 0.5-10) is a wall-clock deadline: a timeout ends the chain and the rules answer; one attempt, 429 cooldown (≤ 60 s, process-wide), per-customer budget failing closed; every other failure → Ollama → rules | `test_the_groq_timeout_is_a_wall_clock_deadline`, `test_a_groq_timeout_ends_the_chain_so_the_rules_answer_at_once`, `test_a_groq_timeout_goes_straight_to_the_rules_and_is_audited_without_payloads`, `test_every_groq_failure_but_a_timeout_falls_back_to_ollama`, `test_any_groq_failure_but_a_timeout_falls_back_to_ollama_and_is_audited`, `test_when_both_models_fail_the_rules_still_answer`, `test_a_429_stops_groq_calls_from_this_process_for_a_while`, `test_the_per_customer_groq_budget_sends_the_rest_to_ollama` |
 | Fixed endpoint, secret key | `GROQ_BASE_URL` constant; `GROQ_API_KEY` is a `SecretStr`, only in the `Authorization` header; deployed environments refuse to boot with groq and no key/model | `test_request_goes_to_the_fixed_url_with_the_key_only_in_the_header`, `test_the_key_never_appears_in_errors_repr_or_logs`, `test_production_rejects_unsafe_configuration` |
 | Audit | `assistant.llm_call` per provider attempt: provider, outcome, latency only | `test_groq_routes_the_unclear_question_and_nothing_identifying_leaves` |
 

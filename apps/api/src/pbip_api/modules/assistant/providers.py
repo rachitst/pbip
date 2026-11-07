@@ -11,16 +11,18 @@ question after :func:`sanitize.redact_for_provider` (no account numbers, ids, em
 phone numbers or the customer's own name). Tool results, retrieved text, conversation history
 and identity never leave: the model does not see them on any provider.
 
-Failure is always safe: timeout, 429, 5xx, bad JSON, no or several tool calls, an unknown tool,
-the per-customer Groq budget or a cooldown after a 429 each raise :class:`LLMUnavailableError`,
-and :class:`ModelChain` moves on to Ollama and then the caller to the keyword rules. There is no
-retry: one attempt per provider per question.
+Failure is always safe: 429, 5xx, bad JSON, no or several tool calls, an unknown tool, the
+per-customer Groq budget or a cooldown after a 429 each raise :class:`LLMUnavailableError`, and
+:class:`ModelChain` moves on to Ollama and then the caller to the keyword rules. A timeout ends the
+chain at once (the routing time is spent): the keyword rules answer (ADR-0037 addendum, 2026-11-08).
+There is no retry: one attempt per provider per question.
 """
 
 import json
 import threading
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from concurrent.futures import Executor, ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
@@ -47,6 +49,12 @@ GROQ_MAX_COMPLETION_TOKENS = 512
 # Longest pause honoured from a 429 ``retry-after``; a bogus large value must not disable Groq
 # for hours.
 MAX_COOLDOWN_SECONDS = 60.0
+# Groq calls run on this pool so GROQ_TIMEOUT_SECONDS is a wall-clock deadline for the customer.
+# httpx timeouts apply per phase (connect, write, read, pool) and not to the DNS lookup, so with
+# the old 5 s setting one routed answer took 8.1 s (measured 2026-11-08). A call still waiting for
+# a worker when the deadline passes is cancelled and never sent; one already sent finishes in the
+# background within the httpx timeouts, and its answer is discarded.
+_GROQ_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="groq")
 
 
 ToolChoice = Literal["required", "auto"]
@@ -143,6 +151,7 @@ class GroqChatModel:
         budget: Callable[[], bool] = lambda: True,
         cooldown: Cooldown | None = None,
         transport: httpx.BaseTransport | None = None,
+        executor: Executor = _GROQ_POOL,
     ) -> None:
         self._api_key = api_key
         self._model = model
@@ -152,6 +161,7 @@ class GroqChatModel:
         self._budget = budget
         self._cooldown = cooldown or Cooldown()
         self._transport = transport
+        self._executor = executor
         self._tool_choice: ToolChoice = tool_choice
 
     def __repr__(self) -> str:  # never the key
@@ -184,20 +194,26 @@ class GroqChatModel:
             raise LLMUnavailableError("cooling down after 429", "cooldown")
         if not self._budget():
             raise LLMUnavailableError("per-customer Groq budget used", "budget")
+        future = self._executor.submit(self._post, self.request_body(system, user))
         try:
-            with httpx.Client(timeout=self._timeout, transport=self._transport) as client:
-                response = client.post(
-                    GROQ_CHAT_URL,
-                    json=self.request_body(system, user),
-                    headers={"Authorization": f"Bearer {self._api_key}"},
-                )
-                if response.status_code == 429:
-                    self._cooldown.start(_retry_after(response))
-                response.raise_for_status()
-                payload = response.json()
+            payload = future.result(timeout=self._timeout)
+        except TimeoutError as exc:  # the wall-clock deadline, whatever phase was slow
+            future.cancel()  # still queued: never sent
+            raise LLMUnavailableError("routing deadline passed", "timeout") from exc
         except (httpx.HTTPError, ValueError) as exc:
             raise unavailable_from_http(exc) from exc
         return _choice_from_tool_call(payload, no_call_means_none=self._tool_choice == "auto")
+
+    def _post(self, body: dict[str, object]) -> Any:
+        """One POST on a pool thread. Any: arbitrary JSON, type-checked by the caller."""
+        with httpx.Client(timeout=self._timeout, transport=self._transport) as client:
+            response = client.post(
+                GROQ_CHAT_URL, json=body, headers={"Authorization": f"Bearer {self._api_key}"}
+            )
+            if response.status_code == 429:
+                self._cooldown.start(_retry_after(response))
+            response.raise_for_status()
+            return response.json()
 
 
 def _choice_from_tool_call(payload: Any, *, no_call_means_none: bool = False) -> str:
@@ -238,8 +254,11 @@ class ModelChain:
     """Try each provider in order (Groq, then Ollama); the first VALID tool choice wins.
 
     Validation happens here, per provider, so an injected or out-of-registry choice from one
-    provider falls through to the next instead of ending the chain. ``attempts`` holds the last
-    question's calls; one chain serves one request.
+    provider falls through to the next instead of ending the chain. A timeout does end it: the
+    customer has already waited the routing deadline, and the next provider would add its own
+    (Ollama's 4 s, which the reference laptop's CPU model exceeds on every question, ADR-0037), so
+    the keyword rules answer at once. ``attempts`` holds the last question's calls; one chain
+    serves one request.
     """
 
     def __init__(
@@ -262,6 +281,8 @@ class ModelChain:
                 parse_choice(text)
             except LLMUnavailableError as exc:
                 self._record(model.provider, exc.outcome, started)
+                if exc.outcome == "timeout":
+                    raise LLMUnavailableError("routing deadline passed", "timeout") from exc
                 continue
             except InvalidChoiceError:
                 self._record(model.provider, "invalid", started)
