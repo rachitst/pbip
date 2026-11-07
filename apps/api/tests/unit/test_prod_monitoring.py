@@ -87,11 +87,24 @@ def test_images_are_pinned_by_digest_to_the_local_profile_versions() -> None:
             assert "monitoring" in local[name]["profiles"], name
 
 
+# The passwords and the variables that hold them on the host; none may be interpolated into the file.
+_SECRETS = {
+    "grafana_admin_password": (
+        "grafana",
+        "GF_SECURITY_ADMIN_PASSWORD__FILE",
+        "GRAFANA_ADMIN_PASSWORD",
+    ),
+    "postgres_monitor_password": (
+        "postgres-exporter",
+        "DATA_SOURCE_PASS_FILE",
+        "POSTGRES_MONITOR_PASSWORD",
+    ),
+}
+
+
 def test_no_default_credentials() -> None:
     services = _services(OVERLAY)
     grafana = services["grafana"]["environment"]
-    # Required from the host .env: compose refuses to start without it, and there is no fallback value.
-    assert grafana["GF_SECURITY_ADMIN_PASSWORD"].startswith("${GRAFANA_ADMIN_PASSWORD:?")
     assert "GF_SECURITY_ADMIN_USER" not in grafana or grafana["GF_SECURITY_ADMIN_USER"] != "admin"
     for flag in (
         "GF_USERS_ALLOW_SIGN_UP",
@@ -100,17 +113,27 @@ def test_no_default_credentials() -> None:
     ):
         assert grafana[flag] == "false", flag
     exporter = services["postgres-exporter"]["environment"]
-    assert exporter["DATA_SOURCE_PASS"].startswith("${POSTGRES_MONITOR_PASSWORD:?")
     assert _env_name(exporter["DATA_SOURCE_USER"]) == "POSTGRES_MONITOR_USER"
     assert "sslmode=verify-full" in exporter["DATA_SOURCE_URI"]
+    # Neither password has a fallback anywhere: each comes only from a file deploy.sh writes from .env
+    # after refusing a missing or weak value, and compose refuses to start without the file.
+    secrets = _overlay()["secrets"]
+    assert secrets == {name: {"file": f"./secrets/{name}"} for name in _SECRETS}
+
+
+def test_passwords_are_never_in_the_compose_file_or_a_container_environment() -> None:
+    """``docker inspect`` shows a container's environment: it carries only the path of a mounted secret."""
+    services = _services(OVERLAY)
     text = OVERLAY.read_text(encoding="utf-8")
-    assert "POSTGRES_PASSWORD" not in text, (
-        "the exporter must not hold the application owner's password"
-    )
+    for name, (service, variable, host_variable) in _SECRETS.items():
+        assert services[service]["environment"][variable] == f"/run/secrets/{name}"
+        assert services[service]["secrets"] == [name]
+        assert host_variable not in text, f"{host_variable} is interpolated into the compose file"
+    assert "POSTGRES_PASSWORD" not in text, "the exporter must not hold the owner's password"
     for name, service in services.items():
         for key, value in (service.get("environment") or {}).items():
             if re.search(r"PASS|SECRET|TOKEN|KEY", key):
-                assert ":?" in str(value), f"{name}.{key} has a default or literal value"
+                assert str(value).startswith("/run/secrets/"), f"{name}.{key} is not a secret file"
 
 
 def test_nothing_is_sent_outside_the_host_by_grafana() -> None:

@@ -1,5 +1,9 @@
 # Monitoring for the production stack on the staging host (ADR-0059, runbook section 1.5).
 #
+# Passwords never appear in this file or in a container's environment (`docker inspect`): `deploy.sh
+# monitoring` writes them from the host .env to ./secrets (directory mode 0700) and they are mounted as compose
+# secrets at /run/secrets, read by Grafana (GF_..._FILE) and the PostgreSQL exporter (DATA_SOURCE_PASS_FILE).
+#
 # A separate compose project that joins the production network `pbip-prod_default` as an external network,
 # so a release (`deploy.sh deploy`, which runs `up --remove-orphans` on pbip-prod) never removes it and a
 # monitoring failure can never fail or roll back a release. Start it with `bash deploy.sh monitoring`, which
@@ -40,9 +44,10 @@ services:
     <<: *hardening
     image: grafana/grafana:12.1.0@sha256:6ac590e7cabc2fbe8d7b8fc1ce9c9f0582177b334e0df9c927ebd9670469440f
     environment:
-      # Generated on the host; there is no default. deploy.sh refuses a short or placeholder value. Grafana
-      # reads it only on its first start; rotation is `grafana cli admin reset-admin-password` (runbook 1.5).
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env (runbook 1.5)}
+      # Generated on the host; there is no default (deploy.sh refuses a missing, short or placeholder value).
+      # Grafana's entrypoint reads the file; Grafana uses it only on its first start, rotation is
+      # `grafana cli admin reset-admin-password` (runbook 1.5).
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_SECURITY_DISABLE_GRAVATAR: "true"
@@ -54,6 +59,7 @@ services:
       GF_NEWS_NEWS_FEED_ENABLED: "false"
       GF_PLUGINS_PREINSTALL_DISABLED: "true"
       GF_SNAPSHOTS_EXTERNAL_ENABLED: "false"
+    secrets: [grafana_admin_password]
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
@@ -111,7 +117,8 @@ services:
     environment:
       DATA_SOURCE_URI: db:5432/${POSTGRES_DB:?set POSTGRES_DB in .env}?sslmode=verify-full&sslrootcert=/etc/pbip-ca/ca.crt
       DATA_SOURCE_USER: ${POSTGRES_MONITOR_USER:-pbip_monitor}
-      DATA_SOURCE_PASS: ${POSTGRES_MONITOR_PASSWORD:?set POSTGRES_MONITOR_PASSWORD in .env (runbook 1.5)}
+      DATA_SOURCE_PASS_FILE: /run/secrets/postgres_monitor_password
+    secrets: [postgres_monitor_password]
     volumes: ["./certs/db/server.crt:/etc/pbip-ca/ca.crt:ro"]
     networks: [prod]
     deploy: { resources: { limits: { cpus: "0.25", memory: 128m } } }
@@ -166,6 +173,13 @@ networks:
   monitoring: {}
   docker-api:
     internal: true
+
+# Written by `deploy.sh monitoring` from the host .env; compose refuses to start if either file is missing.
+secrets:
+  grafana_admin_password:
+    file: ./secrets/grafana_admin_password
+  postgres_monitor_password:
+    file: ./secrets/postgres_monitor_password
 
 volumes:
   prometheus:

@@ -53,8 +53,8 @@ runs only when the repository variable `DEPLOY_ENABLED` is `true` and uses the s
 | `IMAGE_PREFIX`, `IMAGE_TAG` | all app images | Set by the deploy job per release (`ghcr.io/<owner>/pbip`, `vX.Y.Z`); set them yourself for a manual deploy or rollback |
 | `DAILY_TRANSFER_LIMIT_MINOR` | api | Optional override of the per-customer daily transfer limit (default `50000000` = ₹5,00,000.00). Emergency lever in §5.1 |
 | `JWT_ACCESS_TTL_MINUTES` | api | Optional; default 15. Bounds how long a stolen access token stays valid (§5.2) |
-| `GRAFANA_ADMIN_PASSWORD` | grafana (monitoring stack, §1.5) | Generated on the host; no default. `deploy.sh monitoring` refuses fewer than 20 URL-safe characters, a placeholder or the local example value. Read only on Grafana's first start (rotation in §1.5) |
-| `POSTGRES_MONITOR_USER`, `POSTGRES_MONITOR_PASSWORD` | postgres-exporter, deploy.sh | Read-only `pg_monitor` login for the exporter (default user `pbip_monitor`, never `POSTGRES_USER`); password generated like the one above. `deploy.sh monitoring` creates or updates the role |
+| `GRAFANA_ADMIN_PASSWORD` | grafana (monitoring stack, §1.5) | Generated on the host; no default. `deploy.sh monitoring` refuses fewer than 20 URL-safe characters, a placeholder or the local example value, then writes it to `secrets/grafana_admin_password` (mounted as a file, never an environment variable). Read only on Grafana's first start (rotation in §1.5) |
+| `POSTGRES_MONITOR_USER`, `POSTGRES_MONITOR_PASSWORD` | postgres-exporter, deploy.sh | Read-only `pg_monitor` login for the exporter (default user `pbip_monitor`, never `POSTGRES_USER`); password generated like the one above. `deploy.sh monitoring` creates or updates the role and writes the password to `secrets/postgres_monitor_password` |
 | `MONITORING_PROBE_CA_FILE` | blackbox-exporter | Optional: a private CA for the `web-ready` probe (deploy guide option B); default is the host's CA bundle |
 
 ### 1.3 Health, smoke test, logs, metrics
@@ -178,7 +178,8 @@ can take up to a few export timeouts longer while it flushes the last batches to
 (`pbip-prod-monitoring`) attached to the production network, so a release never removes it and it can never fail a
 release. Differences from the local profile: Grafana and Prometheus bind to `127.0.0.1` on the VM only (reach them
 through an SSH tunnel); the Grafana admin password and the exporter's read-only `pbip_monitor` role come from the
-host `.env` (§1.2) with no defaults; the `web-ready` probe verifies the public certificate for `PUBLIC_HOSTNAME`;
+host `.env` (§1.2) with no defaults, and reach the containers as files in `~/pbip/secrets/` (mode 0700, written by
+`deploy.sh monitoring`), never as environment variables; the `web-ready` probe verifies the public certificate for `PUBLIC_HOSTNAME`;
 Alloy reads containers through a read-only Docker API proxy instead of the socket; Loki keeps 7 days, Prometheus 35
 days and at most 4 GB; every container has a memory and CPU limit (3 GiB in total). Commands, from `~/pbip` on the
 VM (full procedure: deploy guide section 16):
@@ -192,11 +193,11 @@ laptop$ ssh -N -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 pbip@<vm-ip>   # th
 vm$ docker compose -f docker-compose.prod.monitoring.yml kill -s SIGHUP prometheus   # after a release: reload rules
 ```
 
-Rotate the Grafana admin password (the environment value is read only on Grafana's first start): generate a new
+Rotate the Grafana admin password (the secret file is read only on Grafana's first start): generate a new
 value, put it in `.env`, then
 `vm$ sed -n 's/^GRAFANA_ADMIN_PASSWORD=//p' .env | docker compose -f docker-compose.prod.monitoring.yml exec -T grafana grafana cli admin reset-admin-password --password-from-stdin`.
 Rotate `POSTGRES_MONITOR_PASSWORD` by changing it in `.env` and running `bash deploy.sh monitoring` again (it
-updates the role and recreates the exporter).
+updates the role, rewrites `secrets/postgres_monitor_password` and restarts the exporter).
 
 **Error tracking.** Every unhandled exception produces one `unhandled_exception` log event with `request_id`,
 `route` (template, never the raw path), `method`, `error_type` and `raised_at` (`file.py:line:function`), plus the

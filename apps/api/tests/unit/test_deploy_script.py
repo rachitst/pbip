@@ -271,6 +271,43 @@ def test_monitoring_creates_the_read_only_role_then_starts_its_own_project(host:
 
 
 @needs_bash
+def test_monitoring_writes_the_compose_secret_files_with_restricted_access(host: Path) -> None:
+    """The passwords reach the containers as files, never as environment variables: secrets/ is 0700 (only
+    the deploy user on the host); the files are 0644 for the containers' own users behind the bind mount."""
+    (host / ".env").write_text(_HOST_ENV, encoding="utf-8")
+
+    assert _run(host, "monitoring").returncode == 0
+
+    files = {
+        "grafana_admin_password": _GRAFANA_PW,
+        "postgres_monitor_password": _MONITOR_PW,
+    }
+    for name, secret in files.items():
+        assert (host / "secrets" / name).read_bytes() == secret.encode()  # no trailing newline
+    if os.name == "posix":  # NTFS has no POSIX permission bits (#329)
+        assert stat.S_IMODE((host / "secrets").stat().st_mode) == 0o700
+        for name in files:
+            assert stat.S_IMODE((host / "secrets" / name).stat().st_mode) == 0o644
+
+
+@needs_bash
+def test_a_changed_exporter_password_restarts_the_exporter_only_then(host: Path) -> None:
+    (host / ".env").write_text(_HOST_ENV, encoding="utf-8")
+    assert _run(host, "monitoring").returncode == 0
+    assert _run(host, "monitoring").returncode == 0
+    assert not any("restart" in line for line in _log(host))  # first start and unchanged value
+
+    rotated = secrets.token_urlsafe(18)
+    (host / ".env").write_text(_HOST_ENV.replace(_MONITOR_PW, rotated), encoding="utf-8")
+    assert _run(host, "monitoring").returncode == 0
+
+    assert (host / "secrets" / "postgres_monitor_password").read_text() == rotated
+    log = _log(host)
+    restart = "compose -f docker-compose.prod.monitoring.yml restart postgres-exporter tag= prefix="
+    assert log.count(restart) == 1 and log.index(restart) == len(log) - 2  # after up, before ps
+
+
+@needs_bash
 @pytest.mark.parametrize(
     ("name", "value"),
     [
@@ -299,6 +336,7 @@ def test_monitoring_refuses_default_or_placeholder_secrets_without_touching_dock
     assert result.returncode == 4
     assert f"{name} in .env must be a generated secret" in result.stderr
     assert _log(host) == []
+    assert not (host / "secrets").exists()
 
 
 @needs_bash

@@ -451,8 +451,9 @@ pinned by digest and has a linux/arm64 variant.
 
 **First start.** The production stack must be running (it owns the network). Generate two secrets on the VM and add
 them to `.env`, then start it; `deploy.sh monitoring` refuses a missing, short, placeholder or default secret,
-creates the read-only PostgreSQL role `pbip_monitor` (`pg_monitor`; never the application owner), then starts the
-project and waits for it:
+creates the read-only PostgreSQL role `pbip_monitor` (`pg_monitor`; never the application owner), writes the two
+passwords to `~/pbip/secrets/` (directory mode 0700; mounted into Grafana and the exporter as files, never as
+environment variables), then starts the project and waits for it:
 
 ```bash
 vm$ cd ~/pbip

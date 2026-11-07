@@ -36,13 +36,18 @@ scrape configuration must not be forked; a production release must keep working 
 3. **Security.**
    * Only Grafana (`127.0.0.1:3000`) and Prometheus (`127.0.0.1:9090`) publish ports, on loopback; operators
      use an SSH tunnel over the existing key-only, IP-restricted port 22. The security list is unchanged.
-   * `GRAFANA_ADMIN_PASSWORD` has no default: compose refuses to start without it (`:?`) and `deploy.sh
-     monitoring` refuses anything shorter than 20 URL-safe characters, a `<placeholder>` or the local example
-     value. Sign-up, anonymous access, external snapshots, usage reporting, update checks, the news feed and
+   * `GRAFANA_ADMIN_PASSWORD` and `POSTGRES_MONITOR_PASSWORD` have no default: `deploy.sh monitoring` refuses a
+     missing value, anything shorter than 20 URL-safe characters, a `<placeholder>` or the local example value.
+     Neither password is in the compose file or in a container's environment (`docker inspect`): `deploy.sh`
+     writes each from the host `.env` to `~/pbip/secrets/` (directory 0700, so only the deploy user on the host;
+     files 0644 so the containers' own users, Grafana uid 472 and the exporter's nobody, can read them through
+     the bind mount), and compose mounts them as file secrets at `/run/secrets/`. Grafana's entrypoint reads
+     `GF_SECURITY_ADMIN_PASSWORD__FILE`, postgres_exporter `DATA_SOURCE_PASS_FILE`; compose refuses to start
+     when a file is missing. A changed exporter password restarts the exporter. Sign-up, anonymous access, external snapshots, usage reporting, update checks, the news feed and
      plugin pre-installation are off, so Grafana sends nothing off the host.
    * The PostgreSQL exporter logs in as `pbip_monitor`, a member of `pg_monitor` with `CONNECTION LIMIT 3`,
      not the application owner; `deploy.sh monitoring` creates it idempotently over the database's local
-     socket, password on stdin only. TLS `verify-full` against the database certificate, like the API.
+     socket, password on psql's stdin only. TLS `verify-full` against the database certificate, like the API.
    * Alloy does not mount the Docker socket (socket access is root on the host). It reads containers through
      `tecnativa/docker-socket-proxy`, which allows GET on `/containers`, `/networks`, `/_ping` and `/version`
      only and refuses every write; the proxy is on an `internal` network shared with Alloy alone, so neither

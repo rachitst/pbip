@@ -93,6 +93,26 @@ GRANT pg_monitor TO $role;
 SQL
 }
 
+# The compose secrets of docker-compose.prod.monitoring.yml: ./secrets/<file> from the .env value, without a
+# newline. secrets/ is 0700, so on the host only this user (and root) can read them; the files themselves are 0644
+# because they are bind-mounted into containers that run as other users (Grafana uid 472, the exporter nobody),
+# and a bind mount does not pass through the host directory. Written in place, so a running container sees the
+# new value; prints "changed" when it replaces a different earlier value.
+write_secret_file() { # <env name> <file>
+  local value old=""
+  value="$(env_value "$1")"
+  mkdir -p secrets
+  chmod 0700 secrets
+  if [ -f "secrets/$2" ]; then
+    old="$(cat "secrets/$2")"
+  fi
+  (umask 077 && printf '%s' "$value" > "secrets/$2")
+  chmod 0644 "secrets/$2"
+  if [ -n "$old" ] && [ "$old" != "$value" ]; then
+    echo changed
+  fi
+}
+
 start_monitoring() {
   if [ ! -f .env ]; then
     echo "refusing to start monitoring: no .env next to deploy.sh" >&2
@@ -101,9 +121,16 @@ start_monitoring() {
   require_generated_secret GRAFANA_ADMIN_PASSWORD
   require_generated_secret POSTGRES_MONITOR_PASSWORD
   ensure_monitor_role
+  local exporter_password_changed
+  write_secret_file GRAFANA_ADMIN_PASSWORD grafana_admin_password > /dev/null
+  exporter_password_changed="$(write_secret_file POSTGRES_MONITOR_PASSWORD postgres_monitor_password)"
   echo "==> Starting the monitoring stack (project pbip-prod-monitoring; Grafana and Prometheus on 127.0.0.1 only)"
   "${MONITORING[@]}" pull --quiet
   "${MONITORING[@]}" up -d --remove-orphans --wait --wait-timeout "$WAIT_TIMEOUT"
+  if [ -n "$exporter_password_changed" ]; then
+    # The exporter reads its password file once, at start.
+    "${MONITORING[@]}" restart postgres-exporter
+  fi
   "${MONITORING[@]}" ps
 }
 
