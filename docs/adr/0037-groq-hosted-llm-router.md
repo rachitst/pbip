@@ -176,7 +176,7 @@ earlier run the same morning under heavier load (load average 4-7.5) timed out o
   default `LLM_PROVIDER=ollama`: the single Ollama attempt is now audited as `assistant.llm_call` too.
 
 ## Addendum (2026-11-08): assistant latency on the Groq path
-- Status: Proposed for the lead's review (meets the owner's six standing-approval conditions: no security, auth,
+- Status: Accepted (under owner's standing approval, 2026-11-08; it meets the six conditions: no security, auth,
   RBAC/BOLA or audit weakening; no money movement; no migration; no new external service and less data sent out;
   measured numbers only; within FR scope)
 - Trigger: the owner's latency review of 8 Nov (Groq path first token p50 746 ms, p95 3,094 ms, max 8,093 ms through
