@@ -247,10 +247,13 @@ packages; keep the file at mode 600 and revoke the token if the host is ever reb
 Copy the same files the deploy job copies, plus the probe script (section 17):
 
 ```bash
-laptop$ ssh -i ~/.ssh/pbip-oci-admin pbip@<vm-ip> 'mkdir -p ~/pbip'
+laptop$ ssh -i ~/.ssh/pbip-oci-admin pbip@<vm-ip> 'mkdir -p ~/pbip/monitoring'
 laptop$ scp -i ~/.ssh/pbip-oci-admin infra/deploy/docker-compose.prod.yml infra/deploy/deploy.sh \
           infra/deploy/certbot-deploy-hook.sh infra/postgres/tls-entrypoint.sh infra/deploy/uptime-probe.sh \
-          scripts/uptime_report.py infra/deploy/.env.prod.example pbip@<vm-ip>:pbip/
+          infra/deploy/docker-compose.prod.monitoring.yml scripts/uptime_report.py infra/deploy/.env.prod.example \
+          pbip@<vm-ip>:pbip/
+laptop$ tar -C infra -cf - prometheus grafana loki alloy | \
+          ssh -i ~/.ssh/pbip-oci-admin pbip@<vm-ip> 'tar -xf - -C ~/pbip/monitoring'   # section 16
 ```
 
 Create the host `.env` from the template **on the VM** (the secrets are generated there and never leave it except into
@@ -489,10 +492,70 @@ local space, not as the off-host copy. Run the restore drill (runbook section 4.
 
 ## 16. Monitoring on staging
 
-The Prometheus, Grafana, Loki and blackbox stack (runbook section 1.5) is the **`monitoring` profile of the local
-`docker-compose.yml`**; the production compose file has no monitoring services, and that profile's scrape targets are
-the local stack's containers. Running it against `pbip-prod` needs an engineering change (an overlay that joins the
-production network and a production Prometheus config), which is not part of this guide. What staging has:
+Prometheus, Grafana, Loki with Alloy, the blackbox exporter and the Celery, Redis and PostgreSQL exporters (runbook
+section 1.5) run on the VM from `infra/deploy/docker-compose.prod.monitoring.yml`: their own compose project,
+`pbip-prod-monitoring`, attached to the production network `pbip-prod_default` (ADR-0059). A release never stops
+it and it can never fail a release. It scrapes both API replicas, the worker (task events and heartbeats), PostgreSQL
+and Redis by their production service names, and probes readiness through nginx's TLS for `PUBLIC_HOSTNAME`
+(certificate chain and name verified). Configuration is the repository's: the deploy job copies
+`infra/{prometheus,grafana,loki,alloy}` to `~/pbip/monitoring/` on every release (by hand: section 11).
+
+**Nothing is published to the internet.** Grafana listens on `127.0.0.1:3000` and Prometheus on `127.0.0.1:9090`
+of the VM only; the security list does not change. **Resources:** at most 3 GiB of RAM and 3 CPUs in total (limits
+on every container; about 0.4 GiB idle). Prometheus keeps 35 days and at most 4 GB, Loki 7 days. Every image is
+pinned by digest and has a linux/arm64 variant.
+
+**First start.** The production stack must be running (it owns the network). Generate two secrets on the VM and add
+them to `.env`, then start it; `deploy.sh monitoring` refuses a missing, short, placeholder or default secret,
+creates the read-only PostgreSQL role `pbip_monitor` (`pg_monitor`; never the application owner), writes the two
+passwords to `~/pbip/secrets/` (directory mode 0700; mounted into Grafana and the exporter as files, never as
+environment variables), then starts the project and waits for it:
+
+```bash
+vm$ cd ~/pbip
+vm$ python3 -c "import secrets; print(secrets.token_urlsafe(18))"     # GRAFANA_ADMIN_PASSWORD
+vm$ python3 -c "import secrets; print(secrets.token_urlsafe(18))"     # POSTGRES_MONITOR_PASSWORD
+vm$ nano .env        # add GRAFANA_ADMIN_PASSWORD=... and POSTGRES_MONITOR_PASSWORD=...; keep it mode 600
+vm$ bash deploy.sh monitoring
+vm$ docker compose -f docker-compose.prod.monitoring.yml ps
+```
+
+Store the Grafana password in your password manager under "PBIP staging". With option B (section 9.2) also set
+`MONITORING_PROBE_CA_FILE=/home/pbip/pbip/certs/staging-ca.crt`; with option A the host's CA bundle is used. Until
+certbot has replaced the placeholder certificate, the `web-ready` probe fails, as it should.
+
+**Check that every target is up** (on the VM). With the default two API replicas expect ten lines, all `up`:
+prometheus, one `pbip-api` line per replica, `pbip-api-shared`, redis, postgres, celery, and the three probes
+(`http://api:8000/api/health/ready`, `.../live` and `https://web:8443/api/health/ready`):
+
+```bash
+vm$ curl -s http://127.0.0.1:9090/api/v1/targets | python3 -c 'import json, sys
+for t in json.load(sys.stdin)["data"]["activeTargets"]:
+    print(t["labels"]["job"], t["labels"]["instance"], t["health"], t["lastError"])'
+```
+
+A target that stays `down` names its error in the last column (Grafana's *PBIP - Availability* dashboard and the
+`ScrapeTargetDown` alert show the same).
+
+**Open Grafana and Prometheus from the laptop** through an SSH tunnel (port 22 is open only to your IP, section 3):
+
+```bash
+laptop$ ssh -i ~/.ssh/pbip-oci-admin -N -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 pbip@<vm-ip>
+```
+
+Then browse to http://localhost:3000 (user `admin`, the generated password; dashboards in folder "PBIP") and
+http://localhost:9090/targets or /alerts. Close the tunnel with Ctrl-C.
+
+**After a release** the new rules and dashboards are already in `~/pbip/monitoring`: Grafana reloads dashboards by
+itself; reload Prometheus with `vm$ docker compose -f docker-compose.prod.monitoring.yml kill -s SIGHUP prometheus`.
+After a change to `docker-compose.prod.monitoring.yml` itself, run `bash deploy.sh monitoring` again.
+
+**Stop it** with `vm$ docker compose -f docker-compose.prod.monitoring.yml stop` (data stays in its volumes). Stop it
+before `docker compose -f docker-compose.prod.yml down`, which cannot remove the production network while
+monitoring is attached; after the production stack is recreated, run `bash deploy.sh monitoring` again. Stopping
+monitoring pauses the availability figure (runbook 1.5); the probe of section 17 keeps running.
+
+Without the monitoring stack, staging still has:
 
 * container logs: `vm$ docker compose -f ~/pbip/docker-compose.prod.yml logs --since 1h api` (JSON, redacted);
 * the availability probe and report below (TASK-103);
