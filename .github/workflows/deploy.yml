@@ -178,12 +178,15 @@ jobs:
             echo "  BatchMode yes"
           } > ~/.ssh/config
           chmod 600 ~/.ssh/config
-      - name: Copy the compose file, deploy script and TLS helpers
+      - name: Copy the compose files, deploy script, TLS helpers and monitoring configuration
         if: env.DRY_RUN != 'true'
+        # The monitoring stack (ADR-0059) mounts ~/pbip/monitoring, a copy of these infra/ folders; it is
+        # copied on every release so a running stack picks up the release's rules and dashboards.
         run: |
-          ssh staging 'mkdir -p ~/pbip'
-          scp infra/deploy/docker-compose.prod.yml infra/deploy/deploy.sh infra/deploy/certbot-deploy-hook.sh \
-            infra/postgres/tls-entrypoint.sh staging:~/pbip/
+          ssh staging 'mkdir -p ~/pbip/monitoring'
+          scp infra/deploy/docker-compose.prod.yml infra/deploy/docker-compose.prod.monitoring.yml \
+            infra/deploy/deploy.sh infra/deploy/certbot-deploy-hook.sh infra/postgres/tls-entrypoint.sh staging:~/pbip/
+          tar -C infra -cf - prometheus grafana loki alloy | ssh staging 'tar -xf - -C ~/pbip/monitoring'
       - name: Deploy (pull, migrate, health-gated start)
         if: env.DRY_RUN != 'true'
         # The runner's values are meant to reach the host: quote them with %q into one remote command.

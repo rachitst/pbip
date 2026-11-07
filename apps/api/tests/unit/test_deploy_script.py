@@ -6,6 +6,7 @@ tags, and that a failed start leaves the previous release recorded and recoverab
 """
 
 import os
+import secrets
 import shutil
 import stat
 import subprocess
@@ -67,6 +68,10 @@ needs_bash = pytest.mark.skipif(
 _FAKE_DOCKER = """#!/usr/bin/env bash
 # Records "<args> tag=$IMAGE_TAG" and fails `up` when FAKE_DOCKER_FAIL_UP=1.
 echo "$* tag=${IMAGE_TAG:-} prefix=${IMAGE_PREFIX:-}" >> "$FAKE_DOCKER_LOG"
+# `compose exec -T` gets its input on stdin (the monitoring role SQL): keep it for the assertions.
+if [[ "$*" == *" exec -T "* ]]; then
+  cat >> "$FAKE_DOCKER_LOG.stdin"
+fi
 if [ "${FAKE_DOCKER_FAIL_UP:-0}" = "1" ] && [[ "$*" == *" up "* ]]; then
   echo "simulated health-check timeout" >&2
   exit 1
@@ -228,6 +233,127 @@ def test_deploy_without_a_host_env_uses_a_localhost_placeholder(host: Path) -> N
     result = _run(host, "deploy", PREFIX, "v0.1.0")
     assert result.returncode == 0, result.stderr
     assert "placeholder web certificate for localhost" in result.stdout
+
+
+# --------------------------------------------------------------------------- monitoring (ADR-0059)
+
+# Generated per run, the way the runbook generates them on the host.
+_GRAFANA_PW = secrets.token_urlsafe(18)
+_MONITOR_PW = secrets.token_urlsafe(18)
+_HOST_ENV = (
+    "POSTGRES_USER=pbip\nPOSTGRES_DB=pbip\nPUBLIC_HOSTNAME=staging.example.test\n"
+    f"GRAFANA_ADMIN_PASSWORD={_GRAFANA_PW}\nPOSTGRES_MONITOR_PASSWORD={_MONITOR_PW}\n"
+)
+
+
+@needs_bash
+def test_monitoring_creates_the_read_only_role_then_starts_its_own_project(host: Path) -> None:
+    (host / ".env").write_text(_HOST_ENV, encoding="utf-8")
+
+    result = _run(host, "monitoring")
+
+    assert result.returncode == 0, result.stderr
+    assert _log(host) == [
+        "compose -f docker-compose.prod.yml exec -T db psql -v ON_ERROR_STOP=1 -q -U pbip -d pbip "
+        "tag= prefix=",
+        "compose -f docker-compose.prod.monitoring.yml pull --quiet tag= prefix=",
+        "compose -f docker-compose.prod.monitoring.yml up -d --remove-orphans --wait --wait-timeout 7 "
+        "tag= prefix=",
+        "compose -f docker-compose.prod.monitoring.yml ps tag= prefix=",
+    ]
+    sql = (host / "docker.log.stdin").read_text(encoding="utf-8")
+    assert "WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'pbip_monitor')\\gexec" in sql
+    assert "ALTER ROLE pbip_monitor WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE" in sql
+    assert f"PASSWORD '{_MONITOR_PW}'" in sql and "GRANT pg_monitor TO pbip_monitor;" in sql
+    # Secrets travel on stdin only: never in a command line (ps, shell history) or the script's output.
+    for secret in (_GRAFANA_PW, _MONITOR_PW):
+        assert secret not in "\n".join(_log(host)) and secret not in result.stdout + result.stderr
+
+
+@needs_bash
+def test_monitoring_writes_the_compose_secret_files_with_restricted_access(host: Path) -> None:
+    """The passwords reach the containers as files, never as environment variables: secrets/ is 0700 (only
+    the deploy user on the host); the files are 0644 for the containers' own users behind the bind mount."""
+    (host / ".env").write_text(_HOST_ENV, encoding="utf-8")
+
+    assert _run(host, "monitoring").returncode == 0
+
+    files = {
+        "grafana_admin_password": _GRAFANA_PW,
+        "postgres_monitor_password": _MONITOR_PW,
+    }
+    for name, secret in files.items():
+        assert (host / "secrets" / name).read_bytes() == secret.encode()  # no trailing newline
+    if os.name == "posix":  # NTFS has no POSIX permission bits (#329)
+        assert stat.S_IMODE((host / "secrets").stat().st_mode) == 0o700
+        for name in files:
+            assert stat.S_IMODE((host / "secrets" / name).stat().st_mode) == 0o644
+
+
+@needs_bash
+def test_a_changed_exporter_password_restarts_the_exporter_only_then(host: Path) -> None:
+    (host / ".env").write_text(_HOST_ENV, encoding="utf-8")
+    assert _run(host, "monitoring").returncode == 0
+    assert _run(host, "monitoring").returncode == 0
+    assert not any("restart" in line for line in _log(host))  # first start and unchanged value
+
+    rotated = secrets.token_urlsafe(18)
+    (host / ".env").write_text(_HOST_ENV.replace(_MONITOR_PW, rotated), encoding="utf-8")
+    assert _run(host, "monitoring").returncode == 0
+
+    assert (host / "secrets" / "postgres_monitor_password").read_text() == rotated
+    log = _log(host)
+    restart = "compose -f docker-compose.prod.monitoring.yml restart postgres-exporter tag= prefix="
+    assert log.count(restart) == 1 and log.index(restart) == len(log) - 2  # after up, before ps
+
+
+@needs_bash
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("GRAFANA_ADMIN_PASSWORD", ""),
+        ("GRAFANA_ADMIN_PASSWORD", "admin"),
+        ("GRAFANA_ADMIN_PASSWORD", "admin_local_password"),  # the local .env.example value
+        (
+            "GRAFANA_ADMIN_PASSWORD",
+            '<python3 -c "import secrets; print(secrets.token_urlsafe(18))">',
+        ),
+        ("POSTGRES_MONITOR_PASSWORD", "short-but-random"),
+        ("POSTGRES_MONITOR_PASSWORD", "x' ; DROP ROLE pbip; --aaaaaaaaaa"),
+    ],
+)
+def test_monitoring_refuses_default_or_placeholder_secrets_without_touching_docker(
+    host: Path, name: str, value: str
+) -> None:
+    env = "".join(
+        f"{name}={value}\n" if line.startswith(f"{name}=") else f"{line}\n"
+        for line in _HOST_ENV.splitlines()
+    )
+    (host / ".env").write_text(env, encoding="utf-8")
+
+    result = _run(host, "monitoring")
+
+    assert result.returncode == 4
+    assert f"{name} in .env must be a generated secret" in result.stderr
+    assert _log(host) == []
+    assert not (host / "secrets").exists()
+
+
+@needs_bash
+def test_monitoring_refuses_to_reuse_the_application_owner_or_an_odd_role_name(host: Path) -> None:
+    for role in ("pbip", "Monitor", "x;drop"):
+        (host / ".env").write_text(_HOST_ENV + f"POSTGRES_MONITOR_USER={role}\n", encoding="utf-8")
+        result = _run(host, "monitoring")
+        assert result.returncode == 4, role
+        assert "POSTGRES_MONITOR_USER must be" in result.stderr
+    assert _log(host) == []
+
+
+@needs_bash
+def test_monitoring_without_a_host_env_refuses(host: Path) -> None:
+    result = _run(host, "monitoring")
+    assert result.returncode == 4 and "no .env" in result.stderr
+    assert _log(host) == []
 
 
 _FAKE_OPENSSL = """#!/usr/bin/env bash
