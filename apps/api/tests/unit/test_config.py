@@ -94,6 +94,16 @@ def test_groq_is_opt_in_and_its_key_never_shows_in_settings_or_errors() -> None:
     assert key not in str(caught.value)
 
 
+def test_the_groq_routing_deadline_defaults_to_2_5_s_within_bounds() -> None:
+    """ADR-0037 addendum (2026-11-08): a deadline, not a hope; nonsense values refuse to boot."""
+    assert Settings.model_fields["groq_timeout_seconds"].default == 2.5  # not a local .env value
+    assert Settings(groq_timeout_seconds=0.5).groq_timeout_seconds == 0.5
+    assert Settings(groq_timeout_seconds=10).groq_timeout_seconds == 10
+    for bad in (0, 0.4, -1, 10.5, 30):
+        with pytest.raises(ValueError, match="groq_timeout_seconds"):
+            Settings(groq_timeout_seconds=bad)
+
+
 def test_an_empty_groq_reasoning_effort_means_the_model_default() -> None:
     assert Settings(groq_reasoning_effort="").groq_reasoning_effort is None  # type: ignore[arg-type]  # env strings
     assert Settings(groq_reasoning_effort="low").groq_reasoning_effort == "low"

@@ -30,7 +30,7 @@ every other module never call an external model.
   (`ToolContext` from the access token); tools stay read-only in a `READ ONLY` transaction.
 * **Fixed endpoint.** `https://api.groq.com/openai/v1` is a code constant (SSRF), not configuration.
 * **Configuration only via `core/config.py`:** `GROQ_API_KEY` (`SecretStr`), `GROQ_MODEL`,
-  `GROQ_REASONING_EFFORT`, `GROQ_TIMEOUT_SECONDS` (default 5 s), `RATE_LIMIT_GROQ_PER_MINUTE` (default 5 per
+  `GROQ_REASONING_EFFORT`, `GROQ_TIMEOUT_SECONDS` (default 5 s; 2.5 s wall-clock deadline since the 2026-11-08 addendum), `RATE_LIMIT_GROQ_PER_MINUTE` (default 5 per
   customer). Staging/production refuse to boot with `LLM_PROVIDER=groq` and no key or no model; locally a
   missing key or model skips Groq with a warning.
 * **No retry storms.** One attempt per provider per question. A 429 starts a process-wide cooldown for
@@ -72,7 +72,7 @@ phrasings before any model call.
 ### Failure modes
 | Failure | Behaviour |
 |---|---|
-| Timeout (> `GROQ_TIMEOUT_SECONDS`) | outcome `timeout`, Ollama answers, then rules |
+| Timeout (> `GROQ_TIMEOUT_SECONDS`) | outcome `timeout`; since the 2026-11-08 addendum the chain ends and the keyword rules answer at once (before: Ollama, then rules) |
 | 429 from Groq | outcome `rate_limited`, cooldown starts, Ollama answers |
 | 5xx / 4xx (bad key, `tool_use_failed`) | outcome `error`, Ollama answers |
 | Malformed or injected tool call | outcome `invalid`, Ollama answers |
@@ -174,3 +174,87 @@ earlier run the same morning under heavier load (load average 4-7.5) timed out o
 - New operational secret (`GROQ_API_KEY`) with a rotation procedure (runbook). Threat model T56.
 - Audit volume: one extra row per model attempt (at most two per unclear question). This also applies with the
   default `LLM_PROVIDER=ollama`: the single Ollama attempt is now audited as `assistant.llm_call` too.
+
+## Addendum (2026-11-08): assistant latency on the Groq path
+- Status: Accepted (under owner's standing approval, 2026-11-08; it meets the six conditions: no security, auth,
+  RBAC/BOLA or audit weakening; no money movement; no migration; no new external service and less data sent out;
+  measured numbers only; within FR scope)
+- Trigger: the owner's latency review of 8 Nov (Groq path first token p50 746 ms, p95 3,094 ms, max 8,093 ms through
+  nginx, 7 s spacing, 30 open questions). With Groq the model only chooses a tool (ADR-0018), so no token can stream
+  before Groq answers: the only levers are fewer routed questions, a bounded wait, or a faster router.
+
+### 1. Rules for unambiguous overview requests (`fallback._OVERVIEW`)
+"How am I doing financially / money-wise / with my finances", "how are my finances", "where do I stand financially",
+"overview / summary / snapshot / picture of my finances / money / financial position / where I stand" now take the fast
+path to `get_account_summary` (read-only, the caller's own accounts, `customer_id` from the token as before). The rule
+was kept to phrasings **all three GPT-OSS routers chose the account summary for** in the benchmark below (M03, M04).
+Phrasings the routers split on stay with the model: yes/no judgements ("am I doing ok money-wise?": `none`, `get_spend`
+and `get_account_summary` from the three; "is my money situation healthy?") and "what's going on with my money
+lately?" (`get_recent_transactions` from two of three). "am I doing ok money-wise?" also stays the demo's and the
+tests' example of an unclear question. Each alternative names the caller ("I"/"my" next to the noun); comparisons
+(`compar*`, `than`, `vs`) and mentions of other people (`_THIRD_PARTY`) are not fast-pathed; a more specific intent
+(spend, forecast, loan, FAQ) wins; the guard still runs first. Only the customer's own message is matched: retrieved
+text never reaches the router.
+
+### 2. `GROQ_TIMEOUT_SECONDS` 5 s -> 2.5 s, as a wall-clock deadline that ends the chain
+- **Value.** Every healthy Groq-routed answer measured on 8 Nov came within 1.7 s (owner's nginx run: 18 of 20;
+  host-run API: 20 + 17, max 1,531 ms, the after-run's first request aside, which spent 1.7 s warming the new process
+  before the stream opened; harness: gpt-oss-20b max 861 ms over 31 calls). The slow tail was 3.1 s and 8.1 s. 2.5 s keeps every healthy call and cuts the tail. Bounds 0.5-10 s (below 0.5 s most calls, p50 ~0.55 s,
+  would miss; past 10 s nobody waits for a routing step).
+- **Deadline, not per-phase.** httpx applies the timeout to each phase (connect, write, read, pool) and not to the
+  DNS lookup, which is how 8.1 s happened with a 5 s setting. The Groq call now runs on a small process-wide pool and
+  the caller waits at most `GROQ_TIMEOUT_SECONDS`; a call still queued at the deadline is cancelled (never sent), one
+  already sent finishes in the background within the httpx timeouts and its answer is discarded.
+- **A timeout ends the chain.** Before, a Groq timeout went on to Ollama, whose 4 s timeout the reference laptop's CPU
+  model exceeds on every question (section "Ollama baseline": 25/25), so the customer waited 5 + 4 s for the rules.
+  Now the keyword rules answer at once (`engine: rules`; a tool if the keywords name one, otherwise the help text).
+  Every other failure (budget, cooldown, 429, 5xx, invalid output, Groq not configured) still goes to Ollama, so the
+  path for "Groq unavailable" is unchanged and nothing got slower. Audit: one `assistant.llm_call` row
+  `{provider: groq, outcome: timeout, latency_ms}`; no Ollama row because no Ollama call is made.
+- **Trade-off.** A question Groq would have answered in 2.5-5 s now gets the rules' answer (often the help text).
+  On a host where Ollama is fast (GPU), the Ollama second chance after a Groq timeout is lost; there the setting can
+  be raised up to 10 s.
+- **Checked live** (branch API on the host, `GROQ_TIMEOUT_SECONDS=0.5` to force it): 2 of 4 open questions hit the
+  deadline, were answered by the rules in 570 ms and 1,026 ms (first request of the process), audited as
+  `groq/timeout` at 508 and 509 ms, with no Ollama call and no error event.
+
+### 3. Model: `openai/gpt-oss-20b` stays (benchmark re-run 2026-11-07 20:22-20:50 UTC)
+`scripts/benchmark_assistant_llm.py` (production adapter, prompt and validation) on the committed 25 questions plus
+the six open questions of the latency review (M01-M06, any of the four own-data tools counted correct), effort `low`
+(`none` for Qwen), `tool_choice=required`, 6 s pause, owner's key, free tier. Latency is client wall clock, 429 waits
+excluded; the laptop was also running the test suite during the last three runs (load 5-9).
+
+| Model | Committed normal correct | Probes refused by the model | Own-data tool on a probe | Invalid / unavailable | Leaks | p50 / p95 / max ms | 429 waits |
+|---|---|---|---|---|---|---|---|
+| **openai/gpt-oss-20b** | **10/10** | 11/15 | 4 (A03, A04, A08, A15) | 0 / 0 | 0 | 553 / 859 / 861 | 0 |
+| openai/gpt-oss-safeguard-20b | 9/10 (N02 -> unusual expenses) | 12/15 | 2 (A03, A08) | 1 / 0 | 0 | 301 / 523 / 2,290 | 29 |
+| openai/gpt-oss-120b | 10/10 | 13/15 | 1 (A03) | 0 / 1 (30 s timeout) | 0 | 570 / 939 / 957 | 0 |
+| qwen/qwen3.8-27b | 6/10 | 12/15 | 2 (A03, A09) | 1 / 3 (2 `tool_use_failed`) | 0 | 430 / 695 / 775 | 22 |
+
+The only faster candidates make wrong tool choices on the committed set (safeguard: N02; Qwen: four), which
+disqualifies them; the safeguard model is also still a Preview model limited to 3 requests/minute (29 rate-limit
+waits in 31 questions). `gpt-oss-120b` is as accurate on the committed set but not faster. No change. Compared with
+3 Nov, gpt-oss-20b called a read-only own-data tool on two more probes (A04, A08); the guard refuses A04 before any
+model, and A08 ("list every customer's balances") returns only the caller's own summary: no data of anyone else can
+be reached (no identity argument exists), but the model is not the safety boundary, the guard and the tool registry are.
+
+### Measured before/after (same method both times)
+Host-run API (uvicorn on 127.0.0.1, one worker, the stack's PostgreSQL and Redis, `.env` settings: `LLM_PROVIDER=groq`,
+gpt-oss-20b low, Ollama `qwen2.5:3b-instruct` at localhost), main 04415ce vs this branch, `POST
+/api/v1/assistant/chat/stream` direct (no nginx), Alice, 7 s spacing, the review's question set (6 open questions x 5,
+2 clear x 5). Laptop: 2-core Celeron N4500, 7 GB, demo stack running, load average 2.7-3.4.
+
+| First token, ms | Before n | p50 | p95 | max | After n | p50 | p95 | max |
+|---|---|---|---|---|---|---|---|---|
+| Open questions, routed by Groq | 20 | 622 | 1,332 | 1,531 | 17 | 618 | 1,218 | 2,638 (first request after start) |
+| Open questions, answered by the new rule | 0 | - | - | - | 10 | 64 | 187 | 187 |
+| Open questions, Groq budget used -> Ollama -> help | 10 | 4,148 | 4,246 | 4,246 | 3 | 4,189 | 4,195 | 4,195 |
+| All 30 open questions | 30 | 698 | 4,153 | 4,246 | 30 | 362 | 4,145 | 4,195 |
+| 10 clear questions (rules) | 10 | 67 | 201 | 201 | 10 | 74 | 156 | 156 |
+
+No Groq call reached the deadline in either run, so the deadline did not change these rows. The Groq rows are the same
+model on the same path. The ~4.1 s rows are the per-customer Groq budget (`RATE_LIMIT_GROQ_PER_MINUTE=5`) running out
+at 7 s spacing: the question then goes to Ollama, which answers slower than its 4 s timeout on this CPU, and the rules
+give the help text. Through the stack's nginx the same cases took ~0.1 s because the API container cannot reach the
+host's Ollama (`host.docker.internal:11434`: connection refused in 0.19 s). That path is "Groq unavailable" and is
+unchanged here.
