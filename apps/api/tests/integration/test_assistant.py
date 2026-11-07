@@ -140,6 +140,34 @@ def test_clear_questions_are_answered_without_calling_the_model(
     assert model.messages == []  # the fast path never reached the model
 
 
+def test_own_overview_requests_are_answered_by_the_rules_with_the_callers_summary(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    use_model: Callable[[object], None],
+    db: Session,
+) -> None:
+    """ADR-0037 addendum (2026-11-08): no model call, the caller's own accounts, audited."""
+    alice = make_customer(funds=5_000_00)
+    bob = make_customer(funds=7_777_00)
+    assert bob.account_number is not None
+    model = FakeModel('{"tool": "get_spend", "arguments": {"period": "this_month"}}')
+    use_model(model)
+    for message in (
+        "how am I doing financially overall?",
+        "give me a quick overview of where I stand",
+        "how are my finances?",
+    ):
+        body = _chat(client, alice, message)
+        assert body["engine"] == "rules" and body["tool"] == "get_account_summary"
+        assert "INR 5,000.00 available" in body["reply"] and "7,777.00" not in body["reply"]
+        assert bob.account_number[-4:] not in body["reply"]
+    assert model.messages == []
+    calls = [row for row in _audit(db, alice) if row.action == "assistant.tool_call"]
+    assert [row.details for row in calls] == [
+        {"tool": "get_account_summary", "outcome": "ok", "engine": "rules"}
+    ] * 3  # tool and outcome only: never the message or the reply
+
+
 @pytest.mark.parametrize(
     "reply",
     [

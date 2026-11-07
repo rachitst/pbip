@@ -105,7 +105,10 @@ class Settings(BaseSettings):
     groq_api_key: SecretStr = SecretStr("")
     # Empty = not chosen. Set from Groq's current model list after the benchmark (ADR-0037).
     groq_model: str = Field(default="", pattern=r"^[A-Za-z0-9._:/-]{0,100}$")
-    groq_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
+    # Wall-clock deadline for the Groq routing call; past it the rules answer (ADR-0037 addendum,
+    # 2026-11-08: above every healthy call measured, below the 3.1 s and 8.1 s tail). Under 0.5 s
+    # most healthy calls (p50 ~0.55 s) would miss it; past 10 s nobody waits for a routing step.
+    groq_timeout_seconds: float = Field(default=2.5, ge=0.5, le=10)
     # None = the model's default (sent as nothing). GPT-OSS accepts low|medium|high only.
     groq_reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
     # Groq calls per customer per minute; above it the question goes to Ollama, not to Groq.

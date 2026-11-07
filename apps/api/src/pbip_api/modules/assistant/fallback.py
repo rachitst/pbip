@@ -52,6 +52,24 @@ _UNUSUAL = re.compile(
 _TRANSACTIONS = re.compile(r"\b(transactions?|recent|history|statement|last \d+)\b", _I)
 _SPEND = re.compile(r"\b(spend|spent|spending|expenses?|expenditure|cost me)\b", _I)
 _BALANCE = re.compile(r"\b(balance|accounts?|how much (money )?(do i have|is in|have i got))\b", _I)
+# A request for the caller's OWN overall position ("how am I doing financially", "overview of where
+# I stand") is answered with the account summary: the tool all three GPT-OSS routers on Groq chose
+# for these phrasings in the 2026-11-08 benchmark (ADR-0037 addendum). Every alternative names the
+# caller ("I"/"my" right next to the noun, so "my friend's money" does not match). Phrasings the
+# routers split on stay with the model: yes/no judgements ("am I doing ok money-wise?", "is my
+# money situation healthy?") and "what's going on with my money lately?" (recent transactions for
+# two of the three). So do comparisons ("...than my neighbours"), which the summary cannot answer.
+# Gaps are bounded ({0,20}) for the ReDoS reason below.
+_OVERVIEW = re.compile(
+    r"\bhow (am i|i am|i['\u2019]m) doing\b.{0,20}\b(financially|money[- ]?wise"
+    r"|with (my )?(money|finances))\b"
+    r"|\b(overview|summary|snapshot|picture) of (my (finances|money|financial (situation"
+    r"|position))|where i stand)\b"
+    r"|\bwhere (do )?i stand (financially|money[- ]?wise)\b"
+    r"|\bhow( are|['\u2019]re) my finances\b",
+    _I,
+)
+_COMPARISON = re.compile(r"\b(compar\w*|than|versus|vs)\b", _I)
 # Mentions of other people: never fast-pathed, so "balances of all customers" is not answered
 # with the caller's own balance as if that were what they asked (the guard refuses the clear
 # cross-customer requests; the model judges the rest).
@@ -297,6 +315,10 @@ def _unusual(message: str) -> Route:
     return Route(ToolName.UNUSUAL_EXPENSES, _with_account(message, {"period": period.value}))
 
 
+def _overview(message: str) -> bool:
+    return bool(_OVERVIEW.search(message)) and not _COMPARISON.search(message)
+
+
 def faq_topics(message: str) -> list[FaqTopic]:
     return [topic for topic, rx in _FAQ if rx.search(message)]
 
@@ -349,8 +371,9 @@ def _intents(message: str) -> list[ToolName]:
             dropped.add(ToolName.LOAN_AFFORDABILITY)
         found = [t for t in found if t not in dropped] + discovery
     # "account" appears in questions about anything ("spend on my second account"), so the
-    # balance intent counts only when nothing more specific was named.
-    if not found and _BALANCE.search(message):
+    # balance intent counts only when nothing more specific was named. The same holds for an
+    # overview request: "overview of my spending" is the spend question.
+    if not found and (_BALANCE.search(message) or _overview(message)):
         found.append(ToolName.ACCOUNT_SUMMARY)
     return found
 
@@ -399,6 +422,6 @@ def route(message: str) -> Route:
         return _transactions(message)
     if _SPEND.search(message):
         return _spend(message)
-    if _BALANCE.search(message):
+    if _BALANCE.search(message) or _overview(message):
         return Route(ToolName.ACCOUNT_SUMMARY)
     return Route(None)

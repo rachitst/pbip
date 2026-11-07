@@ -2,7 +2,9 @@
 every request goes to an ``httpx.MockTransport``."""
 
 import json
+import threading
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import httpx
@@ -244,8 +246,6 @@ def test_injected_tool_calls_are_rejected_and_the_chain_falls_back(
 @pytest.mark.parametrize(
     ("response", "outcome"),
     [
-        (httpx.ReadTimeout("slow"), "timeout"),
-        (httpx.ConnectTimeout("slow"), "timeout"),
         (httpx.ConnectError("refused"), "error"),
         (httpx.Response(429, headers={"retry-after": "2"}), "rate_limited"),
         (httpx.Response(500), "error"),
@@ -254,7 +254,7 @@ def test_injected_tool_calls_are_rejected_and_the_chain_falls_back(
         (httpx.Response(400, json={"error": {"code": "tool_use_failed"}}), "error"),
     ],
 )
-def test_every_groq_failure_falls_back_to_ollama(
+def test_every_groq_failure_but_a_timeout_falls_back_to_ollama(
     response: httpx.Response | Exception, outcome: str
 ) -> None:
     recorder = Recorder(response)
@@ -268,6 +268,68 @@ def test_every_groq_failure_falls_back_to_ollama(
         ("ollama", "ok"),
     ]
     assert all(a.latency_ms >= 0 for a in chain.attempts)
+
+
+@pytest.mark.parametrize("error", [httpx.ReadTimeout("slow"), httpx.ConnectTimeout("slow")])
+def test_a_groq_timeout_ends_the_chain_so_the_rules_answer_at_once(error: Exception) -> None:
+    """ADR-0037 addendum (2026-11-08): the routing time is spent; Ollama would add up to 4 s."""
+    recorder = Recorder(error)
+    ollama = _Scripted('{"tool": "get_spend", "arguments": {"period": "this_month"}}')
+    chain = ModelChain([_groq(recorder), ollama])
+    with pytest.raises(LLMUnavailableError) as caught:
+        llm_route(chain, system_prompt(), "how am I doing")
+    assert caught.value.outcome == "timeout"
+    assert len(recorder.requests) == 1 and ollama.calls == 0
+    assert [(a.provider, a.outcome) for a in chain.attempts] == [("groq", "timeout")]
+
+
+class _Blocked:
+    """A Groq that has not answered yet: requests wait until the test releases them."""
+
+    def __init__(self) -> None:
+        self.release = threading.Event()
+        self.requests: list[httpx.Request] = []
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        self.release.wait()
+        return _tool_call("get_account_summary")
+
+
+def test_the_groq_timeout_is_a_wall_clock_deadline() -> None:
+    """httpx times each phase (and not DNS) separately; the customer must wait one deadline."""
+    upstream = _Blocked()
+    executor = ThreadPoolExecutor(max_workers=1)
+    model = GroqChatModel(
+        KEY, "openai/gpt-oss-20b", 0.05, transport=httpx.MockTransport(upstream), executor=executor
+    )
+    try:
+        with pytest.raises(LLMUnavailableError) as caught:
+            model.complete_json("s", "u", {})
+        assert caught.value.outcome == "timeout"
+        assert not upstream.release.is_set()  # returned while Groq still had not answered
+    finally:
+        upstream.release.set()
+        executor.shutdown(wait=True)
+    assert len(upstream.requests) == 1
+
+
+def test_a_call_still_queued_at_the_deadline_is_never_sent() -> None:
+    busy = threading.Event()
+    executor = ThreadPoolExecutor(max_workers=1)
+    executor.submit(busy.wait)  # every worker is taken
+    recorder = Recorder(_tool_call("none"))
+    model = GroqChatModel(
+        KEY, "openai/gpt-oss-20b", 0.05, transport=httpx.MockTransport(recorder), executor=executor
+    )
+    try:
+        with pytest.raises(LLMUnavailableError) as caught:
+            model.complete_json("s", "u", {})
+        assert caught.value.outcome == "timeout"
+    finally:
+        busy.set()
+        executor.shutdown(wait=True)
+    assert recorder.requests == []  # cancelled before it left the process
 
 
 def test_when_every_provider_fails_the_caller_gets_unavailable() -> None:
