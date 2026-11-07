@@ -1,4 +1,4 @@
-"""TASK-079 / ADR-0061: no more requests inside the app than the pool has connections."""
+"""TASK-079 / ADR-0060: no more requests inside the app than the pool has connections."""
 
 import asyncio
 import json

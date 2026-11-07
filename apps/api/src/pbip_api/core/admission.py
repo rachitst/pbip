@@ -1,4 +1,4 @@
-"""Database admission control (TASK-079, ADR-0061): no more requests in flight than connections."""
+"""Database admission control (TASK-079, ADR-0060): no more requests in flight than connections."""
 
 import asyncio
 

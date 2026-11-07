@@ -91,7 +91,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # Middleware order: the LAST added is the OUTERMOST. Request context must wrap everything.
     # Innermost: admission is counted around the app itself, so a 503 still gets CORS, security
-    # headers and a request id (ADR-0061).
+    # headers and a request id (ADR-0060).
     app.add_middleware(
         DatabaseAdmissionMiddleware,
         limit=settings.db_pool_size + settings.db_max_overflow,

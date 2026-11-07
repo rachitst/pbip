@@ -1,4 +1,4 @@
-# ADR 0061: Admit no more requests than the pool has connections, and one connection per request
+# ADR 0060: Admit no more requests than the pool has connections, and one connection per request
 - Status: Accepted (under owner's standing approval, 2026-11-08)
 - Date: 2026-11-08
 - Deciders: Architecture Team (TASK-079; follow-up to ADR-0045 "the API scales with replicas")

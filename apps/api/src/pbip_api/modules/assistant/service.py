@@ -196,7 +196,7 @@ class AssistantService:
             return _Decision(clear, "rules")
         if self.model is not None:
             # A model call takes seconds: end the auth lookup's transaction first so the request
-            # does not hold a pooled connection idle in a transaction meanwhile (ADR-0061).
+            # does not hold a pooled connection idle in a transaction meanwhile (ADR-0060).
             self.session.rollback()
             try:
                 return _Decision(
@@ -263,7 +263,7 @@ def stream_chat(
 
     Runs on the request's own session: FastAPI closes request-scoped dependencies only after the
     response, streamed or not, has been sent. A second session here needed a second connection
-    while the first was still checked out, which starved a small pool (TASK-079, ADR-0061).
+    while the first was still checked out, which starved a small pool (TASK-079, ADR-0060).
     Events: ``tool_call`` when a tool is chosen, ``tool_result`` when it ran, ``token`` chunks of
     the (server-written, redacted) reply, then ``done`` with the full response. Any failure ends
     the stream with a generic ``error`` event - no details, no stack trace.

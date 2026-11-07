@@ -29,7 +29,7 @@ FRAUD_DECISIONS_TOTAL = Counter("fraud_decisions_total", "Fraud decisions by out
 FRAUD_MONITOR_ALERTS_TOTAL = Counter(
     "fraud_monitor_alerts_total", "Analyst alerts opened by batch fraud monitors", ["monitor"]
 )
-# Requests turned away with 503 after waiting for a database slot (ADR-0061).
+# Requests turned away with 503 after waiting for a database slot (ADR-0060).
 DB_ADMISSION_REJECTED_TOTAL = Counter(
     "db_admission_rejected_total", "Requests rejected after waiting for a database slot"
 )

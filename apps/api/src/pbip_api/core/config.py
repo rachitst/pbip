@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     # worker's warm shutdown) indefinitely. libpq treats values below 2 as 2.
     database_connect_timeout_seconds: int = Field(default=5, ge=2, le=60)
     # SQLAlchemy pool per API process (TASK-079). Size + overflow is also how many requests are let
-    # into the app at once (ADR-0061); the rest wait up to the timeout, then get a 503.
+    # into the app at once (ADR-0060); the rest wait up to the timeout, then get a 503.
     db_pool_size: int = Field(default=10, ge=1, le=100)
     db_max_overflow: int = Field(default=10, ge=0, le=100)
     db_pool_timeout_seconds: float = Field(default=30.0, gt=0, le=120)

@@ -1,4 +1,4 @@
-"""TASK-079: requests must not starve the database connection pool (ADR-0061).
+"""TASK-079: requests must not starve the database connection pool (ADR-0060).
 
 The staging load test collapsed at 200 VUs with idle CPU and ``QueuePool limit ... timed out``.
 Two mechanisms were proven here, against the real PostgreSQL with a scaled-down pool:
@@ -41,7 +41,7 @@ from sqlalchemy import Engine, create_engine, event, text
 
 pytestmark = pytest.mark.integration
 
-# Also the admission wait (ADR-0061): long enough for every queued request on a slow CI runner.
+# Also the admission wait (ADR-0060): long enough for every queued request on a slow CI runner.
 POOL_TIMEOUT_SECONDS = 5.0
 WORKER_THREADS = 2
 
@@ -207,7 +207,7 @@ def test_each_request_type_holds_at_most_one_connection(
     make_verified_payee: Callable[..., dict[str, Any]],
     migrated_engine: Engine,
 ) -> None:
-    """The admission limit (ADR-0061) is the pool size, which is only safe at <= 1 each."""
+    """The admission limit (ADR-0060) is the pool size, which is only safe at <= 1 each."""
     alice = make_customer(funds=5_000_00)
     bob = make_customer()
     payee = make_verified_payee(alice, bob)
@@ -251,7 +251,7 @@ def test_concurrent_mixed_requests_do_not_starve_a_small_pool(
 ) -> None:
     """Real threads, more requests than worker threads and connections, every k6 route group.
 
-    Before ADR-0061 requests held the one connection while waiting for a worker thread and the
+    Before ADR-0060 requests held the one connection while waiting for a worker thread and the
     threads waited for the connection: requests failed after ``pool_timeout`` with a
     ``QueuePool`` timeout (500) or a stream ``error`` event. Same-user transfers also contend
     for the per-user advisory lock (AGENTS.md section 4). ``banking_only`` leaves the assistant
