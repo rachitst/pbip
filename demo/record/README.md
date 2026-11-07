@@ -23,16 +23,18 @@ the release; they are never committed.
 3. **Alice:** sign-in with her code; accounts and total balance; transaction search and filters; a PDF
    statement; payees (add, edit, verify); a transfer held for review; a transfer with a step-up code and its
    receipt; a bill payment; a scheduled transfer; notifications; spending and financial health; the balance
-   forecast; loans (EMI, eligibility, application, repayment schedule); a fixed deposit; investing; the
-   portfolio; an insurance quote; the product comparison; recommendations with reasons; seven assistant
+   forecast; loans (loans for you, EMI, eligibility, application, repayment schedule); a fixed deposit;
+   investing (a fund, a monthly SIP, a stock, a sale, the SIP list); the portfolio; an insurance quote and
+   application; the product comparison with the risk-band row; recommendations with reasons; seven assistant
    questions (balance, last month's spending, unusual expenses, loan affordability, investment
    suggestions, an FAQ, and another customer's data, refused); profile, risk profile, consent, the dark
    theme, the phone layout (390x844) and a staff page refused (the page says "not found", the API 403).
 4. **Fraud analyst** (password + code): security monitoring; the fraud demo lab F1, F2, F3, F5 and F6 (F4
    explained, not runnable); the alert queue; Alice's alert with rule points and SHAP reasons, rejected; F1
    released; the F6 forward (`MULE_PASS_THROUGH`) rejected; the other lab alerts labelled; the fraud
-   statistics page.
-5. **Compliance officer:** the compliance dashboard, an exception acknowledged, the audit log's hash chain
+   dashboard (decisions, rates, risk bands, top reasons).
+5. **Compliance officer:** the compliance dashboard, an exception acknowledged, the
+   scheduled-transfer and notification exception kinds, the audit log's hash chain
    verified.
 6. **Relationship manager:** customer insights, the customer's details and behavioural profile, an
    outreach call logged; behavioural analytics.
@@ -93,6 +95,22 @@ Environment: `PBIP_DEMO_PASSWORD` (else the `APP_ENV=local` constant in `scripts
 `E2E_COMPOSE_DIR` (the checkout that runs the stack, when recording from a worktree; codes come from
 `scripts/totp.py --unused` through `docker compose exec`), `E2E_BASE_URL`, `DEMO_GRAFANA_URL` (default
 `http://localhost:3000`), `DEMO_PACE` (scales every hold; default 1), `DEMO_CAPTIONS=0` (no overlay).
+
+### When a take fails part-way
+
+Each rerun changes the demo data (a second step-up on the same seed can be held instead), so a take
+that failed late still holds good steps. `DEMO_SKIP` (step names separated by `|`) records a run without
+the steps another take already holds, and `merge-takes.py` builds one timeline from several takes, step
+ranges by name:
+
+```bash
+python demo/record/merge-takes.py "a.timeline.json::::fixed deposit booking" \
+  "b.timeline.json::investing: a fund, a monthly SIP and a stock::" merged.timeline.json
+python demo/record/edit-walkthrough.py merged.timeline.json --out ~/Desktop/Rachit/pbip-video
+```
+
+The takes' videos must sit next to the merged timeline. `DEMO_STILLS_DIR` also saves the docs stills
+(1920x1080 PNG, without the caption overlay) as the pages go by.
 
 ### How the edit is made
 
