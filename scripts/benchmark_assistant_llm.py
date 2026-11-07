@@ -249,7 +249,12 @@ def _report(
     latencies = [r.latency_ms for r in rows if not r.status.startswith("unavailable")]
     normal = [r for r in rows if r.kind == "normal"]
     probes = [r for r in rows if r.kind == "adversarial"]
-    timeout = 5.0 if args.provider == "groq" else _settings(args.env_file).ollama_timeout_seconds
+    settings = _settings(args.env_file)
+    timeout = (
+        settings.groq_timeout_seconds
+        if args.provider == "groq"
+        else settings.ollama_timeout_seconds
+    )
     summary = {
         "date": datetime.now(UTC).isoformat(timespec="seconds"),
         "provider": args.provider,

@@ -147,7 +147,6 @@ def test_groq_routes_the_unclear_question_and_nothing_identifying_leaves(
 @pytest.mark.parametrize(
     ("groq", "outcome"),
     [
-        (httpx.ReadTimeout("slow"), "timeout"),
         (httpx.Response(429, headers={"retry-after": "3"}), "rate_limited"),
         (httpx.Response(500), "error"),
         (httpx.Response(503), "error"),
@@ -157,7 +156,7 @@ def test_groq_routes_the_unclear_question_and_nothing_identifying_leaves(
         (_groq_call("get_account_summary", '{"customer_id": "x"}'), "invalid"),  # identity arg
     ],
 )
-def test_any_groq_failure_falls_back_to_ollama_and_is_audited(
+def test_any_groq_failure_but_a_timeout_falls_back_to_ollama_and_is_audited(
     client: TestClient,
     make_customer: Callable[..., Actor],
     upstream: Upstream,
@@ -171,6 +170,53 @@ def test_any_groq_failure_falls_back_to_ollama_and_is_audited(
     assert body["engine"] == "llm" and body["tool"] == "get_spend"  # Ollama's choice
     assert len(upstream.groq_requests) == 1 and len(upstream.ollama_requests) == 1  # no retries
     assert _outcomes(db, alice) == [("groq", outcome), ("ollama", "ok")]
+
+
+@pytest.mark.parametrize("error", [httpx.ReadTimeout("slow"), httpx.ConnectTimeout("slow")])
+def test_a_groq_timeout_goes_straight_to_the_rules_and_is_audited_without_payloads(
+    client: TestClient,
+    make_customer: Callable[..., Actor],
+    upstream: Upstream,
+    db: Session,
+    error: Exception,
+) -> None:
+    """ADR-0037 addendum (2026-11-08): no Ollama wait after the routing deadline, no error."""
+    alice = make_customer(funds=5_000_00)
+    upstream.groq = error
+    body = _chat(client, alice, "recent transactions and my spending")  # two intents: unclear
+    assert body["engine"] == "rules" and body["outcome"] == "answered"
+    assert body["tool"] == "get_recent_transactions"  # the keyword rules' precedence
+    assert len(upstream.groq_requests) == 1 and upstream.ollama_requests == []
+    [audit] = _llm_audit(db, alice)
+    assert set(audit) == {"provider", "outcome", "latency_ms"}  # never the message or prompt
+    assert (audit["provider"], audit["outcome"]) == ("groq", "timeout")
+    [call] = [
+        dict(row.details or {})
+        for row in db.execute(
+            select(AuditLog).where(
+                AuditLog.actor_user_id == alice.user_id,
+                AuditLog.action == "assistant.tool_call",
+            )
+        ).scalars()
+    ]
+    assert call == {"tool": "get_recent_transactions", "outcome": "ok", "engine": "rules"}
+
+
+def test_a_groq_timeout_on_the_stream_ends_with_an_answer_not_an_error(
+    client: TestClient, make_customer: Callable[..., Actor], upstream: Upstream
+) -> None:
+    alice = make_customer(funds=5_000_00)
+    upstream.groq = httpx.ReadTimeout("slow")
+    resp = client.post(
+        "/api/v1/assistant/chat/stream", headers=alice.headers, json={"message": _UNCLEAR}
+    )
+    assert resp.status_code == 200
+    events = [line.removeprefix("event: ") for line in resp.text.splitlines()
+              if line.startswith("event: ")]  # fmt: skip
+    assert "error" not in events and events[-1] == "done"
+    done = json.loads(resp.text.rsplit("data: ", 1)[1].splitlines()[0])
+    assert done["engine"] == "rules" and done["outcome"] == "help"  # nothing fits: help text
+    assert upstream.ollama_requests == []
 
 
 def test_when_both_models_fail_the_rules_still_answer(
