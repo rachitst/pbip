@@ -73,6 +73,10 @@ services:
     volumes: [*db-ca]
     depends_on: { redis: { condition: service_healthy } }
     restart: unless-stopped
+    # The api image's HEALTHCHECK probes uvicorn on :8000, which a Celery process never opens: left
+    # inherited, the container turns unhealthy and deploy.sh's health gate fails every release.
+    healthcheck:
+      test: ["NONE"]
   beat:
     image: ${IMAGE_PREFIX}/api:${IMAGE_TAG}
     environment: *api-env
@@ -80,6 +84,8 @@ services:
     volumes: [*db-ca]
     depends_on: { redis: { condition: service_healthy } }
     restart: unless-stopped
+    healthcheck:
+      test: ["NONE"]  # as worker: no uvicorn in this container
   web:
     image: ${IMAGE_PREFIX}/web:${IMAGE_TAG}
     # nginx resolves `api` at start-up, so it is (re)started only once a healthy API exists.
