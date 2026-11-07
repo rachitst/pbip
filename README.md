@@ -126,8 +126,13 @@ The live demo script and its fallback plan are in [`demo/demo-script.md`](demo/d
 
 The latest release is **[v1.0.2](https://github.com/rachitst/pbip/releases/tag/v1.0.2)**; every release is listed on
 the [releases page](https://github.com/rachitst/pbip/releases), with notes in [`docs/release/`](docs/release/) and
-the full history in [`CHANGELOG.md`](CHANGELOG.md). **v1.1.0** is in progress: new recommendation, behaviour-profile,
-investing and staff-dashboard features.
+the full history in [`CHANGELOG.md`](CHANGELOG.md). The latest release is **v1.1.1** (8 November 2026): the staging
+host's fixes, monitoring for the production stack, off-host backups, the database admission fix and a faster
+assistant, on top of v1.1.0's recommendation, behaviour-profile, investing and staff-dashboard features.
+
+**Staging:** `https://pbip.duckdns.org`, an Oracle Cloud Always Free Arm VM (2 OCPUs, 12 GB) built with the
+[Oracle Cloud guide](docs/operations/deploy-oracle-cloud-arm.md). It holds no demo data (customers register
+themselves); the demo runs on the local stack.
 
 A release is a `vX.Y.Z` tag on `main`: the Deploy workflow verifies it, builds `linux/amd64` and `linux/arm64` images
 to GHCR and, when enabled, deploys them to the staging host with a health-gated start, a smoke test and automatic

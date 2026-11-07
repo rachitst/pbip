@@ -106,7 +106,7 @@ set in `~/pbip/.env`):
    ```bash
    sudo apt-get install -y certbot
    sudo certbot certonly --webroot -w /home/<deploy-user>/pbip/acme -d <host> --agree-tos -m <ops-email> \
-     --deploy-hook "PBIP_DIR=/home/<deploy-user>/pbip bash /home/<deploy-user>/pbip/certbot-deploy-hook.sh"
+     --deploy-hook "env PBIP_DIR=/home/<deploy-user>/pbip bash /home/<deploy-user>/pbip/certbot-deploy-hook.sh"
    ```
 
    `certbot-deploy-hook.sh` copies `fullchain.pem`/`privkey.pem` to `certs/web/tls.{crt,key}`, runs `nginx -t` and
