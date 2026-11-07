@@ -38,9 +38,10 @@ port and `/metrics` are not published by the production compose file.
    available in the home region. From India, `India West (Mumbai)` (`ap-mumbai-1`) or `India South (Hyderabad)`
    (`ap-hyderabad-1`) keep the latency of the page-load measurements (TASK-102, section 18.1) low.
 3. Check the current Always Free limits on Oracle's free-tier page before sizing anything. At the time of writing they
-   included Ampere A1 compute up to a total of 4 OCPUs and 24 GB of memory, a block-storage allowance shared with boot
-   volumes, and a small Object Storage allowance (used for backups in section 15). Treat these as "check current
-   free-tier limits", not as guarantees.
+   included Ampere A1 compute up to a total of 2 OCPUs and 12 GB of memory (the free maximum when the staging host
+   was created in November 2026; earlier versions of this guide said 4 OCPUs and 24 GB), a block-storage allowance
+   shared with boot volumes, and a small Object Storage allowance (used for backups in section 15). Treat these as
+   "check current free-tier limits", not as guarantees.
 4. Set a budget with an alert (Billing & Cost Management > Budgets) at a small amount, so any resource that is
    accidentally outside the free tier is noticed in days, not at the end of the month.
 5. Oracle documents that idle Always Free compute instances can be reclaimed. A staging host that sits idle for a
@@ -82,9 +83,9 @@ Compute > Instances > **Create instance**:
 * **Image:** Canonical Ubuntu 24.04 (not "Minimal"). With an Ampere shape the console selects the aarch64 build.
   Ubuntu 24.04 ships Python 3.12, which `scripts/uptime_report.py` and `scripts/staging_smoke.py` need (standard
   library only).
-* **Shape:** Ampere > `VM.Standard.A1.Flex`, **4 OCPUs and 24 GB** if that is still the free maximum (check current
-  free-tier limits). The stack needs far less (two API replicas use about one core each under load, ADR-0045), but
-  the performance runs in section 18 benefit from the headroom.
+* **Shape:** Ampere > `VM.Standard.A1.Flex` at the current free maximum, **2 OCPUs and 12 GB** in November 2026
+  (check current free-tier limits). The staging stack idles at about 1.6 GB and under 10% CPU; the performance
+  runs in section 18 share these two cores with the load generator, which saturates them (section 18.3).
 * **Networking:** the VCN and public subnet from section 3, "Assign a public IPv4 address".
 * **SSH keys:** paste `~/.ssh/pbip-oci-admin.pub`.
 * **Boot volume:** the default size is enough; keep the total within the free block-storage allowance.
@@ -182,7 +183,7 @@ placeholder there if none exists and **never overwrites** an existing pair. Pick
    ```bash
    vm$ sudo apt-get install -y certbot
    vm$ sudo certbot certonly --webroot -w /home/pbip/pbip/acme -d <host> --agree-tos -m <ops-email> \
-         --deploy-hook "PBIP_DIR=/home/pbip/pbip bash /home/pbip/pbip/certbot-deploy-hook.sh"
+         --deploy-hook "env PBIP_DIR=/home/pbip/pbip bash /home/pbip/pbip/certbot-deploy-hook.sh"
    vm$ sudo certbot renew --dry-run
    ```
 
@@ -653,6 +654,13 @@ delete its database.
 ```bash
 vm$ cd ~/pbip-perf && docker compose -p pbip -f docker-compose.yml -f infra/k6/compose.load.yml down -v
 ```
+
+### 18.3 Results on the 2-OCPU host (8 November 2026)
+
+[performance 2026-11-08](../testing/performance-2026-11-08-oci.md) has the full tables. In short: from 50 VUs upward
+the two cores are saturated by the stack and the k6 generator together, throughput levels at about 80 requests/s and
+the p95 budgets are missed; with admission control (ADR-0060) 200 and 500 VUs run with 0 errors and every money
+invariant holds. Before it, the 200-VU step collapsed into 30 s pool timeouts with the CPU idle.
 
 ## 19. The other #198 checks on this host
 

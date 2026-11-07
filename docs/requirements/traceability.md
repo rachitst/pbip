@@ -7,7 +7,7 @@ file records, for every requirement, what the code does, which automated tests p
 **Checked against** `main` at `60b1af4` (5 Nov 2026), the v1.1.0 code: it includes #461, #462, #463, #464, #465, #466,
 #467, #468, #469, #470, #472, #473, #474 (assistant FAQ for every feature and insurance discovery), #477, #483
 (insurance quote and application, web Invest, Insurance and Holdings pages), #484 (fund SIPs with an hourly job) and
-#487 (SIP web screens).
+#487 (SIP web screens). **Updated 8 Nov 2026** with the staging host (deploy guide), #494, #496, #497, #498 and #499.
 
 Status values:
 
@@ -64,15 +64,15 @@ and `ml/tests/`.
 | Requirement | Status | Evidence | Gap |
 |---|---|---|---|
 | Secure authentication | Verified | UC-01 row; route-policy registry (`security/test_route_policy_registry.py`) | |
-| Encrypt sensitive data | Partial | Field encryption with rotation (`core/crypto.py`, `test_crypto.py`, `test_rotate_field_key.py`), PII policy (ADR-0042), TLS at nginx and to PostgreSQL (`scripts/verify_tls.sh` in the CI E2E job) | At-rest evidence on the deployment host (#399, #145); certificate issuance on staging (#198) |
+| Encrypt sensitive data | Partial | Field encryption with rotation (`core/crypto.py`, `test_crypto.py`, `test_rotate_field_key.py`), PII policy (ADR-0042), TLS at nginx and to PostgreSQL (`scripts/verify_tls.sh` in the CI E2E job). **On the staging host (8 Nov 2026):** encrypted (`gpg`) daily backups with the off-host copy in OCI Object Storage (`infra/deploy/backup-offsite.sh`, `scripts/offsite_backup.py`, #496), and a restore drill of the copy downloaded from the bucket: **PASS** (revision 0031, ledger net 0, audit chain valid); the backup passphrase is a separate file from the `.env` that holds `FIELD_ENCRYPTION_KEY` (both still to be copied into the owner's password manager). Docker's data is on the instance's boot volume, which Oracle encrypts at rest by default (AES-256, Oracle-managed keys) | The boot volume's encryption setting confirmed in the Oracle console (#399, #145); the Let's Encrypt certificate on staging waits for TCP 80/443 (#198) |
 | Role-based access control | Verified | `require_roles`, policy functions; `test_rbac_bola.py`, route-policy registry | |
 | Audit logs | Verified | Hash-chained append-only `audit_logs`; `test_audit_and_outbox.py`, `AuditLog.test.tsx` | |
 | OWASP Top 10 | Verified (locally) | Threat-model mapping, Bandit, CodeQL, pip-audit, npm audit, detect-secrets, nightly Schemathesis, nightly OWASP ZAP baseline against the HTTPS stack ([security audit](../security/security-audit-2026-11.md)) | The ZAP scan is passive (no authenticated active scan) and has not run against a deployed environment (#198) |
 | Page load < 2 s | Verified (CI) | `perf.spec.ts` in `perf.yml` with 2 API replicas: pages 110-451 ms ([performance 2026-11-04](../testing/performance-2026-11-04.md)) | Staging page-load budgets (TASK-102, #185) |
-| API response < 500 ms | Partial | k6 in `perf.yml`, 50 virtual users, 2 API replicas: every route group p95 under 500 ms (transfers 287 / 347 ms); fraud scoring p95 24.7 ms. Assistant: clear questions are answered by the rules in under 0.1 s; unclear questions that need the model take 0.65-0.75 s with Groq on the demo stack (`engine=llm`, live runs on 5 Nov 2026) and 12-50 s with Ollama on CPU, the fallback when Groq is not configured or fails (ADR-0018, ADR-0037) | Load at 500 users (TASK-078, #101); TASK-079 on the host. **The model path misses 500 ms with both providers; Ollama on CPU misses it by far** |
+| API response < 500 ms | Partial | k6 in `perf.yml`, 50 virtual users, 2 API replicas: every route group p95 under 500 ms (transfers 287 / 347 ms); fraud scoring p95 24.7 ms. Assistant, first token through nginx on the demo stack after the ADR-0037 addendum (8 Nov 2026, [performance 2026-11-08](../testing/performance-2026-11-08-oci.md)): clear questions p95 66 ms; 13 of 30 open questions answered by the rules at p95 72 ms; the 17 routed by Groq p50 582 ms, p95 754 ms, max 850 ms (before: p50 746 ms, p95 3,094 ms, max 8,093 ms). Ollama on CPU (12-50 s) is the fallback when Groq is not configured or fails (ADR-0018, ADR-0037). On the 2-OCPU staging host shared with the load generator, the budgets are missed from 50 VUs upward (capacity, [performance 2026-11-08](../testing/performance-2026-11-08-oci.md)) | **The Groq model path misses 500 ms (p50 582 ms); Ollama on CPU misses it by far.** The 2-OCPU host cannot carry the k6 suite within budget |
 | Login < 3 s | Verified (CI) | k6 login p95 340-406 ms, browser login 251-277 ms (#419) | Staging measurement (TASK-102, #185) |
-| 99% availability in the test environment | Unverified | Blackbox probes, `pbip:availability:ratio_30d`, `AvailabilityBelow99`, the staging probe and report scripts (`infra/deploy/uptime-probe.sh`, `scripts/uptime_report.py`) | Staging availability over a month (TASK-103, #186) needs the staging host (#198) |
-| Horizontal scaling, stateless APIs, containers | Verified (CI) | Stateless API, one process per container; **multi-replica exercised in CI**: `perf.yml` runs `API_REPLICAS=2` behind nginx (#419, ADR-0045); staging compose runs 2 replicas | TASK-079 on the host |
+| 99% availability in the test environment | Partial | Blackbox probes, `pbip:availability:ratio_30d`, `AvailabilityBelow99`, and on the staging host the 30-second probe and weekly report (`infra/deploy/uptime-probe.sh`, `scripts/uptime_report.py`) running since 2026-11-07T21:56:03Z; the monitoring stack for the production project (ADR-0059, #498) | A full week of probes ends 2026-11-14T21:56Z (TASK-103, #186); the month after that |
+| Horizontal scaling, stateless APIs, containers | Verified (CI) | Stateless API, one process per container; **multi-replica exercised in CI**: `perf.yml` runs `API_REPLICAS=2` behind nginx (#419, ADR-0045); staging runs 2 replicas; on the staging host 2 replicas with admission control (ADR-0060) carry 500 VUs with 0 errors | Latency budgets on the 2-OCPU host (TASK-078) |
 | Centralised logging, error tracking, health monitoring, performance metrics | Verified (locally) | structlog to Loki through Alloy, `unhandled_exception` events and `unhandled_errors_total` (`test_errors.py`), health probes, Prometheus metrics and alert rules, Grafana dashboards as code (`test_monitoring_as_code.py`), worker metrics through Redis (ADR-0039), optional OTel collector | **No alert notification channel** (no Alertmanager; owner decision); the monitoring profile is not part of the staging compose |
 
 ## Deliverables (section 9)
@@ -88,8 +88,8 @@ and `ml/tests/`.
 | Source code repository | Verified | GitHub repository with rulesets | |
 | API documentation | Verified | `docs/api/openapi.json` and `apps/web/src/api/schema.d.ts`, both drift-checked in CI; `/docs` on a running API | |
 | Automated tests | Verified | Unit, integration, security, ML, Vitest and Playwright suites in CI ([test strategy](../testing/test-strategy-and-report.md)) | |
-| CI/CD pipeline | Partial | `ci.yml`, `codeql.yml`, `deploy.yml` (verify, package arm64 and amd64, deploy, smoke, rollback) | The deploy job has never run against a host (#198) |
-| Deployment scripts | Unverified | `infra/deploy/deploy.sh`, `docker-compose.prod.yml`, tested by `test_deploy_script.py` | Not run on the staging host (#198) |
+| CI/CD pipeline | Partial | `ci.yml`, `codeql.yml`, `deploy.yml` (verify, package arm64 and amd64, deploy, smoke, rollback); the `staging` environment, its four secrets and `STAGING_URL` are set (8 Nov 2026); tag pushes publish the arm64 images that the staging host pulls | The deploy job's smoke test needs `https://pbip.duckdns.org` reachable: TCP 80/443 to the instance (#198) |
+| Deployment scripts | Partial | `infra/deploy/deploy.sh`, `docker-compose.prod.yml`, tested by `test_deploy_script.py`; **run on the staging host on 8 Nov 2026**: `deploy.sh deploy ghcr.io/rachitst/pbip v1.1.0` migrated an empty database to 0031 and recorded the release once every container was healthy, after #494 fixed the worker and beat health checks it found | Run by the Deploy workflow (#198) |
 | Monitoring configuration | Verified (locally) | Prometheus, Grafana, Loki, Alloy, blackbox and exporters as code | Not deployed with staging (by design of the staging compose) |
 | Requirements specification, user stories, use case document | Verified | [requirements-specification.md](requirements-specification.md), [user-stories.md](user-stories.md), [use-cases.md](use-cases.md) | |
 | HLD, LLD, ER diagram, API specifications | Verified | [HLD](../architecture/HLD.md), [LLD](../architecture/LLD.md), [ER diagram](../architecture/er-diagram.md) (drift-checked in CI), [diagrams](../diagrams/README.md), OpenAPI | The HLD and LLD are checked by review, not by a CI test |
@@ -109,7 +109,7 @@ and `ml/tests/`.
 | UI testing of critical journeys | Verified | 11 Playwright journey specs: onboarding with MFA, transfer (2), fraud review (2), scheduled transfer, assistant, BOLA, administration (3), comparison, statements, bills and loans (#472) | |
 | Security testing: authentication, authorization, input validation | Verified | `test_auth.py`, `test_rbac_bola.py`, route-policy registry, `test_request_text_validation.py`, adversarial assistant suite, fuzzing | |
 | CI: build, test, code quality scan, security scan | Verified | `ci.yml` jobs and `CI Gate`, CodeQL | |
-| CI: package, deploy, smoke test | Unverified | `deploy.yml` packages on every tag (v1.0.0 to v1.0.2); deploy and smoke steps gated off | Staging deployment (#198) |
+| CI: package, deploy, smoke test | Partial | `deploy.yml` packages amd64 and arm64 images on every tag (v1.0.0 to v1.1.0); the staging host pulls them; the `staging` environment and its secrets are set | The deploy and smoke steps against the host wait for TCP 80/443 to reach it (#198) |
 
 ## Success criteria (section 11)
 
@@ -126,21 +126,22 @@ and `ml/tests/`.
 | Secure authentication and authorization | Verified | NFR table |
 | Code adheres to coding standards | Verified | Practices table |
 | Documentation complete and professionally presented | Verified | Documentation index ([docs/README.md](../README.md)), user manual with the v1.1.0 screens, link check in CI |
-| Repeatable automated deployment | Unverified | Tagged release, Deploy workflow and `deploy.sh`; not yet run against the staging host (#198) |
+| Repeatable automated deployment | Partial | Tagged release, Deploy workflow and `deploy.sh`; `deploy.sh` ran on the staging host on 8 Nov 2026 (v1.1.0, migrations to 0031, health-gated); the workflow run waits for TCP 80/443 to the instance (#198) |
 
-## Gaps that need the staging server
+## Gaps that needed the staging server
 
-Everything below is implemented and tested locally or in CI and waits only for a deployed host.
+The staging host (Oracle Cloud Always Free Arm VM, `pbip.duckdns.org`, deploy guide) exists since 8 November 2026.
+Status of each item on that date:
 
-| Gap | Issue or task |
-|---|---|
-| First staging deployment through the Deploy workflow, with smoke test and rollback proof | #198 |
-| Availability measured over a month on staging | TASK-103, #186 |
-| Load at 500 users | TASK-078, #101 |
-| Horizontal scaling run on the host | TASK-079 |
-| Page-load and login budgets measured against staging | TASK-102, #185 |
-| Encryption-at-rest evidence on the deployment host | #399, #145 |
-| TASK-089 (demo on the deployed stack) | depends on #399 |
+| Gap | Issue or task | Status on 8 Nov 2026 |
+|---|---|---|
+| First staging deployment through the Deploy workflow, with smoke test and rollback proof | #198 | Manual deploy done (`deploy.sh`, migrations to 0031, all containers healthy after #494); environment and secrets set. The workflow deploy, the Let's Encrypt certificate and the smoke test wait for TCP 80/443 to reach the instance (the security-list rule) |
+| Availability measured over a month on staging | TASK-103, #186 | Probe running every 30 s since 2026-11-07T21:56Z; one week ends 2026-11-14T21:56Z |
+| Load at 500 users | TASK-078, #101 | Done on the host: 500 VUs with 0 errors and every money invariant held after ADR-0060; the p95 budgets are missed on 2 OCPUs shared with the load generator ([performance 2026-11-08](../testing/performance-2026-11-08-oci.md)) |
+| Horizontal scaling run on the host | TASK-079 | Done: 2 replicas on the host; the pool starvation found there is fixed (ADR-0060, #499); no statement needs an index |
+| Page-load and login budgets measured against staging | TASK-102, #185 | Waits for TCP 443 to reach the instance |
+| Encryption-at-rest evidence on the deployment host | #399, #145 | Encrypted daily backups, off-host copy and a PASS restore drill of the downloaded copy done; the boot volume's encryption setting to be confirmed in the Oracle console |
+| TASK-089 (demo on the deployed stack) | depends on #399 | Staging holds no demo data by design (deploy guide section 14); the demo stays on the local stack |
 
 ## Scope decisions
 

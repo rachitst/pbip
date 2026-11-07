@@ -4,6 +4,35 @@ All notable changes to PBIP are listed here. The format follows [Keep a Changelo
 and the project uses [Semantic Versioning](https://semver.org/). Numbers in brackets are the pull requests that made
 each change. The plain-language summaries are in [`docs/release/`](docs/release/).
 
+## [1.1.1] - 2026-11-08
+
+The first release deployed to the staging host (Oracle Cloud Always Free Arm VM, `https://pbip.duckdns.org`), with the
+fixes and operations work that host needed. The summary is in [`docs/release/v1.1.1.md`](docs/release/v1.1.1.md).
+
+### Fixed
+
+- **Production deploys:** the Celery worker and beat no longer inherit the API image's HTTP health check, which made
+  every `deploy.sh` release fail its health gate (#494).
+- **Database pool starvation under load (TASK-079):** each API process admits no more requests than its pool has
+  connections, and every request uses at most one connection, so 200 and 500 virtual users run with 0 errors on the
+  staging host instead of collapsing into 30 s pool timeouts; a request that waits past the pool timeout gets a 503
+  `service_busy` with `Retry-After` (ADR-0060, #499).
+
+### Changed
+
+- **Assistant latency:** clear "overview of my finances" questions are answered by the rules, and the Groq routing
+  call has a 2.5 s wall-clock deadline after which the rules answer at once; first token for open questions p50
+  364 ms (was 688 ms), p95 729 ms (was 1,737 ms), worst case 850 ms (was 8,093 ms) (ADR-0037 addendum, #497).
+
+### Added
+
+- **Monitoring for the production stack:** Prometheus, Grafana, Loki, Alloy and the exporters as their own compose
+  project beside `pbip-prod`, loopback-only, passwords as compose secrets, `deploy.sh monitoring` (ADR-0059, #498).
+- **Off-host backups:** `scripts/offsite_backup.py` and `infra/deploy/backup-offsite.sh` copy the encrypted daily
+  backup to OCI Object Storage through its S3-compatible API; a restore drill of the downloaded copy passed (#496).
+- **Docs:** staging results ([performance 2026-11-08](docs/testing/performance-2026-11-08-oci.md)), the 2 OCPU /
+  12 GB shape and a certbot `--deploy-hook` fix in the Oracle guide and runbook, traceability updated.
+
 ## [1.1.0] - 2026-11-05
 
 The release that completes the use-case document's functional scope (sections 5 and 7) and its deliverables (sections

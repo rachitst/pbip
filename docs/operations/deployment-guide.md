@@ -20,7 +20,7 @@ into issues, chat or documents.
 | Target | Compose file | Who uses it | Data |
 |---|---|---|---|
 | Local stack | `docker-compose.yml` (`make up`, `make up-all`) | Developers and the live demo, at https://localhost:8443 | Demo data from `make seed` |
-| Staging | `infra/deploy/docker-compose.prod.yml`, project `pbip-prod`, on one Oracle Cloud Always Free Arm VM | Testers; release verification | Empty: customers register themselves. `scripts/seed_dev.py` refuses `APP_ENV=staging` |
+| Staging | `infra/deploy/docker-compose.prod.yml`, project `pbip-prod`, on one Oracle Cloud Always Free Arm VM (`https://pbip.duckdns.org`, 2 OCPUs, 12 GB, since 8 Nov 2026) | Testers; release verification | Empty: customers register themselves. `scripts/seed_dev.py` refuses `APP_ENV=staging` |
 
 There is no production deployment. The staging compose is production-like: images pulled from GHCR, no build on the
 host, PostgreSQL and Redis not published, two API replicas, TLS at nginx, and the API refusing to boot with unsafe
