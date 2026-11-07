@@ -5,9 +5,11 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 MAX_AMOUNT_MINOR = 10_00_00_000_00  # INR 10 crore: above every catalogue maximum
+MAX_ORDER_UNITS = 100_000  # whole stocks or bonds in one order
+MAX_UNITS_MICRO = 10**15  # a bound on any sale; far above any holding the order caps allow
 
 RiskLevelLiteral = Literal["LOW", "MODERATE", "HIGH"]
 
@@ -35,6 +37,9 @@ class WealthProductOut(BaseModel):
     premature_closure_allowed: bool
     premature_penalty_bps: int | None
     bookable: bool = Field(description="Only fixed deposits can be booked online")
+    investable: bool = Field(
+        description="A fund that can be bought online at a simulated price (ADR-0058)"
+    )
     notes: str
     catalogue_version: str
 
@@ -106,7 +111,7 @@ class FixedDepositOut(BaseModel):
 
 
 class AllocationSlice(BaseModel):
-    asset_class: Literal["CASH", "DEPOSITS", "FUNDS"]
+    asset_class: Literal["CASH", "DEPOSITS", "FUNDS", "STOCKS", "BONDS"]
     value_minor: int
     share_bps: int = Field(description="Share of the total; the slices sum to 10000 (0 if empty)")
 
@@ -119,7 +124,13 @@ class PortfolioOut(BaseModel):
     accrued_interest_minor: int = Field(description="Interest earned to date on open deposits")
     deposits_value_minor: int = Field(description="Principal + accrued interest")
     projected_maturity_value_minor: int
-    funds_minor: int = Field(description="Fund holdings: PBIP sells no fund units, so always 0")
+    funds_minor: int = Field(description="Fund holdings at today's simulated NAV (ADR-0058)")
+    stocks_minor: int = Field(description="Stock holdings at today's simulated price")
+    bonds_minor: int = Field(description="Bond holdings at today's simulated price")
+    investments_cost_minor: int = Field(description="Cost basis of fund, stock and bond holdings")
+    investments_gain_minor: int = Field(
+        description="Value of fund, stock and bond holdings minus their cost basis (unrealised)"
+    )
     total_minor: int
     open_deposits: int
     allocation: list[AllocationSlice]
@@ -170,3 +181,208 @@ class InsuranceProductOut(BaseModel):
     eligibility: InsuranceEligibilityOut
     notes: str
     catalogue_version: str
+
+
+# ----------------------------------------------------------------- investing (ADR-0058)
+InstrumentKindLiteral = Literal["MUTUAL_FUND", "STOCK", "BOND"]
+PRICE_SOURCE_DESCRIPTION = "Always SIMULATED: PBIP's deterministic price model, not market data"
+
+
+class InstrumentOut(BaseModel):
+    id: UUID
+    code: str
+    kind: InstrumentKindLiteral
+    name: str
+    description: str
+    risk_level: RiskLevelLiteral
+    wealth_product_id: UUID | None = Field(description="The fund's catalogue row; None otherwise")
+    currency: Literal["INR"]
+    order_mode: Literal["AMOUNT", "UNITS"] = Field(
+        description="AMOUNT: funds are bought by amount; UNITS: stocks and bonds in whole units"
+    )
+    min_order_minor: int | None = Field(description="Smallest fund purchase; None for units")
+    price_minor: int = Field(description="Price of one unit today, in paise")
+    price_date: date = Field(description="The bank day the price is for (one price a day)")
+    price_source: Literal["SIMULATED"] = Field(description=PRICE_SOURCE_DESCRIPTION)
+    notes: str
+    catalogue_version: str
+
+
+class BuyRequest(BaseModel):
+    """Exactly one of ``amount_minor`` (funds) or ``units`` (stocks and bonds). No price from
+    the client: the price is the simulated price of the bank day the order executes."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    instrument_id: UUID
+    account_id: UUID = Field(description="One of MY accounts: pays for the order")
+    amount_minor: int | None = Field(default=None, gt=0, le=MAX_AMOUNT_MINOR)
+    units: int | None = Field(default=None, gt=0, le=MAX_ORDER_UNITS)
+
+    @model_validator(mode="after")
+    def _one_quantity(self) -> "BuyRequest":
+        if (self.amount_minor is None) == (self.units is None):
+            raise ValueError("give exactly one of amount_minor or units")
+        return self
+
+
+class SellRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    account_id: UUID = Field(description="One of MY accounts: receives the proceeds")
+    units_micro: int = Field(
+        gt=0,
+        le=MAX_UNITS_MICRO,
+        description="Micro-units to sell (1 unit = 1,000,000); whole units for stocks and bonds",
+    )
+
+
+class OrderOut(BaseModel):
+    id: UUID
+    side: Literal["BUY", "SELL"]
+    holding_id: UUID
+    instrument_id: UUID
+    instrument_code: str
+    instrument_name: str
+    account_id: UUID
+    units_micro: int
+    price_minor: int
+    price_date: date
+    price_source: Literal["SIMULATED"] = Field(description=PRICE_SOURCE_DESCRIPTION)
+    amount_minor: int = Field(description="Debited (BUY) or credited (SELL), in paise")
+    cost_basis_minor: int = Field(description="Cost added (BUY) or taken out (SELL)")
+    realised_gain_minor: int | None = Field(description="SELL only: proceeds minus cost taken out")
+    transaction_id: UUID
+    sip_id: UUID | None
+    created_at: datetime
+
+
+class HoldingOut(BaseModel):
+    id: UUID
+    instrument_id: UUID
+    instrument_code: str
+    instrument_name: str
+    kind: InstrumentKindLiteral
+    risk_level: RiskLevelLiteral
+    units_micro: int = Field(description="1 unit = 1,000,000 micro-units")
+    price_minor: int
+    price_date: date
+    price_source: Literal["SIMULATED"] = Field(description=PRICE_SOURCE_DESCRIPTION)
+    value_minor: int = Field(description="Units at today's simulated price, rounded down")
+    cost_basis_minor: int = Field(description="Average cost of the units held")
+    gain_minor: int = Field(description="Value minus cost basis (unrealised)")
+    gain_bps: int | None = Field(description="Gain as basis points of the cost basis")
+
+
+# ------------------------------------------------------------------ fund SIPs (ADR-0058 s. 7)
+class SipCreateRequest(BaseModel):
+    """A monthly fund purchase. No date or price from the client: the first instalment is the
+    next ``day_of_month`` (today if it is today), at that day's simulated NAV."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    instrument_id: UUID = Field(description="A mutual fund from GET /wealth/instruments")
+    account_id: UUID = Field(description="One of MY accounts: pays every instalment")
+    amount_minor: int = Field(gt=0, le=MAX_AMOUNT_MINOR)
+    day_of_month: int = Field(ge=1, le=28, description="1 to 28, so every month has the day")
+
+
+class SipRunOut(BaseModel):
+    run_on: date
+    status: Literal["EXECUTED", "FAILED"]
+    order_id: UUID | None
+    units_micro: int | None
+    price_minor: int | None
+    failure_reason: str | None = Field(
+        description="Why a FAILED instalment was not bought, e.g. insufficient_funds"
+    )
+
+
+class SipOut(BaseModel):
+    id: UUID
+    instrument_id: UUID
+    instrument_code: str
+    instrument_name: str
+    account_id: UUID
+    amount_minor: int
+    day_of_month: int
+    status: Literal["ACTIVE", "CANCELLED"]
+    next_run_on: date | None = Field(description="Next instalment; None once cancelled")
+    created_at: datetime
+    cancelled_at: datetime | None
+    runs: list[SipRunOut] = Field(description="The latest instalments, newest first (up to 12)")
+
+
+# ---------------------------------------------- insurance quote and application (ADR-0058 s. 8)
+AgeBandLiteral = Literal["18-25", "26-35", "36-50", "51-59", "60+"]
+ApplicationStatusLiteral = Literal["SUBMITTED", "APPROVED_SIMULATED", "DECLINED"]
+MAX_COVER_MINOR = 100_00_00_000_00  # INR 100 crore: above every catalogue maximum
+
+
+class InsuranceQuoteRequest(BaseModel):
+    """The customer DECLARES an age band for this quote, with explicit consent; nothing is read
+    from the profile (the ADR-0015 consent is for recommendations only). No premium from the
+    client."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: UUID
+    cover_minor: int = Field(gt=0, le=MAX_COVER_MINOR)
+    term_years: int = Field(gt=0, le=60)
+    age_band: AgeBandLiteral
+    age_band_consent: Literal[True] = Field(
+        description="Must be true: I agree to my declared age band being used for this quote"
+    )
+
+
+class InsuranceQuoteOut(BaseModel):
+    product_id: UUID
+    product_name: str
+    cover_minor: int
+    term_years: int
+    age_band: AgeBandLiteral
+    annual_premium_minor: int | None = Field(
+        description="Simulated annual premium (rule IQ-1, not an insurer's price); None if declined"
+    )
+    outcome: ApplicationStatusLiteral = Field(
+        description="The status an application with these terms would get"
+    )
+    reason: str
+    age_factor_bps: int = Field(description="The age band's factor (10000 = the 26-35 band)")
+    term_factor_bps: int = Field(description="Term life term factor; 10000 for health plans")
+    quote_version: str
+
+
+class InsuranceApplicationOut(BaseModel):
+    id: UUID
+    product_id: UUID
+    product_name: str
+    cover_minor: int
+    term_years: int
+    age_band: AgeBandLiteral
+    annual_premium_minor: int | None
+    status: ApplicationStatusLiteral = Field(
+        description="SUBMITTED = referred (no insurer decides it in PBIP); APPROVED_SIMULATED = "
+        "meets the simulated rules, no policy is issued; DECLINED"
+    )
+    decision_reason: str
+    quote_version: str
+    created_at: datetime
+
+
+# ------------------------------------------------- suitability by risk band (ADR-0058 s. 9)
+class SuitabilityItemOut(BaseModel):
+    product_id: UUID
+    kind: Literal["WEALTH_PRODUCT", "INSTRUMENT", "INSURANCE"]
+    risk_level: RiskLevelLiteral | None = Field(description="None for insurance (not risk-rated)")
+    suitable: bool | None = Field(
+        description="True: risk at or below my band; False: above it; None: no band or insurance"
+    )
+    reason: str
+
+
+class SuitabilityOut(BaseModel):
+    band: RiskLevelLiteral | None = Field(description="My RTQ-1 risk band; None if not assessed")
+    questionnaire_version: str | None
+    assessed_at: datetime | None
+    items: list[SuitabilityItemOut]

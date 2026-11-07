@@ -662,18 +662,19 @@ def test_products_are_listed_from_the_real_catalogues_with_their_exact_rates(
         [
             "Funds and bonds:",
             "- “Balanced advantage fund (illustrative)”: moderate risk, market-linked, no rate "
-            "shown, from INR 500.00, not sold online.",
+            "shown, from INR 500.00, can be bought online at a simulated price.",
             "- “ELSS tax-saver fund (illustrative)”: high risk, market-linked, no rate shown, "
             "from INR 500.00, locked in for 36 months, not sold online.",
             "- “Nifty 50 index fund (illustrative)”: high risk, market-linked, no rate shown, "
-            "from INR 500.00, not sold online.",
+            "from INR 500.00, can be bought online at a simulated price.",
             "- “Liquid fund (illustrative)”: low risk, market-linked, no rate shown, from INR "
-            "500.00, not sold online.",
+            "500.00, can be bought online at a simulated price.",
             "- “Sovereign gold bond (illustrative)”: moderate risk, fixed coupon 2.50% a year "
             "plus the gold price at redemption, 96 months, locked in for 60 months, not sold "
             "online.",
-            "Wealth catalogue 2026-11-v1: rates are indicative, simulated PBIP rates. Products "
-            "marked illustrative are listed for comparison, not sold online.",
+            "Wealth catalogue 2026-11-v1, 2026-11-v2: rates are indicative, simulated PBIP "
+            "rates. Fund prices are simulated by PBIP, not market data. Products not sold "
+            "online are listed for comparison only.",
         ]
     )
     stored = client.get("/api/v1/assistant/messages", headers=alice.headers).json()["items"]

@@ -112,7 +112,7 @@ The live demo script and its fallback plan are in [`demo/demo-script.md`](demo/d
 | Topic | Start here |
 |---|---|
 | Everything, indexed | [`docs/README.md`](docs/README.md) |
-| Requirements and traceability | [requirements specification](docs/requirements/requirements-specification.md), [user stories](docs/requirements/user-stories.md), [traceability](docs/requirements/traceability.md) |
+| Requirements and traceability | [requirements specification](docs/requirements/requirements-specification.md), [use cases as built](docs/requirements/use-cases.md), [user stories](docs/requirements/user-stories.md), [traceability](docs/requirements/traceability.md) |
 | Architecture | [blueprint](docs/PROJECT_BLUEPRINT.md), [HLD](docs/architecture/HLD.md), [LLD](docs/architecture/LLD.md), [diagrams](docs/diagrams/README.md), [ADRs](docs/adr/) |
 | API | [OpenAPI contract](docs/api/openapi.json), and `/docs` on a running API |
 | Security | [threat model](docs/security/threat-model.md), [AI assistant security](docs/security/ai-assistant-security.md), [security audit](docs/security/security-audit-2026-11.md) |

@@ -63,6 +63,13 @@ def test_unreachable_redis_fails_open_with_none_so_the_caller_uses_the_database(
 def test_concurrent_writers_never_lose_or_double_count_an_event() -> None:
     server = FakeServer()
     account = uuid4()
+    reader = VelocityCounters(FakeRedis(server=server, decode_responses=True))
+    # Create the fake's keyspace before the threads start. fakeredis builds database 0 lazily, in a
+    # defaultdict and outside its server lock, on a client's first connection: two threads racing
+    # there can each build one, and the loser then writes to an orphan copy (398 of 400 once, at
+    # load 12). Real Redis has one keyspace, so that race is the double's, not the code's; with it
+    # out of the way, a write path that was not atomic would still lose events here.
+    assert reader.redis.ping()
 
     def record(i: int) -> bool:  # one client per thread, one shared server: like API workers
         client = VelocityCounters(FakeRedis(server=server, decode_responses=True))
@@ -72,7 +79,6 @@ def test_concurrent_writers_never_lose_or_double_count_an_event() -> None:
 
     with ThreadPoolExecutor(max_workers=16) as pool:
         assert all(pool.map(record, range(400)))
-    reader = VelocityCounters(FakeRedis(server=server, decode_responses=True))
     assert reader.transfers_in_window(account, T0, exclude=uuid4()) == 400
     assert reader.volume_in_window(account, T0, exclude=uuid4()) == sum(100 + i for i in range(400))
 

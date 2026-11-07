@@ -10,6 +10,11 @@ transition tables with the proving tests, plus the hold, bill payment and schedu
 | [2. Fraud alert](#2-fraud-alert-lifecycle) | `AlertStatus`, `AlertSeverity` in `modules/fraud/models.py` | `modules/fraud/service.py` (`open_alert`), `fraud/structuring_monitor.py`, `PaymentsService.review_alert` |
 | [3. Loan](#3-loan-lifecycle) | `LoanStatus`, `InstalmentStatus` in `modules/loans/models.py` | `modules/loans/service.py` |
 | [4. Fixed deposit](#4-fixed-deposit-lifecycle) | `FixedDepositStatus`, `ClosureKind` in `modules/wealth/models.py` | `modules/wealth/service.py`, `modules/wealth/maturity_service.py` |
+| [5. Investment holding](#5-investment-holding) | `OrderSide` in `modules/wealth/models.py` (PR #465) | `modules/wealth/investing_service.py` |
+| [6. Compliance exception](#6-compliance-exception) | `ExceptionKind`, `ExceptionStatus` in `modules/compliance/exceptions.py` (PR #466) | `compliance/exceptions.py` (`apply_action`) |
+| [8. Fund SIP](#8-fund-sip-and-its-instalments) | `SipStatus`, `SipRunStatus` in `modules/wealth/models.py` (#484) | `modules/wealth/sip_service.py` |
+| [9. Insurance application](#9-insurance-application) | `InsuranceApplicationStatus` in `modules/wealth/models.py` (#483) | `modules/wealth/insurance_service.py`, `wealth/insurance.py` |
+| [7. Analytics consent](#7-analytics-consent) | `analytics_consent` columns in `modules/customers/models.py` (#463) | `modules/customers/service.py` (`set_analytics_consent`) |
 
 ## 1. Transaction lifecycle
 
@@ -17,8 +22,8 @@ Exports: [SVG](svg/state-transaction.svg), [PNG](png/state-transaction.png).
 `TransactionStatus` has six values. `INITIATED` exists only inside the database transaction that creates the header:
 any failure before the commit rolls the header back, so no `INITIATED` row is ever visible. The same machine serves
 transfers, scheduled occurrences (where `STEP_UP` becomes `PENDING_REVIEW`) and bill payments (which have no step-up
-flow). Ledger-internal types (deposits, loan disbursals and repayments, deposit bookings and payouts) are posted
-directly: `INITIATED` to `POSTED` in one commit.
+flow). Ledger-internal types (deposits, loan disbursals and repayments, deposit bookings and payouts, and since PR #465
+investment purchases and sales) are posted directly: `INITIATED` to `POSTED` in one commit.
 
 <!-- diagram: state-transaction -->
 ```mermaid
@@ -122,6 +127,124 @@ stateDiagram-v2
     Held --> ClosedMatured: account active again, next hourly run pays out
     ClosedPremature --> [*]
     ClosedMatured --> [*]
+```
+
+## 5. Investment holding
+
+Exports: [SVG](svg/state-investment-holding.svg), [PNG](png/state-investment-holding.png).
+An `investment_holdings` row is one customer's position in one instrument (unique per customer and instrument), with
+integer micro-units and a cost basis in paise. It has no status column: its state is its units. Every buy or sell also
+writes an immutable `investment_orders` row (`OrderSide` `BUY` or `SELL`) with the day's simulated price and the ledger
+transaction (ADR-0058, PR #465).
+
+<!-- diagram: state-investment-holding -->
+```mermaid
+stateDiagram-v2
+    state "No holding row" as None
+    state "units_micro 0 (row inserted, then locked)" as Zero
+    state "Held: units_micro above 0" as Held
+    [*] --> None
+    None --> Zero: first purchase of this instrument
+    Zero --> Held: BUY order, INVESTMENT_PURCHASE posted
+    Held --> Held: further BUY, or SELL of part of the units
+    Held --> Zero: SELL of every unit, cost basis back to 0
+    Zero --> Held: a later BUY reuses the row
+    note right of Held
+        A SELL removes the cost basis in proportion to
+        the units sold and records the realised gain.
+        Selling more units than held is a 422.
+    end note
+```
+
+## 6. Compliance exception
+
+Exports: [SVG](svg/state-compliance-exception.svg), [PNG](png/state-compliance-exception.png).
+`ExceptionStatus` is never stored on a row: it is read back from the `compliance_exception` audit rows of each
+exception, so every transition is an append to the hash-chained audit log (ADR-0027). The five `ExceptionKind` values
+share one lifecycle: `BLOCKED_TRANSFER`, `ACCOUNT_LOCKOUT`, `AUDIT_CHAIN_FAILURE`, and since PR #466
+`NOTIFICATION_DEAD_LETTER` and `SCHEDULED_TRANSFER_FAILURE`.
+
+<!-- diagram: state-compliance-exception -->
+```mermaid
+stateDiagram-v2
+    [*] --> OPEN: the source fact exists (block, lockout, chain failure, dead letter, failed scheduled run)
+    OPEN --> ACKNOWLEDGED: ACKNOWLEDGE with a reason, audit COMPLIANCE_EXCEPTION_ACKNOWLEDGED
+    OPEN --> RESOLVED: RESOLVE with a reason, audit COMPLIANCE_EXCEPTION_RESOLVED
+    ACKNOWLEDGED --> RESOLVED: RESOLVE with a reason
+    RESOLVED --> [*]
+    note right of ACKNOWLEDGED
+        A second ACKNOWLEDGE, or any action on a
+        RESOLVED exception, is a 409. The audit chain
+        is locked while the status is read and changed.
+    end note
+```
+
+## 7. Analytics consent
+
+Exports: [SVG](svg/state-analytics-consent.svg), [PNG](png/state-analytics-consent.png).
+Stored on `customers` as `analytics_consent` (default false), `analytics_consent_updated_at` and
+`analytics_consent_policy`; CHECK constraints keep the time and policy together (ADR-0057, #463).
+
+<!-- diagram: state-analytics-consent -->
+```mermaid
+stateDiagram-v2
+    state "Not decided: false, no time, no policy" as Undecided
+    state "Granted: true, time and policy version" as Granted
+    state "Withdrawn: false, time and policy version" as Withdrawn
+    [*] --> Undecided
+    Undecided --> Granted: PUT analytics-consent granted, ANALYTICS_CONSENT_GRANTED
+    Undecided --> Withdrawn: PUT analytics-consent refused, ANALYTICS_CONSENT_WITHDRAWN
+    Granted --> Withdrawn: withdraw, events and profile erased in the same transaction
+    Withdrawn --> Granted: grant again
+    note right of Granted
+        Only here are clickstream batches stored and a
+        behavioural profile built (daily job at 03:40).
+        The same decision under the same policy is not
+        re-audited.
+    end note
+```
+
+## 8. Fund SIP and its instalments
+
+Exports: [SVG](svg/state-fund-sip.svg), [PNG](png/state-fund-sip.png).
+`SipStatus` and `SipRunStatus` in `modules/wealth/models.py`, transitions in `modules/wealth/sip_service.py` (#484).
+
+<!-- diagram: state-fund-sip -->
+```mermaid
+stateDiagram-v2
+    state "SIP (fund_sips.status)" as Sip {
+        [*] --> ACTIVE: POST /wealth/sips, no money moved
+        ACTIVE --> ACTIVE: instalment executed or failed, next_run_on moves to next month
+        ACTIVE --> CANCELLED: POST /wealth/sips/id/cancel
+        CANCELLED --> [*]
+    }
+    state "Instalment (fund_sip_runs.status), one per SIP and day" as Run {
+        [*] --> EXECUTED: units bought through the ledger
+        [*] --> FAILED: refused, reason stored, nothing bought
+        EXECUTED --> [*]
+        FAILED --> [*]
+    }
+```
+
+## 9. Insurance application
+
+Exports: [SVG](svg/state-insurance-application.svg), [PNG](png/state-insurance-application.png).
+`InsuranceApplicationStatus` in `modules/wealth/models.py`; the status is decided once, when the application is
+recorded, by `wealth/insurance.py` `decide` (#483). Simulated: no policy is issued and no premium is debited.
+
+<!-- diagram: state-insurance-application -->
+```mermaid
+stateDiagram-v2
+    [*] --> DECLINED: band outside the entry ages, or the term runs past the maximum cover age
+    [*] --> SUBMITTED: referred, exact age or medical underwriting needed
+    [*] --> APPROVED_SIMULATED: meets the simulated acceptance rules
+    DECLINED --> [*]
+    SUBMITTED --> [*]
+    APPROVED_SIMULATED --> [*]
+    note right of SUBMITTED
+        No later transition exists in the code:
+        there is no insurer to complete a referral.
+    end note
 ```
 
 **Extension point.** A new lifecycle gets its own numbered section with a `<!-- diagram: state-... -->` marker, its

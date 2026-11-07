@@ -529,7 +529,9 @@
             "enum": [
               "CASH",
               "DEPOSITS",
-              "FUNDS"
+              "FUNDS",
+              "STOCKS",
+              "BONDS"
             ],
             "title": "Asset Class",
             "type": "string"
@@ -1371,6 +1373,55 @@
           "updated_count"
         ],
         "title": "BulkMarkReadResponse",
+        "type": "object"
+      },
+      "BuyRequest": {
+        "additionalProperties": false,
+        "description": "Exactly one of ``amount_minor`` (funds) or ``units`` (stocks and bonds). No price from\nthe client: the price is the simulated price of the bank day the order executes.",
+        "properties": {
+          "account_id": {
+            "description": "One of MY accounts: pays for the order",
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "amount_minor": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 10000000000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Minor"
+          },
+          "instrument_id": {
+            "format": "uuid",
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "units": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Units"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "account_id"
+        ],
+        "title": "BuyRequest",
         "type": "object"
       },
       "CategoryInterest": {
@@ -4136,6 +4187,111 @@
         "title": "HighRiskCustomer",
         "type": "object"
       },
+      "HoldingOut": {
+        "properties": {
+          "cost_basis_minor": {
+            "description": "Average cost of the units held",
+            "title": "Cost Basis Minor",
+            "type": "integer"
+          },
+          "gain_bps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Gain as basis points of the cost basis",
+            "title": "Gain Bps"
+          },
+          "gain_minor": {
+            "description": "Value minus cost basis (unrealised)",
+            "title": "Gain Minor",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "instrument_code": {
+            "title": "Instrument Code",
+            "type": "string"
+          },
+          "instrument_id": {
+            "format": "uuid",
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "instrument_name": {
+            "title": "Instrument Name",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "MUTUAL_FUND",
+              "STOCK",
+              "BOND"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "price_date": {
+            "format": "date",
+            "title": "Price Date",
+            "type": "string"
+          },
+          "price_minor": {
+            "title": "Price Minor",
+            "type": "integer"
+          },
+          "price_source": {
+            "const": "SIMULATED",
+            "description": "Always SIMULATED: PBIP's deterministic price model, not market data",
+            "title": "Price Source",
+            "type": "string"
+          },
+          "risk_level": {
+            "enum": [
+              "LOW",
+              "MODERATE",
+              "HIGH"
+            ],
+            "title": "Risk Level",
+            "type": "string"
+          },
+          "units_micro": {
+            "description": "1 unit = 1,000,000 micro-units",
+            "title": "Units Micro",
+            "type": "integer"
+          },
+          "value_minor": {
+            "description": "Units at today's simulated price, rounded down",
+            "title": "Value Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "instrument_id",
+          "instrument_code",
+          "instrument_name",
+          "kind",
+          "risk_level",
+          "units_micro",
+          "price_minor",
+          "price_date",
+          "price_source",
+          "value_minor",
+          "cost_basis_minor",
+          "gain_minor",
+          "gain_bps"
+        ],
+        "title": "HoldingOut",
+        "type": "object"
+      },
       "IndicativePremiumOut": {
         "description": "ONE illustrative figure at a stated reference profile, never a quote for this customer\n(PBIP does no underwriting, ADR-0028).",
         "properties": {
@@ -4218,6 +4374,214 @@
           "balance_after_minor"
         ],
         "title": "InstalmentOut",
+        "type": "object"
+      },
+      "InstrumentOut": {
+        "properties": {
+          "catalogue_version": {
+            "title": "Catalogue Version",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "currency": {
+            "const": "INR",
+            "title": "Currency",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "MUTUAL_FUND",
+              "STOCK",
+              "BOND"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "min_order_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Smallest fund purchase; None for units",
+            "title": "Min Order Minor"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "title": "Notes",
+            "type": "string"
+          },
+          "order_mode": {
+            "description": "AMOUNT: funds are bought by amount; UNITS: stocks and bonds in whole units",
+            "enum": [
+              "AMOUNT",
+              "UNITS"
+            ],
+            "title": "Order Mode",
+            "type": "string"
+          },
+          "price_date": {
+            "description": "The bank day the price is for (one price a day)",
+            "format": "date",
+            "title": "Price Date",
+            "type": "string"
+          },
+          "price_minor": {
+            "description": "Price of one unit today, in paise",
+            "title": "Price Minor",
+            "type": "integer"
+          },
+          "price_source": {
+            "const": "SIMULATED",
+            "description": "Always SIMULATED: PBIP's deterministic price model, not market data",
+            "title": "Price Source",
+            "type": "string"
+          },
+          "risk_level": {
+            "enum": [
+              "LOW",
+              "MODERATE",
+              "HIGH"
+            ],
+            "title": "Risk Level",
+            "type": "string"
+          },
+          "wealth_product_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The fund's catalogue row; None otherwise",
+            "title": "Wealth Product Id"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "kind",
+          "name",
+          "description",
+          "risk_level",
+          "wealth_product_id",
+          "currency",
+          "order_mode",
+          "min_order_minor",
+          "price_minor",
+          "price_date",
+          "price_source",
+          "notes",
+          "catalogue_version"
+        ],
+        "title": "InstrumentOut",
+        "type": "object"
+      },
+      "InsuranceApplicationOut": {
+        "properties": {
+          "age_band": {
+            "enum": [
+              "18-25",
+              "26-35",
+              "36-50",
+              "51-59",
+              "60+"
+            ],
+            "title": "Age Band",
+            "type": "string"
+          },
+          "annual_premium_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annual Premium Minor"
+          },
+          "cover_minor": {
+            "title": "Cover Minor",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision_reason": {
+            "title": "Decision Reason",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "product_name": {
+            "title": "Product Name",
+            "type": "string"
+          },
+          "quote_version": {
+            "title": "Quote Version",
+            "type": "string"
+          },
+          "status": {
+            "description": "SUBMITTED = referred (no insurer decides it in PBIP); APPROVED_SIMULATED = meets the simulated rules, no policy is issued; DECLINED",
+            "enum": [
+              "SUBMITTED",
+              "APPROVED_SIMULATED",
+              "DECLINED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "term_years": {
+            "title": "Term Years",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "product_id",
+          "product_name",
+          "cover_minor",
+          "term_years",
+          "age_band",
+          "annual_premium_minor",
+          "status",
+          "decision_reason",
+          "quote_version",
+          "created_at"
+        ],
+        "title": "InsuranceApplicationOut",
         "type": "object"
       },
       "InsuranceEligibilityOut": {
@@ -4342,6 +4706,142 @@
           "catalogue_version"
         ],
         "title": "InsuranceProductOut",
+        "type": "object"
+      },
+      "InsuranceQuoteOut": {
+        "properties": {
+          "age_band": {
+            "enum": [
+              "18-25",
+              "26-35",
+              "36-50",
+              "51-59",
+              "60+"
+            ],
+            "title": "Age Band",
+            "type": "string"
+          },
+          "age_factor_bps": {
+            "description": "The age band's factor (10000 = the 26-35 band)",
+            "title": "Age Factor Bps",
+            "type": "integer"
+          },
+          "annual_premium_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Simulated annual premium (rule IQ-1, not an insurer's price); None if declined",
+            "title": "Annual Premium Minor"
+          },
+          "cover_minor": {
+            "title": "Cover Minor",
+            "type": "integer"
+          },
+          "outcome": {
+            "description": "The status an application with these terms would get",
+            "enum": [
+              "SUBMITTED",
+              "APPROVED_SIMULATED",
+              "DECLINED"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "product_name": {
+            "title": "Product Name",
+            "type": "string"
+          },
+          "quote_version": {
+            "title": "Quote Version",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "term_factor_bps": {
+            "description": "Term life term factor; 10000 for health plans",
+            "title": "Term Factor Bps",
+            "type": "integer"
+          },
+          "term_years": {
+            "title": "Term Years",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "product_id",
+          "product_name",
+          "cover_minor",
+          "term_years",
+          "age_band",
+          "annual_premium_minor",
+          "outcome",
+          "reason",
+          "age_factor_bps",
+          "term_factor_bps",
+          "quote_version"
+        ],
+        "title": "InsuranceQuoteOut",
+        "type": "object"
+      },
+      "InsuranceQuoteRequest": {
+        "additionalProperties": false,
+        "description": "The customer DECLARES an age band for this quote, with explicit consent; nothing is read\nfrom the profile (the ADR-0015 consent is for recommendations only). No premium from the\nclient.",
+        "properties": {
+          "age_band": {
+            "enum": [
+              "18-25",
+              "26-35",
+              "36-50",
+              "51-59",
+              "60+"
+            ],
+            "title": "Age Band",
+            "type": "string"
+          },
+          "age_band_consent": {
+            "const": true,
+            "description": "Must be true: I agree to my declared age band being used for this quote",
+            "title": "Age Band Consent",
+            "type": "boolean"
+          },
+          "cover_minor": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100000000000.0,
+            "title": "Cover Minor",
+            "type": "integer"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "term_years": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 60.0,
+            "title": "Term Years",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "product_id",
+          "cover_minor",
+          "term_years",
+          "age_band",
+          "age_band_consent"
+        ],
+        "title": "InsuranceQuoteRequest",
         "type": "object"
       },
       "InsuranceType": {
@@ -5582,6 +6082,130 @@
         "title": "OpenAlertsPanel",
         "type": "object"
       },
+      "OrderOut": {
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "amount_minor": {
+            "description": "Debited (BUY) or credited (SELL), in paise",
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "cost_basis_minor": {
+            "description": "Cost added (BUY) or taken out (SELL)",
+            "title": "Cost Basis Minor",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "holding_id": {
+            "format": "uuid",
+            "title": "Holding Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "instrument_code": {
+            "title": "Instrument Code",
+            "type": "string"
+          },
+          "instrument_id": {
+            "format": "uuid",
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "instrument_name": {
+            "title": "Instrument Name",
+            "type": "string"
+          },
+          "price_date": {
+            "format": "date",
+            "title": "Price Date",
+            "type": "string"
+          },
+          "price_minor": {
+            "title": "Price Minor",
+            "type": "integer"
+          },
+          "price_source": {
+            "const": "SIMULATED",
+            "description": "Always SIMULATED: PBIP's deterministic price model, not market data",
+            "title": "Price Source",
+            "type": "string"
+          },
+          "realised_gain_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "SELL only: proceeds minus cost taken out",
+            "title": "Realised Gain Minor"
+          },
+          "side": {
+            "enum": [
+              "BUY",
+              "SELL"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "sip_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sip Id"
+          },
+          "transaction_id": {
+            "format": "uuid",
+            "title": "Transaction Id",
+            "type": "string"
+          },
+          "units_micro": {
+            "title": "Units Micro",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "side",
+          "holding_id",
+          "instrument_id",
+          "instrument_code",
+          "instrument_name",
+          "account_id",
+          "units_micro",
+          "price_minor",
+          "price_date",
+          "price_source",
+          "amount_minor",
+          "cost_basis_minor",
+          "realised_gain_minor",
+          "transaction_id",
+          "sip_id",
+          "created_at"
+        ],
+        "title": "OrderOut",
+        "type": "object"
+      },
       "PageDirection": {
         "enum": [
           "older",
@@ -5853,6 +6477,11 @@
             "title": "As Of",
             "type": "string"
           },
+          "bonds_minor": {
+            "description": "Bond holdings at today's simulated price",
+            "title": "Bonds Minor",
+            "type": "integer"
+          },
           "cash_minor": {
             "description": "Ledger balance of my INR accounts",
             "title": "Cash Minor",
@@ -5869,7 +6498,7 @@
             "type": "integer"
           },
           "funds_minor": {
-            "description": "Fund holdings: PBIP sells no fund units, so always 0",
+            "description": "Fund holdings at today's simulated NAV (ADR-0058)",
             "title": "Funds Minor",
             "type": "integer"
           },
@@ -5878,12 +6507,27 @@
             "title": "Invested Principal Minor",
             "type": "integer"
           },
+          "investments_cost_minor": {
+            "description": "Cost basis of fund, stock and bond holdings",
+            "title": "Investments Cost Minor",
+            "type": "integer"
+          },
+          "investments_gain_minor": {
+            "description": "Value of fund, stock and bond holdings minus their cost basis (unrealised)",
+            "title": "Investments Gain Minor",
+            "type": "integer"
+          },
           "open_deposits": {
             "title": "Open Deposits",
             "type": "integer"
           },
           "projected_maturity_value_minor": {
             "title": "Projected Maturity Value Minor",
+            "type": "integer"
+          },
+          "stocks_minor": {
+            "description": "Stock holdings at today's simulated price",
+            "title": "Stocks Minor",
             "type": "integer"
           },
           "total_minor": {
@@ -5900,6 +6544,10 @@
           "deposits_value_minor",
           "projected_maturity_value_minor",
           "funds_minor",
+          "stocks_minor",
+          "bonds_minor",
+          "investments_cost_minor",
+          "investments_gain_minor",
           "total_minor",
           "open_deposits",
           "allocation"
@@ -7445,6 +8093,30 @@
         "title": "SegmentSpend",
         "type": "object"
       },
+      "SellRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "description": "One of MY accounts: receives the proceeds",
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "units_micro": {
+            "description": "Micro-units to sell (1 unit = 1,000,000); whole units for stocks and bonds",
+            "exclusiveMinimum": 0.0,
+            "maximum": 1000000000000000.0,
+            "title": "Units Micro",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "account_id",
+          "units_micro"
+        ],
+        "title": "SellRequest",
+        "type": "object"
+      },
       "SettingUnit": {
         "enum": [
           "MINOR_UNITS",
@@ -7452,6 +8124,215 @@
         ],
         "title": "SettingUnit",
         "type": "string"
+      },
+      "SipCreateRequest": {
+        "additionalProperties": false,
+        "description": "A monthly fund purchase. No date or price from the client: the first instalment is the\nnext ``day_of_month`` (today if it is today), at that day's simulated NAV.",
+        "properties": {
+          "account_id": {
+            "description": "One of MY accounts: pays every instalment",
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "amount_minor": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 10000000000.0,
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "day_of_month": {
+            "description": "1 to 28, so every month has the day",
+            "maximum": 28.0,
+            "minimum": 1.0,
+            "title": "Day Of Month",
+            "type": "integer"
+          },
+          "instrument_id": {
+            "description": "A mutual fund from GET /wealth/instruments",
+            "format": "uuid",
+            "title": "Instrument Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "account_id",
+          "amount_minor",
+          "day_of_month"
+        ],
+        "title": "SipCreateRequest",
+        "type": "object"
+      },
+      "SipOut": {
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "amount_minor": {
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "cancelled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancelled At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "day_of_month": {
+            "title": "Day Of Month",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "instrument_code": {
+            "title": "Instrument Code",
+            "type": "string"
+          },
+          "instrument_id": {
+            "format": "uuid",
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "instrument_name": {
+            "title": "Instrument Name",
+            "type": "string"
+          },
+          "next_run_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Next instalment; None once cancelled",
+            "title": "Next Run On"
+          },
+          "runs": {
+            "description": "The latest instalments, newest first (up to 12)",
+            "items": {
+              "$ref": "#/components/schemas/SipRunOut"
+            },
+            "title": "Runs",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "CANCELLED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "instrument_id",
+          "instrument_code",
+          "instrument_name",
+          "account_id",
+          "amount_minor",
+          "day_of_month",
+          "status",
+          "next_run_on",
+          "created_at",
+          "cancelled_at",
+          "runs"
+        ],
+        "title": "SipOut",
+        "type": "object"
+      },
+      "SipRunOut": {
+        "properties": {
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why a FAILED instalment was not bought, e.g. insufficient_funds",
+            "title": "Failure Reason"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "price_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Minor"
+          },
+          "run_on": {
+            "format": "date",
+            "title": "Run On",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "EXECUTED",
+              "FAILED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "units_micro": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Units Micro"
+          }
+        },
+        "required": [
+          "run_on",
+          "status",
+          "order_id",
+          "units_micro",
+          "price_minor",
+          "failure_reason"
+        ],
+        "title": "SipRunOut",
+        "type": "object"
       },
       "SpendIncomePattern": {
         "properties": {
@@ -7733,6 +8614,125 @@
           "outcome"
         ],
         "title": "StreamToolResult",
+        "type": "object"
+      },
+      "SuitabilityItemOut": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "WEALTH_PRODUCT",
+              "INSTRUMENT",
+              "INSURANCE"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "risk_level": {
+            "anyOf": [
+              {
+                "enum": [
+                  "LOW",
+                  "MODERATE",
+                  "HIGH"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "None for insurance (not risk-rated)",
+            "title": "Risk Level"
+          },
+          "suitable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "True: risk at or below my band; False: above it; None: no band or insurance",
+            "title": "Suitable"
+          }
+        },
+        "required": [
+          "product_id",
+          "kind",
+          "risk_level",
+          "suitable",
+          "reason"
+        ],
+        "title": "SuitabilityItemOut",
+        "type": "object"
+      },
+      "SuitabilityOut": {
+        "properties": {
+          "assessed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessed At"
+          },
+          "band": {
+            "anyOf": [
+              {
+                "enum": [
+                  "LOW",
+                  "MODERATE",
+                  "HIGH"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "My RTQ-1 risk band; None if not assessed",
+            "title": "Band"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SuitabilityItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "questionnaire_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Questionnaire Version"
+          }
+        },
+        "required": [
+          "band",
+          "questionnaire_version",
+          "assessed_at",
+          "items"
+        ],
+        "title": "SuitabilityOut",
         "type": "object"
       },
       "SupportedCurrency": {
@@ -8371,6 +9371,11 @@
             "title": "Id",
             "type": "string"
           },
+          "investable": {
+            "description": "A fund that can be bought online at a simulated price (ADR-0058)",
+            "title": "Investable",
+            "type": "boolean"
+          },
           "max_amount_minor": {
             "anyOf": [
               {
@@ -8473,6 +9478,7 @@
           "premature_closure_allowed",
           "premature_penalty_bps",
           "bookable",
+          "investable",
           "notes",
           "catalogue_version"
         ],
@@ -14594,6 +15600,212 @@
         ]
       }
     },
+    "/api/v1/wealth/holdings": {
+      "get": {
+        "operationId": "list_holdings_api_v1_wealth_holdings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/HoldingOut"
+                  },
+                  "title": "Response List Holdings Api V1 Wealth Holdings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "My fund, stock and bond holdings at today's simulated price, with gain or loss",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/holdings/{holding_id}": {
+      "get": {
+        "operationId": "get_holding_api_v1_wealth_holdings__holding_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "holding_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Holding Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldingOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "One of my holdings",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/holdings/{holding_id}/sell": {
+      "post": {
+        "operationId": "sell_investment_api_v1_wealth_holdings__holding_id__sell_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "holding_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Holding Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Unique per logical request; retrying with the same key never duplicates.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Unique per logical request; retrying with the same key never duplicates.",
+              "maxLength": 128,
+              "minLength": 8,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SellRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The request body is not valid JSON (problem+json)"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          },
+          "404": {
+            "description": "The holding or the account is not mine (problem+json)"
+          },
+          "422": {
+            "description": "More units than held, part of a stock or bond, or too small"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Sell units of one of my holdings into one of my accounts (idempotent)",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/instruments": {
+      "get": {
+        "operationId": "list_instruments_api_v1_wealth_instruments_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InstrumentOut"
+                  },
+                  "title": "Response List Instruments Api V1 Wealth Instruments Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Investable funds, stocks and bonds with today's SIMULATED price (not market data)",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
     "/api/v1/wealth/insurance": {
       "get": {
         "operationId": "list_insurance_api_v1_wealth_insurance_get",
@@ -14655,6 +15867,282 @@
           }
         ],
         "summary": "Insurance catalogue: term life and health, with indicative premiums (no underwriting)",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/insurance/applications": {
+      "get": {
+        "operationId": "list_insurance_applications_api_v1_wealth_insurance_applications_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InsuranceApplicationOut"
+                  },
+                  "title": "Response List Insurance Applications Api V1 Wealth Insurance Applications Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "My insurance applications with their status",
+        "tags": [
+          "wealth"
+        ]
+      },
+      "post": {
+        "operationId": "apply_for_insurance_api_v1_wealth_insurance_applications_post",
+        "parameters": [
+          {
+            "description": "Unique per logical request; retrying with the same key never duplicates.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Unique per logical request; retrying with the same key never duplicates.",
+              "maxLength": 128,
+              "minLength": 8,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InsuranceQuoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceApplicationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The request body is not valid JSON (problem+json)"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          },
+          "404": {
+            "description": "No such insurance product (problem+json)"
+          },
+          "422": {
+            "description": "Cover or term not offered, or consent not given"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Apply for an insurance plan (simulated; no policy is issued and nothing is charged)",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/insurance/applications/{application_id}": {
+      "get": {
+        "operationId": "get_insurance_application_api_v1_wealth_insurance_applications__application_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Application Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceApplicationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "One of my insurance applications",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/insurance/quote": {
+      "post": {
+        "operationId": "quote_insurance_api_v1_wealth_insurance_quote_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InsuranceQuoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceQuoteOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The request body is not valid JSON (problem+json)"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          },
+          "404": {
+            "description": "No such insurance product (problem+json)"
+          },
+          "422": {
+            "description": "Cover or term not offered, or consent not given"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Simulated insurance quote from my declared age band (no underwriting; stores nothing)",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/investments/buy": {
+      "post": {
+        "operationId": "buy_investment_api_v1_wealth_investments_buy_post",
+        "parameters": [
+          {
+            "description": "Unique per logical request; retrying with the same key never duplicates.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Unique per logical request; retrying with the same key never duplicates.",
+              "maxLength": 128,
+              "minLength": 8,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The request body is not valid JSON (problem+json)"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          },
+          "404": {
+            "description": "No such instrument, or the account is not mine (problem+json)"
+          },
+          "422": {
+            "description": "Insufficient funds, wrong quantity kind or too small an order"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Buy fund units by amount, or whole stocks or bonds, from one of my accounts",
         "tags": [
           "wealth"
         ]
@@ -14753,6 +16241,253 @@
           }
         ],
         "summary": "Wealth catalogue: fixed deposits, mutual funds and the sovereign gold bond",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/sips": {
+      "get": {
+        "operationId": "list_sips_api_v1_wealth_sips_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SipOut"
+                  },
+                  "title": "Response List Sips Api V1 Wealth Sips Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "My fund SIPs with their latest runs",
+        "tags": [
+          "wealth"
+        ]
+      },
+      "post": {
+        "operationId": "create_sip_api_v1_wealth_sips_post",
+        "parameters": [
+          {
+            "description": "Unique per logical request; retrying with the same key never duplicates.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Unique per logical request; retrying with the same key never duplicates.",
+              "maxLength": 128,
+              "minLength": 8,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SipCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SipOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The request body is not valid JSON (problem+json)"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          },
+          "404": {
+            "description": "No such instrument, or the account is not mine (problem+json)"
+          },
+          "422": {
+            "description": "Not a fund, below the fund's minimum, or invalid request"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set up a monthly fund purchase from one of my accounts (idempotent; moves no money)",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/sips/{sip_id}": {
+      "get": {
+        "operationId": "get_sip_api_v1_wealth_sips__sip_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sip_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Sip Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SipOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "One of my fund SIPs",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/sips/{sip_id}/cancel": {
+      "post": {
+        "operationId": "cancel_sip_api_v1_wealth_sips__sip_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sip_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Sip Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SipOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          },
+          "404": {
+            "description": "Not found (problem+json). A resource that exists but is not the caller's is also 404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel one of my fund SIPs (no further instalments; safe to repeat)",
+        "tags": [
+          "wealth"
+        ]
+      }
+    },
+    "/api/v1/wealth/suitability": {
+      "get": {
+        "operationId": "get_suitability_api_v1_wealth_suitability_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuitabilityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token (problem+json)"
+          },
+          "403": {
+            "description": "Not allowed (problem+json): wrong role, a staff route without an MFA session, a customer route called by a non-customer, or a cookie route without the CSRF header"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Which wealth products suit my recorded risk band (RTQ-1), with the reason",
         "tags": [
           "wealth"
         ]

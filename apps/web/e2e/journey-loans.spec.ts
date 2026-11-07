@@ -49,7 +49,10 @@ test("a loan is checked, applied for, disbursed and tracked", async ({ page, req
 
   // Tracking: the loan is listed with its schedule, and it is the API's record (reload).
   await page.reload();
-  const card = page.getByRole("region", { name: "Personal loan", exact: true });
+  // The card in "Your loans": since #470 "Loans for you" also has a "Personal loan" offer card.
+  const card = page
+    .getByRole("region", { name: "Your loans" })
+    .getByRole("region", { name: "Personal loan", exact: true });
   await expect(card).toContainText(inr(PRINCIPAL));
   await expect(card).toContainText("0 of 12 EMIs paid");
   await card.getByRole("button", { name: "Show upcoming EMIs" }).click();

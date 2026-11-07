@@ -14,6 +14,13 @@ the attempt persists, including the idempotency row, so the client may retry wit
 | [5. Bill payment](#5-bill-payment) | `modules/bills/service.py` (`pay_bill`) |
 | [6. Scheduled transfer run](#6-scheduled-transfer-run) | `modules/payments/scheduled_service.py`, beat entry `execute-scheduled-transfers` |
 | [7. Fixed deposit booking and maturity payout](#7-fixed-deposit-booking-and-maturity-payout) | `modules/wealth/service.py` (`book_fixed_deposit`, `close_fixed_deposit`), `modules/wealth/maturity_service.py` |
+| [8. Investing: buy and sell](#8-investing-buy-and-sell) | `modules/wealth/investing_service.py`, `wealth/pricing.py`, `wealth/router.py`, `ledger/service.py` (`buy_investment`, `sell_investment`), ADR-0058 (PR #465) |
+| [9. Behavioural profile and analytics consent](#9-behavioural-profile-and-analytics-consent-uc-11) | `modules/customers/service.py` (`set_analytics_consent`), `modules/events/service.py`, `modules/analytics/profile_job.py`, `analytics/profiling.py`, ADR-0057 (#463) |
+| [10. Loan recommendations](#10-loan-recommendations-uc-06) | `modules/loans/service.py` (`assess`, `loan_offers`), `modules/recommendations/service.py`, ADR-0056 (PR #470) |
+| [11. Fraud monitoring dashboard](#11-fraud-monitoring-dashboard) | `modules/fraud/stats.py`, `fraud/router.py`, `apps/web/src/pages/staff/FraudDashboard.tsx` (PR #464) |
+| [13. Fund SIP](#13-fund-sip-set-up-and-monthly-instalment) | `modules/wealth/sip_service.py`, beat `run-fund-sips` (#484) |
+| [14. Insurance quote and application](#14-insurance-quote-and-application) | `modules/wealth/insurance_service.py`, `wealth/insurance.py` (#483) |
+| [12. Compliance exceptions](#12-compliance-exceptions) | `modules/compliance/exceptions.py`, `compliance/router.py`, ADR-0027 (PR #466) |
 
 All paths are relative to `apps/api/src/pbip_api/` unless they start with `apps/`.
 
@@ -448,6 +455,327 @@ flowchart TD
     active -- "no: rolled back" --> first
     first -- no --> held
     first -- yes --> stillheld
+```
+
+## 8. Investing: buy and sell
+
+Exports: [SVG](svg/activity-investing.svg), [PNG](png/activity-investing.png).
+Funds are bought by amount, stocks and bonds in whole units; every price comes from `wealth/pricing.py`, a
+deterministic **simulated** price per bank day (never market data, never taken from the client). A purchase or a sale
+is one use case and one database transaction in the AGENTS.md lock order (ADR-0058). Money moves only through the
+ledger: `INVESTMENT_PURCHASE` debits the customer and credits `SYS-INVESTMENTS`, `INVESTMENT_SALE` the reverse.
+
+<!-- diagram: activity-investing -->
+```mermaid
+flowchart TD
+    list(["Customer views instruments<br/>GET /api/v1/wealth/instruments: funds, stocks, bonds<br/>with today's simulated price"])
+    buy(["POST /wealth/investments/buy with Idempotency-Key<br/>instrument, account, amount for a fund or units for a stock or bond"])
+    lock["Per-user advisory lock, idempotency key<br/>a replay returns the stored 201"]
+    inst{"Instrument exists?"}
+    r404[["404 instrument not found"]]
+    qty{"Quantity matches the kind?<br/>fund by amount at or above its minimum,<br/>stock or bond in whole units"}
+    r422q[["422, or 422 order too small"]]
+    acct{"Account owned, ACTIVE, INR?"}
+    r4a[["404 when not owned, else 422"]]
+    hold["Insert a zero holding if none,<br/>then lock the holding row"]
+    pay{"Funds available?"}
+    r422f[["422 insufficient funds, rolled back"]]
+    bought["ledger.buy_investment: INVESTMENT_PURCHASE,<br/>debit the customer, credit SYS-INVESTMENTS;<br/>holding units and cost basis increased;<br/>investment_orders row BUY"]
+    bnote["Notify INVESTMENT_BOUGHT, audit INVESTMENT_BOUGHT<br/>with price source SIMULATED, store the answer, commit"]
+    r201[["201 order"]]
+
+    holdings(["GET /wealth/holdings: units at today's<br/>simulated price, gain or loss"])
+    sell(["POST /wealth/holdings/id/sell with Idempotency-Key<br/>units and the account to pay into"])
+    slock["Per-user advisory lock, idempotency key"]
+    owned{"Holding owned?<br/>locked FOR UPDATE"}
+    r404h[["404"]]
+    units{"Whole units for a stock or bond,<br/>and no more than held?"}
+    r422u[["422, or 422 insufficient units"]]
+    worth{"Proceeds at today's price<br/>at least one paisa?"}
+    r422s[["422 order too small"]]
+    sacct{"Account owned, ACTIVE, INR?"}
+    sold["ledger.sell_investment: INVESTMENT_SALE,<br/>debit SYS-INVESTMENTS, credit the customer;<br/>units and proportional cost basis removed;<br/>order SELL with realised gain"]
+    snote["Notify INVESTMENT_SOLD, audit INVESTMENT_SOLD,<br/>store the answer, commit"]
+    r200[["200 order"]]
+
+    list --> buy --> lock --> inst
+    inst -- no --> r404
+    inst -- yes --> qty
+    qty -- no --> r422q
+    qty -- yes --> acct
+    acct -- no --> r4a
+    acct -- yes --> hold --> pay
+    pay -- no --> r422f
+    pay -- yes --> bought --> bnote --> r201
+
+    holdings --> sell --> slock --> owned
+    owned -- no --> r404h
+    owned -- yes --> units
+    units -- no --> r422u
+    units -- yes --> worth
+    worth -- no --> r422s
+    worth -- yes --> sacct
+    sacct -- no --> r4a
+    sacct -- yes --> sold --> snote --> r200
+```
+
+Wealth scope (ADR-0058): investing (#465, this diagram), insurance quote and application with the web Invest,
+Insurance and Holdings pages (#483, [diagram 14](#14-insurance-quote-and-application)), and fund SIPs with an hourly
+job (#484, [diagram 13](#13-fund-sip-set-up-and-monthly-instalment)).
+
+## 9. Behavioural profile and analytics consent (UC-11)
+
+Exports: [SVG](svg/activity-behaviour-profile.svg), [PNG](png/activity-behaviour-profile.png).
+Analytics consent is off until the customer turns it on. Without it the browser's clickstream batches are acknowledged
+and discarded, no profile is built, and staff see an empty profile. Turning it off erases the customer's events and
+profile in the same transaction (ADR-0057). In the web app (#477) the customer decides under "App usage analytics" on
+the Profile page; the tracker sends batches only while the recorded consent is on and the browser sends no Global
+Privacy Control signal, with a session heartbeat every 60 s while the page is in use. The profile is shown in the
+RM flyout on `/staff/insights`, and the aggregates are charted on `/staff/behaviour`.
+
+<!-- diagram: activity-behaviour-profile -->
+```mermaid
+flowchart TD
+    consent(["Customer turns analytics on or off<br/>PUT /api/v1/customers/me/analytics-consent"])
+    lockc["Customer row locked"]
+    same{"Same decision under the<br/>current policy version?"}
+    nochange[["200, nothing changed, not re-audited"]]
+    granted{"Granted?"}
+    erase["Erase the customer's clickstream_events<br/>and stored behavioural profile"]
+    save["Store the decision, time and policy version;<br/>audit ANALYTICS_CONSENT_GRANTED or _WITHDRAWN, commit"]
+    r200[["200 consent state"]]
+
+    batch(["Web app sends a clickstream batch<br/>POST /api/v1/events/batch, at most 25 events"])
+    allowed{"Analytics consent on?"}
+    discard[["202, nothing stored: not_recorded = batch size"]]
+    insert["Insert the events, duplicates skipped,<br/>monthly partition; commit"]
+    r202[["202 accepted and duplicates"]]
+
+    beat(["Beat: build-behaviour-profiles-daily, 03:40"])
+    joblock{"Profile job advisory lock acquired?"}
+    skip[["Skipped: another run holds it"]]
+    removeoff["Delete the profiles of customers<br/>whose consent is off (safety net)"]
+    read["Read the consenting customers' events<br/>in the profile window"]
+    derive["Sessions: 30-minute inactivity timeout,<br/>heartbeats extend but are not interactions;<br/>engagement: sessions, mean duration, page views, interactions;<br/>product interests: weighted signals halving every 14 days"]
+    store["Replace each consenting customer's profile, commit"]
+
+    view(["Customer: GET /api/v1/analytics/behaviour-profile/me<br/>RM or admin: GET /api/v1/insights/customers/id/behaviour-profile"])
+    vconsent{"Consent on?"}
+    empty[["analytics_consent false, no profile"]]
+    profile[["Segment, spend and income, engagement,<br/>product interests"]]
+
+    consent --> lockc --> same
+    same -- yes --> nochange
+    same -- no --> granted
+    granted -- no --> erase --> save
+    granted -- yes --> save
+    save --> r200
+
+    batch --> allowed
+    allowed -- no --> discard
+    allowed -- yes --> insert --> r202
+
+    beat --> joblock
+    joblock -- no --> skip
+    joblock -- yes --> removeoff --> read --> derive --> store
+
+    view --> vconsent
+    vconsent -- no --> empty
+    vconsent -- yes --> profile
+```
+
+## 10. Loan recommendations (UC-06)
+
+Exports: [SVG](svg/activity-loan-offers.svg), [PNG](png/activity-loan-offers.png).
+`GET /api/v1/loans/offers` assesses every catalogue loan on the customer's own figures, read-only. The same
+five rules decide the offer, the eligibility check and the application, so they cannot disagree (ADR-0056); the
+recommendation carousel shows the loans module's own offers.
+
+<!-- diagram: activity-loan-offers -->
+```mermaid
+flowchart TD
+    open(["Customer opens /loans or the recommendations carousel<br/>GET /api/v1/loans/offers, GET /api/v1/recommendations"])
+    figures["Figures from the customer's own ledger:<br/>monthly income from recurring credits, monthly spending,<br/>existing and active PBIP loan EMIs,<br/>available balance of all accounts"]
+    each["For each catalogue loan product"]
+    r1{"Rule 1: no sign-in lockout<br/>in the last 90 days?"}
+    r2{"Rule 2: regular income found?"}
+    budget["Largest new EMI rules 3 to 5 allow:<br/>3. repayments at most 50% of income<br/>4. spending, PBIP EMIs and the new EMI at most 90% of income<br/>5. available balance covers at least one new EMI"]
+    tenor{"An amount of this product fits<br/>at its offer tenor, or a longer one?"}
+    noroom["NOT_ELIGIBLE, reason names the binding rule"]
+    check{"Re-assessed at that amount:<br/>ELIGIBLE?"}
+    offer["ELIGIBLE: suggested amount range, tenure,<br/>EMI and the reasons in the customer's own figures"]
+    notel["NOT_ELIGIBLE with the failing rules' reasons"]
+    out[["Offers for every product, rules version stated;<br/>the final check runs again on POST /loans/apply"]]
+
+    open --> figures --> each --> r1
+    r1 -- no --> notel
+    r1 -- yes --> r2
+    r2 -- no --> notel
+    r2 -- yes --> budget --> tenor
+    tenor -- no --> noroom --> out
+    tenor -- yes --> check
+    check -- yes --> offer --> out
+    check -- no --> notel --> out
+```
+
+## 11. Fraud monitoring dashboard
+
+Exports: [SVG](svg/activity-fraud-dashboard.svg), [PNG](png/activity-fraud-dashboard.png).
+The `/staff/fraud-dashboard` page charts `GET /api/v1/fraud/stats` (fraud analyst or admin, MFA session). Aggregates
+only: counts, rates, rule codes and masked accounts.
+
+<!-- diagram: activity-fraud-dashboard -->
+```mermaid
+flowchart TD
+    page(["Analyst opens /staff/fraud-dashboard<br/>and picks a period: 7, 30 or 90 days"])
+    gate{"FRAUD_ANALYST or ADMIN<br/>with an MFA session?"}
+    r403[["401 or 403"]]
+    req["GET /api/v1/fraud/stats?days=N, refreshed periodically"]
+    cache{"Cached in Redis for this window,<br/>younger than 60 s?"}
+    hit["Cached payload"]
+    compute["Compute over fraud_events in the window,<br/>payment decisions only (monitor alerts excluded):<br/>decisions per day, totals, hold and block rates,<br/>top rules, risky payees (masked), model fallbacks,<br/>scoring p95, 10-point risk-score bands,<br/>alerts by status: OPEN, CONFIRMED_FRAUD, FALSE_POSITIVE"]
+    store["Store in Redis for 60 s<br/>Redis down: computed directly"]
+    show[["Charts: decisions over time, risk bands,<br/>alert outcomes, top rules, risky payees"]]
+
+    page --> gate
+    gate -- no --> r403
+    gate -- yes --> req --> cache
+    cache -- yes --> hit --> show
+    cache -- no --> compute --> store --> show
+```
+
+## 12. Compliance exceptions
+
+Exports: [SVG](svg/activity-compliance-exceptions.svg), [PNG](png/activity-compliance-exceptions.png).
+Exceptions are derived from the records that already hold the facts; nothing is copied. Their workflow state lives only
+in the hash-chained audit log, so every change is audited by construction (ADR-0027). Compliance officer or admin, MFA
+session.
+
+<!-- diagram: activity-compliance-exceptions -->
+```mermaid
+flowchart TD
+    subgraph sources["Sources, read on every request"]
+        s1["BLOCKED_TRANSFER: fraud_events with decision BLOCK"]
+        s2["ACCOUNT_LOCKOUT: security_events ACCOUNT_LOCKED"]
+        s3["AUDIT_CHAIN_FAILURE: the audit chain does not verify<br/>(full verification cached for 5 minutes)"]
+        s4["NOTIFICATION_DEAD_LETTER: audit row OUTBOX_EVENT_DEAD_LETTERED"]
+        s5["SCHEDULED_TRANSFER_FAILURE: audit rows<br/>SCHEDULED_TRANSFER_MISSED or SCHEDULED_TRANSFER_AUTO_PAUSED"]
+    end
+    list(["Officer opens /staff/compliance<br/>GET /api/v1/compliance/exceptions"])
+    state["Status of each from its compliance_exception audit rows:<br/>RESOLVED if resolved, else ACKNOWLEDGED if acknowledged, else OPEN"]
+    view[["Exceptions with codes, amounts and times only,<br/>counts by kind and status, regulatory indicators"]]
+    act(["Acknowledge or resolve with a reason<br/>POST /compliance/exceptions/kind/ref/acknowledge or /resolve"])
+    chain["Lock the audit chain until commit"]
+    exists{"Exception exists?"}
+    r404[["404"]]
+    allowed{"Acknowledge: still OPEN?<br/>Resolve: not yet RESOLVED?"}
+    r409[["409 already acknowledged or resolved"]]
+    audit["Audit row COMPLIANCE_EXCEPTION_ACKNOWLEDGED or _RESOLVED<br/>with kind, ref, previous status and reason: the state change; commit"]
+    r200[["200 exception with its new status"]]
+
+    s1 --> list
+    s2 --> list
+    s3 --> list
+    s4 --> list
+    s5 --> list
+    list --> state --> view --> act --> chain --> exists
+    exists -- no --> r404
+    exists -- yes --> allowed
+    allowed -- no --> r409
+    allowed -- yes --> audit --> r200
+```
+
+## 13. Fund SIP: set-up and monthly instalment
+
+Exports: [SVG](svg/activity-fund-sip.svg), [PNG](png/activity-fund-sip.png).
+Source: `modules/wealth/sip_service.py`, `wealth/router.py` (`/api/v1/wealth/sips`), beat entry `run-fund-sips`
+(hourly at minute 50), ADR-0058 section 7 (#484). Setting up or cancelling a SIP moves no money. Each instalment is
+one use case in one transaction, exactly once per SIP and day: the key `fund-sip/{sip_id}/{run_on}` (which no client
+can send) and `UNIQUE (sip_id, run_on)`. A refused instalment is recorded as FAILED and the SIP moves to next month;
+missed months are never caught up. There is no SIP web screen.
+
+<!-- diagram: activity-fund-sip -->
+```mermaid
+flowchart TD
+    create(["Customer sets up a SIP<br/>POST /api/v1/wealth/sips with Idempotency-Key:<br/>fund, account, amount, day of month 1 to 28"])
+    clock["Per-user advisory lock, idempotency key<br/>a replay returns the stored 201"]
+    fund{"Instrument is a mutual fund<br/>and the amount fits its rules?"}
+    r422[["422 not a fund, or amount refused"]]
+    acct{"Account owned and can fund purchases?"}
+    r4a[["404 or 422"]]
+    saved["fund_sips row ACTIVE, next_run_on = this month's day<br/>if still ahead, else next month; audit FUND_SIP_CREATED, commit"]
+    r201[["201 SIP, no money moved"]]
+    cancel(["POST /api/v1/wealth/sips/id/cancel"])
+    cstate["ACTIVE becomes CANCELLED, audited;<br/>an already cancelled SIP is unchanged"]
+
+    beat(["Beat: run-fund-sips, hourly at minute 50"])
+    due["Select ACTIVE SIPs with next_run_on on or before the bank date"]
+    lock["Per-user lock; claim key fund-sip/sip/run_on"]
+    rep{"Key already answered?"}
+    replay[["REPLAY"]]
+    still{"SIP still ACTIVE and due<br/>on that day, under row lock?"}
+    skip[["SKIPPED: cancelled or already run"]]
+    buy{"Purchase at the day's simulated price:<br/>account owned and active, funds available?"}
+    bought["Same purchase path as a customer order:<br/>INVESTMENT_PURCHASE posted, units added to the holding;<br/>fund_sip_runs EXECUTED; next_run_on = next month;<br/>notify INVESTMENT_BOUGHT, audit FUND_SIP_INSTALMENT_BOUGHT, commit"]
+    failed["Rolled back; new transaction:<br/>fund_sip_runs FAILED with the reason; next_run_on = next month;<br/>notify FUND_SIP_INSTALMENT_FAILED, audit, commit"]
+
+    create --> clock --> fund
+    fund -- no --> r422
+    fund -- yes --> acct
+    acct -- no --> r4a
+    acct -- yes --> saved --> r201
+    cancel --> cstate
+
+    beat --> due --> lock --> rep
+    rep -- yes --> replay
+    rep -- no --> still
+    still -- no --> skip
+    still -- yes --> buy
+    buy -- yes --> bought
+    buy -- "no: insufficient funds, inactive or unavailable account" --> failed
+```
+
+## 14. Insurance quote and application
+
+Exports: [SVG](svg/activity-insurance-application.svg), [PNG](png/activity-insurance-application.png).
+Source: `modules/wealth/insurance_service.py`, `wealth/insurance.py` (`decide`), `wealth/router.py`, web
+`/wealth/insurance` (`InsuranceQuote.tsx`), ADR-0058 section 8 (#483). Quotes and applications are simulated: the
+premium uses documented age-band and term factors, no policy is issued, no premium is debited and nothing touches the
+ledger. A quote reads only the catalogue row and what the customer declares (cover, term, age band with explicit
+consent), never the profile.
+
+<!-- diagram: activity-insurance-application -->
+```mermaid
+flowchart TD
+    pick(["Customer opens /wealth/insurance, picks a plan,<br/>declares cover, term and age band (with consent)"])
+    quote["POST /api/v1/wealth/insurance/quote"]
+    plan{"Plan exists, cover in range,<br/>term offered?"}
+    r4q[["404 or 422"]]
+    band{"Any age in the band within<br/>the plan's entry ages?"}
+    maxage{"At the youngest eligible age, does<br/>the term stay within the maximum cover age?"}
+    declined["DECLINED, with the reason, no premium"]
+    premium["Indicative premium = reference premium<br/>scaled by cover, age-band factor and term factor"]
+    refer{"Only part of the band can apply, the term may run past<br/>the maximum cover age, or cover above twice the reference?"}
+    submitted["SUBMITTED: referred, an insurer would need<br/>the exact age or medical underwriting"]
+    approved["APPROVED_SIMULATED: meets the simulated rules,<br/>no policy issued, nothing charged"]
+    shown[["Quote shown with outcome, reason, premium and factors"]]
+    apply(["Customer applies<br/>POST /api/v1/wealth/insurance/applications with Idempotency-Key"])
+    save["Per-user lock, idempotency key; decision re-run;<br/>insurance_applications row with the quote and status;<br/>audited, commit"]
+    r201[["201 application; listed under GET /wealth/insurance/applications"]]
+
+    pick --> quote --> plan
+    plan -- no --> r4q
+    plan -- yes --> band
+    band -- no --> declined
+    band -- yes --> maxage
+    maxage -- no --> declined
+    maxage -- yes --> premium --> refer
+    refer -- yes --> submitted
+    refer -- no --> approved
+    declined --> shown
+    submitted --> shown
+    approved --> shown
+    shown --> apply --> save --> r201
 ```
 
 **Extension point.** A new flow gets its own numbered section with a `<!-- diagram: activity-... -->` marker, a row in

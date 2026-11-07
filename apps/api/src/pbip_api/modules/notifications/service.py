@@ -41,6 +41,11 @@ FIXED_DEPOSIT_CLOSED = "FIXED_DEPOSIT_CLOSED"
 # Automatic maturity payout (ADR-0029): paid, or held because the account is not active.
 FIXED_DEPOSIT_MATURED = "FIXED_DEPOSIT_MATURED"
 FIXED_DEPOSIT_PAYOUT_HELD = "FIXED_DEPOSIT_PAYOUT_HELD"
+# Simulated investing (ADR-0058): an order executed through the ledger.
+INVESTMENT_BOUGHT = "INVESTMENT_BOUGHT"
+INVESTMENT_SOLD = "INVESTMENT_SOLD"
+# A fund SIP instalment that could not be bought (ADR-0058 section 7); no transaction exists.
+FUND_SIP_INSTALMENT_FAILED = "FUND_SIP_INSTALMENT_FAILED"
 # Security notifications for events the auth and customers modules already record (#45).
 PASSWORD_CHANGED = "PASSWORD_CHANGED"  # noqa: S105  # pragma: allowlist secret - an event type name
 MFA_ENABLED = "MFA_ENABLED"
@@ -61,6 +66,8 @@ _TRANSFER_TYPES = {
     FIXED_DEPOSIT_BOOKED,
     FIXED_DEPOSIT_CLOSED,
     FIXED_DEPOSIT_MATURED,
+    INVESTMENT_BOUGHT,
+    INVESTMENT_SOLD,
 }
 _SCHEDULED_TRANSFER_TYPES = {
     SCHEDULED_TRANSFER_FAILED,
@@ -265,6 +272,10 @@ def _deposit_text(event: OutboxEvent, amount: str) -> tuple[str, str] | None:
             f"Your fixed deposit matured. {amount}, including {interest} interest, was credited "
             "to your account.",
         )
+    if event.event_type == INVESTMENT_BOUGHT:
+        return "Investment bought", f"{amount} was debited for your investment order."
+    if event.event_type == INVESTMENT_SOLD:
+        return "Investment sold", f"{amount} from your sale was credited to your account."
     return None
 
 
@@ -279,6 +290,24 @@ def _payout_held(event: OutboxEvent, user_id: UUID) -> Notification:
             f"Your fixed deposit has matured, but its payout of {amount} is on hold because the "
             "account it pays into is not active. It will be paid automatically once the account "
             "is active again. Contact the bank for help."
+        ),
+        resource_type=None,
+        account_id=_uuid_or_none(event.payload.get("account_id")),
+    )
+
+
+def _sip_failed(event: OutboxEvent, user_id: UUID) -> Notification:
+    """No money moved, so the bell links nowhere; the SIP continues next month."""
+    amount = format_minor(int(event.payload["amount_minor"]), str(event.payload["currency"]))
+    run_on = date.fromisoformat(str(event.payload["run_on"])).strftime("%d %b %Y")
+    next_on = date.fromisoformat(str(event.payload["next_run_on"])).strftime("%d %b %Y")
+    return Notification(
+        user_id=user_id,
+        type=event.event_type,
+        title="SIP instalment not made",
+        body=(
+            f"Your SIP instalment of {amount} due on {run_on} could not be made: there was not "
+            f"enough money or the account was not active. The next one is on {next_on}."
         ),
         resource_type=None,
         account_id=_uuid_or_none(event.payload.get("account_id")),
@@ -363,6 +392,8 @@ def _notification(event: OutboxEvent) -> Notification | None:
         return _statement(event, user_id)
     if event.event_type == FIXED_DEPOSIT_PAYOUT_HELD:
         return _payout_held(event, user_id)
+    if event.event_type == FUND_SIP_INSTALMENT_FAILED:
+        return _sip_failed(event, user_id)
     if event.event_type in _SCHEDULED_TRANSFER_TYPES:
         text = _scheduled_transfer_text(event)
         if text is None:
@@ -420,7 +451,7 @@ _IN_APP_TYPES = (
     _TRANSFER_TYPES
     | _SCHEDULED_TRANSFER_TYPES
     | set(_SECURITY_TEXT)
-    | {STATEMENT_DOWNLOADED, FIXED_DEPOSIT_PAYOUT_HELD}
+    | {STATEMENT_DOWNLOADED, FIXED_DEPOSIT_PAYOUT_HELD, FUND_SIP_INSTALMENT_FAILED}
 )
 # The dispatch handlers by event type (ADR-0040). In-app notifications are PBIP's only consumer;
 # there are no external webhooks.
