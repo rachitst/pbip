@@ -336,3 +336,22 @@ def test_api_scales_with_replicas_and_production_runs_two() -> None:
     assert "ports" not in prod["api"]  # only nginx is published
     perf = yaml.safe_load((ROOT / ".github" / "workflows" / "perf.yml").read_text("utf-8"))
     assert perf["env"]["API_REPLICAS"] == "${{ inputs.api_replicas || '2' }}"
+
+
+@pytest.mark.parametrize(
+    "compose_file", ["docker-compose.yml", "infra/deploy/docker-compose.prod.yml"]
+)
+def test_celery_services_do_not_inherit_the_api_images_http_health_check(compose_file: str) -> None:
+    """Regression (first staging deploy, 8 Nov 2026): the api image's HEALTHCHECK calls uvicorn on
+    :8000. worker and beat run Celery from the same image and never open that port, so in the
+    production compose file they turned unhealthy and deploy.sh's health gate failed every release.
+    Every service on the api image that does not run uvicorn must switch the inherited check off."""
+    services = yaml.safe_load((ROOT / compose_file).read_text(encoding="utf-8"))["services"]
+    celery = {
+        name: spec
+        for name, spec in services.items()
+        if spec.get("command") and spec["command"][0] == "celery"
+    }
+    assert set(celery) == {"worker", "beat"}, compose_file
+    for name, spec in celery.items():
+        assert spec.get("healthcheck") == {"test": ["NONE"]}, f"{compose_file}: {name}"
