@@ -53,6 +53,9 @@ runs only when the repository variable `DEPLOY_ENABLED` is `true` and uses the s
 | `IMAGE_PREFIX`, `IMAGE_TAG` | all app images | Set by the deploy job per release (`ghcr.io/<owner>/pbip`, `vX.Y.Z`); set them yourself for a manual deploy or rollback |
 | `DAILY_TRANSFER_LIMIT_MINOR` | api | Optional override of the per-customer daily transfer limit (default `50000000` = ₹5,00,000.00). Emergency lever in §5.1 |
 | `JWT_ACCESS_TTL_MINUTES` | api | Optional; default 15. Bounds how long a stolen access token stays valid (§5.2) |
+| `GRAFANA_ADMIN_PASSWORD` | grafana (monitoring stack, §1.5) | Generated on the host; no default. `deploy.sh monitoring` refuses fewer than 20 URL-safe characters, a placeholder or the local example value. Read only on Grafana's first start (rotation in §1.5) |
+| `POSTGRES_MONITOR_USER`, `POSTGRES_MONITOR_PASSWORD` | postgres-exporter, deploy.sh | Read-only `pg_monitor` login for the exporter (default user `pbip_monitor`, never `POSTGRES_USER`); password generated like the one above. `deploy.sh monitoring` creates or updates the role |
+| `MONITORING_PROBE_CA_FILE` | blackbox-exporter | Optional: a private CA for the `web-ready` probe (deploy guide option B); default is the host's CA bundle |
 
 ### 1.3 Health, smoke test, logs, metrics
 
@@ -169,6 +172,31 @@ costs dropped spans only: spans wait in a queue of at most 2,048 and each export
 `OTEL_EXPORT_TIMEOUT_SECONDS`; the API logs `Failed to export spans batch`. To check it in an incident: stop the
 collector, send requests, and compare `ApiSlowP95` and the latency dashboard with the period before. Stopping the API
 can take up to a few export timeouts longer while it flushes the last batches to a dead collector.
+
+**On the staging host (ADR-0059).** The same components, configuration, dashboards and rules run against
+`pbip-prod` from `infra/deploy/docker-compose.prod.monitoring.yml`, a separate compose project
+(`pbip-prod-monitoring`) attached to the production network, so a release never removes it and it can never fail a
+release. Differences from the local profile: Grafana and Prometheus bind to `127.0.0.1` on the VM only (reach them
+through an SSH tunnel); the Grafana admin password and the exporter's read-only `pbip_monitor` role come from the
+host `.env` (§1.2) with no defaults; the `web-ready` probe verifies the public certificate for `PUBLIC_HOSTNAME`;
+Alloy reads containers through a read-only Docker API proxy instead of the socket; Loki keeps 7 days, Prometheus 35
+days and at most 4 GB; every container has a memory and CPU limit (3 GiB in total). Commands, from `~/pbip` on the
+VM (full procedure: deploy guide section 16):
+
+```bash
+vm$ bash deploy.sh monitoring                                          # validate .env, create the role, start, wait
+vm$ curl -s http://127.0.0.1:9090/api/v1/targets | python3 -c 'import json, sys
+for t in json.load(sys.stdin)["data"]["activeTargets"]:
+    print(t["labels"]["job"], t["labels"]["instance"], t["health"], t["lastError"])'   # every line "up"
+laptop$ ssh -N -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 pbip@<vm-ip>   # then http://localhost:3000
+vm$ docker compose -f docker-compose.prod.monitoring.yml kill -s SIGHUP prometheus   # after a release: reload rules
+```
+
+Rotate the Grafana admin password (the environment value is read only on Grafana's first start): generate a new
+value, put it in `.env`, then
+`vm$ sed -n 's/^GRAFANA_ADMIN_PASSWORD=//p' .env | docker compose -f docker-compose.prod.monitoring.yml exec -T grafana grafana cli admin reset-admin-password --password-from-stdin`.
+Rotate `POSTGRES_MONITOR_PASSWORD` by changing it in `.env` and running `bash deploy.sh monitoring` again (it
+updates the role and recreates the exporter).
 
 **Error tracking.** Every unhandled exception produces one `unhandled_exception` log event with `request_id`,
 `route` (template, never the raw path), `method`, `error_type` and `raised_at` (`file.py:line:function`), plus the

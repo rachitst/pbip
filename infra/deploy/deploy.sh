@@ -4,6 +4,9 @@
 #   bash deploy.sh deploy <image_prefix> <tag>   pull, run migrations, start, wait for health checks;
 #                                                records the tag only once the stack is healthy
 #   bash deploy.sh rollback                      redeploy the previously recorded healthy release
+#   bash deploy.sh monitoring                    start or update Prometheus, Grafana, Loki and the exporters
+#                                                (docker-compose.prod.monitoring.yml, its own compose project;
+#                                                ADR-0059, runbook section 1.5)
 #
 # Run from ~/pbip next to docker-compose.prod.yml and the host .env (infra/deploy/.env.prod.example).
 # State files next to this script: .deployed_tag (current healthy release), .previous_tag (the one
@@ -13,6 +16,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
 COMPOSE=(docker compose -f docker-compose.prod.yml)
+MONITORING=(docker compose -f docker-compose.prod.monitoring.yml)
 STATE_CURRENT=.deployed_tag
 STATE_PREVIOUS=.previous_tag
 STATE_PENDING=.deployed_tag.pending
@@ -53,6 +57,56 @@ ensure_tls() {
   chmod 0755 tls-entrypoint.sh 2>/dev/null || true
 }
 
+# A secret the monitoring stack needs, generated on the host (python3 -c "import secrets;
+# print(secrets.token_urlsafe(18))"). Refuses an unset, placeholder, short or known default value, and anything
+# outside the URL-safe alphabet (the value is written into SQL below, so the alphabet is also the escaping).
+require_generated_secret() { # <name>
+  local value
+  value="$(env_value "$1")"
+  if ! [[ "$value" =~ ^[A-Za-z0-9_-]{20,}$ ]] || [ "$value" = admin_local_password ]; then
+    echo "refusing to start monitoring: $1 in .env must be a generated secret of at least 20 URL-safe" \
+      "characters (runbook section 1.5)" >&2
+    exit 4
+  fi
+}
+
+# The postgres-exporter's login: member of pg_monitor (read-only statistics), never the application owner.
+# Idempotent; the password goes over stdin, never on a command line.
+ensure_monitor_role() {
+  local role owner db password
+  role="$(env_value POSTGRES_MONITOR_USER)"
+  role="${role:-pbip_monitor}"
+  owner="$(env_value POSTGRES_USER)"
+  db="$(env_value POSTGRES_DB)"
+  password="$(env_value POSTGRES_MONITOR_PASSWORD)"
+  if ! [[ "$role" =~ ^[a-z_][a-z0-9_]{0,62}$ ]] || [ "$role" = "$owner" ]; then
+    echo "refusing to start monitoring: POSTGRES_MONITOR_USER must be a lower-case role name other than" \
+      "POSTGRES_USER" >&2
+    exit 4
+  fi
+  echo "==> Ensuring the read-only PostgreSQL role $role (pg_monitor)"
+  "${COMPOSE[@]}" exec -T db psql -v ON_ERROR_STOP=1 -q -U "$owner" -d "$db" <<SQL
+SELECT 'CREATE ROLE $role' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$role')\gexec
+ALTER ROLE $role WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS
+  CONNECTION LIMIT 3 PASSWORD '$password';
+GRANT pg_monitor TO $role;
+SQL
+}
+
+start_monitoring() {
+  if [ ! -f .env ]; then
+    echo "refusing to start monitoring: no .env next to deploy.sh" >&2
+    exit 4
+  fi
+  require_generated_secret GRAFANA_ADMIN_PASSWORD
+  require_generated_secret POSTGRES_MONITOR_PASSWORD
+  ensure_monitor_role
+  echo "==> Starting the monitoring stack (project pbip-prod-monitoring; Grafana and Prometheus on 127.0.0.1 only)"
+  "${MONITORING[@]}" pull --quiet
+  "${MONITORING[@]}" up -d --remove-orphans --wait --wait-timeout "$WAIT_TIMEOUT"
+  "${MONITORING[@]}" ps
+}
+
 start_release() { # <image_prefix> <tag>
   export IMAGE_PREFIX="$1" IMAGE_TAG="$2"
   ensure_tls
@@ -91,8 +145,11 @@ case "${1:-}" in
     rm -f "$STATE_PENDING"
     echo "==> Rolled back to $tag (database migrations are not downgraded automatically)"
     ;;
+  monitoring)
+    start_monitoring
+    ;;
   *)
-    echo "usage: deploy.sh deploy <image_prefix> <tag> | deploy.sh rollback" >&2
+    echo "usage: deploy.sh deploy <image_prefix> <tag> | deploy.sh rollback | deploy.sh monitoring" >&2
     exit 64
     ;;
 esac

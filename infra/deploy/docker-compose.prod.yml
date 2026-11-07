@@ -69,7 +69,8 @@ services:
   worker:
     image: ${IMAGE_PREFIX}/api:${IMAGE_TAG}
     environment: *api-env
-    command: ["celery", "-A", "pbip_api.worker.celery_app", "worker", "--loglevel=INFO"]
+    # -E: task events for the celery-exporter of the monitoring stack (ADR-0059); without a consumer they are dropped.
+    command: ["celery", "-A", "pbip_api.worker.celery_app", "worker", "--loglevel=INFO", "-E"]
     volumes: [*db-ca]
     depends_on: { redis: { condition: service_healthy } }
     restart: unless-stopped
