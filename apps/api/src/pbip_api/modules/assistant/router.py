@@ -6,17 +6,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import Engine
 
-from pbip_api.core.db import get_engine
-from pbip_api.modules.assistant.dependencies import (
-    assistant_rate_limit,
-    get_assistant_service,
-    get_chat_model,
-    get_faq_facts,
-)
-from pbip_api.modules.assistant.faq import FaqFacts
-from pbip_api.modules.assistant.llm import ChatModel
+from pbip_api.modules.assistant.dependencies import assistant_rate_limit, get_assistant_service
 from pbip_api.modules.assistant.schemas import (
     AssistantHistory,
     AssistantStreamFrames,
@@ -85,16 +76,12 @@ def chat_stream(
     body: ChatRequest,
     customer: Customer = Depends(get_current_customer),
     principal: Principal = Depends(get_current_principal),
-    engine: Engine = Depends(get_engine),
-    model: ChatModel | None = Depends(get_chat_model),
-    facts: FaqFacts = Depends(get_faq_facts),
+    service: AssistantService = Depends(get_assistant_service),
     clock: Callable[[], float] = Depends(get_clock),
     _limited: None = Depends(assistant_rate_limit),
 ) -> StreamingResponse:
     events = stream_chat(
-        engine,
-        model,
-        facts,
+        service,
         customer.id,
         principal.user_id,
         body.message,

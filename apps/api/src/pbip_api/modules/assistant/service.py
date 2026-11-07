@@ -31,9 +31,8 @@ from uuid import UUID
 
 import structlog
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import Engine as DbEngine
 from sqlalchemy import text
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
 from pbip_api.core.errors import DomainError
 from pbip_api.modules.assistant import fallback, guard, repository
@@ -196,6 +195,9 @@ class AssistantService:
         if clear is not None:
             return _Decision(clear, "rules")
         if self.model is not None:
+            # A model call takes seconds: end the auth lookup's transaction first so the request
+            # does not hold a pooled connection idle in a transaction meanwhile (ADR-0060).
+            self.session.rollback()
             try:
                 return _Decision(
                     _grounded(llm_route(self.model, system_prompt(), message), message), "llm"
@@ -251,9 +253,7 @@ def _grounded(route: Route, message: str) -> Route:
 
 
 def stream_chat(
-    engine: DbEngine,
-    model: ChatModel | None,
-    facts: FaqFacts,
+    service: AssistantService,
     customer_id: UUID,
     user_id: UUID,
     message: str,
@@ -261,26 +261,26 @@ def stream_chat(
 ) -> Iterator[str]:
     """Server-Sent Events for one message (TASK-060).
 
-    The stream outlives the request's dependencies, so it owns its session. Events:
-    ``tool_call`` when a tool is chosen, ``tool_result`` when it ran, ``token`` chunks of the
-    (server-written, redacted) reply, then ``done`` with the full response. Any failure ends the
-    stream with a generic ``error`` event - no details, no stack trace.
+    Runs on the request's own session: FastAPI closes request-scoped dependencies only after the
+    response, streamed or not, has been sent. A second session here needed a second connection
+    while the first was still checked out, which starved a small pool (TASK-079, ADR-0060).
+    Events: ``tool_call`` when a tool is chosen, ``tool_result`` when it ran, ``token`` chunks of
+    the (server-written, redacted) reply, then ``done`` with the full response. Any failure ends
+    the stream with a generic ``error`` event - no details, no stack trace.
     """
-    with sessionmaker(bind=engine, expire_on_commit=False)() as session:
-        try:
-            service = AssistantService(session, model, facts)
-            for event in service.run(customer_id, user_id, message, now):
-                if isinstance(event, ToolCalled):
-                    frame: BaseModel = StreamToolCall(tool=event.tool, engine=event.engine)
-                    yield format_event("tool_call", frame.model_dump(mode="json"))
-                elif isinstance(event, ToolFinished):
-                    frame = StreamToolResult(tool=event.tool, outcome=event.outcome)
-                    yield format_event("tool_result", frame.model_dump(mode="json"))
-                else:
-                    for chunk in reply_chunks(event.response.reply):
-                        yield format_event("token", StreamToken(text=chunk).model_dump())
-                    yield format_event("done", event.response.model_dump(mode="json"))
-        except Exception as exc:
-            session.rollback()
-            _logger.warning("assistant_stream_failed", error=type(exc).__name__)
-            yield format_event("error", StreamError(detail=UNAVAILABLE_TEXT).model_dump())
+    try:
+        for event in service.run(customer_id, user_id, message, now):
+            if isinstance(event, ToolCalled):
+                frame: BaseModel = StreamToolCall(tool=event.tool, engine=event.engine)
+                yield format_event("tool_call", frame.model_dump(mode="json"))
+            elif isinstance(event, ToolFinished):
+                frame = StreamToolResult(tool=event.tool, outcome=event.outcome)
+                yield format_event("tool_result", frame.model_dump(mode="json"))
+            else:
+                for chunk in reply_chunks(event.response.reply):
+                    yield format_event("token", StreamToken(text=chunk).model_dump())
+                yield format_event("done", event.response.model_dump(mode="json"))
+    except Exception as exc:
+        service.session.rollback()
+        _logger.warning("assistant_stream_failed", error=type(exc).__name__)
+        yield format_event("error", StreamError(detail=UNAVAILABLE_TEXT).model_dump())
