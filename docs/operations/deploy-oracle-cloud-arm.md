@@ -430,6 +430,62 @@ section 4.2).
            --bucket-name pbip-backups --file "$f" --name "$(basename "$f")"; done
    ```
 
+**Alternative: a Customer Secret Key and the S3-compatible API** (what the staging host uses since 8 November 2026).
+If the bucket owner creates a Customer Secret Key (Profile > Customer secret keys) instead of the dynamic group, the
+host writes through Object Storage's S3-compatible endpoint with `scripts/offsite_backup.py`. Trade-off: the key
+carries its user's own rights, not the write-only policy above, so a compromised host could also read or delete
+earlier backups; keep Object Versioning on, and prefer the instance principal where you can set it up.
+
+```bash
+laptop$ scp -i ~/.ssh/pbip-oci-admin <file with OCI_NAMESPACE, OCI_REGION, OCI_BUCKET, OCI_S3_ACCESS_KEY, OCI_S3_SECRET_KEY> \
+          pbip@<vm-ip>:.pbip-oci-s3.env
+vm$ chmod 600 ~/.pbip-oci-s3.env                      # the script refuses a file others can read
+vm$ python3 -m venv ~/s3-venv && ~/s3-venv/bin/pip install -q boto3   # host-only; not a project dependency
+vm$ cd ~/pbip-repo && ~/s3-venv/bin/python scripts/offsite_backup.py ls
+```
+
+`infra/deploy/backup-offsite.sh` runs the backup above and uploads the newest dump and manifest. Install it as a daily
+timer (it publishes PostgreSQL on loopback for the run, which restarts the `db` container: the probe records a few
+seconds down per run):
+
+```bash
+laptop$ scp -i ~/.ssh/pbip-oci-admin infra/deploy/backup-offsite.sh pbip@<vm-ip>:pbip/
+vm$ sudo tee /etc/systemd/system/pbip-backup.service >/dev/null <<'EOF'
+[Unit]
+Description=PBIP staging daily backup and off-host copy (runbook 4.1)
+After=docker.service
+
+[Service]
+Type=oneshot
+User=pbip
+ExecStart=/bin/bash /home/pbip/pbip/backup-offsite.sh
+EOF
+vm$ sudo tee /etc/systemd/system/pbip-backup.timer >/dev/null <<'EOF'
+[Unit]
+Description=Daily PBIP staging backup
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+vm$ sudo systemctl daemon-reload && sudo systemctl enable --now pbip-backup.timer
+```
+
+Restore check of the off-host copy: download it into an empty directory, compare it with the local file, and run the
+restore drill on the downloaded copy, so the drill proves the copy in the bucket rather than the one on the host:
+
+```bash
+vm$ mkdir -m 700 /var/backups/pbip/offsite-check && cd ~/pbip-repo
+vm$ ~/s3-venv/bin/python scripts/offsite_backup.py get <name>.dump.gpg /var/backups/pbip/offsite-check
+vm$ ~/s3-venv/bin/python scripts/offsite_backup.py get <name>.manifest.json /var/backups/pbip/offsite-check
+vm$ cmp /var/backups/pbip/offsite-check/<name>.dump.gpg /var/backups/pbip/<name>.dump.gpg
+vm$ uv run python scripts/restore.py /var/backups/pbip/offsite-check/<name>.dump.gpg \
+      --passphrase-file ~/.pbip-backup-passphrase --docker-container "$DB"   # with the loopback override up, as above
+```
+
 The alternative of a second block volume stays on the same host and the same failure domain; use it only as extra
 local space, not as the off-host copy. Run the restore drill (runbook section 4.2) on the host once a month and record
 `PASS` on the operations issue.
