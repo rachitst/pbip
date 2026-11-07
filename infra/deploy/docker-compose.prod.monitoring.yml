@@ -1,0 +1,188 @@
+# Monitoring for the production stack on the staging host (ADR-0059, runbook section 1.5).
+#
+# Passwords never appear in this file or in a container's environment (`docker inspect`): `deploy.sh
+# monitoring` writes them from the host .env to ./secrets (directory mode 0700) and they are mounted as compose
+# secrets at /run/secrets, read by Grafana (GF_..._FILE) and the PostgreSQL exporter (DATA_SOURCE_PASS_FILE).
+#
+# A separate compose project that joins the production network `pbip-prod_default` as an external network,
+# so a release (`deploy.sh deploy`, which runs `up --remove-orphans` on pbip-prod) never removes it and a
+# monitoring failure can never fail or roll back a release. Start it with `bash deploy.sh monitoring`, which
+# refuses default or placeholder secrets and creates the read-only PostgreSQL role first.
+#
+# Configuration is the repository's own (infra/prometheus, infra/grafana, infra/loki, infra/alloy), copied
+# to ./monitoring/ by the deploy job; nothing here forks a dashboard, rule or scrape config. Scrape targets
+# are the production service names (api, redis, db, web) plus the exporters below.
+#
+# Nothing is published publicly: Grafana and Prometheus bind to 127.0.0.1 only (operators use an SSH tunnel).
+# Images are the local `monitoring` profile's versions, pinned by digest to the multi-arch manifest list
+# (each includes linux/arm64). Every service has a memory and CPU limit for the 2 OCPU / 12 GB host.
+name: pbip-prod-monitoring
+
+x-hardening: &hardening
+  restart: unless-stopped
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+services:
+  prometheus:
+    <<: *hardening
+    image: prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
+    # 35 days for the monthly availability figure (TASK-103), and never more than 4 GB on disk.
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=35d
+      - --storage.tsdb.retention.size=4GB
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus:ro
+      - prometheus:/prometheus
+    ports: ["127.0.0.1:9090:9090"]
+    networks: [prod, monitoring]
+    deploy: { resources: { limits: { cpus: "0.50", memory: 1g } } }
+
+  grafana:
+    <<: *hardening
+    image: grafana/grafana:12.1.0@sha256:6ac590e7cabc2fbe8d7b8fc1ce9c9f0582177b334e0df9c927ebd9670469440f
+    environment:
+      # Generated on the host; there is no default (deploy.sh refuses a missing, short or placeholder value).
+      # Grafana's entrypoint reads the file; Grafana uses it only on its first start, rotation is
+      # `grafana cli admin reset-admin-password` (runbook 1.5).
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      # Nothing leaves the host: no usage reports, update checks, news feed, plugin downloads or public snapshots.
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_ANALYTICS_FEEDBACK_LINKS_ENABLED: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_SNAPSHOTS_EXTERNAL_ENABLED: "false"
+    secrets: [grafana_admin_password]
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana:/var/lib/grafana
+    ports: ["127.0.0.1:3000:3000"]
+    networks: [monitoring]
+    deploy: { resources: { limits: { cpus: "0.50", memory: 512m } } }
+
+  # Availability probes (TASK-103). The shared blackbox.yml verifies nginx's certificate for the name "web"
+  # (the local dev CA); here it is rendered with the public host name and checked against the host's CA
+  # bundle, so web-ready proves the real certificate. Override the bundle with MONITORING_PROBE_CA_FILE
+  # (option B's private CA, deploy guide section 9.2).
+  blackbox-exporter:
+    <<: *hardening
+    image: prom/blackbox-exporter:v0.27.0@sha256:a50c4c0eda297baa1678cd4dc4712a67fdea713b832d43ce7fcc5f9bea05094d
+    user: "65534:65534"
+    environment:
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:?set PUBLIC_HOSTNAME in .env}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        case "$$PUBLIC_HOSTNAME" in
+          "" | *[!A-Za-z0-9.-]*) echo "PUBLIC_HOSTNAME is not a host name or IPv4 address" >&2; exit 64 ;;
+        esac
+        sed "s/server_name: web$$/server_name: $$PUBLIC_HOSTNAME/" /etc/pbip-blackbox/blackbox.yml > /tmp/blackbox.yml
+        grep -q "server_name: $$PUBLIC_HOSTNAME$$" /tmp/blackbox.yml
+        exec /bin/blackbox_exporter --config.file=/tmp/blackbox.yml
+    volumes:
+      - ./monitoring/prometheus:/etc/pbip-blackbox:ro
+      - ${MONITORING_PROBE_CA_FILE:-/etc/ssl/certs/ca-certificates.crt}:/etc/blackbox/ca.crt:ro
+    networks: [prod]
+    deploy: { resources: { limits: { cpus: "0.25", memory: 64m } } }
+
+  # Celery task metrics from worker events (the production worker runs with -E). The project's GHCR
+  # build of the same release: the Docker Hub tag the local profile uses is amd64-only.
+  celery-exporter:
+    <<: *hardening
+    image: ghcr.io/danihodovic/celery-exporter:0.12.2@sha256:f344aacb6ebf2cd55f347ba0736ff9b083b69125840621c08f07d9ebcdd5c704
+    command: ["--broker-url=redis://redis:6379/0", "--retry-interval=5"]
+    networks: [prod]
+    deploy: { resources: { limits: { cpus: "0.25", memory: 256m } } }
+
+  redis-exporter:
+    <<: *hardening
+    image: oliver006/redis_exporter:v1.75.0@sha256:bbc0b673a89296eab36d6c6c2bde8571ee868dc4059306be482c03d7b05aa662
+    command: ["--redis.addr=redis://redis:6379", "--check-single-keys=db0=celery"]
+    networks: [prod]
+    deploy: { resources: { limits: { cpus: "0.25", memory: 64m } } }
+
+  # Read-only statistics through a dedicated pg_monitor role (deploy.sh monitoring creates it), never the
+  # application owner; TLS verified against the database certificate like the API (runbook 1.4).
+  postgres-exporter:
+    <<: *hardening
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.17.1@sha256:38606faa38c54787525fb0ff2fd6b41b4cfb75d455c1df294927c5f611699b17
+    environment:
+      DATA_SOURCE_URI: db:5432/${POSTGRES_DB:?set POSTGRES_DB in .env}?sslmode=verify-full&sslrootcert=/etc/pbip-ca/ca.crt
+      DATA_SOURCE_USER: ${POSTGRES_MONITOR_USER:-pbip_monitor}
+      DATA_SOURCE_PASS_FILE: /run/secrets/postgres_monitor_password
+    secrets: [postgres_monitor_password]
+    volumes: ["./certs/db/server.crt:/etc/pbip-ca/ca.crt:ro"]
+    networks: [prod]
+    deploy: { resources: { limits: { cpus: "0.25", memory: 128m } } }
+
+  # Logs: 7 days, then the compactor deletes them.
+  loki:
+    <<: *hardening
+    image: grafana/loki:3.5.0@sha256:4c431d2e6b9b38718694b31c5d56be7c80dc69c513215fde1aeb5b02cd4e2665
+    command:
+      - -config.file=/etc/loki/loki.yml
+      - -compactor.retention-enabled=true
+      - -compactor.delete-request-store=filesystem
+      - -store.retention=168h
+    volumes: ["./monitoring/loki:/etc/loki:ro", "loki:/loki"]
+    networks: [monitoring]
+    deploy: { resources: { limits: { cpus: "0.50", memory: 512m } } }
+
+  # Ships every container's logs to Loki. It reaches Docker only through the read-only proxy below, never
+  # the socket itself, so it runs as the image's unprivileged alloy user.
+  alloy:
+    <<: *hardening
+    image: grafana/alloy:v1.10.0@sha256:1bc130e909116a4bf950eb5187a346007d3b796f96832b529acb14a64e41230f
+    user: "473:473"
+    command: ["run", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
+    environment:
+      DOCKER_HOST: tcp://docker-socket-proxy:2375
+    volumes: ["./monitoring/alloy:/etc/alloy:ro", "alloy:/var/lib/alloy/data"]
+    depends_on: [docker-socket-proxy, loki]
+    networks: [monitoring, docker-api]
+    deploy: { resources: { limits: { cpus: "0.25", memory: 256m } } }
+
+  # Docker API filter (Apache-2.0): GET on /containers (list, inspect, logs), /networks (discovery labels),
+  # /_ping and /version only; every write is refused. Reachable only from Alloy, on an internal network without a route out.
+  docker-socket-proxy:
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    image: tecnativa/docker-socket-proxy:v0.4.1@sha256:3400c429c5f9e1b21d62130fb93b16e2e772d4fb7695bd52fc2b743800b9fe9e
+    environment:
+      CONTAINERS: "1"
+      NETWORKS: "1"
+      EVENTS: "0"
+      POST: "0"
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock:ro"]
+    networks: [docker-api]
+    deploy: { resources: { limits: { cpus: "0.25", memory: 64m } } }
+
+networks:
+  # The production stack's network, created by `docker compose -f docker-compose.prod.yml up`.
+  prod:
+    external: true
+    name: pbip-prod_default
+  monitoring: {}
+  docker-api:
+    internal: true
+
+# Written by `deploy.sh monitoring` from the host .env; compose refuses to start if either file is missing.
+secrets:
+  grafana_admin_password:
+    file: ./secrets/grafana_admin_password
+  postgres_monitor_password:
+    file: ./secrets/postgres_monitor_password
+
+volumes:
+  prometheus:
+  grafana:
+  loki:
+  alloy:
