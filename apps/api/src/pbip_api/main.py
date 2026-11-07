@@ -8,6 +8,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from redis import Redis
 
 from pbip_api import __version__
+from pbip_api.core.admission import DatabaseAdmissionMiddleware
 from pbip_api.core.config import Settings, get_settings
 from pbip_api.core.errors import (
     document_not_found_responses,
@@ -89,6 +90,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     # Middleware order: the LAST added is the OUTERMOST. Request context must wrap everything.
+    # Innermost: admission is counted around the app itself, so a 503 still gets CORS, security
+    # headers and a request id (ADR-0060).
+    app.add_middleware(
+        DatabaseAdmissionMiddleware,
+        limit=settings.db_pool_size + settings.db_max_overflow,
+        wait_seconds=settings.db_pool_timeout_seconds,
+        exempt_paths=frozenset({"/api/health/live", "/metrics"}),
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,

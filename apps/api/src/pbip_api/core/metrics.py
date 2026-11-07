@@ -29,6 +29,10 @@ FRAUD_DECISIONS_TOTAL = Counter("fraud_decisions_total", "Fraud decisions by out
 FRAUD_MONITOR_ALERTS_TOTAL = Counter(
     "fraud_monitor_alerts_total", "Analyst alerts opened by batch fraud monitors", ["monitor"]
 )
+# Requests turned away with 503 after waiting for a database slot (ADR-0060).
+DB_ADMISSION_REJECTED_TOTAL = Counter(
+    "db_admission_rejected_total", "Requests rejected after waiting for a database slot"
+)
 TRANSFERS_TOTAL = Counter("transfers_total", "Transfers by final status", ["status"])
 IDEMPOTENT_REPLAYS_TOTAL = Counter(
     "idempotent_replays_total", "Requests answered from a stored idempotent response"
