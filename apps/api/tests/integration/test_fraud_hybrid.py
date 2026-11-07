@@ -67,9 +67,23 @@ class StubEngine:
         return HybridResult(self.risk, decide(self.risk), [reason], STUB_VERSION, snapshot)
 
 
+PRODUCTION_BUDGET_MS = Settings.model_fields["fraud_model_budget_ms"].default
+
+
 @pytest.fixture
 def settings(settings: Settings) -> Settings:
-    return settings.model_copy(update={"fraud_scorer": "hybrid"})
+    """A 10 s model budget (validation bypassed on purpose; ``test_config`` covers the bounds):
+    these tests check what a score does, so a loaded CI machine must never turn a stub's answer
+    into a TIMEOUT fallback. The timeout tests opt back into the production budget."""
+    return settings.model_copy(update={"fraud_scorer": "hybrid", "fraud_model_budget_ms": 10_000})
+
+
+@pytest.fixture
+def production_budget(app: FastAPI, settings: Settings) -> Settings:
+    """The shipped budget, for the tests whose model is held past it by a gate (no sleep)."""
+    tight = settings.model_copy(update={"fraud_model_budget_ms": PRODUCTION_BUDGET_MS})
+    app.dependency_overrides[get_settings] = lambda: tight
+    return tight
 
 
 @pytest.fixture
@@ -222,7 +236,7 @@ def test_any_model_problem_falls_back_to_the_rules_never_allow_all(
     use_engine: Callable[[object], None],
     make_customer: Callable[..., Actor],
     make_verified_payee: Callable[..., dict[str, Any]],
-    settings: Settings,
+    production_budget: Settings,
     db: Session,
     problem: str,
 ) -> None:
@@ -246,7 +260,7 @@ def test_any_model_problem_falls_back_to_the_rules_never_allow_all(
     expected = {"missing": "NOT_LOADED", "raises": "RuntimeError", "too_slow": "TIMEOUT"}
     assert event.features["model_error"] == expected[problem]
     if problem == "too_slow":
-        assert event.latency_ms < settings.fraud_model_budget_ms + 1_000  # did not wait 10 s
+        assert event.latency_ms < production_budget.fraud_model_budget_ms + 1_000  # not 10 s
 
 
 def test_bill_payments_get_the_same_hybrid_score(
@@ -360,6 +374,7 @@ def test_real_model_slower_than_the_budget_falls_back_to_the_rules(
     make_customer: Callable[..., Actor],
     make_verified_payee: Callable[..., dict[str, Any]],
     settings: Settings,
+    production_budget: Settings,
     model_dir: Path,
     db: Session,
 ) -> None:
@@ -385,7 +400,7 @@ def test_real_model_slower_than_the_budget_falls_back_to_the_rules(
     assert {"MODEL_UNAVAILABLE", "NEW_PAYEE_LARGE_AMOUNT"} <= codes  # scored by the rules
     assert event.risk_score == 45 and event.decision != "ALLOW"
     assert "model_probability" not in event.features  # no model output leaked into the result
-    assert event.latency_ms < settings.fraud_model_budget_ms + 1_000  # did not wait for the gate
+    assert event.latency_ms < production_budget.fraud_model_budget_ms + 1_000  # not the gate
 
 
 def test_load_engine_serves_rules_only_without_valid_artifacts(
