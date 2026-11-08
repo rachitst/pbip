@@ -34,8 +34,8 @@ Option 1. When `api` containers are already running, `deploy.sh deploy` and `dep
    workflow's rollback then finds the old replicas running and replaces them with the same release;
 5. retire each old replica in turn: `docker stop -t 30` (SIGTERM: uvicorn stops accepting and finishes its
    in-flight requests; a refused connection is retried on another replica by nginx, which has not sent the
-   request yet), `docker rm`, then `nginx -s reload` in `web`, whose new workers resolve `api` at once instead
-   of up to 10 s later;
+   request yet), then at once `nginx -s reload` in `web`, whose new workers resolve `api` instead of up to
+   10 s later, then `docker rm`;
 6. replace `worker`, `beat` and `web` (`up -d --no-deps --remove-orphans --wait`).
 
 With no `api` running (a first deploy, or after a stop), the script keeps the single `up -d --remove-orphans
@@ -56,3 +56,17 @@ than 1-99 is refused before a container changes.
 - Tests: `apps/api/tests/unit/test_deploy_script.py` asserts the order with a stub `docker`, the removal of
   unhealthy new replicas without touching the old ones, the refusal of a bad `API_REPLICAS`, and rollback taking
   the same path.
+
+## Update 2026-11-08: measured on the v1.1.3 deploy, and a connect timeout
+- **Measured on the v1.1.3 deploy:** pipeline run 42479972985, with a 1-second probe from outside and the
+  server's own logs in Loki. The API rolled as designed: the new replicas were healthy at 12:29:06 UTC and the old
+  ones were gone by 12:29:10.
+- **One probe request hung (12:29:08).** An nginx worker still held the stopped api-1's address, and the connect to
+  an address that no longer exists hangs instead of being refused. nginx logged it as a 499 when the probe gave up.
+  The reload had come 1.2 s after the stop, because it ran after `docker rm`.
+- **Fix:**
+  - the reload now comes straight after the stop;
+  - `location /api/` sets `proxy_connect_timeout 1s` with `proxy_next_upstream error timeout`, so such a connect
+    costs at most 1 s and then goes to another replica. A request that was never sent is retried whatever its method.
+- **The `web` swap measured 4.1 s on the server:** SIGQUIT to the old nginx at 12:29:10.456, the new one's workers
+  started at 12:29:14.597. The probe saw two failed samples in that window. That gap remains (see Consequences).

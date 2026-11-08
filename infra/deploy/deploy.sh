@@ -232,8 +232,8 @@ roll_api() { # <running api container id>...
   for id in "${old[@]}"; do
     echo "==> Retiring api ${id:0:12}"
     docker stop -t 30 "$id" > /dev/null # SIGTERM: uvicorn stops accepting and finishes in-flight requests
+    reload_web                           # first: until then a worker may still route to the stopped address
     docker rm "$id" > /dev/null
-    reload_web
   done
 }
 
