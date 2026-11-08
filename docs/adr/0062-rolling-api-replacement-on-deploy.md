@@ -70,3 +70,8 @@ than 1-99 is refused before a container changes.
     costs at most 1 s and then goes to another replica. A request that was never sent is retried whatever its method.
 - **The `web` swap measured 4.1 s on the server:** SIGQUIT to the old nginx at 12:29:10.456, the new one's workers
   started at 12:29:14.597. The probe saw two failed samples in that window. That gap remains (see Consequences).
+- **Result with the fix:**
+  - v1.1.4 tag deploy (run 42486266050) and a workflow redeploy of v1.1.4 (42486981720): no request failed while the
+    api replicas rolled. Refused connects to stopping replicas were retried on another replica.
+  - The `web` swap took 3.7-4.1 s, which is 1 failed probe sample per release.
+  - Details: `docs/testing/performance-2026-11-08-oci.md`, "Rolling deploy".

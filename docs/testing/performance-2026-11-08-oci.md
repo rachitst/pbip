@@ -197,3 +197,36 @@ there is no supported staff bootstrap there (deploy guide section 14).
   often reported to end idle reclamation, but Oracle's Always Free page does not say so; it is an account change only
   the owner can make. Padding load to defeat the rule is not proposed. Whatever happens to the instance, the daily
   encrypted backups are off-host in Object Storage.
+
+### Rolling deploy (ADR-0062, #505): v1.1.3 and v1.1.4 through the Deploy workflow
+
+**Method:**
+- A 1-second readiness probe ran from the laptop: `curl --max-time 2 https://pbip.duckdns.org/api/health/ready`.
+- A read-only sampler on the VM recorded the api containers and memory every 2 s.
+- The nginx and uvicorn logs for each window came from Loki.
+- Each failed probe sample was matched to the server's own log. The laptop's network adds noise: outside any deploy
+  it timed out on 29 of 501 samples before the v1.1.3 deploy and 3 of 674 before v1.1.4. A sample with no
+  matching request in the nginx log is counted as noise, not downtime.
+
+| Release (run) | API phase (new replicas start, old ones retire) | Failed requests in the API phase | `web` swap on the server | Failed probe samples in the deploy, attributable to the server |
+|---|---|---|---|---|
+| v1.1.2, before the change (42451892070) | both replicas recreated at once | about 12-15 s without a ready answer | (not separable) | about 12-15 s |
+| v1.1.3 tag (42479972985) | 12:29:00-12:29:10 UTC | 1: an nginx worker still held the stopped api-1's address; the connect hung and the probe gave up (nginx logged 499) | 4.1 s (SIGQUIT 12:29:10.456, new workers 12:29:14.597) | 3: the hung request and 2 during the web swap |
+| v1.1.4 tag (42486266050), still on v1.1.3's nginx config | 13:50:36-13:50:46 | 0 (two refused connects retried on another replica, both 200) | 4.1 s (13:50:46.471 to 13:50:50.592) | 1, during the web swap |
+| v1.1.4 workflow redeploy (42486981720), v1.1.4's nginx | 14:00:21-14:00:38 | 0 (one refused connect retried, 200) | 3.7 s (14:00:38.518 to 14:00:42.253) | 1, during the web swap |
+
+**The fix after v1.1.3.** A connect to a stopped replica's address hangs rather than being refused, so v1.1.4
+(#509) changed two things:
+- nginx reloads straight after each stop;
+- nginx gives up an api connect after 1 s and tries the next replica.
+
+No request hung in either v1.1.4 deploy.
+
+**Resources during a roll:**
+- memory rose from 19.4-19.7% to a peak of 23.2% while four api replicas ran, and was back under 20% within
+  seconds;
+- the load average peaked at 2.75 (v1.1.3) and 1.63 (v1.1.4), on 2 OCPUs.
+
+**What is left:** the `web` swap, 3.7-4.1 s per release. `web` owns ports 80 and 443, so the old nginx must stop before
+the new one can bind. Its start-up is about 4 s on this host, mostly container creation and the image's entrypoint
+scripts. Removing the gap would need a second front proxy (ADR-0062, Consequences); follow-up #510.

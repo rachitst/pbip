@@ -260,7 +260,9 @@ separate local-mode stack, because `scripts/seed_load.py` refuses a staging data
   that release for the length of a deploy: add columns and tables first, remove them in a later release.
 - **`web` (nginx) is still recreated** at the end, because it owns ports 80 and 443. The seconds between the old
   nginx stopping and the new one listening are the only gap; measure it with a 1-second probe from outside
-  (`curl --max-time 2 https://<host>/api/health/ready` once a second) and record it in §6.
+  (`curl --max-time 2 https://<host>/api/health/ready` once a second) and record it in §6. Measured on 8 Nov 2026
+  (v1.1.4): 3.7-4.1 s, one failed probe sample per release, and no failed request while the API rolled
+  (`docs/testing/performance-2026-11-08-oci.md`, "Rolling deploy").
 
 **Dry run.** `Actions -> Deploy -> Run workflow` with a tag and `dry_run = true` runs the tag verification, the image
 build and the secret/variable check, prints the plan, and skips every step that touches the host.
