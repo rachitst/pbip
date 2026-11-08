@@ -142,6 +142,7 @@ Status of each item on that date (updated 8 Nov 04:40 UTC, after TCP 80/443 open
 | Page-load and login budgets measured against staging | TASK-102, #185 | Done: every budget met on `https://pbip.duckdns.org` in 3 runs (worst page 1,357 ms, worst login 868 ms) |
 | Encryption-at-rest evidence on the deployment host | #399, #145 | Done: boot volume encrypted with an Oracle-managed key (OCI console), encrypted daily backups copied off-host, PASS restore drill of the downloaded copy, TLS with HSTS from outside; ADR-0042 is no longer provisional |
 | TASK-089 (demo on the deployed stack) | depends on #399 | Customer pages on staging: 0 console errors, 0 page errors, 0 server errors across 12 pages. Staff pages and money movement stay on the local stack: staging has no staff bootstrap or funding by design (deploy guide section 14) |
+| Zero-downtime cutover | TASK-082 criterion 3, #505 | API side done: rolling replacement (ADR-0062, v1.1.3, fixed in v1.1.4). No request failed while the API rolled in the v1.1.4 tag deploy or its workflow redeploy (1-second probe and server logs). The `web` swap still takes 3.7-4.1 s per release, 1 failed probe sample; follow-up #510 |
 | Trained models on staging | ADR-0061, #503 | Done: since the v1.1.2 deploy both API replicas serve `hybrid-lgbm-iforest-3` and `sim-propensity-v2` (the demo stack's artefacts, read-only mounts); at rest CPU p95 8.3%, memory 18.9%, still under Oracle's 20% idle line |
 
 ## Scope decisions

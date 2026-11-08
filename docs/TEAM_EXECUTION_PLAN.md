@@ -2523,7 +2523,7 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
 
 - **Issue:** #105 | **Sprint:** 6 | **Priority:** should | **Size:** L (3.5 person-days estimate) | **Epic:** Platform & DevOps
 - **Owner:** Rachit (`rachitst`)
-- **Start:** Mon 26 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** Wed 29 Oct (merged in #155; acceptance criteria verified, zero-downtime cutover partially met - health-gated single host, follow-up noted on #105) | **Status:** Done | **Risk:** Low
+- **Start:** Mon 26 Oct | **Target deadline:** Tue 27 Oct | **Actual completion:** Wed 29 Oct (merged in #155; acceptance criteria verified, zero-downtime cutover partially met - health-gated single host, follow-up noted on #105; criterion 3 updated 8 Nov, see below) | **Status:** Done | **Risk:** Low
 - **Depends on:** TASK-001 (#12, Rachit). **Handoff evidence before starting:** the upstream PR is merged and its owner has posted the interface/contract and the tests that prove it on this issue.
 - **Mode:** Done
 - **Goal:** Automated GitHub Actions workflow building GHCR images and deploying to staging VM via SSH.
@@ -2539,6 +2539,15 @@ checklist steps 0-8 in `docs/SETUP_GUIDE.md` section 4.7 (evidence on #12, #23, 
   - [x] Triggered by git push of version tag (v*.*.*) from main branch
   - [x] Builds multi-stage Docker images and pushes to GitHub Container Registry (GHCR)
   - [x] Deploys over SSH to target host, runs migrations, and starts stack with zero downtime
+    - **Update 8 Nov 2026 (#505, ADR-0062, v1.1.3 and v1.1.4):**
+      - Before the change, the v1.1.2 cutover lost 12-15 s.
+      - `deploy.sh` now replaces the api replicas rolling: new replicas must be healthy before the old ones stop, and
+        nginx retries a stopped replica on another one.
+      - Measured on the staging host with a 1-second probe from outside and the server's logs. Across the v1.1.4 tag
+        deploy (run 42486266050) and a workflow redeploy (42486981720), **no request failed during the API phase**.
+      - **The `web` (nginx) swap still costs 3.7-4.1 s** on the server, which is 1 failed probe sample per release,
+        because only one container can hold ports 80/443.
+      - So the API side is zero-downtime, but the stack as a whole is not.
   - [x] Executes scripts/smoke_test.py post-deploy verifying readiness and security headers
 - **Definition of done (evidence):** Tested with dry-run or target staging environment, workflow syntax validated.
 - **Required checks:**
