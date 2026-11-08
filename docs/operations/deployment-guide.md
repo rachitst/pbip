@@ -83,9 +83,9 @@ laptop over SSH with the same `deploy.sh` (Oracle guide section 12). Both paths 
 `migrate` exited 0), `cat ~/pbip/.deployed_tag`, and the output of `python3 scripts/smoke_test.py https://<host>` and
 `python3 scripts/staging_smoke.py` (runbook section 2.0).
 
-**Cutover.** Containers are recreated in place on one host: a health-gated, minimal-downtime deployment, not a
-zero-downtime one (runbook section 2.1). Staging runs two API replicas (ADR-0045); the availability probe measures any
-downtime during the window rather than assuming none (Oracle guide section 17).
+**Cutover.** With replicas running, the API is replaced rolling (ADR-0062, runbook section 2.1): new replicas must be
+healthy before the old ones stop, so the API always answers. `web` (nginx, ports 80/443) is still recreated, which
+leaves a short gap; measure it with a 1-second probe from outside rather than assuming none (Oracle guide section 19).
 
 ## 4. Rollback
 
