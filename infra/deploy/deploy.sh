@@ -13,7 +13,13 @@
 # ADR-0061, deploy guide section 14.1) to deploy and rollback alike; without it the stack serves the rules.
 # State files next to this script: .deployed_tag (current healthy release), .previous_tag (the one
 # before it), .deployed_tag.pending (a deploy in progress). Procedures: docs/operations/runbook.md
-# section 2. Migrations run before the API starts (compose dependency) and are never downgraded here.
+# section 2. Migrations run before the API starts and are never downgraded here.
+#
+# When api replicas are already running, a release replaces them rolling (ADR-0062, #505): the new replicas
+# start beside the old ones, must pass their health checks, and only then are the old ones stopped one at a
+# time (uvicorn finishes its in-flight requests) with an nginx reload after each, so nginx never routes to a
+# stopped replica. A new release that never turns healthy is removed and the running one keeps serving.
+# The web container (nginx) is still recreated, which is the only gap left; runbook 2.1 records its size.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
@@ -164,13 +170,91 @@ select_models() {
   COMPOSE+=(-f "$MODELS_OVERLAY")
 }
 
+# Waits until every given container reports healthy; fails on "unhealthy", on a container that is gone, or after
+# WAIT_TIMEOUT seconds.
+wait_healthy() { # <container id>...
+  local deadline=$((SECONDS + WAIT_TIMEOUT)) id status waiting
+  while :; do
+    waiting=0
+    for id in "$@"; do
+      status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$id" 2>/dev/null)" ||
+        status=gone
+      case "$status" in
+        healthy) ;;
+        starting) waiting=1 ;;
+        *)
+          echo "new api container ${id:0:12} is $status" >&2
+          return 1
+          ;;
+      esac
+    done
+    [ "$waiting" = 0 ] && return 0
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      echo "new api replicas not healthy within ${WAIT_TIMEOUT}s" >&2
+      return 1
+    fi
+    sleep 2
+  done
+}
+
+# nginx re-resolves "api" only every 10 s (default.conf.template); a reload starts workers that resolve it now,
+# while the old workers finish their in-flight requests.
+reload_web() {
+  "${COMPOSE[@]}" exec -T web nginx -s reload ||
+    echo "warning: could not reload nginx in web; it re-resolves the api within 10 s" >&2
+}
+
+roll_api() { # <running api container id>...
+  local old=("$@") all=() new=() replicas id
+  replicas="$(env_value API_REPLICAS)"
+  replicas="${replicas:-2}"
+  if ! [[ "$replicas" =~ ^[1-9][0-9]?$ ]]; then
+    echo "refusing to deploy: API_REPLICAS in .env must be a number from 1 to 99" >&2
+    exit 5
+  fi
+  echo "==> Starting $replicas new api replicas beside the ${#old[@]} running ones (rolling, ADR-0062)"
+  "${COMPOSE[@]}" up -d --no-deps --no-recreate --scale "api=$((${#old[@]} + replicas))" api
+  mapfile -t all < <("${COMPOSE[@]}" ps -q api)
+  for id in "${all[@]}"; do
+    [[ " ${old[*]} " == *" $id "* ]] || new+=("$id")
+  done
+  if [ "${#new[@]}" -ne "$replicas" ]; then
+    echo "expected $replicas new api containers, found ${#new[@]}" >&2
+    [ "${#new[@]}" -eq 0 ] || docker rm -f "${new[@]}" > /dev/null
+    return 1
+  fi
+  echo "==> Waiting up to ${WAIT_TIMEOUT}s for the new replicas' health checks"
+  if ! wait_healthy "${new[@]}"; then
+    echo "==> Removing the new replicas; the running release keeps serving" >&2
+    docker rm -f "${new[@]}" > /dev/null
+    return 1
+  fi
+  for id in "${old[@]}"; do
+    echo "==> Retiring api ${id:0:12}"
+    docker stop -t 30 "$id" > /dev/null # SIGTERM: uvicorn stops accepting and finishes in-flight requests
+    docker rm "$id" > /dev/null
+    reload_web
+  done
+}
+
 start_release() { # <image_prefix> <tag>
   export IMAGE_PREFIX="$1" IMAGE_TAG="$2"
+  local running=()
   ensure_tls
   echo "==> Pulling $1/api:$2 and $1/web:$2"
   "${COMPOSE[@]}" pull --quiet
-  echo "==> Starting release $2 (migrate first, then waiting up to ${WAIT_TIMEOUT}s for health checks)"
-  "${COMPOSE[@]}" up -d --remove-orphans --wait --wait-timeout "$WAIT_TIMEOUT"
+  mapfile -t running < <("${COMPOSE[@]}" ps -q api)
+  if [ "${#running[@]}" -eq 0 ]; then
+    echo "==> Starting release $2 (migrate first, then waiting up to ${WAIT_TIMEOUT}s for health checks)"
+    "${COMPOSE[@]}" up -d --remove-orphans --wait --wait-timeout "$WAIT_TIMEOUT"
+  else
+    echo "==> Rolling release $2: migrations first, while the running api keeps serving"
+    "${COMPOSE[@]}" up -d --wait --wait-timeout "$WAIT_TIMEOUT" db redis
+    "${COMPOSE[@]}" up --no-deps --exit-code-from migrate migrate
+    roll_api "${running[@]}"
+    echo "==> Replacing worker, beat and web (waiting up to ${WAIT_TIMEOUT}s for health checks)"
+    "${COMPOSE[@]}" up -d --no-deps --remove-orphans --wait --wait-timeout "$WAIT_TIMEOUT" worker beat web
+  fi
   "${COMPOSE[@]}" ps
 }
 
