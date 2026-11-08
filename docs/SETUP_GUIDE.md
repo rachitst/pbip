@@ -449,9 +449,9 @@ numbers or your name) to a US-hosted provider, so use it only where the owner ap
 * In `.env`: `LLM_PROVIDER=groq`, `GROQ_API_KEY=<from console.groq.com/keys>` (never commit or paste it
   anywhere), `GROQ_MODEL` and `GROQ_REASONING_EFFORT` as chosen in ADR-0037. Then restart the API
   (`docker compose up -d api` or `make dev-api`).
-* Order: Groq, then Ollama, then the keyword rules. A 429, a 5xx, a used budget or a bad answer from Groq
-  moves to the next step; a Groq timeout (`GROQ_TIMEOUT_SECONDS`, default 2.5 s, a wall-clock deadline) goes
-  straight to the keyword rules (ADR-0037 addendum, 2026-11-08). Each customer gets `RATE_LIMIT_GROQ_PER_MINUTE` (default 5) Groq calls a minute.
+* Order: Groq, then Ollama, then the keyword rules. A 429, a 5xx or a bad answer from Groq
+  moves to the next step; a Groq timeout (`GROQ_TIMEOUT_SECONDS`, default 2.5 s, a wall-clock deadline) or a
+  used budget goes straight to the keyword rules (ADR-0037 addenda, 2026-11-08). Each customer gets `RATE_LIMIT_GROQ_PER_MINUTE` (default 10) Groq calls a minute.
 * Check: an unclear question ("am I doing ok money-wise?") answers with `engine: llm`; the audit log has an
   `assistant.llm_call` row with `provider=groq`.
 * Key handling and rotation: `docs/operations/runbook.md` section 3.3.

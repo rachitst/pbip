@@ -31,12 +31,12 @@ every other module never call an external model.
 * **Fixed endpoint.** `https://api.groq.com/openai/v1` is a code constant (SSRF), not configuration.
 * **Configuration only via `core/config.py`:** `GROQ_API_KEY` (`SecretStr`), `GROQ_MODEL`,
   `GROQ_REASONING_EFFORT`, `GROQ_TIMEOUT_SECONDS` (default 5 s; 2.5 s wall-clock deadline since the 2026-11-08 addendum), `RATE_LIMIT_GROQ_PER_MINUTE` (default 5 per
-  customer). Staging/production refuse to boot with `LLM_PROVIDER=groq` and no key or no model; locally a
+  customer; 10 since the 2026-11-08 budget addendum). Staging/production refuse to boot with `LLM_PROVIDER=groq` and no key or no model; locally a
   missing key or model skips Groq with a warning.
 * **No retry storms.** One attempt per provider per question. A 429 starts a process-wide cooldown for
   `retry-after` seconds (capped at 60 s) during which Groq is skipped. A per-customer budget
   (`within_budget`, Redis fixed window) skips Groq once a customer has used theirs; it fails **closed** (Redis
-  down → Ollama), unlike the sign-in limiter.
+  down → Ollama; keyword rules since the 2026-11-08 budget addendum), unlike the sign-in limiter.
 * **Reasoning never leaves the adapter.** GPT-OSS models get `include_reasoning: false` (Groq does not accept
   `reasoning_format` for them); other reasoning models get `reasoning_format: "hidden"`. The adapter reads only
   `tool_calls`; `content` and any `reasoning` field are ignored, so reasoning text is never shown, stored in
@@ -76,7 +76,7 @@ phrasings before any model call.
 | 429 from Groq | outcome `rate_limited`, cooldown starts, Ollama answers |
 | 5xx / 4xx (bad key, `tool_use_failed`) | outcome `error`, Ollama answers |
 | Malformed or injected tool call | outcome `invalid`, Ollama answers |
-| Per-customer budget used / cooldown active | outcome `budget` / `cooldown`, no request is made |
+| Per-customer budget used / cooldown active | outcome `budget` / `cooldown`, no request is made; since the 2026-11-08 budget addendum a used budget ends the chain (keyword rules), a cooldown still goes to Ollama |
 | Groq and Ollama both fail | keyword rules answer (`engine: rules`); the customer always gets an answer |
 | Key leaked | rotate (runbook "Groq API key"); the key is never logged, echoed in errors or sent anywhere but the `Authorization` header to the fixed URL |
 
@@ -258,3 +258,35 @@ at 7 s spacing: the question then goes to Ollama, which answers slower than its 
 give the help text. Through the stack's nginx the same cases took ~0.1 s because the API container cannot reach the
 host's Ollama (`host.docker.internal:11434`: connection refused in 0.19 s). That path is "Groq unavailable" and is
 unchanged here.
+
+## Addendum (2026-11-08): a used Groq budget goes straight to the rules; budget 5 -> 10 a minute
+- Status: Accepted (under owner's standing approval, 2026-11-08; it meets the six conditions: no security, auth,
+  RBAC/BOLA or audit weakening; no money movement; no migration; no new external service and no more data sent out
+  per question; measured numbers only; within FR scope)
+- Trigger: the before/after table above. The only slow open-question rows left were "Groq budget used -> Ollama ->
+  help" (p50 4,189 ms, max 4,246 ms): Ollama on the 2-OCPU host answers slower than its 4 s timeout, so the customer
+  waited ~4 s for the help text the rules would have given at once.
+
+### Change
+- **A used per-customer budget ends the chain**, exactly as a timeout does since the addendum above
+  (`providers._CHAIN_ENDING`): no Ollama call, the keyword rules answer (`engine: rules`; a tool if the keywords name
+  one, otherwise the help text). The audit row and log keep the label: one `assistant.llm_call` row
+  `{provider: groq, outcome: budget, latency_ms}`, no Ollama row. Because the budget fails closed, Redis down now
+  also means rules, not Ollama.
+- **`RATE_LIMIT_GROQ_PER_MINUTE` default 5 -> 10** (bounds unchanged, 1-600). The first-token measurement showed Groq
+  is the fast path (p50 ~0.6 s, every healthy call within 1.7 s) and the budget was what pushed customers off it:
+  at 7 s spacing a customer asks ~8 open questions a minute, so 5 ran out (10 of 30 before, 3 of 30 after the
+  overview rules). Ten a minute per customer stays within the free tier's organisation-wide 30 RPM for the demo's
+  handful of concurrent customers; a 429 still starts the process-wide cooldown.
+- **Unchanged:** a 429 cooldown, 5xx, invalid output and "Groq not configured" still go to Ollama (the "Groq
+  unavailable" path); guard, tool registry, `parse_choice` validation, redaction and audit logging are untouched.
+
+### Trade-off
+- A customer over budget loses the Ollama second chance: on a host where Ollama is fast (GPU) that could have chosen
+  a tool where the rules give the help text. On the reference and OCI hosts (2 CPUs) Ollama misses its 4 s timeout on
+  every question (section "Ollama baseline": 25/25), so the customer gets the same answer ~4 s sooner.
+- Doubling the budget doubles the Groq calls one customer can make (cost on demand: gpt-oss-20b $0.075 / $0.30 per 1M
+  tokens; negligible at demo volume). The operator can lower it per environment; the default only changes the code.
+- Tests: `test_a_used_groq_budget_ends_the_chain_so_the_rules_answer_at_once`,
+  `test_a_429_cooldown_still_falls_back_to_ollama` (unit), `test_a_used_groq_budget_goes_straight_to_the_rules_without_ollama`
+  (integration, replaces the budget-to-Ollama test because the requirement changed), and the config default/bounds test.

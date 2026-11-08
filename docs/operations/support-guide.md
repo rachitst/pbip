@@ -62,7 +62,7 @@ Rate limits are per client IP, counted in Redis, and the response carries `Retry
 | Sign-in and MFA code (`/auth/login`, `/auth/mfa/verify`) | `RATE_LIMIT_LOGIN_PER_MINUTE`, 10 per minute |
 | Registration | `RATE_LIMIT_REGISTER_PER_HOUR`, 10 per hour |
 | Password change | `RATE_LIMIT_PASSWORD_CHANGE_PER_MINUTE`, 5 per minute |
-| Assistant questions | `RATE_LIMIT_ASSISTANT_PER_MINUTE`, 10 per minute; Groq routing additionally `RATE_LIMIT_GROQ_PER_MINUTE`, 5 |
+| Assistant questions | `RATE_LIMIT_ASSISTANT_PER_MINUTE`, 10 per minute; Groq routing additionally `RATE_LIMIT_GROQ_PER_MINUTE`, 10 |
 | Clickstream batches (`/events/batch`) | `RATE_LIMIT_EVENTS_PER_MINUTE`, 120 per minute |
 | Phone number change | `RATE_LIMIT_PHONE_CHANGE_PER_HOUR`, 10 per hour |
 

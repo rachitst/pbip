@@ -111,8 +111,9 @@ class Settings(BaseSettings):
     groq_timeout_seconds: float = Field(default=2.5, ge=0.5, le=10)
     # None = the model's default (sent as nothing). GPT-OSS accepts low|medium|high only.
     groq_reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
-    # Groq calls per customer per minute; above it the question goes to Ollama, not to Groq.
-    rate_limit_groq_per_minute: int = Field(default=5, ge=1, le=600)
+    # Groq calls per customer per minute; above it the keyword rules answer at once (Ollama is
+    # skipped: on the 2-OCPU host it takes seconds), ADR-0037 addendum 2026-11-08 (budget).
+    rate_limit_groq_per_minute: int = Field(default=10, ge=1, le=600)
 
     # Fraud scoring (ADR-0019). "rules" = baseline rules only. "hybrid" adds the trained models
     # from FRAUD_MODEL_DIR (operator-controlled; it holds a pickle) with the rules as a floor.
