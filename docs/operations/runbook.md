@@ -242,21 +242,25 @@ separate local-mode stack, because `scripts/seed_load.py` refuses a staging data
 2. The `package` job builds and pushes `api:vX.Y.Z`/`web:vX.Y.Z` (and `latest`) to GHCR.
 3. With `DEPLOY_ENABLED=true`, the `deploy` job (GitHub environment `staging`, one deployment at a time) checks
    that every required secret and variable is set (names only), copies `docker-compose.prod.yml` and
-   `infra/deploy/deploy.sh` to `~/pbip`, and runs `bash deploy.sh deploy <prefix> vX.Y.Z` on the host:
-   `pull`, then `up -d --remove-orphans --wait`, which runs `migrate` (`alembic upgrade head`) before `api` starts,
-   starts `web` only once `api` is healthy, and fails if any container is not healthy within 180 s. The tag is
-   recorded in `~/pbip/.deployed_tag` only after the stack is healthy; the previous release stays in
-   `~/pbip/.previous_tag`.
+   `infra/deploy/deploy.sh` to `~/pbip`, and runs `bash deploy.sh deploy <prefix> vX.Y.Z` on the host. With
+   `api` replicas running it rolls (ADR-0062): `pull`; `migrate` (`alembic upgrade head`) while the old release
+   serves; `API_REPLICAS` new `api` replicas start beside the old ones and must be healthy within 180 s (else they
+   are removed and the old release keeps serving); each old replica is then stopped (in-flight requests finish)
+   and nginx reloaded; finally `worker`, `beat` and `web` are replaced. On a host with no `api` running it does
+   one `up -d --remove-orphans --wait`. The tag is recorded in `~/pbip/.deployed_tag` only after the stack is
+   healthy; the previous release stays in `~/pbip/.previous_tag`.
 4. The runner then runs `scripts/smoke_test.sh` against `STAGING_URL`. If the deploy or the smoke test fails, the
    workflow runs `bash deploy.sh rollback` on the host, which redeploys the previous healthy release (§2.2), and the
    run is marked failed.
 5. Confirm: the workflow is green; `docker compose -f docker-compose.prod.yml ps` on the host shows `migrate`
    exited 0 and the others healthy; `cat ~/pbip/.deployed_tag` shows the new tag.
 
-**Cutover window.** Containers are recreated in place on one host, so the API is unavailable for the seconds
-between the old `api` stopping and the new one passing its health check (nginx is restarted after that). This is
-a health-gated, minimal-downtime deployment, not a zero-downtime one; true zero downtime needs two `api` replicas
-behind a dynamically resolved nginx upstream (follow-up noted on #105).
+**Cutover window.** The api always has a healthy replica during a release (ADR-0062). Two things follow:
+- **Migrations run while the previous release still serves**, so a migration must leave the schema usable by
+  that release for the length of a deploy: add columns and tables first, remove them in a later release.
+- **`web` (nginx) is still recreated** at the end, because it owns ports 80 and 443. The seconds between the old
+  nginx stopping and the new one listening are the only gap; measure it with a 1-second probe from outside
+  (`curl --max-time 2 https://<host>/api/health/ready` once a second) and record it in §6.
 
 **Dry run.** `Actions -> Deploy -> Run workflow` with a tag and `dry_run = true` runs the tag verification, the image
 build and the secret/variable check, prints the plan, and skips every step that touches the host.

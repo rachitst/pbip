@@ -76,6 +76,16 @@ if [ "${FAKE_DOCKER_FAIL_UP:-0}" = "1" ] && [[ "$*" == *" up "* ]]; then
   echo "simulated health-check timeout" >&2
   exit 1
 fi
+# Running api replicas (#505): the n-th `ps -q api` prints FAKE_DOCKER_LOG.ps<n> when that file exists.
+if [[ "$*" == *" ps -q api"* ]]; then
+  n=$(( $(cat "$FAKE_DOCKER_LOG.psn" 2>/dev/null || echo 0) + 1 ))
+  echo "$n" > "$FAKE_DOCKER_LOG.psn"
+  cat "$FAKE_DOCKER_LOG.ps$n" 2>/dev/null || true
+fi
+# Health of a container: FAKE_DOCKER_HEALTH (default healthy).
+if [ "${1:-}" = "inspect" ]; then
+  echo "${FAKE_DOCKER_HEALTH:-healthy}"
+fi
 """
 
 
@@ -125,6 +135,7 @@ def test_deploy_pulls_then_starts_health_gated_and_records_the_release(host: Pat
     assert result.returncode == 0, result.stderr
     assert _log(host) == [
         f"compose -f docker-compose.prod.yml pull --quiet tag=v0.1.0 prefix={PREFIX}",
+        f"compose -f docker-compose.prod.yml ps -q api tag=v0.1.0 prefix={PREFIX}",
         f"compose -f docker-compose.prod.yml up -d --remove-orphans --wait --wait-timeout 7 "
         f"tag=v0.1.0 prefix={PREFIX}",
         f"compose -f docker-compose.prod.yml ps tag=v0.1.0 prefix={PREFIX}",
@@ -386,6 +397,7 @@ def test_ml_models_enabled_adds_the_overlay_to_every_release_command(host: Path)
     assert result.returncode == 0, result.stderr
     assert _log(host) == [
         f"{_WITH_MODELS} pull --quiet tag=v0.1.0 prefix={PREFIX}",
+        f"{_WITH_MODELS} ps -q api tag=v0.1.0 prefix={PREFIX}",
         f"{_WITH_MODELS} up -d --remove-orphans --wait --wait-timeout 7 tag=v0.1.0 prefix={PREFIX}",
         f"{_WITH_MODELS} ps tag=v0.1.0 prefix={PREFIX}",
     ]
@@ -417,7 +429,7 @@ def test_without_ml_models_enabled_the_release_runs_the_rules_only_file(
     result = _run(host, "deploy", PREFIX, "v0.1.0")
 
     assert result.returncode == 0, result.stderr
-    assert len(_log(host)) == 3
+    assert len(_log(host)) == 4  # pull, ps -q api, up, ps
     assert all(line.startswith("compose -f docker-compose.prod.yml ") for line in _log(host))
     assert not any(OVERLAY in line for line in _log(host))
 
@@ -597,3 +609,125 @@ def test_on_windows_without_git_bash_the_tests_skip_instead_of_using_wsl() -> No
         env={"ProgramFiles": r"C:\Program Files", "LOCALAPPDATA": r"C:\Users\dev\AppData\Local"},
     )
     assert bash is None
+
+
+# Rolling releases (ADR-0062, #505): with api replicas running, the new ones start beside them and the old ones
+# are retired only once the new ones are healthy, one at a time with an nginx reload after each.
+
+_C = "compose -f docker-compose.prod.yml"
+
+
+def _running(host: Path, before: list[str], after: list[str]) -> None:
+    """The api containers `ps -q api` reports before and after the new replicas start."""
+    (host / "docker.log.ps1").write_text("".join(f"{i}\n" for i in before), encoding="utf-8")
+    (host / "docker.log.ps2").write_text("".join(f"{i}\n" for i in after), encoding="utf-8")
+
+
+@needs_bash
+def test_a_release_over_running_replicas_rolls_them_after_the_new_ones_are_healthy(
+    host: Path,
+) -> None:
+    _running(host, ["old1", "old2"], ["old1", "old2", "new1", "new2"])
+
+    result = _run(host, "deploy", PREFIX, "v0.2.0")
+
+    assert result.returncode == 0, result.stderr
+    t = f"tag=v0.2.0 prefix={PREFIX}"
+    assert _log(host) == [
+        f"{_C} pull --quiet {t}",
+        f"{_C} ps -q api {t}",
+        f"{_C} up -d --wait --wait-timeout 7 db redis {t}",
+        f"{_C} up --no-deps --exit-code-from migrate migrate {t}",
+        f"{_C} up -d --no-deps --no-recreate --scale api=4 api {t}",
+        f"{_C} ps -q api {t}",
+        f"inspect -f {{{{if .State.Health}}}}{{{{.State.Health.Status}}}}{{{{else}}}}none{{{{end}}}} new1 {t}",
+        f"inspect -f {{{{if .State.Health}}}}{{{{.State.Health.Status}}}}{{{{else}}}}none{{{{end}}}} new2 {t}",
+        f"stop -t 30 old1 {t}",
+        f"rm old1 {t}",
+        f"{_C} exec -T web nginx -s reload {t}",
+        f"stop -t 30 old2 {t}",
+        f"rm old2 {t}",
+        f"{_C} exec -T web nginx -s reload {t}",
+        f"{_C} up -d --no-deps --remove-orphans --wait --wait-timeout 7 worker beat web {t}",
+        f"{_C} ps {t}",
+    ]
+    assert (host / ".deployed_tag").read_text() == f"{PREFIX} v0.2.0\n"
+
+
+@needs_bash
+def test_new_replicas_that_turn_unhealthy_are_removed_and_the_old_ones_keep_serving(
+    host: Path,
+) -> None:
+    assert _run(host, "deploy", PREFIX, "v0.1.0").returncode == 0
+    (host / "docker.log").unlink()
+    (host / "docker.log.psn").unlink()
+    _running(host, ["old1", "old2"], ["old1", "old2", "new1", "new2"])
+
+    result = _run(host, "deploy", PREFIX, "v0.2.0", extra_env={"FAKE_DOCKER_HEALTH": "unhealthy"})
+
+    assert result.returncode != 0
+    assert "the running release keeps serving" in result.stderr
+    log = _log(host)
+    assert f"rm -f new1 new2 tag=v0.2.0 prefix={PREFIX}" in log
+    # The old replicas are untouched.
+    assert not any(line.startswith(("stop ", "rm old")) for line in log)
+    assert not any(" worker beat web " in line for line in log)
+    assert (host / ".deployed_tag").read_text() == f"{PREFIX} v0.1.0\n"
+    assert (host / ".deployed_tag.pending").read_text() == f"{PREFIX} v0.2.0\n"
+
+
+@needs_bash
+def test_a_scale_up_that_creates_no_new_replica_stops_before_touching_the_old_ones(
+    host: Path,
+) -> None:
+    _running(host, ["old1", "old2"], ["old1", "old2"])
+
+    result = _run(host, "deploy", PREFIX, "v0.2.0")
+
+    assert result.returncode != 0
+    assert "expected 2 new api containers, found 0" in result.stderr
+    assert not any(line.startswith(("stop ", "rm ")) for line in _log(host))
+    assert not (host / ".deployed_tag").exists()
+
+
+@needs_bash
+def test_api_replicas_from_the_host_env_set_the_scale(host: Path) -> None:
+    (host / ".env").write_text("API_REPLICAS=3\n", encoding="utf-8")
+    _running(host, ["old1"], ["old1", "n1", "n2", "n3"])
+
+    result = _run(host, "deploy", PREFIX, "v0.2.0")
+
+    assert result.returncode == 0, result.stderr
+    assert (
+        f"{_C} up -d --no-deps --no-recreate --scale api=4 api tag=v0.2.0 prefix={PREFIX}"
+        in _log(host)
+    )
+
+
+@needs_bash
+def test_a_non_numeric_api_replicas_is_refused_before_the_old_replicas_are_touched(
+    host: Path,
+) -> None:
+    (host / ".env").write_text("API_REPLICAS=two\n", encoding="utf-8")
+    _running(host, ["old1", "old2"], [])
+
+    result = _run(host, "deploy", PREFIX, "v0.2.0")
+
+    assert result.returncode == 5
+    assert "API_REPLICAS" in result.stderr
+    assert not any(" --scale " in line or line.startswith("stop ") for line in _log(host))
+
+
+@needs_bash
+def test_rollback_over_running_replicas_is_rolling_too(host: Path) -> None:
+    assert _run(host, "deploy", PREFIX, "v0.1.0").returncode == 0
+    assert _run(host, "deploy", PREFIX, "v0.2.0").returncode == 0
+    (host / "docker.log").unlink()
+    (host / "docker.log.psn").unlink()
+    _running(host, ["a", "b"], ["a", "b", "c", "d"])
+
+    result = _run(host, "rollback")
+
+    assert result.returncode == 0, result.stderr
+    assert f"stop -t 30 a tag=v0.1.0 prefix={PREFIX}" in _log(host)
+    assert (host / ".deployed_tag").read_text() == f"{PREFIX} v0.1.0\n"

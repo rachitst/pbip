@@ -805,8 +805,10 @@ invariant holds. Before it, the 200-VU step collapsed into 30 s pool timeouts wi
   vm$ docker compose -f docker-compose.prod.yml ps beat           # exactly one beat container
   ```
 
-* **Cutover downtime (#198 item 1, follow-up):** during a deploy, the probe log (section 17) records any failed or
-  missing probes; quote the incident list for the deploy window rather than claiming zero downtime.
+* **Cutover downtime (#198 item 1, #505):** the API is replaced rolling (ADR-0062); only the `web` swap can leave a
+  gap. The 30-second probe (section 17) is too coarse for it: during a deploy, run a 1-second probe from outside
+  (`while sleep 1; do curl -s -o /dev/null -w '%{http_code}\n' --max-time 2 https://<host>/api/health/ready; done`)
+  and quote its failed samples rather than claiming zero downtime.
 
 ## 20. Costs and teardown
 
