@@ -347,3 +347,11 @@ The rulesets in `.github/rulesets/` enforce what can be enforced: pull requests 
 resolved review threads, required checks `CI Gate` and `PR title - Conventional Commit` on an up-to-date branch, and
 merges restricted to the maintainer. The required approval count in the ruleset is 0, so steps 2, 3 and 7 are team
 practice, recorded on each PR, rather than a GitHub setting.
+
+**Step 7 as recorded (checked 2026-11-08).** Teammates approved 12 of the 15 PRs in the v1.1.0 requests (#317):
+- 3 are GitHub reviews with Approve (Krishna: #463, #461, #470);
+- 9 are PR comments saying "Approved" (Kalpak: #477, #487, #464; Abbas: #474, #482, #476; Sujal: #465, #484, #472);
+- Pranay's 3 (#437, #485, #479) have none.
+
+None has line comments, and the earlier request list has no reviews. Details:
+[peer-review-requests.md](peer-review-requests.md#v110-requests-posted-on-317-2026-11-07-and-what-was-recorded).

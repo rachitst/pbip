@@ -185,7 +185,9 @@ How a change is reviewed and merged, as practised on this repository:
   only), so only the maintainer can merge, and only through a pull request.
 
 Teammates also review recent merged PRs in their own area after the fact; the current requests are in
-[`docs/testing/peer-review-requests.md`](docs/testing/peer-review-requests.md).
+[`docs/testing/peer-review-requests.md`](docs/testing/peer-review-requests.md). As of 2026-11-08, teammates have approved 12 of the 15 v1.1.0 requests: 3 GitHub reviews
+and 9 approval comments. Pranay's 3 have no review, and the earlier list has none. The per-PR record is at the end of
+that file.
 
 ## 5. Coding and testing practices
 

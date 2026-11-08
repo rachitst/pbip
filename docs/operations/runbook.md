@@ -309,6 +309,22 @@ process: after fixing the file, restart `api` and `worker`.
 Keep the attribution "IP Geolocation by DB-IP" (https://db-ip.com) wherever location results are
 shown (the staff alert view shows the NEW_COUNTRY and IMPOSSIBLE_TRAVEL reason text).
 
+### 2.5 SSH access and automatic deploys until the final presentation (owner decision, 2026-11-08)
+
+**Current state.** The staging host's security list allows TCP 22 from `0.0.0.0/0` (key-only, password login off,
+guide section 6), and the repository variable `DEPLOY_ENABLED` is `true`. GitHub-hosted runners have no fixed
+address, so both are needed for a tag push to deploy through the workflow (guide section 13).
+
+**Decision.** Both stay as they are until the final presentation, so releases can still go out through the
+pipeline. Afterwards the owner:
+1. deletes the `0.0.0.0/0` rule for TCP 22 (Networking > Virtual cloud networks > the VCN > Security Lists),
+   keeping the `<owner-ip>/32` rule for manual SSH;
+2. sets `DEPLOY_ENABLED` to `false` (Settings > Secrets and variables > Actions > Variables), because without the
+   rule every tag push would end in a failed `deploy` job and an unreachable rollback step.
+
+To ship a release after that: open TCP 22 to `0.0.0.0/0` for the run, set `DEPLOY_ENABLED=true`, push the tag, and
+undo both once the workflow is green (guide section 13), or deploy by hand from the laptop (guide section 12).
+
 ## 3. Secret rotation
 
 Both procedures are safe to run during business hours; §3.1 logs every active user out of their *access* token for at
@@ -594,6 +610,35 @@ repository's compose file does not enable it. To enable it on the host:
      then promotes. Run the §4.2 checks (counts, balances, hash chain) before pointing the stack at it.
 4. Until this is configured and a recovery has been drilled on the real host, state the recovery point objective
    honestly as "last logical dump" (§4.1), not "point in time".
+
+### 4.5 Oracle idle reclamation: accepted risk and recovery (owner decision, 2026-11-08)
+
+**Risk.** Oracle may reclaim an Always Free compute instance that stays idle for 7 days: CPU p95, network and (on
+A1) memory all under 20% ([Always Free resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm)).
+Staging is under all three lines even with the trained models on (8 Nov: CPU p95 8.3%, memory 18.9%, network
+2.9 kB/s; `docs/testing/performance-2026-11-08-oci.md`). The owner **accepts the risk**: no artificial load, and no
+account upgrade. What reclamation does to the instance and its boot volume is not stated in those docs, so the
+steps below assume the worst case, a host that has to be rebuilt.
+
+**What survives a lost host.** The daily encrypted dumps in the `pbip-backups` bucket (Object Storage, a separate
+Always Free resource; guide section 15), the images in GHCR, the repository, and the `staging` environment
+secrets on GitHub. **The backup passphrase and the host `.env` exist only on the host and in the owner's password
+manager**: without the passphrase the dumps cannot be decrypted.
+
+**Recovery.**
+1. If the instance only stopped: start it in the console (Compute > Instances > Start). The stack restarts on its
+   own (`restart: unless-stopped`); check `docker compose -f docker-compose.prod.yml ps`, the smoke test and the
+   availability probe (guide section 17). Note the outage on #186's weekly report.
+2. If it is gone: build a new host with guide sections 3-11, put the `.env` and
+   `~/.pbip-backup-passphrase` back from the password manager, and update the `DEPLOY_HOST` and `DEPLOY_KNOWN_HOSTS`
+   secrets and the DuckDNS record if the public IP changed.
+3. Deploy the last release (`.deployed_tag` from the last workflow run) by hand (guide section 12), or through the
+   workflow with §2.5's rule open.
+4. Restore the newest dump from the bucket: `scripts/offsite_backup.py get` for the `.dump.gpg` and its
+   `.manifest.json` (guide section 15, "Restore check of the off-host copy"), run the §4.2 drill on the download,
+   then §4.3 to restore it into the live database. Transactions after that dump are lost (§4.3 step 6).
+5. Re-issue the certificate (guide section 9.1), re-enable the backup timer (guide section 15) and the probe
+   (guide section 17), and re-copy the models if `ML_MODELS=enabled` (guide section 14.1).
 
 ---
 
