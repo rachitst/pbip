@@ -124,8 +124,9 @@ The live demo script and its fallback plan are in [`demo/demo-script.md`](demo/d
 
 ## Releases
 
-The latest release is **[v1.1.2](https://github.com/rachitst/pbip/releases/tag/v1.1.2)** (8 November 2026): staging
-over HTTPS, the trained models on the staging host and a faster assistant fallback, on top of v1.1.1's staging fixes,
+The latest release is **[v1.1.3](https://github.com/rachitst/pbip/releases/tag/v1.1.3)** (8 November 2026): deploys
+that replace the API rolling, so it keeps answering, on top of v1.1.2's staging over HTTPS, the trained models on the
+staging host and a faster assistant fallback, v1.1.1's staging fixes,
 monitoring, off-host backups and database admission fix and v1.1.0's recommendation, behaviour-profile, investing and
 staff-dashboard features. Every release is listed on the [releases page](https://github.com/rachitst/pbip/releases),
 with notes in [`docs/release/`](docs/release/) and the full history in [`CHANGELOG.md`](CHANGELOG.md).

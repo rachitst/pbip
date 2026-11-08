@@ -122,3 +122,41 @@ Area checklist:
 | Abbas | Assistant and docs | #368 [ ] | #335 [ ] | #374 [ ] |
 | Pranay | Machine learning | #437 [ ] | #376 [ ] | #354 [ ] |
 | Sujal | Payments | #296 [ ] | #369 [ ] | #364 [ ] |
+
+Checked on GitHub on 2026-11-08: none of the 15 PRs above has a teammate review or comment.
+
+## v1.1.0 requests (posted on #317, 2026-11-07) and what was recorded
+
+Each teammate was asked for three merged PRs in their area. Checked on GitHub on 2026-11-08 at 07:30 UTC; the
+reviews were recorded after the PRs merged.
+
+- **A GitHub review** means a review submitted with **Approve** on the PR.
+- **A PR comment** means a conversation comment saying "Approved", not a submitted review. It still counts as a
+  recorded approval.
+- No review has line comments, and none links an issue.
+
+| Teammate (login) | Area | PR | Recorded | Date (UTC) |
+|---|---|---|---|---|
+| Kalpak (`Patil-Kalpak`) | Web UI | #477 usage analytics | PR comment "Approved" | 2026-11-08 06:33 |
+| Kalpak (`Patil-Kalpak`) | Web UI | #487 monthly SIP | PR comment "Approved" | 2026-11-08 06:33 |
+| Kalpak (`Patil-Kalpak`) | Web UI | #464 fraud monitoring dashboard | PR comment "Approved" | 2026-11-08 06:33 |
+| Krishna (`LetRock1`) | Analytics and recommendations | #463 behavioural profile | GitHub review, Approve | 2026-11-08 07:23 |
+| Krishna (`LetRock1`) | Analytics and recommendations | #461 RTQ-1 suitability rule | GitHub review, Approve | 2026-11-08 07:23 |
+| Krishna (`LetRock1`) | Analytics and recommendations | #470 loan recommendations | GitHub review, Approve | 2026-11-08 07:24 |
+| Abbas (`Abbaskazi`) | Assistant and docs | #474 FAQ coverage | PR comment "Approved" | 2026-11-07 19:22 |
+| Abbas (`Abbaskazi`) | Assistant and docs | #482 consent FAQ | PR comment "Approved" | 2026-11-07 19:23 |
+| Abbas (`Abbaskazi`) | Assistant and docs | #476 use cases and traceability | PR comment "Approved" | 2026-11-07 19:23 |
+| Pranay | Machine learning | #437 F7/F8 features and retrain | none | |
+| Pranay | Machine learning | #485 fakeredis keyspace race | none | |
+| Pranay | Machine learning | #479 shared trained model in tests | none | |
+| Sujal (`SUJALGPM`) | Payments and loans | #465 simulated investments | PR comment "Approved" | 2026-11-08 06:06 |
+| Sujal (`SUJALGPM`) | Payments and loans | #484 monthly fund SIPs | PR comment "Approved" | 2026-11-08 06:11 |
+| Sujal (`SUJALGPM`) | Payments and loans | #472 E2E journeys | PR comment "Approved" | 2026-11-08 06:16 |
+
+**Total:** 12 of 15 PRs have a teammate approval:
+- 3 are GitHub reviews (all of Krishna's);
+- 9 are approval comments (Kalpak, Abbas and Sujal);
+- Pranay's 3 machine-learning PRs have none.
+
+One limit applies to all 12: none has line comments. Each records that a teammate approved the change, but it doesn't
+show what they checked. Sujal's #465 touches `ledger/`, so it is the CODEOWNERS case of AGENTS.md section 4.

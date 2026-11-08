@@ -4,6 +4,24 @@ All notable changes to PBIP are listed here. The format follows [Keep a Changelo
 and the project uses [Semantic Versioning](https://semver.org/). Numbers in brackets are the pull requests that made
 each change. The plain-language summaries are in [`docs/release/`](docs/release/).
 
+## [1.1.3] - 2026-11-08
+
+Deploys that keep the API answering. The summary is in [`docs/release/v1.1.3.md`](docs/release/v1.1.3.md).
+
+### Fixed
+
+- **Deploy cutover:** with api replicas running, `deploy.sh` (deploy and rollback) now starts the new replicas beside
+  the old ones, waits for their health checks, and only then stops the old ones one at a time with an nginx reload
+  after each. New replicas that never turn healthy are removed and the running release keeps serving. The v1.1.2
+  deploy had been measured at 12-15 s without a ready answer. `web` (nginx, ports 80/443) is still recreated
+  (ADR-0062, #505, #507).
+
+### Added
+
+- **Docs:** runbook section 2.5 (SSH ingress and `DEPLOY_ENABLED` until the final presentation) and section 4.5
+  (Oracle idle reclamation: accepted risk and recovery from the off-host backups); the teammates' peer reviews of
+  the v1.1.0 requests recorded; #101 (TASK-078) and #198 closed by owner decision.
+
 ## [1.1.2] - 2026-11-08
 
 Staging over HTTPS, the trained models on the staging host and the assistant's Groq budget. The summary is in
