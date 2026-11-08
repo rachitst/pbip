@@ -643,11 +643,11 @@ def test_a_release_over_running_replicas_rolls_them_after_the_new_ones_are_healt
         f"inspect -f {{{{if .State.Health}}}}{{{{.State.Health.Status}}}}{{{{else}}}}none{{{{end}}}} new1 {t}",
         f"inspect -f {{{{if .State.Health}}}}{{{{.State.Health.Status}}}}{{{{else}}}}none{{{{end}}}} new2 {t}",
         f"stop -t 30 old1 {t}",
+        f"{_C} exec -T web nginx -s reload {t}",
         f"rm old1 {t}",
-        f"{_C} exec -T web nginx -s reload {t}",
         f"stop -t 30 old2 {t}",
-        f"rm old2 {t}",
         f"{_C} exec -T web nginx -s reload {t}",
+        f"rm old2 {t}",
         f"{_C} up -d --no-deps --remove-orphans --wait --wait-timeout 7 worker beat web {t}",
         f"{_C} ps {t}",
     ]

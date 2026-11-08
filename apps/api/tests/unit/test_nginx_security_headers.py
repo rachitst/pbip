@@ -56,3 +56,14 @@ def test_the_api_upstream_is_re_resolved_after_the_api_container_is_recreated() 
     assert re.search(r"^\s*set \$pbip_api_upstream http://api:8000;$", api, re.M)
     assert re.search(r"^\s*proxy_pass \$pbip_api_upstream;$", api, re.M)
     assert "proxy_pass http://api" not in api
+
+
+def test_a_stopped_api_replica_costs_a_one_second_retry_not_a_hang() -> None:
+    """Regression (#505, v1.1.3 deploy): a worker still held a retired replica's address and the request
+    hung on the connect until the client gave up. The connect timeout is short and a timeout moves the
+    request to the next replica."""
+    api = TEMPLATE.read_text(encoding="utf-8").split("location /api/ {", 1)[1].split("}", 1)[0]
+    assert re.search(r"^\s*proxy_connect_timeout 1s;$", api, re.M)
+    next_upstream = re.search(r"^\s*proxy_next_upstream ([a-z_ ]+);$", api, re.M)
+    assert next_upstream is not None
+    assert {"error", "timeout"} <= set(next_upstream.group(1).split())

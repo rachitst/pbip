@@ -4,6 +4,15 @@ All notable changes to PBIP are listed here. The format follows [Keep a Changelo
 and the project uses [Semantic Versioning](https://semver.org/). Numbers in brackets are the pull requests that made
 each change. The plain-language summaries are in [`docs/release/`](docs/release/).
 
+## [1.1.4] - 2026-11-08
+
+### Fixed
+
+- **Rolling deploy, a stale replica address:** on the v1.1.3 deploy one request hung while an nginx worker still
+  held a retired api replica's address. nginx now reloads straight after each old replica stops, and gives up on
+  an api connect after 1 s and tries the next replica (`proxy_connect_timeout 1s`, `proxy_next_upstream error
+  timeout`; ADR-0062 update, #505).
+
 ## [1.1.3] - 2026-11-08
 
 Deploys that keep the API answering. The summary is in [`docs/release/v1.1.3.md`](docs/release/v1.1.3.md).

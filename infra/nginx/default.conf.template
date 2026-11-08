@@ -65,6 +65,13 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Request-ID $request_id;
         proxy_read_timeout 30s;
+        # A rolling deploy (ADR-0062) stops old api replicas; for a moment a worker can still hold a stopped
+        # replica's address, and a connect to it hangs rather than being refused (#505: the v1.1.3 deploy had
+        # one request wait 2 s+). Replicas are on the same host, so a connect takes well under a millisecond:
+        # after 1 s nginx gives up on that address and tries the next replica. A request that was never sent is
+        # retried whatever its method.
+        proxy_connect_timeout 1s;
+        proxy_next_upstream error timeout;
     }
 
     # Prometheus metrics are internal-only.
