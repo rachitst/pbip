@@ -594,8 +594,9 @@ vm$ sudo tee /etc/systemd/system/pbip-uptime-probe.timer >/dev/null <<'EOF'
 Description=Run the PBIP availability probe every 30 seconds
 
 [Timer]
-OnBootSec=30s
-OnUnitActiveSec=30s
+# Wall-clock ticks at :00 and :30. OnUnitActiveSec=30s drifts to about one run per 30.9 s (measured on the
+# staging host), and uptime_report.py expects one probe per 30 s: the drift would count as missing probes.
+OnCalendar=*-*-* *:*:00/30
 AccuracySec=1s
 
 [Install]
