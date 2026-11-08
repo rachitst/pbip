@@ -1,0 +1,32 @@
+# Opt-in overlay: the trained models on the staging host (ADR-0061). Not used on its own:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.prod.models.yml ...
+# deploy.sh adds it only when the host .env has ML_MODELS=enabled, and then refuses to deploy unless
+# ./models/fraud/manifest.json and ./models/recommendations exist (deploy guide section 14.1). The model files are
+# copied by the operator from `make fraud-model-release` / `make fraud-model` and `make recommendation-model`,
+# never by CI. Without this overlay the stack serves the fraud rules and rules-v1 recommendations.
+#
+# Read-only: the containers must never be able to rewrite the models they load (threat model T34). Any load
+# problem (missing, altered or refused files) logs *_model_not_loaded and the rules decide: never allow-all.
+services:
+  api:
+    environment:
+      # Hybrid fraud scorer (ADR-0019) and the gated recommendation ranker (ADR-0049, ADR-0053).
+      FRAUD_SCORER: hybrid
+      FRAUD_MODEL_DIR: /models/fraud
+      # Model step budget, 5-100 ms (#362): raise it in .env if scripts/benchmark_fraud_latency.py shows the
+      # host falling back too often at 50 ms.
+      FRAUD_MODEL_BUDGET_MS: ${FRAUD_MODEL_BUDGET_MS:-50}
+      RECOMMENDATION_MODEL_DIR: /models/recommendations
+    volumes:
+      - ./models/fraud:/models/fraud:ro
+      - ./models/recommendations:/models/recommendations:ro
+  worker:
+    # Scheduled transfers are scored in the worker with the same engine as a request
+    # (payments/scheduled_service.py), so a scheduled payment is never judged less strictly than a manual one.
+    # The worker ranks no recommendations, so it gets no recommendation model.
+    environment:
+      FRAUD_SCORER: hybrid
+      FRAUD_MODEL_DIR: /models/fraud
+      FRAUD_MODEL_BUDGET_MS: ${FRAUD_MODEL_BUDGET_MS:-50}
+    volumes:
+      - ./models/fraud:/models/fraud:ro

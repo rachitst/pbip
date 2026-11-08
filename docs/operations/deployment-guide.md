@@ -111,10 +111,12 @@ stops a deployment.
 | Hybrid fraud scorer (LightGBM, Isolation Forest, rules floor; ADR-0019) | `FRAUD_SCORER=hybrid`, `FRAUD_MODEL_DIR` | Rules only, marked `+rules-only` with a `MODEL_UNAVAILABLE` reason; never allow-all | `./models/fraud` to `/models/fraud` |
 | Recommendation ranker trained on simulated uptake (ADR-0053) | `RECOMMENDATION_MODEL_DIR` | `rules-v1` ranking | `./models/recommendations` to `/models/recommendations` |
 
-`docker-compose.yml` sets both (`FRAUD_SCORER` defaults to `hybrid` there). The staging compose sets neither, and the
-code default is `FRAUD_SCORER=rules`: **staging serves the baseline fraud rules and `rules-v1` recommendations.**
-Serving the models on staging would need the model directories on the host and the two settings in the staging
-compose, which is a reviewed change to `infra/deploy/docker-compose.prod.yml`, not a host edit.
+`docker-compose.yml` sets both (`FRAUD_SCORER` defaults to `hybrid` there). The staging compose sets neither by
+default, and the code default is `FRAUD_SCORER=rules`: **staging serves the baseline fraud rules and `rules-v1`
+recommendations** unless the host `.env` says `ML_MODELS=enabled`. Then `deploy.sh` adds
+`infra/deploy/docker-compose.prod.models.yml`, which sets both and mounts `~/pbip/models/fraud` and
+`~/pbip/models/recommendations` read-only, and refuses to deploy if the model files are missing (ADR-0061; procedure
+in the [staging guide](deploy-oracle-cloud-arm.md) section 14.1).
 
 ### 5.1 The pinned fraud model: `make fraud-model-release`
 

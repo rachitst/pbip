@@ -356,6 +356,150 @@ def test_monitoring_without_a_host_env_refuses(host: Path) -> None:
     assert _log(host) == []
 
 
+# --------------------------------------------------------------------------- trained models (ADR-0061)
+
+OVERLAY = "docker-compose.prod.models.yml"
+_WITH_MODELS = f"compose -f docker-compose.prod.yml -f {OVERLAY}"
+
+
+def _with_models(
+    host: Path, value: str = "enabled", *, fraud: bool = True, ranker: bool = True
+) -> None:
+    """The host as section 14.1 of the staging guide leaves it: overlay, model files and the .env flag."""
+    shutil.copy(ROOT / "infra" / "deploy" / OVERLAY, host)
+    (host / ".env").write_text(
+        f"PUBLIC_HOSTNAME=staging.example.test\nML_MODELS={value}\n", encoding="utf-8"
+    )
+    if fraud:
+        (host / "models" / "fraud").mkdir(parents=True)
+        (host / "models" / "fraud" / "manifest.json").write_text("{}", encoding="utf-8")
+    if ranker:
+        (host / "models" / "recommendations").mkdir(parents=True)
+
+
+@needs_bash
+def test_ml_models_enabled_adds_the_overlay_to_every_release_command(host: Path) -> None:
+    _with_models(host)
+
+    result = _run(host, "deploy", PREFIX, "v0.1.0")
+
+    assert result.returncode == 0, result.stderr
+    assert _log(host) == [
+        f"{_WITH_MODELS} pull --quiet tag=v0.1.0 prefix={PREFIX}",
+        f"{_WITH_MODELS} up -d --remove-orphans --wait --wait-timeout 7 tag=v0.1.0 prefix={PREFIX}",
+        f"{_WITH_MODELS} ps tag=v0.1.0 prefix={PREFIX}",
+    ]
+    assert "Trained models enabled" in result.stdout
+
+
+@needs_bash
+def test_rollback_uses_the_same_file_set_as_the_deploy(host: Path) -> None:
+    _with_models(host)
+    assert _run(host, "deploy", PREFIX, "v0.1.0").returncode == 0
+    assert _run(host, "deploy", PREFIX, "v0.2.0").returncode == 0
+
+    result = _run(host, "rollback")
+
+    assert result.returncode == 0, result.stderr
+    assert _log(host)[-2] == (
+        f"{_WITH_MODELS} up -d --remove-orphans --wait --wait-timeout 7 tag=v0.1.0 prefix={PREFIX}"
+    )
+
+
+@needs_bash
+@pytest.mark.parametrize("value", ["", "disabled"])
+def test_without_ml_models_enabled_the_release_runs_the_rules_only_file(
+    host: Path, value: str
+) -> None:
+    """The default deployment is unchanged, even with the overlay and model files on the host."""
+    _with_models(host, value)
+
+    result = _run(host, "deploy", PREFIX, "v0.1.0")
+
+    assert result.returncode == 0, result.stderr
+    assert len(_log(host)) == 3
+    assert all(line.startswith("compose -f docker-compose.prod.yml ") for line in _log(host))
+    assert not any(OVERLAY in line for line in _log(host))
+
+
+@needs_bash
+@pytest.mark.parametrize(
+    ("fraud", "ranker", "missing"),
+    [
+        (False, True, "models/fraud/manifest.json"),
+        (True, False, "models/recommendations/"),
+        (False, False, "models/fraud/manifest.json models/recommendations/"),
+    ],
+)
+def test_ml_models_enabled_refuses_to_deploy_without_the_model_files(
+    host: Path, fraud: bool, ranker: bool, missing: str
+) -> None:
+    """Docker would create a missing directory empty and the API would quietly serve the rules: the
+    deploy stops before any container or state file changes."""
+    _with_models(host, fraud=fraud, ranker=ranker)
+
+    result = _run(host, "deploy", PREFIX, "v0.1.0")
+
+    assert result.returncode == 5
+    assert f"missing {missing} next to deploy.sh" in result.stderr
+    assert _log(host) == []
+    assert not (host / ".deployed_tag.pending").exists()
+    assert not (host / ".deployed_tag").exists()
+
+
+@needs_bash
+def test_ml_models_enabled_refuses_without_the_overlay_file(host: Path) -> None:
+    _with_models(host)
+    (host / OVERLAY).unlink()
+
+    result = _run(host, "deploy", PREFIX, "v0.1.0")
+
+    assert result.returncode == 5
+    assert f"missing {OVERLAY} next to deploy.sh" in result.stderr
+    assert _log(host) == []
+
+
+@needs_bash
+def test_rollback_with_ml_models_enabled_also_refuses_without_the_model_files(host: Path) -> None:
+    _with_models(host)
+    assert _run(host, "deploy", PREFIX, "v0.1.0").returncode == 0
+    assert _run(host, "deploy", PREFIX, "v0.2.0").returncode == 0
+    shutil.rmtree(host / "models" / "fraud")
+    calls = len(_log(host))
+
+    result = _run(host, "rollback")
+
+    assert result.returncode == 5
+    assert "models/fraud/manifest.json" in result.stderr
+    assert len(_log(host)) == calls  # docker not touched
+    assert (host / ".deployed_tag").read_text() == f"{PREFIX} v0.2.0\n"  # nothing rolled back
+
+
+@needs_bash
+@pytest.mark.parametrize("value", ["enable", "true", "Enabled", "yes"])
+def test_an_unknown_ml_models_value_is_refused_rather_than_read_as_off(
+    host: Path, value: str
+) -> None:
+    _with_models(host, value)
+
+    result = _run(host, "deploy", PREFIX, "v0.1.0")
+
+    assert result.returncode == 5
+    assert "ML_MODELS in .env must be enabled, disabled or unset" in result.stderr
+    assert _log(host) == []
+
+
+@needs_bash
+def test_monitoring_ignores_ml_models(host: Path) -> None:
+    """The monitoring path neither needs the model files nor changes its compose files."""
+    (host / ".env").write_text(_HOST_ENV + "ML_MODELS=enabled\n", encoding="utf-8")
+
+    result = _run(host, "monitoring")
+
+    assert result.returncode == 0, result.stderr
+    assert not any(OVERLAY in line for line in _log(host))
+
+
 _FAKE_OPENSSL = """#!/usr/bin/env bash
 # Records how it was called, then writes the files named by -keyout and -out.
 echo "MSYS_NO_PATHCONV=${MSYS_NO_PATHCONV:-unset} $*" >> "$FAKE_OPENSSL_LOG"

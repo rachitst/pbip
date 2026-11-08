@@ -251,8 +251,8 @@ Copy the same files the deploy job copies, plus the probe script (section 17):
 laptop$ ssh -i ~/.ssh/pbip-oci-admin pbip@<vm-ip> 'mkdir -p ~/pbip/monitoring'
 laptop$ scp -i ~/.ssh/pbip-oci-admin infra/deploy/docker-compose.prod.yml infra/deploy/deploy.sh \
           infra/deploy/certbot-deploy-hook.sh infra/postgres/tls-entrypoint.sh infra/deploy/uptime-probe.sh \
-          infra/deploy/docker-compose.prod.monitoring.yml scripts/uptime_report.py infra/deploy/.env.prod.example \
-          pbip@<vm-ip>:pbip/
+          infra/deploy/docker-compose.prod.monitoring.yml infra/deploy/docker-compose.prod.models.yml \
+          scripts/uptime_report.py infra/deploy/.env.prod.example pbip@<vm-ip>:pbip/
 laptop$ tar -C infra -cf - prometheus grafana loki alloy | \
           ssh -i ~/.ssh/pbip-oci-admin pbip@<vm-ip> 'tar -xf - -C ~/pbip/monitoring'   # section 16
 ```
@@ -366,8 +366,74 @@ Record the outputs on #198 (runbook section 6).
   administrator, or to fund an account, in a deployed environment. Staff screens and money movement can therefore not
   be demonstrated on staging today; the demo stays on the local stack. Closing that gap is an engineering change with
   security impact (a one-time admin bootstrap) and needs its own issue and ADR.
-* The production compose file runs the rules-only fraud scorer (`FRAUD_SCORER` defaults to `rules` and no model
-  directory is mounted).
+* By default the production compose file runs the rules-only fraud scorer and `rules-v1` recommendations
+  (`FRAUD_SCORER` defaults to `rules` and no model directory is mounted). Section 14.1 turns the trained models on.
+
+### 14.1 Trained models on staging (opt-in, ADR-0061)
+
+The same models as the local demo stack: the hybrid fraud scorer (ADR-0019) and the recommendation ranker (ADR-0049,
+ADR-0053). `infra/deploy/docker-compose.prod.models.yml` sets `FRAUD_SCORER=hybrid`, `FRAUD_MODEL_DIR` and
+`RECOMMENDATION_MODEL_DIR`, and mounts `~/pbip/models/fraud` and `~/pbip/models/recommendations` **read-only** into
+`api` (the worker gets the fraud model only: it scores scheduled transfers and ranks nothing). `deploy.sh` adds that
+file only when the host `.env` says `ML_MODELS=enabled`. The model files come from your laptop, never from CI or the
+image; the deploy job copies the overlay file, not the models.
+
+1. Build the models on the laptop (repository root):
+
+   ```bash
+   laptop$ make fraud-model-release        # the pinned, checksummed champion (or: make fraud-model to train)
+   laptop$ make recommendation-model       # writes the ranker only if it passes its gate; report.json says why
+   laptop$ ls models/fraud/manifest.json models/recommendations/report.json
+   ```
+
+2. Copy them to the host as the deploy user, so the deploy user owns them and the container user (`app`, another uid)
+   can read but never write them. The bind mounts are read-only as well (threat model T34):
+
+   ```bash
+   laptop$ ssh -i ~/.ssh/pbip-oci-admin pbip@<vm-ip> 'mkdir -p ~/pbip/models'
+   laptop$ scp -r -i ~/.ssh/pbip-oci-admin models/fraud models/recommendations pbip@<vm-ip>:pbip/models/
+   vm$ cd ~/pbip && chmod -R u=rwX,go=rX models && ls -lR models | head -20     # owner pbip, nothing group/world-writable
+   ```
+
+   To replace a model later, copy the new directory next to the old one and swap it with `mv`, then redeploy: the API
+   loads the files once at start-up.
+
+3. Turn it on and redeploy (same release or the next one):
+
+   ```bash
+   vm$ cd ~/pbip && echo 'ML_MODELS=enabled' >> .env
+   vm$ bash deploy.sh deploy ghcr.io/rachitst/pbip <vX.Y.Z>
+   vm$ docker compose -f docker-compose.prod.yml -f docker-compose.prod.models.yml logs api worker | \
+         grep -E 'fraud_model_(not_)?loaded|recommendation_model_(not_)?loaded'
+   ```
+
+   `fraud_model_loaded` and `recommendation_model_loaded` with a `model_version` mean the models are served. With
+   `ML_MODELS=enabled`, `deploy.sh deploy` and `deploy.sh rollback` refuse to start (exit 5, nothing changed) when
+   `models/fraud/manifest.json` or `models/recommendations` is missing, or when `ML_MODELS` has any value other than
+   `enabled`, `disabled` or empty, so a typo never falls back unnoticed. Hand-run `docker compose ... up` commands must
+   name both files (runbook section 2.3).
+
+4. Turn it off: set `ML_MODELS=disabled` (or delete the line) and redeploy; the stack is back to the rules-only
+   default, and the `models` directory can stay or go.
+
+Failure behaviour: the API and the worker never fail to start because of a model. Missing, altered (manifest SHA-256
+mismatch) or refused files, a pickle outside the allow-list (ADR-0033) or a ranker that did not pass its gate log
+`fraud_model_not_loaded` / `recommendation_model_not_loaded`, and the rules decide (fraud decisions are then marked
+`+rules-only`; never allow-all).
+
+Latency on this host: the model step has a budget, `FRAUD_MODEL_BUDGET_MS` (default 50 ms, allowed 5-100); past it
+the transfer is decided by the rules and marked `+rules-only` with a `MODEL_UNAVAILABLE` reason. The A1 cores are
+slower than the laptop's, so measure before relying on the model. The production image has no `scripts/`, so run the
+benchmark from a checkout on the VM (the `~/pbip-perf` clone of section 18.2, after its `uv sync --all-packages
+--frozen`) against the same `models/fraud`; it only reads the directory:
+
+```bash
+vm$ cd ~/pbip-perf && uv run python scripts/benchmark_fraud_latency.py --model-dir ~/pbip/models/fraud --calls 500 \
+      --budget-ms 50 --budget-ms 100
+```
+
+If the fallback rate at 50 ms is too high, set `FRAUD_MODEL_BUDGET_MS` (at most 100) in `.env` and redeploy; the
+overlay passes it to `api` and `worker`.
 
 ## 15. Backups to OCI Object Storage
 

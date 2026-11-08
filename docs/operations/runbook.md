@@ -276,6 +276,9 @@ but only downgrade when the previous release cannot run on the new schema, and t
 
 `docker compose -f docker-compose.prod.yml up -d api worker beat` recreates the containers whose environment changed
 (compose compares the resolved config). `restart` alone does **not** reload `.env`.
+With `ML_MODELS=enabled` (trained models, ADR-0061) every hand-run `up` must also name the model overlay,
+`docker compose -f docker-compose.prod.yml -f docker-compose.prod.models.yml up -d api worker beat`, or the
+recreated `api` and `worker` serve the rules only; `deploy.sh` adds it by itself (staging guide section 14).
 
 ---
 
