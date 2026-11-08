@@ -172,3 +172,28 @@ A Playwright sweep (one registered customer, laptop to `https://pbip.duckdns.org
 (accounts, payees, bills, scheduled, statements, insights, loans, wealth, compare, invest, insurance, profile) and the
 not-found page: 0 console errors, 0 uncaught page errors, 0 responses >= 500. Staff pages cannot be checked on staging:
 there is no supported staff bootstrap there (deploy guide section 14).
+
+### v1.1.2 through the Deploy workflow, the trained models, and the Oracle idle rule
+
+- **Deploy:** the `v1.1.2` tag push ran the Deploy workflow (run 42451892070): build 6 min, deploy and smoke test 2 min,
+  all green; `.deployed_tag` v1.1.2, `.previous_tag` v1.1.1. Both API replicas logged `fraud_model_loaded`
+  (`hybrid-lgbm-iforest-3`) and `recommendation_model_loaded` (`sim-propensity-v2`); the API and worker model mounts and
+  the GeoIP mount are read-only; inside the API the DB-IP country file resolves `8.8.8.8` to US and `81.2.69.142` to GB.
+- **Cutover downtime:** a 1-second readiness probe from the laptop saw about 12-15 s without a ready answer
+  (05:51:38-05:51:50 UTC and one sample at 05:52:11); the 30-second probe on the VM recorded every tick as up. The
+  cutover is health-gated, not zero-downtime: #505.
+- **Utilisation against Oracle's Always Free idle rule** (an A1 instance can be reclaimed when, over 7 days, its CPU
+  95th percentile, network and memory are all below 20%). `sysstat` one-minute samples, memory as (total - available) /
+  total, network on `enp0s6`; staging has no real traffic, so these are the at-rest figures:
+
+| Window (8 Nov, UTC) | Samples | CPU busy p95 (mean) | Memory used mean (max) | Network rx+tx p95 |
+|---|---|---|---|---|
+| 00:05-03:20, rules only | 195 | 7.2% (5.9%) | 17.4% (18.3%) | 2.9 kB/s |
+| 05:53-06:23, trained models on | 30 | 8.3% (6.2%) | 18.9% (19.2%) | 2.9 kB/s |
+
+  The models add about 1.5 points of memory and almost no CPU at rest (fraud scoring runs only on transfers). All three
+  stay below 20%, so the instance remains eligible for reclamation on this measure. Legitimate ways above the line are
+  real use (the monitoring stack's retention and staging traffic grow memory slowly). Upgrading to Pay As You Go is
+  often reported to end idle reclamation, but Oracle's Always Free page does not say so; it is an account change only
+  the owner can make. Padding load to defeat the rule is not proposed. Whatever happens to the instance, the daily
+  encrypted backups are off-host in Object Storage.
