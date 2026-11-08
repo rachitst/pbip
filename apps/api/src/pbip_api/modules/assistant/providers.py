@@ -11,10 +11,10 @@ question after :func:`sanitize.redact_for_provider` (no account numbers, ids, em
 phone numbers or the customer's own name). Tool results, retrieved text, conversation history
 and identity never leave: the model does not see them on any provider.
 
-Failure is always safe: 429, 5xx, bad JSON, no or several tool calls, an unknown tool, the
-per-customer Groq budget or a cooldown after a 429 each raise :class:`LLMUnavailableError`, and
-:class:`ModelChain` moves on to Ollama and then the caller to the keyword rules. A timeout ends the
-chain at once (the routing time is spent): the keyword rules answer (ADR-0037 addendum, 2026-11-08).
+Failure is always safe: 429, 5xx, bad JSON, no or several tool calls, an unknown tool or a
+cooldown after a 429 each raise :class:`LLMUnavailableError`, and :class:`ModelChain` moves on to
+Ollama and then the caller to the keyword rules. A timeout or a used per-customer Groq budget ends
+the chain at once: the keyword rules answer (ADR-0037 addenda, 2026-11-08).
 There is no retry: one attempt per provider per question.
 """
 
@@ -241,6 +241,13 @@ def _choice_from_tool_call(payload: Any, *, no_call_means_none: bool = False) ->
     return json.dumps({"tool": name, "arguments": arguments})
 
 
+# Outcomes after which no further provider is tried (fixed audit/log phrases, never payloads).
+_CHAIN_ENDING: dict[LLMOutcome, str] = {
+    "timeout": "routing deadline passed",
+    "budget": "per-customer Groq budget used",
+}
+
+
 @dataclass(frozen=True)
 class LLMAttempt:
     """One provider call, for the audit trail: never the message, the prompt or the answer."""
@@ -257,8 +264,10 @@ class ModelChain:
     provider falls through to the next instead of ending the chain. A timeout does end it: the
     customer has already waited the routing deadline, and the next provider would add its own
     (Ollama's 4 s, which the reference laptop's CPU model exceeds on every question, ADR-0037), so
-    the keyword rules answer at once. ``attempts`` holds the last question's calls; one chain
-    serves one request.
+    the keyword rules answer at once. A used per-customer Groq budget ends it too: Ollama would
+    take seconds on the 2-OCPU host, so a customer over budget gets the immediate rules answer
+    (ADR-0037 addendum "budget", 2026-11-08). ``attempts`` holds the last question's calls; one
+    chain serves one request.
     """
 
     def __init__(
@@ -281,8 +290,8 @@ class ModelChain:
                 parse_choice(text)
             except LLMUnavailableError as exc:
                 self._record(model.provider, exc.outcome, started)
-                if exc.outcome == "timeout":
-                    raise LLMUnavailableError("routing deadline passed", "timeout") from exc
+                if exc.outcome in _CHAIN_ENDING:
+                    raise LLMUnavailableError(_CHAIN_ENDING[exc.outcome], exc.outcome) from exc
                 continue
             except InvalidChoiceError:
                 self._record(model.provider, "invalid", started)

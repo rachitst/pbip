@@ -387,6 +387,32 @@ def test_the_per_customer_budget_stops_the_call_before_any_request() -> None:
     assert caught.value.outcome == "budget" and recorder.requests == []
 
 
+def test_a_used_groq_budget_ends_the_chain_so_the_rules_answer_at_once() -> None:
+    """ADR-0037 addendum (2026-11-08, budget): Ollama takes seconds on the 2-OCPU host."""
+    recorder = Recorder(_tool_call("none"))
+    ollama = _Scripted('{"tool": "get_spend", "arguments": {"period": "this_month"}}')
+    chain = ModelChain([_groq(recorder, budget=lambda: False), ollama])
+    with pytest.raises(LLMUnavailableError) as caught:
+        llm_route(chain, system_prompt(), "how am I doing")
+    assert caught.value.outcome == "budget"  # the audit/metric label stays "budget"
+    assert recorder.requests == [] and ollama.calls == 0
+    assert [(a.provider, a.outcome) for a in chain.attempts] == [("groq", "budget")]
+
+
+def test_a_429_cooldown_still_falls_back_to_ollama() -> None:
+    cooldown = Cooldown(_Clock())
+    cooldown.start(30)
+    recorder = Recorder(_tool_call("none"))
+    ollama = _Scripted('{"tool": "get_spend", "arguments": {"period": "this_month"}}')
+    chain = ModelChain([_groq(recorder, cooldown=cooldown), ollama])
+    assert llm_route(chain, system_prompt(), "how am I doing").tool is ToolName.SPEND
+    assert recorder.requests == [] and ollama.calls == 1
+    assert [(a.provider, a.outcome) for a in chain.attempts] == [
+        ("groq", "cooldown"),
+        ("ollama", "ok"),
+    ]
+
+
 def test_the_key_never_appears_in_errors_repr_or_logs() -> None:
     def leak_check(request: httpx.Request) -> httpx.Response:
         return httpx.Response(401, json={"error": {"message": f"bad key {KEY}"}}, request=request)
