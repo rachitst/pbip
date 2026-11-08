@@ -4,6 +4,27 @@ All notable changes to PBIP are listed here. The format follows [Keep a Changelo
 and the project uses [Semantic Versioning](https://semver.org/). Numbers in brackets are the pull requests that made
 each change. The plain-language summaries are in [`docs/release/`](docs/release/).
 
+## [1.1.2] - 2026-11-08
+
+Staging over HTTPS, the trained models on the staging host and the assistant's Groq budget. The summary is in
+[`docs/release/v1.1.2.md`](docs/release/v1.1.2.md).
+
+### Changed
+
+- **Assistant:** the per-customer Groq budget is 10 questions a minute (was 5), and a customer over budget gets the
+  keyword rules at once instead of waiting for Ollama, which takes longer than its 4 s timeout on a 2-CPU host;
+  a 429 cooldown, a 5xx or an invalid answer still fall back to Ollama (ADR-0037 addendum, #502).
+
+### Added
+
+- **Trained models on the staging host (opt-in):** `ML_MODELS=enabled` in the host `.env` makes `deploy.sh` add
+  `docker-compose.prod.models.yml`, which serves the hybrid fraud scorer (API and worker) and the recommendation
+  ranker (API) from read-only mounts of operator-copied model files; the deploy stops if the files are missing
+  (ADR-0061, #503).
+- **Docs:** staging over HTTPS (Let's Encrypt), the TASK-102 page-load and login budgets measured on staging, the
+  k6 suite with the load generator off the host, the at-rest evidence that makes ADR-0042 final (#399), and the
+  traceability and threat-model updates.
+
 ## [1.1.1] - 2026-11-08
 
 The first release deployed to the staging host (Oracle Cloud Always Free Arm VM, `https://pbip.duckdns.org`), with the

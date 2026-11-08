@@ -86,8 +86,89 @@ per-customer Groq budget (`RATE_LIMIT_GROQ_PER_MINUTE=5`) falling back; before t
 fallbacks. The 2.5 s Groq deadline bounds the tail; the Groq path itself (one model round trip) is still above
 500 ms at p50, so the NFR is met for the rules path and not for the model path.
 
-## Still to measure
+### After the budget change (#502, 8 Nov 04:20 UTC)
 
-- **TASK-102 page-load and login budgets against staging** (deploy guide section 18.1) need the public host
-  reachable on 443; on 8 November the Oracle security list did not pass TCP 80/443 to the instance (0 packets at the
-  VM), so this run, the Let's Encrypt certificate and the pipeline deploy wait for that rule.
+Same method and question set, demo stack rebuilt from `main` at `bd8e8d6` (`RATE_LIMIT_GROQ_PER_MINUTE` default 10):
+
+| First token, ms | n | p50 | p95 | max |
+|---|---|---|---|---|
+| All 30 open questions | 30 | 500 | 724 | 757 |
+| ... routed by Groq | 20 | 626 | 728 | 757 |
+| ... answered by the rules (the overview rule) | 10 | 50 | 75 | 75 |
+| 10 clear questions (rules) | 10 | 52 | 90 | 90 |
+
+No question ran out of budget at 7 s spacing (about 8.5 questions a minute), so the 3 questions that fell back to the
+help text in the previous run are now routed by the model: the open-question p50 rises (364 to 500 ms) because three
+generic answers became tool answers, and the worst case falls (850 to 757 ms). Through the stack's nginx a used
+budget was already fast (the API container does not reach a host Ollama); on a host where Ollama is reachable the
+budget path took about 4.2 s and now ends in the rules at once (ADR-0037 addendum, unit and integration tests).
+
+## Second pass, 8 November 03:30-04:30 UTC (HTTPS reachable)
+
+TCP 80/443 reached the instance from 03:25 UTC; the Let's Encrypt certificate was issued at 03:26 and the Deploy
+workflow deployed v1.1.1 with its smoke test (run 42442978136, 6/6 checks over HTTPS from the GitHub runner).
+
+### TASK-102: page-load and login budgets against `https://pbip.duckdns.org`
+
+`apps/web/e2e/perf.spec.ts`, Chromium, from the developer laptop (round trip to the instance about 9 ms), against the
+staging stack itself (v1.1.1, two API replicas, Let's Encrypt TLS), one freshly registered customer per run, no
+other load. Three runs, 03:40-03:45 UTC:
+
+| Measurement (budget) | Run 1 | Run 2 | Run 3 | Worst |
+|---|---|---|---|---|
+| `/` signed out, empty cache (2 s) | 1,105 ms | 1,044 ms | 1,357 ms | 1,357 ms |
+| Login, "Sign in" to "My accounts" (3 s) | 675 ms | 796 ms | 868 ms | 868 ms |
+| `/accounts` reload (2 s) | 666 ms | 482 ms | 620 ms | 666 ms |
+| `/insights` reload (2 s) | 947 ms | 867 ms | 1,015 ms | 1,015 ms |
+| `/profile` reload (2 s) | 491 ms | 464 ms | 582 ms | 582 ms |
+
+Every budget is met on staging, with at least 32% headroom. Three earlier runs with the list reporter also passed.
+
+### TASK-078/079: the k6 suite with the load generator off the host
+
+The first pass ran k6 on the VM, so the generator competed with the stack for the two cores. This pass ran k6 1.3.0
+on the developer laptop (Intel Celeron N4500, 2 cores; 27-35% busy during the runs, so not the limit) against the
+separate local-mode stack on the VM (project `pbip`, v1.1.1, `API_REPLICAS=2`, 500 seeded users, the load-test rate
+limits), over HTTPS through an SSH tunnel to its nginx (only TCP 22/80/443 reach the instance; sshd used 4.6% of a
+core at 200 VUs). It is not the `pbip-prod` stack: `scripts/seed_load.py` and the load-test rate limits are refused or
+forbidden on a staging database (deploy guide section 18.2), and staging cannot fund accounts. The staging stack
+(16 containers including the monitoring stack, idle) ran alongside. 2-minute steady state per step.
+
+| VUs | Requests (k6 rate, whole run incl. setup) | HTTP errors | p95 accounts / analytics / assistant / transfers | p95 login / refresh | VM CPU busy |
+|---|---|---|---|---|---|
+| 50 | 10,158 (39.7/s) | 0.00% | 720 / 860 / 1,307 / 1,922 ms | 1,780 / 963 ms | 86% |
+| 100 | 10,897 (42.6/s) | 0.00% | 1,893 / 1,941 / 2,879 / 3,836 ms | 3,220 / 2,195 ms | 87% |
+| 200 | 10,629 (41.1/s) | 0.00% | 5,676 / 5,739 / 6,663 / 7,336 ms | 6,812 / 6,065 ms | 89% |
+| 500 | 11,420 (44.2/s) | 0.00% | 12,231 / 12,115 / 13,157 / 13,978 ms | 13,007 / 12,421 ms | 91% |
+
+`unexpected_responses` was 0 and `scripts/load_invariants.py check` passed after every step (no overdraft, every
+transaction balanced, no deadlock). In `pg_stat_statements` the per-user `pg_advisory_xact_lock` is again the top
+statement by total time (mean 29 ms at 50 VUs, 288 ms at 100, 335 ms at 200, 406 ms at 500); every insert averages
+under 7 ms. The two uvicorn processes used 72% and 60% of a core each at 200 VUs (`pidstat`).
+
+What this shows:
+
+1. **Moving the generator off the host did not raise throughput.** Each step completed 10,200-11,400 requests, against
+   10,900-12,000 in the first pass with the generator on the host (about 70-80 requests/s over the 150 s of ramp and
+   steady state); the first pass ran before the monitoring stack was started. The limit is the CPU available to the
+   two API processes, PostgreSQL and the monitoring stack, not k6.
+2. **The 500 ms p95 at 500 users is not met on this host and cannot be with this shape.** At 500 VUs with a 1 s think
+   time the suite offers several hundred requests/s; the host completes about 75/s, so the queue sets the latency.
+   This is a hardware bound of the Always Free 2-OCPU shape. The repository evidence for the budget is the CI run on
+   4 vCPUs at **50 VUs** (`performance-2026-11-04.md`: p95 61-73 / 73-100 / 140-190 / 287-347 ms, 0 errors); no run
+   on any hardware has met the budget at 500 VUs.
+3. **Correctness held at every step.** The error-rate target (< 0.5%) and the money invariants are met at 500 VUs over
+   more than 10,000 requests; the TASK-079 pool fix (ADR-0060) is what makes that true on this host.
+4. **The advisory-lock wait grows with the queue, not with contention between customers.** Each VU signs in as its
+   own seeded user; the lock is held for the length of one transfer transaction, and that transaction is slow because
+   its process is CPU-starved. It is the lock-order contract (AGENTS.md section 4), not an index or pool problem.
+
+The trained models were not loaded in these perf-stack runs (its `models/` directories were empty, created by a
+bind mount), so fraud scoring used the rules; CI runs the suite with the hybrid scorer.
+
+### TASK-089 criterion 3 on the deployed stack
+
+A Playwright sweep (one registered customer, laptop to `https://pbip.duckdns.org`) visited the 12 customer pages
+(accounts, payees, bills, scheduled, statements, insights, loans, wealth, compare, invest, insurance, profile) and the
+not-found page: 0 console errors, 0 uncaught page errors, 0 responses >= 500. Staff pages cannot be checked on staging:
+there is no supported staff bootstrap there (deploy guide section 14).
