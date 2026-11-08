@@ -182,9 +182,12 @@ jobs:
         if: env.DRY_RUN != 'true'
         # The monitoring stack (ADR-0059) mounts ~/pbip/monitoring, a copy of these infra/ folders; it is
         # copied on every release so a running stack picks up the release's rules and dashboards.
+        # docker-compose.prod.models.yml is used only with ML_MODELS=enabled in the host .env (ADR-0061); the
+        # model files themselves are copied by the operator, never from CI.
         run: |
           ssh staging 'mkdir -p ~/pbip/monitoring'
           scp infra/deploy/docker-compose.prod.yml infra/deploy/docker-compose.prod.monitoring.yml \
+            infra/deploy/docker-compose.prod.models.yml \
             infra/deploy/deploy.sh infra/deploy/certbot-deploy-hook.sh infra/postgres/tls-entrypoint.sh staging:~/pbip/
           tar -C infra -cf - prometheus grafana loki alloy | ssh staging 'tar -xf - -C ~/pbip/monitoring'
       - name: Deploy (pull, migrate, health-gated start)

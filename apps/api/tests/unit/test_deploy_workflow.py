@@ -149,3 +149,12 @@ def test_web_bundle_is_built_on_the_native_platform() -> None:
     """The static bundle is platform-independent: building it under emulation only costs time."""
     dockerfile = (ROOT / "apps" / "web" / "Dockerfile").read_text(encoding="utf-8")
     assert "FROM --platform=$BUILDPLATFORM node:" in dockerfile
+
+
+def test_the_model_overlay_is_shipped_but_the_models_never_are() -> None:
+    """ADR-0061: deploy.sh adds docker-compose.prod.models.yml when the host .env says ML_MODELS=enabled, so the
+    file must be on the host for every release; the model files are operator-supplied, never copied by CI."""
+    copy = next(s for s in _steps("deploy") if s.get("name", "").startswith("Copy"))
+    assert "infra/deploy/docker-compose.prod.models.yml" in copy["run"]
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert "models/fraud" not in text and "models/recommendations" not in text

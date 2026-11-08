@@ -9,6 +9,8 @@
 #                                                ADR-0059, runbook section 1.5)
 #
 # Run from ~/pbip next to docker-compose.prod.yml and the host .env (infra/deploy/.env.prod.example).
+# ML_MODELS=enabled in .env adds docker-compose.prod.models.yml (the trained fraud and recommendation models,
+# ADR-0061, deploy guide section 14.1) to deploy and rollback alike; without it the stack serves the rules.
 # State files next to this script: .deployed_tag (current healthy release), .previous_tag (the one
 # before it), .deployed_tag.pending (a deploy in progress). Procedures: docs/operations/runbook.md
 # section 2. Migrations run before the API starts (compose dependency) and are never downgraded here.
@@ -16,6 +18,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
 COMPOSE=(docker compose -f docker-compose.prod.yml)
+MODELS_OVERLAY=docker-compose.prod.models.yml
 MONITORING=(docker compose -f docker-compose.prod.monitoring.yml)
 STATE_CURRENT=.deployed_tag
 STATE_PREVIOUS=.previous_tag
@@ -134,6 +137,33 @@ start_monitoring() {
   "${MONITORING[@]}" ps
 }
 
+# The opt-in model overlay (ADR-0061). With ML_MODELS=enabled the release must find the operator-copied model
+# files: a missing directory would otherwise be created empty by Docker (owned by root) and the API would quietly
+# serve the rules, so the deploy stops before anything changes. Any other value than enabled/disabled/unset is
+# refused for the same reason (a typo must not silently mean "off").
+select_models() {
+  local mode missing=()
+  mode="$(env_value ML_MODELS)"
+  case "$mode" in
+    "" | disabled) return 0 ;;
+    enabled) ;;
+    *)
+      echo "refusing to deploy: ML_MODELS in .env must be enabled, disabled or unset" >&2
+      exit 5
+      ;;
+  esac
+  [ -f "$MODELS_OVERLAY" ] || missing+=("$MODELS_OVERLAY")
+  [ -f models/fraud/manifest.json ] || missing+=(models/fraud/manifest.json)
+  [ -d models/recommendations ] || missing+=(models/recommendations/)
+  if [ "${#missing[@]}" -gt 0 ]; then
+    echo "refusing to deploy with ML_MODELS=enabled: missing ${missing[*]} next to deploy.sh" \
+      "(copy the models first, or set ML_MODELS=disabled; deploy guide section 14.1)" >&2
+    exit 5
+  fi
+  echo "==> Trained models enabled (ML_MODELS=enabled): mounting models/fraud and models/recommendations read-only"
+  COMPOSE+=(-f "$MODELS_OVERLAY")
+}
+
 start_release() { # <image_prefix> <tag>
   export IMAGE_PREFIX="$1" IMAGE_TAG="$2"
   ensure_tls
@@ -152,6 +182,7 @@ case "${1:-}" in
       echo "refusing to deploy '$tag': only release tags vX.Y.Z are deployed" >&2
       exit 2
     fi
+    select_models
     if [ -f "$STATE_CURRENT" ]; then
       cp "$STATE_CURRENT" "$STATE_PREVIOUS"
     fi
@@ -165,6 +196,7 @@ case "${1:-}" in
       echo "no previous healthy release is recorded; nothing to roll back to" >&2
       exit 3
     fi
+    select_models
     read -r prefix tag < "$STATE_PREVIOUS"
     echo "==> Rolling back to $tag"
     start_release "$prefix" "$tag"
