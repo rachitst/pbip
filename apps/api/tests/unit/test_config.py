@@ -104,6 +104,16 @@ def test_the_groq_routing_deadline_defaults_to_2_5_s_within_bounds() -> None:
             Settings(groq_timeout_seconds=bad)
 
 
+def test_the_per_customer_groq_budget_defaults_to_10_a_minute_within_bounds() -> None:
+    """ADR-0037 addendum (2026-11-08, budget): doubled from 5; Groq is the fast path."""
+    assert Settings.model_fields["rate_limit_groq_per_minute"].default == 10
+    assert Settings(rate_limit_groq_per_minute=1).rate_limit_groq_per_minute == 1
+    assert Settings(rate_limit_groq_per_minute=600).rate_limit_groq_per_minute == 600
+    for bad in (0, -1, 601):
+        with pytest.raises(ValueError, match="rate_limit_groq_per_minute"):
+            Settings(rate_limit_groq_per_minute=bad)
+
+
 def test_an_empty_groq_reasoning_effort_means_the_model_default() -> None:
     assert Settings(groq_reasoning_effort="").groq_reasoning_effort is None  # type: ignore[arg-type]  # env strings
     assert Settings(groq_reasoning_effort="low").groq_reasoning_effort == "low"

@@ -242,20 +242,18 @@ def test_a_429_stops_groq_calls_from_this_process_for_a_while(
     assert _outcomes(db, bob) == [("groq", "cooldown"), ("ollama", "ok")]
 
 
-def test_the_per_customer_groq_budget_sends_the_rest_to_ollama(
+def test_a_used_groq_budget_goes_straight_to_the_rules_without_ollama(
     client: TestClient, make_customer: Callable[..., Actor], upstream: Upstream, db: Session
 ) -> None:
+    """ADR-0037 addendum (2026-11-08, budget): no Ollama wait once a customer's budget is used."""
     alice, bob = make_customer(funds=1_00), make_customer(funds=1_00)
-    for _ in range(3):  # rate_limit_groq_per_minute=2
+    for _ in range(2):  # rate_limit_groq_per_minute=2
         assert _chat(client, alice, _UNCLEAR)["engine"] == "llm"
-    _chat(client, bob, _UNCLEAR)  # another customer has their own budget
-    assert len(upstream.groq_requests) == 3
-    assert _outcomes(db, alice) == [
-        ("groq", "ok"),
-        ("groq", "ok"),
-        ("groq", "budget"),
-        ("ollama", "ok"),
-    ]
+    over = _chat(client, alice, _UNCLEAR)
+    assert over["engine"] == "rules" and over["outcome"] == "help"  # nothing fits: help text
+    assert _chat(client, bob, _UNCLEAR)["engine"] == "llm"  # another customer has their own
+    assert len(upstream.groq_requests) == 3 and upstream.ollama_requests == []
+    assert _outcomes(db, alice) == [("groq", "ok"), ("groq", "ok"), ("groq", "budget")]
     assert _outcomes(db, bob) == [("groq", "ok")]
 
 
