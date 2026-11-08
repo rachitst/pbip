@@ -1,8 +1,8 @@
 # ADR 0042: Customer PII encryption policy for email, full name and date of birth
-- Status: Accepted (under owner's standing approval, 2026-11-03). **Provisional**: the decision rests on at-rest
-  controls that are not yet demonstrated on a deployment host (#399), and it is revisited if that follow-up
-  concludes differently. The phone condition is met (2026-11-04, #398): US-17 requires the profile to show a
-  masked phone number, so the column was given a write path rather than removed (see "Update 2026-11-04").
+- Status: Accepted (under owner's standing approval, 2026-11-03). No longer provisional since 2026-11-08: the at-rest
+  controls the decision rests on are demonstrated on the staging host (#399, "Update 2026-11-08" below). The phone
+  condition is met (2026-11-04, #398): US-17 requires the profile to show a masked phone number, so the column was
+  given a write path rather than removed (see "Update 2026-11-04").
 - Date: 2026-11-03
 - Deciders: Architecture Team (issue #145, from the TASK-028 threat-model review)
 
@@ -35,9 +35,9 @@ Do **not** add field-level encryption to `users.email`, `customers.full_name` or
 Protect them with the baseline above (TLS in transit, encrypted backups, MFA-gated staff access with object-level
 authorisation, log redaction, data minimisation in staff and AI responses) plus host disk encryption on the
 deployment target. Field-level encryption stays reserved for secrets and identifiers that are never searched,
-sorted or shown in full (`mfa_secret_enc`, `phone_enc`). The decision is **provisional** until #399 records host
-disk encryption and an off-host, encrypted, drilled backup on the deployment host; until then the database volume
-at rest is an open residual risk, not a met control.
+sorted or shown in full (`mfa_secret_enc`, `phone_enc`). The decision was **provisional** until #399 recorded host
+disk encryption and an off-host, encrypted, drilled backup on the deployment host; both are recorded since
+2026-11-08 ("Update 2026-11-08" below).
 
 `test_pii_encryption_policy.py` makes the inventory executable: it fails if a new `*_enc` column is not covered by
 key rotation, if a plain-text phone column appears, or if the case-insensitive unique email index changes.
@@ -64,10 +64,11 @@ key rotation, if a plain-text phone column appears, or if the case-insensitive u
   - Anyone with database read access (a DBA role, a SQL injection, a leaked `DATABASE_URL`) reads email, name and
     date of birth in plain text. Mitigations are access control, parameterised queries (SQLAlchemy) and the
     `verify-full` TLS requirement, not encryption.
-  - The `pgdata`, `redisdata` and log volumes are unencrypted unless the host encrypts its disk; no host exists yet
-    (#198, #399).
+  - ~~The `pgdata`, `redisdata` and log volumes are unencrypted unless the host encrypts its disk.~~ Resolved
+    2026-11-08 on the staging host (below); any other host must show the same before it holds customer data.
   - nginx → API and services → Redis traffic is plain TCP on the internal network (accepted for a single host).
-  - Backups are encrypted but only drilled locally; scheduling, off-host storage and key custody are host tasks.
+  - ~~Backups are encrypted but only drilled locally.~~ Resolved 2026-11-08: scheduled, off-host and drilled on the
+    staging host (below). Key custody (the passphrase in the owner's password manager) stays an operator task.
   - ~~The phone column is encrypted but never written (#398).~~ Resolved 2026-11-04: the number is written
     encrypted (below).
 - Revisit when: #399 cannot show disk encryption (then encrypt `date_of_birth` first), a real phone write path or
@@ -97,3 +98,19 @@ requirement. The column was therefore given a write path, following this ADR's r
 Standing approval for this update: (1) no control weakened; the new route is customer-only, validated, audited
 and rate-limited; (2) no money movement; (3) no migration (the column already exists); (4) no new service,
 dependency or outbound data; (5) no metrics; (6) within US-17 / FR-16.
+
+## Update 2026-11-08: at-rest evidence on the staging host (#399)
+The conditions that kept this decision provisional are met on the staging host (Oracle Cloud Always Free A1, Ubuntu
+24.04); the evidence is on #399, commands and outcomes only:
+
+| Control | Evidence |
+|---|---|
+| Disk encryption | OCI console, boot volume encryption: **Oracle-managed key** (AES-256, the OCI default). Docker's data root `/var/lib/docker`, and with it `pgdata`, `redisdata` and the logs, is on that boot volume (`lsblk`: one disk; no block volume) |
+| Off-host encrypted backups | `pbip-backup.timer` daily 02:30 UTC: `backup.py` (gpg) and the manifest copied to OCI Object Storage (`infra/deploy/backup-offsite.sh`, `scripts/offsite_backup.py`, deploy guide section 15); first scheduled run 2026-11-08T02:30Z uploaded both. The passphrase is its own file, separate from `.env` and `FIELD_ENCRYPTION_KEY` |
+| Restore drill on the host | `restore.py` PASS on the copy downloaded back from the bucket (revision 0031, ledger net 0, audit chain valid) |
+| TLS in transit from outside | Let's Encrypt certificate; `http://` answers 301 to `https://`; HSTS `max-age=63072000; includeSubDomains`; TLSv1.3; the Deploy workflow's smoke test passes over HTTPS |
+
+What this does not cover: an Oracle-managed key protects against exposure of the provider's media, not against
+someone with root on the running instance or the database credentials; those threats are handled by access control
+and are why the residual risks above stay. A customer-managed key (OCI Vault) is not used; the OCI default meets #399's
+criterion, and switching keys is a console change that needs no change here.
