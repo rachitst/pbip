@@ -205,3 +205,19 @@ def test_probe_passes_the_private_ca_and_the_local_connect_target(tmp_path: Path
 def test_probe_script_is_strict_bash() -> None:
     text = PROBE.read_text(encoding="utf-8")
     assert text.startswith("#!/usr/bin/env bash") and "set -euo pipefail" in text
+
+
+def test_the_guides_probe_timer_ticks_on_the_wall_clock_at_the_reports_interval() -> None:
+    """Regression (staging host, 8 Nov 2026): the guide's timer used OnUnitActiveSec=30s, which ran
+    about every 30.9 s, so the report counted about 3% of a perfect week as missing probes and the
+    conservative figure could never reach 99%. The timer must fire on wall-clock ticks every
+    DEFAULT_INTERVAL_S seconds."""
+    guide = (ROOT / "docs" / "operations" / "deploy-oracle-cloud-arm.md").read_text(
+        encoding="utf-8"
+    )
+    timer = guide.split("pbip-uptime-probe.timer >/dev/null", 1)[1].split("EOF", 2)[1]
+    directives = [
+        line.strip() for line in timer.splitlines() if "=" in line and not line.startswith("#")
+    ]
+    assert not [d for d in directives if d.startswith(("OnUnitActiveSec", "OnBootSec"))]
+    assert f"OnCalendar=*-*-* *:*:00/{report.DEFAULT_INTERVAL_S}" in directives
