@@ -1,34 +1,41 @@
-# PBIP web UI guidelines
+# Finora web UI guidelines
 
-The working rules for every web screen. Decision record: [ADR-0016](../adr/0016-web-ui-architecture-and-design-system.md).
+The working rules for every web screen. Decision records: [ADR-0016](../adr/0016-web-ui-architecture-and-design-system.md)
+(architecture) and [ADR-0063](../adr/0063-finora-brand-and-visual-refresh.md) (the Finora brand and visual
+direction; token values in [ui-design-system.md](ui-design-system.md)).
 Code: tokens in `apps/web/src/styles/tokens.css`, primitives in `apps/web/src/ui/`, helpers in
 `apps/web/src/lib/`.
 
 ## Visual direction
-Quiet, trustworthy, dense enough for real work.
+Modern, calm and trustworthy: a clean fintech look that stays dense enough for real work (ADR-0063).
 
-* Neutral surfaces, one brand colour (navy `#00395d`, light blue in dark mode), semantic colours
-  only for meaning (success, warning, danger, info). No gradients, no decorative illustrations.
-* Flat surfaces with 1px borders. Shadow only on overlays (dialogs, menus). Radius 4-8px.
-* System font stack, base 16px, page title 24px (`--text-2xl`), section 20px. Nothing larger.
+* Light theme by default: white and soft-grey surfaces, deep navy text and primary (`--brand`
+  `#1a3561`), one teal accent (`--accent`) for focus rings, highlights and the active navigation icon,
+  and semantic colours only for meaning (success, warning, danger, info). Dark mode keeps every token
+  legible. No neon, no heavy gradients, no glassmorphism, no decorative illustrations.
+* Cards have a hairline border, a 14 px radius and a small shadow; controls a 10 px radius. Overlays
+  (dialogs, drawers, menus) use `--shadow-overlay`.
+* Inter (self-hosted), base 16 px, page title 26 px (`--text-2xl`), section 20 px; larger sizes only for
+  stat values and the landing page.
 * Amounts: right-aligned, tabular figures, always through `formatMinor` / `<Amount>`.
 * Cards only when they group something; a page is a header plus sections, not a grid of tiles.
 * Charts only when a pattern is easier to see than in a table; every chart has a one-line summary
   and a table fallback. Colours `--chart-1..5` in order; never encode meaning by colour alone.
+* The product name is **Finora** (`BRAND` in `src/brand/Logo.tsx`); the assistant is **Ask Finora**.
 
 ## Tokens
 Use `var(--token)`; never write a hex value in a component stylesheet.
 
 | Group | Tokens |
 |---|---|
-| Surfaces | `--bg`, `--surface`, `--surface-sunken`, `--border`, `--border-strong` |
+| Surfaces | `--bg`, `--surface`, `--surface-sunken`, `--surface-raised`, `--border`, `--border-strong` |
 | Text | `--text`, `--muted` |
-| Brand | `--brand`, `--brand-hover`, `--brand-contrast` |
-| Semantic | `--ok`, `--warn`, `--danger`, `--info` |
+| Brand | `--brand`, `--brand-hover`, `--brand-contrast`, `--brand-soft`, `--accent`, `--accent-soft`, `--focus` |
+| Semantic | `--ok`, `--warn`, `--danger`, `--info` and their `-soft` backgrounds |
 | Charts | `--chart-1` ... `--chart-5` |
-| Type | `--text-xs` ... `--text-2xl`, `--weight-medium`, `--weight-strong` |
-| Space | `--space-1` (4px) ... `--space-7` (48px) |
-| Shape, motion | `--radius-sm`, `--radius`, `--radius-lg`, `--shadow-overlay`, `--duration`, `--control-height` |
+| Type | `--text-xs` ... `--text-4xl`, `--weight-medium`, `--weight-strong`, `--weight-bold` |
+| Space | `--space-1` (4px) ... `--space-8` (64px) |
+| Shape, motion | `--radius-sm`, `--radius`, `--radius-lg`, `--radius-pill`, `--shadow-sm`, `--shadow`, `--shadow-overlay`, `--duration`, `--control-height` |
 
 Each colour is defined once with `light-dark()`. A new colour needs a contrast check in both
 themes: text >= 4.5:1 on `--bg`, `--surface` and `--surface-sunken`; borders and chart marks >= 3:1.
@@ -46,7 +53,10 @@ themes: text >= 4.5:1 on `--bg`, `--surface` and `--surface-sunken`; borders and
 | Page title | `<PageHeader title description actions>` once per page |
 | Review before acting | `<ConfirmDialog items confirmLabel busy error>` |
 | Other overlays | `<Dialog>` (native `<dialog>`: focus trap, Esc, focus return) |
-| Icons | `<Icon name>` (decorative; the control carries the accessible name) |
+| Icons | `<Icon name>` or a `lucide-react` icon with `aria-hidden` (decorative; the control carries the accessible name) |
+| Headline figure | `.stat-tile` with `__label`, `__value`, `__note` |
+| Filter buttons as tabs | a `.segmented` group of `<Button aria-pressed>` |
+| Logo | `<Logo>` / `<LogoMark>` from `src/brand/Logo.tsx` |
 | Dates | `formatDate`, `formatDateTime` from `lib/format.ts` |
 | Error text | `errorMessage(error, fallback)` from `lib/errors.ts`; never show `error.message` directly |
 

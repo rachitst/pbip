@@ -30,10 +30,10 @@ export const BOOK_FIXED_DEPOSIT = "fixed-deposit";
 /** `/loans`, `/wealth/invest` and `/wealth/insurance` preselect `?product=<id>` when it is theirs. */
 export const PRODUCT_PARAM = "product";
 
-export const NOT_AVAILABLE_NOTE = "You cannot apply for this in PBIP yet.";
+export const NOT_AVAILABLE_NOTE = "You cannot apply for this in Finora yet.";
 /** ADR-0058 section 10: PBIP issues no cards (no card network, no card ledger), so the rewards card
  * gets a plain note rather than an "apply" button that would record nothing. */
-export const NO_CARDS_NOTE = "PBIP does not issue cards yet, so there is nothing to apply for.";
+export const NO_CARDS_NOTE = "Finora does not issue cards yet, so there is nothing to apply for.";
 
 function withProduct(path: string, productId: string): string {
   const params = new URLSearchParams({ [PRODUCT_PARAM]: productId });

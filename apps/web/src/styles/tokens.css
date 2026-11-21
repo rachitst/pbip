@@ -1,42 +1,58 @@
-/* Design tokens (ADR-0016). Every colour is defined ONCE with light-dark(): the browser picks the
- * value from `color-scheme`, which follows the OS until ThemeProvider sets data-theme. Contrast
- * was checked for both themes: text tokens >= 4.5:1 on bg, surface and sunken; borders and
- * chart colours >= 3:1 on surface. Change a value only after re-checking contrast. */
+/* Finora design tokens (ADR-0016, visual direction ADR-0063; values and contrast checks in
+ * docs/design/ui-design-system.md). Every colour is defined ONCE with light-dark(): the browser picks
+ * the value from `color-scheme`, which ThemeProvider sets through data-theme (light by default).
+ * Contrast was checked for both themes: text tokens >= 4.5:1 on bg, surface and sunken; control
+ * borders and chart colours >= 3:1 on surface. Change a value only after re-checking contrast. */
 :root {
   color-scheme: light dark;
 
-  --bg: light-dark(#f4f6f8, #0e151b);
-  --surface: light-dark(#ffffff, #16212b);
-  --surface-sunken: light-dark(#eef1f4, #111a22);
-  --text: light-dark(#14202b, #e8eef3);
-  --muted: light-dark(#5b6b7a, #9bacbb);
-  --border: light-dark(#d5dde5, #2a3947);
-  --border-strong: light-dark(#8595a5, #5d7082);
-  --brand: light-dark(#00395d, #5cb3ff);
-  --brand-hover: light-dark(#002a45, #84c6ff);
-  --brand-contrast: light-dark(#ffffff, #06131d);
-  --ok: light-dark(#0a7a43, #4cd18b);
-  --warn: light-dark(#8a5a00, #f0c04d);
-  --danger: light-dark(#b3261e, #ff8a80);
-  --info: light-dark(#0b5cad, #7cb8ff);
+  --bg: light-dark(#f5f7fa, #0b1220);
+  --surface: light-dark(#ffffff, #111a2c);
+  --surface-sunken: light-dark(#eef2f7, #0d1526);
+  --surface-raised: light-dark(#ffffff, #16213a);
+  --text: light-dark(#0f1d33, #e7edf6);
+  --muted: light-dark(#526079, #9eabc0);
+  --border: light-dark(#dfe5ee, #25324b);
+  --border-strong: light-dark(#7c889b, #66768f);
+  --brand: light-dark(#1a3561, #8fb2f2);
+  --brand-hover: light-dark(#122849, #b0c9f7);
+  --brand-contrast: light-dark(#ffffff, #0b1220);
+  --brand-soft: light-dark(#e9eef8, #1b2944);
+  --accent: light-dark(#0b7a72, #3fd0bf);
+  --accent-soft: light-dark(#e3f4f2, #10302e);
+  --ok: light-dark(#147a3e, #5fd394);
+  --warn: light-dark(#965a04, #f1c25a);
+  --danger: light-dark(#b42318, #ff8f86);
+  --info: light-dark(#1f5bb8, #86b6ff);
+  --ok-soft: light-dark(#e8f5ed, #12301f);
+  --warn-soft: light-dark(#fbf1e1, #33280f);
+  --danger-soft: light-dark(#fcebea, #3a1a1a);
+  --info-soft: light-dark(#e8effb, #152640);
+  --focus: var(--accent);
+  /* The navy logo square keeps its colour in both themes; only its outline changes. */
+  --logo-bg: #1a3561;
+  --logo-line: light-dark(transparent, #3b4f78);
 
   /* Categorical chart palette, in this order. Never encode meaning by colour alone. */
-  --chart-1: light-dark(#1f6fb2, #5cb3ff);
-  --chart-2: light-dark(#12857a, #3cc8b4);
-  --chart-3: light-dark(#b26b00, #e0a63a);
-  --chart-4: light-dark(#6b4fbb, #a48bf0);
-  --chart-5: light-dark(#c2416b, #f07a9f);
+  --chart-1: light-dark(#2357a8, #7fa9f0);
+  --chart-2: light-dark(#0b7a72, #3fd0bf);
+  --chart-3: light-dark(#b8730a, #e9ae4c);
+  --chart-4: light-dark(#6a4fb8, #ae98f2);
+  --chart-5: light-dark(#c0436c, #f283a6);
 
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-base: 1rem;
   --text-lg: 1.125rem;
   --text-xl: 1.25rem;
-  --text-2xl: 1.5rem;
-  --leading: 1.5;
+  --text-2xl: 1.625rem;
+  --text-3xl: 2.25rem;
+  --text-4xl: clamp(2.25rem, 1.6rem + 2.6vw, 3.25rem);
+  --leading: 1.55;
   --weight-medium: 500;
   --weight-strong: 600;
+  --weight-bold: 700;
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -45,13 +61,20 @@
   --space-5: 1.5rem;
   --space-6: 2rem;
   --space-7: 3rem;
+  --space-8: 4rem;
 
-  --radius-sm: 4px;
-  --radius: 6px;
-  --radius-lg: 8px;
-  --shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.18);
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+  --shadow-sm: 0 1px 2px light-dark(rgb(15 29 51 / 0.06), rgb(0 0 0 / 0.3));
+  --shadow: 0 4px 12px light-dark(rgb(15 29 51 / 0.08), rgb(0 0 0 / 0.35));
+  --shadow-overlay: 0 16px 40px light-dark(rgb(15 29 51 / 0.16), rgb(0 0 0 / 0.5));
   --duration: 150ms;
   --control-height: 2.5rem;
+  --content-width: 75rem;
+  --sidebar-width: 16rem;
+  --topbar-height: 4rem;
 }
 :root[data-theme="light"] {
   color-scheme: light;

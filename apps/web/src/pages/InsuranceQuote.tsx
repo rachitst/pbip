@@ -32,9 +32,9 @@ export const STATUS: Record<InsuranceApplicationOut["status"], StatusView> = {
 
 export const QUOTE_NOTE =
   "Simulated quote (rule IQ-1): the plan's indicative premium scaled by cover, age band and term. " +
-  "It is not an insurer's price, PBIP does no underwriting, no policy is issued and nothing is charged.";
+  "It is not an insurer's price, Finora does no underwriting, no policy is issued and nothing is charged.";
 export const REFERRED_NOTE =
-  "A referred application stays referred: PBIP has no insurer partner to decide it.";
+  "A referred application stays referred: Finora has no insurer partner to decide it.";
 
 function QuoteResult({ quote }: { quote: InsuranceQuoteOut }) {
   return (

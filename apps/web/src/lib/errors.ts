@@ -11,7 +11,7 @@ import { ApiError } from "../api/client";
 export function errorMessage(error: unknown, fallback: string): string {
   if (!(error instanceof ApiError)) {
     return error instanceof TypeError
-      ? "We could not reach PBIP. Check your connection and try again."
+      ? "We could not reach Finora. Check your connection and try again."
       : fallback;
   }
   if (error.status === 429 || error.code === "rate_limited") {

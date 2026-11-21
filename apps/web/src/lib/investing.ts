@@ -43,4 +43,4 @@ export function formatGainBps(bps: number): string {
 }
 
 export const SIMULATED_PRICE_NOTE =
-  "Prices are simulated by PBIP's price model, one price per day. They are not market data.";
+  "Prices are simulated by Finora's price model, one price per day. They are not market data.";

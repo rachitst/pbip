@@ -735,7 +735,7 @@ function CatalogueSection() {
     <>
       <p className="muted">
         Rates are indicative and simulated for this demo bank. Market-linked funds show no yield
-        because PBIP has no market data.
+        because Finora has no market data.
       </p>
       <Field label="Risk level">
         {(control) => (

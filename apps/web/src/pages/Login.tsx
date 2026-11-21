@@ -90,7 +90,7 @@ export function Login({ onRegister }: { onRegister?: () => void }) {
       </form>
       {onRegister && !mfaToken && (
         <p>
-          New to PBIP?{" "}
+          New to Finora?{" "}
           <Button variant="link" onClick={onRegister}>
             Create an account
           </Button>
