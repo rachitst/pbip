@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
@@ -81,6 +81,67 @@ test.beforeAll(() => {
   mkdirSync(OUT, { recursive: true });
 });
 
+// The product screenshots on the landing page (apps/web/src/pages/Landing.tsx), bundled from
+// apps/web/src/assets/landing/ (LANDING_DIR overrides it). 1200 x 750, light theme, demo data
+// only, encoded as WebP by the browser itself (canvas.toDataURL), so no image tool is needed.
+const LANDING_DIR = process.env.LANDING_DIR ?? join(REPO, "apps/web/src/assets/landing");
+const LANDING_VIEWPORT = { width: 1200, height: 750 };
+
+async function saveWebp(page: Page, name: string): Promise<void> {
+  await page.waitForTimeout(600); // charts and fonts finish painting
+  const png = await page.screenshot({ animations: "disabled" });
+  const encoder = await page.context().newPage();
+  const dataUrl = await encoder.evaluate(async (base64) => {
+    const image = new Image();
+    image.src = `data:image/png;base64,${base64}`;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    canvas.getContext("2d")?.drawImage(image, 0, 0);
+    return canvas.toDataURL("image/webp", 0.82);
+  }, png.toString("base64"));
+  await encoder.close();
+  expect(dataUrl.startsWith("data:image/webp;base64,")).toBe(true);
+  const bytes = Buffer.from(dataUrl.slice(dataUrl.indexOf(",") + 1), "base64");
+  writeFileSync(join(LANDING_DIR, `${name}.webp`), bytes);
+}
+
+test("landing assets", async ({ page }) => {
+  test.setTimeout(6 * 60_000);
+  mkdirSync(LANDING_DIR, { recursive: true });
+  await page.setViewportSize(LANDING_VIEWPORT);
+
+  await signInAs(page, "alice@demo.pbip", true);
+  await page.goto("/accounts");
+  await settle(page);
+  await saveWebp(page, "accounts");
+  await page.goto("/insights");
+  await settle(page);
+  await saveWebp(page, "insights");
+  await page.goto("/accounts");
+  await settle(page);
+  await page.getByRole("button", { name: /^Ask the .* assistant$/ }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await quiet(page);
+  await saveWebp(page, "assistant");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+
+  await signInAs(page, "analyst@demo.pbip", true);
+  await page.goto("/staff/fraud-dashboard");
+  await settle(page);
+  await saveWebp(page, "staff-dashboard");
+  await page.goto("/staff/fraud");
+  await settle(page);
+  await page.getByRole("button", { name: "All", exact: true }).click(); // the open queue may be empty
+  await quiet(page);
+  await page.getByRole("table").getByRole("link").first().click();
+  await expect(page.getByRole("heading", { level: 1, name: /^Risk \d+ of 100/ })).toBeVisible();
+  await settle(page);
+  await saveWebp(page, "fraud-alert");
+});
 // SCREENS_PREPARE=1 on a freshly seeded stack: run three fraud demo lab scenarios first, so the
 // alert queue, the alert detail and the dashboards have something to show. This is the only step
 // that writes (the lab's own simulated transfers for Carol); the default run writes nothing.
