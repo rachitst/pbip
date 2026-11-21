@@ -79,11 +79,16 @@ describe("App shell, session bar, and theme toggle (TASK-019)", () => {
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
   });
 
-  it("follows the OS preference without saving it until the user toggles", async () => {
+  it("starts light even when the OS prefers dark, and saves nothing until the user toggles", async () => {
+    // ADR-0063: light is the default theme; the OS setting no longer picks it.
+    vi.stubGlobal(
+      "matchMedia",
+      (query: string) => ({ matches: query.includes("dark"), media: query }) as MediaQueryList,
+    );
     renderApp();
 
     const themeBtn = await screen.findByRole("button", { name: /switch to (dark|light) theme/i });
-    expect(document.documentElement.getAttribute("data-theme")).toBe("light"); // jsdom default
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
     expect(window.localStorage.getItem("pbip-theme")).toBeNull();
 
     await userEvent.setup().click(themeBtn);

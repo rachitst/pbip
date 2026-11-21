@@ -353,8 +353,8 @@ export function WealthCompare() {
       />
       <p className="muted">
         Rates and premiums are indicative and simulated for this demo bank. Premiums are for the
-        reference profile shown, not a quote: PBIP does no underwriting. Market-linked funds show no
-        yield because PBIP has no market data.
+        reference profile shown, not a quote: Finora does no underwriting. Market-linked funds show
+        no yield because Finora has no market data.
       </p>
       <BandNote suitability={suitability.data} />
       {body}

@@ -25,12 +25,12 @@ system is in [ui-design-system.md](ui-design-system.md).
 
 | Phase | State | PR |
 |---|---|---|
-| 0 Audit, design system, before screenshots | done | this PR |
-| 1 Foundation: tokens, font, brand, components, shell | - | - |
-| 2 Landing page, sign in, register, MFA | - | - |
+| 0 Audit, design system, before screenshots | done | #518 |
+| 1 Foundation: tokens, font, brand, components, shell | done | #521 |
+| 2 Landing page, sign in, register, MFA | in review | #524 |
 | 3 Customer pages | - | - |
-| 4 Staff pages | - | - |
-| 4b Backend display text | - | - |
+| 4 Staff pages | in review | #523 |
+| 4b Backend display text | in review | #519 |
 | 5 Polish, accessibility, `make check`, docs, v1.2.0, deploy | - | - |
 | Re-record walkthrough, demo cut, slide screenshots | - | - |
 
@@ -54,9 +54,42 @@ system is in [ui-design-system.md](ui-design-system.md).
     to dark and the choice is remembered as before.
   - One small dependency each for the font and the icons (Phase 1 records the justification).
 
+## Phase 1 (21 Nov 2026)
+
+- **Tokens:** `apps/web/src/styles/tokens.css` replaced with the Finora palette and scales from the design
+  system (contrast checked for every pair, both themes).
+- **Dependencies** (justification, rule 5):
+  - `@fontsource-variable/inter` (OFL-1.1): Inter as bundled woff2 files served by our own nginx, about
+    25 kB per subset and only the subsets a page needs are downloaded; no CDN, no CSP change. The
+    alternative, the system font, does not give a consistent look across Windows, macOS and Android.
+  - `lucide-react` (ISC): one consistent icon set, tree-shaken so only the imported icons are bundled
+    (each a small inline SVG component). The alternative, drawing every icon by hand, costs time and
+    consistency. No UI component library was added.
+- **Brand:** original logo mark and wordmark (`src/brand/Logo.tsx`, `public/favicon.svg`), title and meta
+  tags, every user-visible "PBIP" in the web app renamed to Finora.
+- **Shared components and shell:** buttons, form controls, cards, badges, alerts, tables, states, dialog,
+  `.stat-tile`, `.segmented`; a sidebar with logo and icon navigation and a sticky top bar for both areas.
+- **CSS order:** `main.tsx` imports the global styles before `App`, so page stylesheets (imported by
+  their pages) come later in the bundle and win over shared rules of the same specificity.
+- **Light by default:** a first visit is light whatever the OS prefers; the toggle and its saved choice
+  work as before.
+- **Preview against the local stack:** each branch is built and served with `vite preview` over HTTPS,
+  proxying `/api` to the stack (a git-excluded local config); the proxy presents the stack's own Origin
+  because the API's CSRF guard allows only that origin on cookie endpoints.
+- **CI repair found on the way (#520):** `main` had turned red without a code change: the runner image's
+  newer `pg_dump` wrote a setting PostgreSQL 16 rejects (the backup drill now runs the tools inside the
+  database service container), and two new CVEs (dnspython 2.9.2, tornado 6.6.1).
+- **Branches are updated by merging `main`,** never rebased and force-pushed (owner's rule).
+
 ## Tests changed
 
-None yet.
+| Test | Change | Reason |
+|---|---|---|
+| `src/App.test.tsx` | "follows the OS preference..." becomes "starts light even when the OS prefers dark...", with a stubbed dark OS | the owner asked for light by default; the test proves it (it fails on the old code) |
+| `src/assistant/AssistantDrawer.test.tsx`, `e2e/journey-assistant.spec.ts` | "Ask the Finora assistant", "Finora assistant", "Looking up how Finora works..." | old "PBIP" display text |
+| `src/lib/errors.test.ts` | "We could not reach Finora." | old "PBIP" display text |
+| `src/pages/MfaEnrolment.test.tsx` | "Finora will ask for a code" | old "PBIP" display text |
+| `src/shell/routing.test.tsx`, `e2e/shell.spec.ts` | page titles "... - Finora" | old "PBIP" display text |
 
 ## Backend files whose display text changed
 

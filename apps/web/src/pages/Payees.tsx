@@ -131,7 +131,7 @@ function AddPayee({ onClose }: { onClose: (result?: PayeeVerificationOut) => voi
       </Field>
       <Field
         label="Bank code"
-        hint={`${INTERNAL_BANK_CODE} is PBIP. Other banks' payees are not name-checked.`}
+        hint={`${INTERNAL_BANK_CODE} is Finora's bank code. Other banks' payees are not name-checked.`}
       >
         {(control) => (
           <input

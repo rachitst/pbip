@@ -66,12 +66,12 @@ describe("routing, roles and the application shell (ADR-0016)", () => {
       const user = userEvent.setup();
       renderApp();
       expect(await screen.findByRole("heading", { name: "My accounts" })).toBeInTheDocument();
-      expect(document.title).toBe("My accounts - PBIP");
+      expect(document.title).toBe("My accounts - Finora");
 
       await user.click(screen.getByRole("link", { name: "Profile & security" }));
       const heading = await screen.findByRole("heading", { name: "Profile & security" });
       expect(window.location.pathname).toBe("/profile");
-      expect(document.title).toBe("Profile & security - PBIP");
+      expect(document.title).toBe("Profile & security - Finora");
       await waitFor(() => {
         expect(heading).toHaveFocus();
       });

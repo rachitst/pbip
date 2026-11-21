@@ -17,7 +17,7 @@ export const TOOL_LABELS: Record<StreamToolCall["tool"], string> = {
   get_balance_forecast: "Forecasting your balance...",
   get_loan_affordability: "Checking loan affordability...",
   get_unusual_expenses: "Comparing with your usual spending...",
-  get_faq_answer: "Looking up how PBIP works...",
+  get_faq_answer: "Looking up how Finora works...",
   list_products: "Checking the product catalogue...",
   get_investment_suggestions: "Matching options to your risk profile...",
 };
@@ -59,7 +59,7 @@ function errorText(error: unknown): string {
 }
 
 /**
- * Floating "Ask PBIP" button and side drawer, on every customer page (ADR-0016 shell and tokens).
+ * Floating "Ask Finora" button and side drawer, on every customer page (ADR-0016 shell and tokens).
  * Native <dialog> (showModal) gives focus trap, Esc and focus return to the button. The message
  * list is an aria-live log so screen readers hear replies as they stream in.
  */
@@ -161,7 +161,7 @@ export function AssistantDrawer() {
     <>
       <Button
         className="assistant-fab"
-        aria-label="Ask the PBIP assistant"
+        aria-label="Ask the Finora assistant"
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => {
@@ -169,7 +169,7 @@ export function AssistantDrawer() {
         }}
       >
         <Icon name="chat" size={20} />
-        <span className="assistant-fab__label">Ask PBIP</span>
+        <span className="assistant-fab__label">Ask Finora</span>
       </Button>
       <dialog
         ref={dialogRef}
@@ -182,7 +182,7 @@ export function AssistantDrawer() {
       >
         <header className="assistant-drawer__header">
           <h2 id={titleId} className="assistant-drawer__title">
-            PBIP assistant
+            Finora assistant
           </h2>
           <Button
             variant="ghost"

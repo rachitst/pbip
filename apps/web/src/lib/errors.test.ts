@@ -36,7 +36,7 @@ describe("errorMessage", () => {
 
   it("hides browser network errors and unknown values", () => {
     expect(errorMessage(new TypeError("Failed to fetch"), FALLBACK)).toBe(
-      "We could not reach PBIP. Check your connection and try again.",
+      "We could not reach Finora. Check your connection and try again.",
     );
     expect(errorMessage(new Error("boom"), FALLBACK)).toBe(FALLBACK);
     expect(errorMessage("x", FALLBACK)).toBe(FALLBACK);
