@@ -1,6 +1,6 @@
-# PBIP user manual and banking product guide
+# Finora user manual and banking product guide
 
-PBIP is a simulated retail bank with a fraud and analytics layer. This manual explains how to use it,
+Finora is a simulated retail bank with a fraud and analytics layer. This manual explains how to use it,
 screen by screen, for customers and for bank staff. It describes what the application does today; planned
 features are not covered.
 
@@ -12,7 +12,7 @@ features are not covered.
 
 ## Getting started
 
-To run PBIP on your own machine, follow the [setup guide](../SETUP_GUIDE.md):
+To run Finora on your own machine, follow the [setup guide](../SETUP_GUIDE.md):
 
 - **Ubuntu:** [Native Ubuntu setup](../SETUP_GUIDE.md#3-native-ubuntu-setup-step-by-step), using `make`.
 - **Windows 10/11:** [Native Windows setup](../SETUP_GUIDE.md#4-native-windows-setup-step-by-step), using
@@ -33,7 +33,7 @@ own customer from the sign-in page.
 ## How a payment is decided
 
 Every transfer, scheduled payment and bill payment passes the same checks before money moves. This is the
-part of PBIP that customers and staff both see, from different sides.
+part of Finora that customers and staff both see, from different sides.
 
 ```mermaid
 flowchart TD
@@ -78,4 +78,4 @@ customers at `example.com`. Keep in mind:
 - **The assistant** answered with its built-in, rule-based helper because no local language model was
   running. With a model running, the facts are the same and the wording is more natural.
 - **The fraud model** was trained locally (`fraud-model` in the setup guide) so the alert screens show
-  SHAP values. Without a trained model, PBIP scores with bank rules only and says so on the alert.
+  SHAP values. Without a trained model, Finora scores with bank rules only and says so on the alert.

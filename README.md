@@ -1,11 +1,12 @@
-# PBIP: Personal Banking Intelligence Platform
+# Finora: smart personal banking
 
 [![CI](https://github.com/rachitst/pbip/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/rachitst/pbip/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/rachitst/pbip/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/rachitst/pbip/actions/workflows/codeql.yml)
 [![Performance](https://github.com/rachitst/pbip/actions/workflows/perf.yml/badge.svg?branch=main)](https://github.com/rachitst/pbip/actions/workflows/perf.yml)
 [![Latest release](https://img.shields.io/github/v/release/rachitst/pbip?sort=semver)](https://github.com/rachitst/pbip/releases/latest)
 
-PBIP is a simulated retail bank with a fraud, analytics and AI layer, engineered to the standards of a regulated
+Finora is a simulated retail bank with a fraud, analytics and AI layer (the repository and code keep the project name
+PBIP, Personal Banking Intelligence Platform), engineered to the standards of a regulated
 financial product. Customers open accounts, manage payees, send money, pay bills, set up standing orders, download
 statements, take loans, book fixed deposits and ask an AI assistant about their own finances. Behind every payment a
 hybrid fraud engine (explainable rules plus LightGBM and Isolation Forest models) decides to allow, verify, hold or
@@ -119,7 +120,7 @@ The live demo script and its fallback plan are in [`demo/demo-script.md`](demo/d
 | Machine learning | [fraud models](docs/ml/fraud-models.md), [evaluation report](docs/ml/model-evaluation-report-v1.md), [model cards](docs/ml/model-cards.md) |
 | Testing | [test strategy and report](docs/testing/test-strategy-and-report.md), [E2E](docs/testing/e2e.md) |
 | Operations | [deployment guide](docs/operations/deployment-guide.md), [support guide](docs/operations/support-guide.md), [runbook](docs/operations/runbook.md) |
-| Using PBIP | [user manual](docs/user-manual/README.md), [setup guide](docs/SETUP_GUIDE.md) |
+| Using Finora | [user manual](docs/user-manual/README.md), [setup guide](docs/SETUP_GUIDE.md) |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md) (engineering rules for people and AI assistants) |
 
 ## Releases
