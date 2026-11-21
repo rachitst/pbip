@@ -1,11 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState } from "react";
 import type { SyntheticEvent } from "react";
+import { Lock } from "lucide-react";
 import { Link } from "react-router";
 import { ApiError, api } from "../api/client";
 import type { ChatResponse, StreamToolCall } from "../api/client";
+import { LogoMark } from "../brand/Logo";
 import { Button } from "../ui/Button";
 import { Icon } from "../ui/Icon";
+import "./AssistantDrawer.css";
 import { ReplyText } from "./ReplyText";
 import { streamChat } from "./stream";
 
@@ -181,9 +184,12 @@ export function AssistantDrawer() {
         }}
       >
         <header className="assistant-drawer__header">
-          <h2 id={titleId} className="assistant-drawer__title">
-            Finora assistant
-          </h2>
+          <div className="assistant-drawer__brand">
+            <LogoMark size={28} />
+            <h2 id={titleId} className="assistant-drawer__title">
+              Finora assistant
+            </h2>
+          </div>
           <Button
             variant="ghost"
             size="sm"
@@ -196,6 +202,7 @@ export function AssistantDrawer() {
           </Button>
         </header>
         <p className="assistant-drawer__note muted">
+          <Lock size={14} aria-hidden="true" focusable="false" />
           Read-only: it can look at your own accounts but can't move money.
         </p>
         <div

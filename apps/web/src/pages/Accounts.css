@@ -1,0 +1,285 @@
+/* My accounts (Finora): the total-balance hero, account cards, their transactions, open an account
+   and send money with its outcomes. Tokens only. Moved here from styles.css: the FR-08 total
+   balance rules (TASK-109) and the phone-width account header rules. */
+
+/* ---- Total balance hero (FR-08, TASK-109) ---- */
+.total-balance {
+  --hero-text: var(--brand-contrast);
+  --hero-muted: color-mix(in srgb, var(--brand-contrast) 78%, var(--brand));
+  --hero-tile: color-mix(in srgb, var(--brand-contrast) 10%, transparent);
+  --hero-line: color-mix(in srgb, var(--brand-contrast) 18%, transparent);
+  --hero-bg: var(--brand);
+  margin: 0 0 var(--space-5);
+  padding: var(--space-5) var(--space-6);
+  color: var(--hero-text);
+  background: var(--hero-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+/* Dark theme: the light-blue brand would glare as a whole card; a deep navy card instead. */
+:root[data-theme="dark"] .total-balance {
+  --hero-text: var(--text);
+  --hero-muted: var(--muted);
+  --hero-tile: color-mix(in srgb, var(--text) 7%, transparent);
+  --hero-line: var(--border);
+  --hero-bg: var(--brand-soft);
+  border: 1px solid var(--border);
+}
+.total-balance__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.total-balance__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  color: var(--hero-text);
+  background: var(--hero-tile);
+  border-radius: var(--radius);
+}
+.total-balance__title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.02em;
+  color: var(--hero-muted);
+}
+.total-balance__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-2) 0 var(--space-4);
+}
+.total-balance__row + .total-balance__row {
+  border-top: 1px solid var(--hero-line);
+  padding-top: var(--space-4);
+}
+.total-balance__value {
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-strong);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.total-balance__sub {
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--hero-muted);
+}
+.total-balance__tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.total-balance__tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 10rem;
+  padding: var(--space-3) var(--space-4);
+  background: var(--hero-tile);
+  border-radius: var(--radius);
+}
+.total-balance__tile-label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.02em;
+  color: var(--hero-muted);
+}
+.total-balance__tile-value {
+  font-size: var(--text-base);
+  font-weight: var(--weight-strong);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.total-balance__tile--note {
+  justify-content: center;
+  max-width: 14rem;
+  font-size: var(--text-sm);
+}
+.total-balance__note {
+  margin: 0;
+  padding-top: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--hero-muted);
+  border-top: 1px solid var(--hero-line);
+}
+/* Loading, empty and error states keep their own light surface inside the navy card. */
+.total-balance .state {
+  color: var(--muted);
+}
+.total-balance .state--error {
+  color: var(--danger);
+}
+
+/* ---- Account cards ---- */
+.account-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr); /* an open transactions table scrolls, never widens */
+  gap: var(--space-3);
+  margin: 0 0 var(--space-5);
+}
+.list li.account-card {
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.account-header {
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+.account-card__id {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.account-card__id strong {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-strong);
+}
+.account-card__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+}
+.account-balances {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.balance-available {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-strong);
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.balance-sub {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0 var(--space-3);
+}
+.account-card__toggle {
+  margin-top: var(--space-2);
+}
+.account-card__toggle svg {
+  transition: transform var(--duration);
+}
+.account-card__toggle[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+.account-card__transactions {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+/* ---- Transactions: filters as a sunken well above the table ---- */
+.account-card__transactions .filters {
+  align-items: start;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.account-card__transactions .filters .field {
+  margin: 0;
+}
+.account-card__transactions .filters__actions {
+  align-self: end;
+}
+.account-card__transactions .filters .alert {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.account-card__transactions td:first-child {
+  white-space: nowrap;
+}
+.account-card__transactions .entries > .btn {
+  margin-top: var(--space-3);
+}
+
+/* ---- Send money (outcome cards are in CustomerPage.css) ---- */
+.send-money .form-column > .btn {
+  margin-top: var(--space-1);
+}
+/* The step-up prompt: a shield above the explanation, so it reads as a security check. */
+.step-up__lead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+.step-up__lead .panel__icon {
+  margin-top: 2px;
+}
+
+/* ---- Phone width ---- */
+@media (max-width: 640px) {
+  .total-balance {
+    padding: var(--space-4);
+  }
+  .total-balance__value {
+    font-size: var(--text-2xl);
+  }
+  .total-balance__tiles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: var(--space-2);
+  }
+  .total-balance__tile {
+    min-width: 0;
+    padding: var(--space-2) var(--space-3);
+  }
+  .total-balance__tile-value {
+    font-size: var(--text-sm);
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .total-balance__tile--note {
+    grid-column: 1 / -1;
+    max-width: none;
+  }
+  .list li.account-card {
+    padding: var(--space-4);
+  }
+  /* Balances sit under the account name, left-aligned, instead of a ragged right column. */
+  .row.account-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+  }
+  .right.account-balances {
+    align-items: flex-start;
+    text-align: left;
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
+  }
+  .balance-sub {
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+  .account-card__toggle {
+    align-self: stretch;
+  }
+  .account-card__transactions .filters {
+    padding: var(--space-3);
+  }
+}

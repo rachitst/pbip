@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { RouterProvider, createBrowserRouter } from "react-router";
 import { useAuth } from "./auth/AuthContext";
+import { Landing } from "./pages/Landing";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
 import { routes } from "./shell/routes";
@@ -26,19 +27,35 @@ function AuthenticatedOrLogin() {
   return status === "authenticated" ? <AppRouter /> : <SignedOut />;
 }
 
-/** Sign-in and registration swap in place, so the deep link in the address bar survives both. */
+/** Sign-in and registration swap in place, so the deep link in the address bar survives both.
+ * At "/" (no deep link to keep) the same forms sit in the hero of the landing page. */
 function SignedOut() {
   const [registering, setRegistering] = useState(false);
-  return registering ? (
+  const atFrontDoor = window.location.pathname === "/";
+  const form = registering ? (
     <Register
+      embedded={atFrontDoor}
       onSignIn={() => {
         setRegistering(false);
       }}
     />
   ) : (
     <Login
+      embedded={atFrontDoor}
       onRegister={() => {
         setRegistering(true);
+      }}
+    />
+  );
+  if (!atFrontDoor) return form;
+  return (
+    <Landing
+      form={form}
+      onOpenAccount={() => {
+        setRegistering(true);
+      }}
+      onSignIn={() => {
+        setRegistering(false);
       }}
     />
   );

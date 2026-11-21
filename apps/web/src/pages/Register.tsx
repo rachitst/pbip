@@ -7,7 +7,7 @@ import { MIN_PASSWORD_LENGTH, newPasswordProblem } from "../lib/password";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
-import { PageHeader } from "../ui/PageHeader";
+import { AuthFrame } from "./AuthFrame";
 
 /** Only the API's own wording is shown: it never echoes input and says no more than the API does. */
 function registrationError(error: unknown): string {
@@ -18,7 +18,13 @@ function registrationError(error: unknown): string {
 }
 
 /** #201: self-registration (POST /auth/register), then the normal sign-in with the same details. */
-export function Register({ onSignIn }: { onSignIn: () => void }) {
+export function Register({
+  onSignIn,
+  embedded = false,
+}: {
+  onSignIn: () => void;
+  embedded?: boolean;
+}) {
   const { login } = useAuth();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -52,9 +58,8 @@ export function Register({ onSignIn }: { onSignIn: () => void }) {
   }
 
   return (
-    <main className="card narrow">
-      <PageHeader title="Create your account" />
-      <form onSubmit={(event) => void submit(event)}>
+    <AuthFrame title="Create your account" embedded={embedded}>
+      <form className="auth-form" onSubmit={(event) => void submit(event)}>
         <Field label="Full name">
           {(control) => (
             <input
@@ -117,16 +122,16 @@ export function Register({ onSignIn }: { onSignIn: () => void }) {
           )}
         </Field>
         {error && <Alert tone="error">{error}</Alert>}
-        <Button type="submit" loading={busy}>
+        <Button type="submit" className="auth-form__submit" loading={busy}>
           Create account
         </Button>
       </form>
-      <p>
+      <p className="auth-card__switch">
         Already have an account?{" "}
         <Button variant="link" onClick={onSignIn}>
           Sign in
         </Button>
       </p>
-    </main>
+    </AuthFrame>
   );
 }

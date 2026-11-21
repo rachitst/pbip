@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CalendarClock, LineChart, PiggyBank, ShoppingBag, Wallet } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
@@ -29,6 +30,9 @@ import { StatusBadge } from "../ui/StatusBadge";
 import { CHART_COLORS, TOOLTIP_STYLE } from "./insightsChart";
 import { formatRate } from "./Loans";
 import "./LoanCard.css";
+import "./CustomerPage.css";
+import "./Wealth.css";
+import { EmptyCard } from "./EmptyCard";
 import { HoldingsSection, SipsSection } from "./WealthHoldings";
 
 /** Wait for typing to settle before asking the server for a maturity quote. */
@@ -110,7 +114,7 @@ function AllocationChart({ portfolio }: { portfolio: PortfolioOut }) {
     .map((s) => `${ASSET_LABEL[s.asset_class]} ${formatShareBps(s.share_bps)}`)
     .join(", ");
   return (
-    <div className="insights-breakdown">
+    <div className="insights-breakdown wealth-allocation">
       <div
         role="region"
         aria-label="Asset allocation chart"
@@ -181,7 +185,7 @@ function PortfolioSection() {
   const p = portfolio.data;
   return (
     <>
-      <section className="loan-card" aria-label="Portfolio summary">
+      <section className="loan-card wealth-portfolio" aria-label="Portfolio summary">
         <dl className="details">
           <div className="details__row">
             <dt>Invested capital</dt>
@@ -212,7 +216,7 @@ function PortfolioSection() {
             <dd>{formatMinor(p.total_minor, p.currency)}</dd>
           </div>
         </dl>
-        <p className="muted">
+        <p className="muted wealth-portfolio__note">
           {p.open_deposits === 1 ? "1 open deposit" : `${String(p.open_deposits)} open deposits`} ·
           figures as of {formatDate(p.as_of)}. Funds, stocks and bonds are valued at today&apos;s
           simulated prices, not market data.
@@ -313,9 +317,11 @@ function DepositsSection() {
     );
   }
   const held = deposits.data.filter((d) => d.status !== "CLOSED");
-  if (held.length === 0) return <EmptyState message="You have no active fixed deposits." />;
+  if (held.length === 0) {
+    return <EmptyCard icon={PiggyBank} message="You have no active fixed deposits." />;
+  }
   return (
-    <div className="entries">
+    <div className="entries table-card">
       {held.some((d) => d.status === "MATURED") && (
         <Alert tone="info">
           A matured deposit earns no further interest: withdraw it to your account.
@@ -645,9 +651,9 @@ function BookingDialog({
 function ProductCard({ product, onBook }: { product: WealthProductOut; onBook: () => void }) {
   const headingId = useId();
   return (
-    <section className="loan-card" aria-labelledby={headingId}>
+    <section className="loan-card wealth-product" aria-labelledby={headingId}>
       <h3 id={headingId}>{product.name}</h3>
-      <p>
+      <p className="wealth-product__meta">
         <StatusBadge status={RISK[product.risk_level]} />{" "}
         <span className="muted">{PRODUCT_TYPE[product.product_type]}</span>
       </p>
@@ -686,7 +692,7 @@ function ProductCard({ product, onBook }: { product: WealthProductOut; onBook: (
           </div>
         )}
       </dl>
-      <p className="muted">{product.notes}</p>
+      <p className="muted wealth-product__notes">{product.notes}</p>
       {product.bookable && (
         <Button size="sm" onClick={onBook}>
           Book this deposit
@@ -737,23 +743,25 @@ function CatalogueSection() {
         Rates are indicative and simulated for this demo bank. Market-linked funds show no yield
         because Finora has no market data.
       </p>
-      <Field label="Risk level">
-        {(control) => (
-          <select
-            {...control}
-            value={risk}
-            onChange={(e) => {
-              const value = e.target.value;
-              setRisk(value === "LOW" || value === "MODERATE" || value === "HIGH" ? value : "");
-            }}
-          >
-            <option value="">All</option>
-            <option value="LOW">Low</option>
-            <option value="MODERATE">Moderate</option>
-            <option value="HIGH">High</option>
-          </select>
-        )}
-      </Field>
+      <div className="wealth-filter">
+        <Field label="Risk level">
+          {(control) => (
+            <select
+              {...control}
+              value={risk}
+              onChange={(e) => {
+                const value = e.target.value;
+                setRisk(value === "LOW" || value === "MODERATE" || value === "HIGH" ? value : "");
+              }}
+            >
+              <option value="">All</option>
+              <option value="LOW">Low</option>
+              <option value="MODERATE">Moderate</option>
+              <option value="HIGH">High</option>
+            </select>
+          )}
+        </Field>
+      </div>
       {products.isPending && <LoadingState label="Loading wealth products..." />}
       {products.isError && (
         <ErrorState
@@ -768,7 +776,7 @@ function CatalogueSection() {
         <Alert tone="info">No fixed deposit can be booked online right now.</Alert>
       )}
       {products.data && products.data.length > 0 && (
-        <div className="loan-list">
+        <div className="loan-list wealth-products">
           {products.data.map((p) => (
             <ProductCard
               key={p.id}
@@ -809,26 +817,41 @@ export function Wealth() {
         description="Your fixed deposits, what they will pay, and products to grow your savings."
       />
       <section aria-labelledby="portfolio-title">
-        <h2 id="portfolio-title">Portfolio</h2>
+        <h2 id="portfolio-title" className="section-title">
+          <Wallet size={18} aria-hidden="true" focusable="false" />
+          Portfolio
+        </h2>
         <PortfolioSection />
       </section>
       <section aria-labelledby="deposits-title">
-        <h2 id="deposits-title">Your fixed deposits</h2>
+        <h2 id="deposits-title" className="section-title">
+          <PiggyBank size={18} aria-hidden="true" focusable="false" />
+          Your fixed deposits
+        </h2>
         <DepositsSection />
       </section>
       <section aria-labelledby="investments-title">
-        <h2 id="investments-title">Your funds, stocks and bonds</h2>
+        <h2 id="investments-title" className="section-title">
+          <LineChart size={18} aria-hidden="true" focusable="false" />
+          Your funds, stocks and bonds
+        </h2>
         <p>
           <Link to="/wealth/invest">Invest in funds, stocks or bonds</Link>.
         </p>
         <HoldingsSection />
       </section>
       <section aria-labelledby="sips-title">
-        <h2 id="sips-title">Your SIPs</h2>
+        <h2 id="sips-title" className="section-title">
+          <CalendarClock size={18} aria-hidden="true" focusable="false" />
+          Your SIPs
+        </h2>
         <SipsSection />
       </section>
       <section aria-labelledby="catalogue-title">
-        <h2 id="catalogue-title">Products</h2>
+        <h2 id="catalogue-title" className="section-title">
+          <ShoppingBag size={18} aria-hidden="true" focusable="false" />
+          Products
+        </h2>
         <p>
           <Link to="/wealth/compare">Compare products side by side</Link>, including term life and
           health insurance, or <Link to="/wealth/insurance">get a simulated insurance quote</Link>.

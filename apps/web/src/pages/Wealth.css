@@ -1,0 +1,146 @@
+/* Wealth (Finora): the portfolio as figure tiles beside the allocation chart, and the product
+   catalogue as a card grid. The phone-width figure rules stay in LoanCard.css. Tokens only. */
+
+/* Portfolio summary: each label/value pair becomes a tile; the total is the highlighted one. */
+.loan-card.wealth-portfolio {
+  margin-block: var(--space-3);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-sm);
+}
+.loan-card.wealth-portfolio .details {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: var(--space-3);
+}
+.wealth-portfolio .details__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-sunken);
+  border-radius: var(--radius);
+}
+.wealth-portfolio .details dt {
+  font-size: var(--text-sm);
+}
+.loan-card.wealth-portfolio .details dd {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-strong);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+.wealth-portfolio .details__row:last-child {
+  color: var(--brand-contrast);
+  background: var(--brand);
+}
+.wealth-portfolio .details__row:last-child dt {
+  color: color-mix(in srgb, var(--brand-contrast) 78%, var(--brand));
+}
+:root[data-theme="dark"] .wealth-portfolio .details__row:last-child {
+  color: var(--text);
+  background: var(--brand-soft);
+  box-shadow: inset 0 0 0 1px var(--brand);
+}
+:root[data-theme="dark"] .wealth-portfolio .details__row:last-child dt {
+  color: var(--muted);
+}
+.wealth-portfolio__note {
+  margin: var(--space-3) 0 0;
+}
+.wealth-allocation {
+  margin-top: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Product catalogue */
+.wealth-filter {
+  max-width: 16rem;
+}
+.wealth-products {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 24rem), 1fr));
+}
+.wealth-products .loan-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-block: 0;
+  box-shadow: var(--shadow-sm);
+}
+.wealth-products .loan-card .details {
+  align-self: stretch;
+  margin-bottom: var(--space-3);
+}
+.wealth-products .loan-card .details dd {
+  font-weight: var(--weight-medium);
+}
+.wealth-product__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.wealth-product .wealth-product__meta + p {
+  font-size: var(--text-sm);
+}
+.wealth-product__notes {
+  margin-top: auto;
+  font-size: var(--text-xs);
+}
+
+/* Invest, SIP and insurance forms: a card whose fields keep a readable width. */
+.loan-card.form-card {
+  padding: var(--space-5);
+  box-shadow: var(--shadow-sm);
+}
+.form-card > .field,
+.form-card > .money-input,
+.form-card > .details,
+.form-card > p {
+  max-width: 40rem;
+}
+.form-card > .field:first-child,
+.form-card > h2 + .field {
+  margin-top: 0;
+}
+.form-card > .details {
+  margin-bottom: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-sunken);
+  border-radius: var(--radius);
+}
+.form-card .dialog__actions {
+  justify-content: flex-start;
+}
+.loan-card.quote-result {
+  background: var(--brand-soft);
+  border-color: transparent;
+}
+
+/* Phone: tiles become label/value rows (one per line), still with the total highlighted. */
+@media (max-width: 40rem) {
+  .loan-card.wealth-portfolio .details {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+  .wealth-portfolio .details__row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: var(--space-2) var(--space-3);
+  }
+  .loan-card.wealth-portfolio .details dd {
+    font-size: var(--text-base);
+    text-align: right;
+  }
+  .wealth-allocation {
+    padding: var(--space-3);
+  }
+  .wealth-filter {
+    max-width: none;
+  }
+}

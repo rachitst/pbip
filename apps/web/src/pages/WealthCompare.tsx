@@ -1,3 +1,4 @@
+import { ArrowLeft } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import type { ReactNode } from "react";
@@ -349,7 +350,12 @@ export function WealthCompare() {
       <PageHeader
         title="Compare products"
         description="Pick two to four investments or insurance plans to see them side by side."
-        actions={<Link to="/wealth">Back to wealth</Link>}
+        actions={
+          <Link to="/wealth" className="btn btn--secondary btn--sm">
+            <ArrowLeft size={16} aria-hidden="true" focusable="false" />
+            Back to wealth
+          </Link>
+        }
       />
       <p className="muted">
         Rates and premiums are indicative and simulated for this demo bank. Premiums are for the

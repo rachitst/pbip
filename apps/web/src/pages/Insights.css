@@ -1,0 +1,66 @@
+/* Spending & financial health (Finora): section cards with an icon title, the score as a headline
+   figure, components as tiles. The shared insights-* rules stay in styles.css (staff dashboards
+   use them too), so everything here is scoped to this page's .insights wrapper. Chart colours
+   come from the --chart-* tokens (insightsChart.ts). Tokens only. */
+.insights .insights-section {
+  box-shadow: var(--shadow-sm);
+}
+.insights-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.insights-title__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+}
+.insights .insights-score__value {
+  font-size: var(--text-3xl);
+  letter-spacing: -0.02em;
+}
+.insights .insights-component {
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-sunken);
+  border-radius: var(--radius);
+}
+.insights .insights-recommendations {
+  padding: var(--space-3) var(--space-4);
+  border-top: 0;
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+}
+.insights .insights-recommendations .insights-eyebrow {
+  color: var(--accent);
+  font-weight: var(--weight-strong);
+}
+.insights .insights-figure {
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-sunken);
+  border-radius: var(--radius);
+}
+.insights .insights-total__value {
+  font-size: var(--text-xl);
+}
+.insights .insights-fallback {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 640px) {
+  .insights .insights-section {
+    padding: var(--space-4);
+  }
+  .insights .insights-total {
+    text-align: left;
+  }
+  .insights .insights-score__value {
+    font-size: var(--text-2xl);
+  }
+}

@@ -5,10 +5,17 @@ import { errorMessage } from "../lib/errors";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
-import { PageHeader } from "../ui/PageHeader";
+import { AuthFrame } from "./AuthFrame";
 
-/** ``onRegister`` is given only where self-registration is offered (the signed-out app). */
-export function Login({ onRegister }: { onRegister?: () => void }) {
+/** ``onRegister`` is given only where self-registration is offered (the signed-out app);
+ * ``embedded`` puts the form in the landing page's hero instead of a page of its own. */
+export function Login({
+  onRegister,
+  embedded = false,
+}: {
+  onRegister?: () => void;
+  embedded?: boolean;
+}) {
   const { login, verifyMfa, mfaToken, notice } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,26 +38,30 @@ export function Login({ onRegister }: { onRegister?: () => void }) {
   }
 
   return (
-    <main className="card narrow">
-      <PageHeader title="Sign in" />
+    <AuthFrame title="Sign in" embedded={embedded}>
       {notice && <Alert tone="success">{notice}</Alert>}
-      <form onSubmit={(event) => void submit(event)}>
+      <form className="auth-form" onSubmit={(event) => void submit(event)}>
         {mfaToken ? (
-          <Field label="Authenticator or recovery code">
-            {(control) => (
-              <input
-                {...control}
-                value={code}
-                onChange={(event) => {
-                  setCode(event.target.value);
-                }}
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                autoFocus
-                required
-              />
-            )}
-          </Field>
+          <>
+            <p className="auth-form__lead">
+              Enter the 6-digit code from your authenticator app, or one of your recovery codes.
+            </p>
+            <Field label="Authenticator or recovery code">
+              {(control) => (
+                <input
+                  {...control}
+                  value={code}
+                  onChange={(event) => {
+                    setCode(event.target.value);
+                  }}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  autoFocus
+                  required
+                />
+              )}
+            </Field>
+          </>
         ) : (
           <>
             <Field label="Email">
@@ -84,18 +95,18 @@ export function Login({ onRegister }: { onRegister?: () => void }) {
           </>
         )}
         {error && <Alert tone="error">{error}</Alert>}
-        <Button type="submit" loading={busy}>
+        <Button type="submit" className="auth-form__submit" loading={busy}>
           {mfaToken ? "Verify" : "Sign in"}
         </Button>
       </form>
       {onRegister && !mfaToken && (
-        <p>
+        <p className="auth-card__switch">
           New to Finora?{" "}
           <Button variant="link" onClick={onRegister}>
             Create an account
           </Button>
         </p>
       )}
-    </main>
+    </AuthFrame>
   );
 }

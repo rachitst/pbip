@@ -1,0 +1,205 @@
+/* ---- Ask Finora assistant drawer (TASK-061) ---------------------------------------------- */
+/* Moved from styles.css with the Finora redesign. The recorder and E2E find reply bubbles by
+   `.assistant-msg--assistant`; keep that class on each assistant bubble. */
+.assistant-fab {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: 90;
+  gap: var(--space-2);
+  min-height: 3rem;
+  padding: 0 var(--space-5) 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-overlay);
+}
+.assistant-drawer {
+  position: fixed;
+  inset: 0 0 0 auto;
+  width: min(27rem, 100vw);
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0;
+  padding: 0;
+  display: none;
+  flex-direction: column;
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 0;
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-overlay);
+}
+.assistant-drawer[open] {
+  display: flex;
+}
+.assistant-drawer::backdrop {
+  background: rgb(11 18 32 / 0.45);
+}
+.assistant-drawer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 4rem;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.assistant-drawer__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.assistant-drawer__title {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+.assistant-drawer__note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--border);
+}
+.assistant-drawer__note svg {
+  flex: none;
+  color: var(--accent);
+}
+.assistant-log {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  overflow-y: auto;
+  background: var(--bg);
+}
+.assistant-msg {
+  max-width: 88%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.assistant-msg p,
+.assistant-reply p {
+  margin: 0;
+}
+.assistant-reply p + p {
+  margin-top: var(--space-2);
+}
+.assistant-reply ol,
+.assistant-reply ul {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-5);
+}
+.assistant-msg--user {
+  align-self: flex-end;
+  color: var(--brand-contrast);
+  background: var(--brand);
+  border-bottom-right-radius: var(--radius-sm);
+}
+.assistant-msg--assistant {
+  align-self: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+}
+.assistant-msg__link {
+  display: inline-block;
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--brand);
+}
+.assistant-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--info);
+  background: var(--info-soft);
+  border-radius: var(--radius-pill);
+}
+.assistant-tool__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  background: currentColor;
+  border-radius: 50%;
+  animation: assistant-pulse 1s ease-in-out infinite;
+}
+@keyframes assistant-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .assistant-tool__dot {
+    animation: none;
+  }
+}
+.assistant-error {
+  margin: 0;
+  color: var(--danger);
+}
+.assistant-starters > p {
+  margin: 0;
+  font-weight: var(--weight-medium);
+}
+.assistant-starters ul {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.assistant-starters li {
+  max-width: 100%;
+}
+.btn.assistant-chip {
+  max-width: 100%;
+  height: auto;
+  min-height: var(--control-height);
+  white-space: normal;
+  text-align: left;
+  padding-block: var(--space-2);
+  border-radius: var(--radius);
+}
+.assistant-form {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-end;
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.assistant-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  resize: none;
+}
+@media (max-width: 40rem) {
+  .assistant-fab__label {
+    display: none;
+  }
+  .assistant-fab {
+    padding: 0;
+    width: 3rem;
+    justify-content: center;
+  }
+}
