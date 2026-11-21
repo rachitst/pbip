@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronDown, PiggyBank, PlusCircle, Wallet } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { api } from "../api/client";
@@ -17,6 +18,8 @@ import { AccountTransactions } from "./AccountTransactions";
 import { ProductRecommendations } from "./ProductRecommendations";
 import { SendMoney } from "./SendMoney";
 import { TotalBalance } from "./TotalBalance";
+import "./Accounts.css";
+import "./CustomerPage.css";
 
 export function Accounts() {
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts });
@@ -48,7 +51,7 @@ export function Accounts() {
         />
       )}
       {accounts.data?.length === 0 && <EmptyState message="You have no accounts yet." />}
-      <ul className="list">
+      <ul className="list account-list">
         {accounts.data?.map((account) => (
           <AccountRow
             key={account.id}
@@ -88,11 +91,20 @@ interface AccountRowProps {
 function AccountRow({ account, expanded, highlightTransactionId, onToggle }: AccountRowProps) {
   const panelId = `transactions-${account.id}`;
   return (
-    <li className="account">
+    <li className="account account-card">
       <div className="row account-header">
-        <div>
-          <strong>{accountTypeLabel(account.account_type)}</strong>
-          <div className="muted">{account.account_number_masked}</div>
+        <div className="account-card__id">
+          <span className="account-card__icon">
+            {account.account_type === "SAVINGS" ? (
+              <PiggyBank size={20} aria-hidden="true" focusable="false" />
+            ) : (
+              <Wallet size={20} aria-hidden="true" focusable="false" />
+            )}
+          </span>
+          <div>
+            <strong>{accountTypeLabel(account.account_type)}</strong>
+            <div className="muted">{account.account_number_masked}</div>
+          </div>
         </div>
         <div className="right account-balances">
           <div aria-label="available balance" className="balance-available">
@@ -107,17 +119,20 @@ function AccountRow({ account, expanded, highlightTransactionId, onToggle }: Acc
             </div>
           </div>
           <Button
-            variant="link"
+            variant="secondary"
+            size="sm"
+            className="account-card__toggle"
             aria-expanded={expanded}
             aria-controls={panelId}
             onClick={onToggle}
           >
             {expanded ? "Hide transactions" : "Transactions"}
+            <ChevronDown size={16} aria-hidden="true" focusable="false" />
           </Button>
         </div>
       </div>
       {expanded && (
-        <div id={panelId}>
+        <div id={panelId} className="account-card__transactions">
           <AccountTransactions
             accountId={account.id}
             currency={account.currency}
@@ -160,10 +175,18 @@ function OpenAccount({ requested }: { requested: OpenAccountType | null }) {
   });
 
   return (
-    <section>
-      <h2>Open an account</h2>
+    <section className="panel" aria-labelledby="open-account-title">
+      <div className="panel__head">
+        <span className="panel__icon">
+          <PlusCircle size={18} aria-hidden="true" focusable="false" />
+        </span>
+        <div>
+          <h2 id="open-account-title">Open an account</h2>
+          <p>A savings or current account, opened straight away.</p>
+        </div>
+      </div>
       <form
-        className="inline"
+        className="inline form-column"
         onSubmit={(event) => {
           event.preventDefault();
           open.mutate(accountType);

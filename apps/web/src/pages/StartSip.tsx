@@ -62,7 +62,7 @@ export function StartSip({ fund, accounts }: { fund: InstrumentOut; accounts: Ac
 
   const account = accounts.find((a) => a.id === accountId);
   return (
-    <section className="loan-card" aria-labelledby="start-sip-title">
+    <section className="loan-card form-card" aria-labelledby="start-sip-title">
       <h2 id="start-sip-title">Start a monthly SIP</h2>
       {created ? (
         <p role="status">

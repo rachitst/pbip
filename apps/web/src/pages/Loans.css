@@ -1,0 +1,103 @@
+/* Loans (Finora): active loans, offers as a card grid, and the calculator beside its estimate.
+   The phone-width figure rules stay in LoanCard.css (LayoutStyles.test.ts). Tokens only. */
+.loan-card {
+  box-shadow: var(--shadow-sm);
+}
+.loan-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.loan-card__head h3 {
+  margin: 0;
+}
+.loan-card--active .loan-card__head {
+  justify-content: flex-start;
+}
+.loan-card .details dd {
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+.loan-reasons {
+  margin: var(--space-4) 0 0;
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-6);
+  font-size: var(--text-sm);
+  color: var(--muted);
+  background: var(--surface-sunken);
+  border-radius: var(--radius);
+}
+.loan-reasons li + li {
+  margin-top: var(--space-1);
+}
+
+/* Offers: two cards a row on wide screens, one on narrow ones. */
+.loan-list--offers {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 24rem), 1fr));
+}
+.loan-list--offers .loan-card {
+  display: flex;
+  flex-direction: column;
+  margin-block: 0;
+}
+.loan-list--offers .loan-reasons {
+  margin-top: auto;
+}
+.loan-list--offers .details {
+  margin-bottom: var(--space-4);
+}
+
+/* Calculator: inputs on the left, the estimate and eligibility on the right. */
+.loan-apply {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+.loan-apply__inputs .field:first-child {
+  margin-top: 0;
+}
+.loan-apply__summary .loan-card {
+  margin-block: 0 var(--space-3);
+  padding: var(--space-4);
+}
+.loan-apply__summary .loan-card--estimate {
+  background: var(--brand-soft);
+  border-color: transparent;
+  box-shadow: none;
+}
+.loan-card--estimate .details__row:first-child dd {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-strong);
+  color: var(--brand);
+}
+.loan-apply__summary .state {
+  margin-top: 0;
+}
+.loan-value {
+  display: inline-block;
+  margin-top: calc(-1 * var(--space-2));
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-lg);
+  color: var(--brand);
+  background: var(--brand-soft);
+  border-radius: var(--radius-sm);
+}
+.loan-apply__submit {
+  margin-top: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.loan-apply__submit .field {
+  max-width: 40rem;
+  margin-top: 0;
+}
+
+@media (max-width: 860px) {
+  .loan-apply {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+}

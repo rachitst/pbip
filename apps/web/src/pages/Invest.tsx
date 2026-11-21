@@ -22,6 +22,8 @@ import { MoneyInput } from "../ui/MoneyInput";
 import { StartSip } from "./StartSip";
 import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
+import "./CustomerPage.css";
+import "./Wealth.css";
 
 const KIND_LABEL: Record<InstrumentOut["kind"], string> = {
   MUTUAL_FUND: "Mutual fund",
@@ -89,7 +91,7 @@ function orderItems(draft: Draft, account: AccountOut | undefined) {
 
 function Receipt({ order }: { order: OrderOut }) {
   return (
-    <section className="loan-card" aria-label="Order receipt">
+    <section className="loan-card receipt-card" aria-label="Order receipt">
       <h2>Order executed</h2>
       <dl className="details">
         <div className="details__row">
@@ -188,7 +190,7 @@ function OrderForm({
   if (order) return <Receipt order={order} />;
   return (
     <>
-      <section className="loan-card" aria-label="Order">
+      <section className="loan-card form-card" aria-label="Order">
         <Field label="Investment">
           {(control) => (
             <select
