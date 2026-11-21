@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Activity, Inbox, KeyRound, Users } from "lucide-react";
 import { Link } from "react-router";
 import { api } from "../../api/client";
 import type { SecurityMonitoring as Monitoring } from "../../api/client";
@@ -12,6 +13,7 @@ import { EmptyState, ErrorState, LoadingState } from "../../ui/States";
 import { StatusBadge } from "../../ui/StatusBadge";
 import { ALERT_STATUS_LABEL, DECISION_LABEL, canReviewFraud, riskTone } from "./fraudFormat";
 import type { Tone } from "../../lib/status";
+import "./staff.css";
 
 /** The API caches the panels for 60 seconds; polling faster would only re-read the cache. */
 const REFRESH_MS = 60_000;
@@ -46,7 +48,10 @@ function RiskBadge({ score }: { score: number }) {
 export function OpenAlertsPanel({ panel }: { panel: Monitoring["open_alerts"] }) {
   return (
     <section className="card fraud-panel" aria-labelledby="mon-open">
-      <h2 id="mon-open">Open investigations</h2>
+      <h2 id="mon-open" className="panel-title">
+        <Inbox className="panel-title__icon" size={20} aria-hidden="true" />
+        Open investigations
+      </h2>
       {panel.total === 0 ? (
         <EmptyState message="No open alerts. Nothing is waiting for an analyst." />
       ) : (
@@ -131,7 +136,10 @@ export function HighRiskCustomersPanel({
 }) {
   return (
     <section className="card fraud-panel monitoring-wide" aria-labelledby="mon-customers">
-      <h2 id="mon-customers">High-risk customers</h2>
+      <h2 id="mon-customers" className="panel-title">
+        <Users className="panel-title__icon" size={20} aria-hidden="true" />
+        High-risk customers
+      </h2>
       <p className="muted">
         Customers with the most held, blocked or escalated payments in the last{" "}
         {countOf(windowDays, "day")}. Open an alert to see who they are.
@@ -200,7 +208,10 @@ export function LoginAnomaliesPanel({ panel }: { panel: Monitoring["login_anomal
   const period = countOf(panel.window_hours, "hour");
   return (
     <section className="card fraud-panel" aria-labelledby="mon-logins">
-      <h2 id="mon-logins">Login anomalies</h2>
+      <h2 id="mon-logins" className="panel-title">
+        <KeyRound className="panel-title__icon" size={20} aria-hidden="true" />
+        Login anomalies
+      </h2>
       <p className="muted">Last {period}. User ids only; no addresses or emails.</p>
       <dl className="details details--counts">
         {SECURITY_COUNTS.map((c) => (
@@ -289,7 +300,10 @@ export function FraudEventsPanel({ panel }: { panel: Monitoring["fraud_events"] 
   const blocked = panel.last_24h.BLOCK ?? 0;
   return (
     <section className="card fraud-panel monitoring-wide" aria-labelledby="mon-events">
-      <h2 id="mon-events">Recent fraud events</h2>
+      <h2 id="mon-events" className="panel-title">
+        <Activity className="panel-title__icon" size={20} aria-hidden="true" />
+        Recent fraud events
+      </h2>
       <p>
         Last 24 hours: <strong>{countOf(held, "payment")} held for review</strong>,{" "}
         <strong>{blocked} blocked</strong>.
@@ -369,7 +383,7 @@ export function SecurityMonitoring() {
   });
   if (!allowed) {
     return (
-      <div className="page">
+      <div className="page staff-page">
         <PageHeader title="Security monitoring" />
         <Notice tone="error">
           Access restricted: security monitoring needs the Fraud Analyst or Administrator role.
@@ -379,7 +393,7 @@ export function SecurityMonitoring() {
   }
   const data = monitoring.data;
   return (
-    <div className="page">
+    <div className="page staff-page">
       <PageHeader
         title="Security monitoring"
         description="Open investigations, high-risk customers, login anomalies and flagged payments. Refreshes every minute."

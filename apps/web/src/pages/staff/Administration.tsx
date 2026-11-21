@@ -5,6 +5,7 @@ import { PageHeader } from "../../ui/PageHeader";
 import { RuntimeSettingsPanel } from "./AdminSettings";
 import { CreateStaffUser, LockoutPanel } from "./AdminStaffUsers";
 import "./Administration.css";
+import "./staff.css";
 
 /** Every /api/v1/admin route admits ADMIN only (with an MFA-verified session). */
 export function canAdminister(me: UserOut): boolean {
@@ -17,14 +18,14 @@ export function Administration() {
   const me = useCurrentUser();
   if (!canAdminister(me)) {
     return (
-      <div className="page">
+      <div className="page staff-page">
         <PageHeader title="Administration" />
         <Alert tone="error">Access restricted: administration needs the Administrator role.</Alert>
       </div>
     );
   }
   return (
-    <div className="page admin-page">
+    <div className="page staff-page admin-page">
       <PageHeader
         title="Administration"
         description="Create staff users, clear sign-in lockouts and change the business limits that are safe to change at runtime. Every action is audited."

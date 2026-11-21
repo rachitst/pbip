@@ -10,3 +10,103 @@
   font-size: var(--text-sm);
   white-space: normal;
 }
+
+/* Relationship Manager insights (TASK-066), moved from styles.css: the customer detail is a
+   full-height side panel on wide screens and a full-width sheet on phones. */
+.rm-summary {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+}
+.rm-pager {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+/* Doubled class: page stylesheets load before styles.css, whose .dialog would otherwise win. */
+.dialog.dialog--flyout {
+  width: min(36rem, 100vw);
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0 0 0 auto;
+  padding: var(--space-6) var(--space-5);
+  border-radius: 0;
+  border-width: 0 0 0 1px;
+  overflow-y: auto;
+}
+.flyout-close {
+  position: absolute;
+  top: var(--space-5);
+  right: var(--space-4);
+}
+.dialog--flyout > p {
+  margin-top: var(--space-3);
+}
+.dialog--flyout .dialog__title {
+  padding-right: 5rem;
+  overflow-wrap: anywhere;
+}
+/* Each block of the flyout is a sunken well, so the sections read apart at a glance. */
+.flyout-section {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.flyout-section h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-base);
+}
+.small {
+  font-size: var(--text-sm);
+}
+.rm-products,
+.rm-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.rm-products ul {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-5);
+}
+.rm-log li {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+.rm-log li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.rm-log li p {
+  margin: 0;
+}
+.rm-log-note {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.rm-log-form {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.rm-log-form .btn {
+  justify-self: start;
+}
+.rm-log-form textarea {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  resize: vertical;
+}
+.rm-log-form textarea[aria-invalid="true"] {
+  border-color: var(--danger);
+}
