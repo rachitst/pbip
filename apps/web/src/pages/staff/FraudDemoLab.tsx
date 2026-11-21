@@ -14,6 +14,7 @@ import { StatusBadge } from "../../ui/StatusBadge";
 import {
   DECISION_LABEL,
   SOURCE_LABEL,
+  SOURCE_STYLE,
   canReviewFraud,
   contributionLabel,
   parseReasons,
@@ -29,6 +30,7 @@ import {
   useDemoLabStatus,
 } from "./fraudLab";
 import type { LabStep, LabTransfer, Scenario, ScenarioCode, StepState } from "./fraudLab";
+import "./staff.css";
 
 const STEP_BADGE: Record<StepState, { label: string; tone: string }> = {
   running: { label: "Running", tone: "info" },
@@ -44,7 +46,7 @@ export function FraudDemoLab() {
 
   if (!allowed) {
     return (
-      <div className="page">
+      <div className="page staff-page">
         <PageHeader title="Fraud demo lab" />
         <Alert tone="error">
           Access restricted: the fraud demo lab needs the Fraud Analyst or Administrator role.
@@ -54,7 +56,7 @@ export function FraudDemoLab() {
   }
 
   return (
-    <div className="page">
+    <div className="page staff-page">
       <PageHeader
         title="Fraud demo lab"
         description="Run fraud scenarios through the real transfer API as a demo customer, then see what the fraud engine decided and why."
@@ -251,7 +253,7 @@ function ScenarioCard({ scenario, busy, running, ready, onRun }: CardProps) {
   return (
     <li className="card fraud-panel lab-card" aria-labelledby={titleId}>
       <h3 id={titleId}>
-        <span className="badge badge--info">{scenario.code}</span> {scenario.title}
+        <span className="badge badge--info lab-code">{scenario.code}</span> {scenario.title}
       </h3>
       <p>{scenario.summary}</p>
       {scenario.sequence.length > 0 && (
@@ -261,7 +263,7 @@ function ScenarioCard({ scenario, busy, running, ready, onRun }: CardProps) {
           ))}
         </ol>
       )}
-      <p className="text-sm muted">
+      <p className="text-sm muted lab-signals">
         <strong>Engine signals:</strong> {scenario.signals}
       </p>
       {isRunnable(scenario.code) ? (
@@ -322,7 +324,9 @@ function TransferOutcome({ result }: { result: LabTransfer }) {
               {reasons.map((r) => (
                 <li key={`${r.source}-${r.code}`}>
                   <div className="reason__head">
-                    <span className="badge badge--neutral">{SOURCE_LABEL[r.source]}</span>
+                    <span className={`badge badge--${SOURCE_STYLE[r.source].badge}`}>
+                      {SOURCE_LABEL[r.source]}
+                    </span>
                     <span>{plainMessage(r)}</span>
                     {r.contribution !== null && (
                       <span className="text-sm muted">{contributionLabel(r)}</span>

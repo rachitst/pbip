@@ -1,0 +1,344 @@
+/* Staff console (Finora redesign, Phase 4, ADR-0063): the rules every staff page shares. Imported by
+   each page under pages/staff/; tokens only. The fraud, lab and monitoring rules moved here from the
+   TASK-036, TASK-081 and TASK-099 sections of styles.css. The bundler emits page stylesheets BEFORE
+   styles.css, so a rule that refines a shared one (.meter, .details, .dialog) doubles its class to
+   win on specificity rather than on order. */
+
+/* Staff tools are data-dense: they use the whole content width, not the reading width. */
+.page.staff-page {
+  max-width: none;
+}
+
+/* A panel heading with a decorative icon in front (the icon is aria-hidden). */
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.panel-title__icon {
+  flex: none;
+  color: var(--accent);
+}
+
+/* A table that sits straight on the page: framed like a card, scrolling inside its own region. */
+.table-card {
+  margin-top: var(--space-3);
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+/* A table inside a panel: a hairline frame, so the sunken header reads as the table's own. */
+.staff-page .card .entries {
+  max-width: 100%;
+  overflow-x: auto;
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.table-card thead th,
+.staff-page .card .entries thead th {
+  border-radius: 0;
+}
+.table-card tbody tr:last-child > *,
+.staff-page .card .entries tbody tr:last-child > * {
+  border-bottom: 0;
+}
+.table-summary {
+  margin: var(--space-2) 0 0;
+}
+
+/* Filter rows: the dashboards' selects and the RM filters sit in one sunken bar; a lone select keeps
+   a sensible width instead of stretching across the page. */
+.rm-filters {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+  margin: 0 0 var(--space-5);
+  padding: var(--space-4);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.rm-filters .field {
+  margin: 0;
+}
+
+/* Fraud alert queue filter (aria-pressed buttons): a joined segmented control. */
+.filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.filter-group.segmented {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+/* ---- Fraud analyst views (TASK-036) ------------------------------------------------------- */
+.fraud-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  align-items: start;
+}
+.fraud-stack {
+  display: grid;
+  gap: var(--space-4);
+}
+@media (max-width: 760px) {
+  .fraud-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* Panels inside the analyst views sit in a grid: no centring, no width cap. */
+.fraud-panel {
+  max-width: none;
+  margin: 0;
+}
+.fraud-panel h2 {
+  margin-top: 0;
+  font-size: var(--text-lg);
+}
+.fraud-panel h3 {
+  margin: var(--space-4) 0 var(--space-1);
+  font-size: var(--text-base);
+}
+.fraud-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-4);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+}
+.fraud-back:hover {
+  text-decoration: underline;
+}
+/* The overall score: a thicker bar than the per-reason ones. */
+.risk-scale {
+  margin: 0 0 var(--space-4);
+}
+.risk-scale .meter {
+  height: 12px;
+  border-radius: var(--radius-pill);
+}
+.reason-list {
+  list-style: none;
+  margin: var(--space-3) 0;
+  padding: 0;
+  display: grid;
+  gap: 0;
+}
+.reason-list > li {
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--border);
+}
+.reason-list > li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.reason__head {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.reason__bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.reason__bar .meter {
+  border-radius: var(--radius-pill);
+}
+/* The model's reasons: the teal accent, so the three sources differ by colour AND by their label. */
+.badge--model {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.meter.meter--accent {
+  --meter: var(--accent);
+}
+.fraud-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.fraud-decision {
+  margin-top: var(--space-4);
+}
+.fraud-decision textarea {
+  min-height: 5rem;
+}
+
+/* ---- Fraud demo lab (TASK-081): scenario cards in a responsive grid; no inline styles (CSP) -- */
+.lab-form {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+}
+.lab-grid {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  align-items: stretch;
+}
+.lab-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.lab-card h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+.lab-card p {
+  margin: 0;
+}
+.lab-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.lab-sequence {
+  margin: 0;
+  padding-left: var(--space-5);
+  font-size: var(--text-sm);
+}
+.lab-signals {
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-sunken);
+  border-radius: var(--radius);
+  overflow-wrap: anywhere;
+}
+.lab-card__action {
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+.lab-steps {
+  margin: var(--space-3) 0;
+  padding-left: var(--space-5);
+  display: grid;
+  gap: var(--space-2);
+}
+.lab-outcome {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-3);
+  margin-top: var(--space-3);
+}
+.lab-outcome h3 {
+  margin-top: 0;
+}
+.lab-outcome__verdict {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+/* ---- Security monitoring (TASK-099): panels two per row, stacking on narrow screens; the
+   table-heavy panels take the full row. ------------------------------------------------------ */
+.monitoring-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+  align-items: start;
+}
+.monitoring-wide {
+  grid-column: 1 / -1;
+}
+.severity-list {
+  list-style: none;
+  margin: var(--space-3) 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.severity-list li {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+}
+.severity-list .meter {
+  border-radius: var(--radius-pill);
+}
+/* Label and count rows: the label wraps, the number never splits across lines. */
+.details.details--counts {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.details.details--counts dd {
+  overflow-wrap: normal;
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+}
+.details--counts .details__row > * {
+  padding: var(--space-1) 0;
+}
+.short-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--text-sm);
+}
+.plain-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+}
+
+/* ---- Staff overview ------------------------------------------------------------------------ */
+.staff-home {
+  max-width: 44rem;
+}
+.staff-home .details {
+  row-gap: var(--space-3);
+}
+.staff-home__note {
+  margin-top: var(--space-4);
+}
+.staff-nowrap {
+  white-space: nowrap;
+}
+.staff-home > .card {
+  margin-top: 0;
+}
+.staff-home__mfa {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.staff-home__mfa svg {
+  flex: none;
+  margin-top: 0.2em;
+}
+.staff-more {
+  margin-top: var(--space-4);
+}
+.fraud-queue__reason {
+  min-width: 14rem;
+}
+/* Row buttons sit in a flex box INSIDE the cell: a flex td stops being a table cell. */
+.staff-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
