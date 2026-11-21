@@ -27,6 +27,7 @@ import {
   segmentLabel,
 } from "./rmInsightsFormat";
 import "./RMInsights.css";
+import "./staff.css";
 
 export const PAGE_SIZE = 20;
 
@@ -107,7 +108,7 @@ export function RMInsights() {
 
   if (!allowed) {
     return (
-      <div className="page">
+      <div className="page staff-page">
         <PageHeader title="Customer insights" />
         <Alert tone="error">
           Access restricted: customer insights need the Relationship Manager or Administrator role.
@@ -126,7 +127,7 @@ export function RMInsights() {
   const data = leads.data;
   const items = data?.items ?? [];
   return (
-    <div className="page">
+    <div className="page staff-page">
       <PageHeader
         title="Customer insights"
         description={`${ORDER_TEXT[order].description} Open one to see their health score, recent activity and eligible products, and to log a call or note.`}
@@ -314,7 +315,7 @@ function LeadsTable({
   onOpen: (item: CustomerInsightItem) => void;
 }) {
   return (
-    <div className="entries">
+    <div className="entries table-card">
       <table>
         <caption className="sr-only">{caption}</caption>
         <thead>

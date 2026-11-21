@@ -1,3 +1,4 @@
+import { Activity, ChartPie, Layers, ShoppingBag } from "lucide-react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router";
@@ -15,6 +16,7 @@ import { TOOLTIP_STYLE, formatShare } from "../insightsChart";
 import { FilterSelect, Metric } from "./dashboardParts";
 import { SEGMENT_LABEL, canAccessRMInsights, segmentLabel } from "./rmInsightsFormat";
 import "./dashboards.css";
+import "./staff.css";
 
 /** Typed by the OpenAPI union, so a segment the API adds fails the type check. */
 const SEGMENTS: readonly BehaviourSegment[] = [
@@ -89,7 +91,10 @@ export function SegmentsPanel({
   const rows = panel.items.map((i) => ({ name: segmentLabel(i.segment), customers: i.customers }));
   return (
     <section className="card" aria-labelledby="ba-segments">
-      <h2 id="ba-segments">Segment mix</h2>
+      <h2 id="ba-segments" className="panel-title">
+        <ChartPie className="panel-title__icon" size={20} aria-hidden="true" />
+        Segment mix
+      </h2>
       <p className="muted">
         Every customer's latest weekly segment (K-Means on recency, frequency, spend and lifestyle
         ratios); customers the job has not seen yet are "Not segmented yet". Not filtered, so the
@@ -206,7 +211,10 @@ export function SpendingPanel({
 }) {
   return (
     <section className="card" aria-labelledby="ba-spending">
-      <h2 id="ba-spending">Spending patterns</h2>
+      <h2 id="ba-spending" className="panel-title">
+        <ShoppingBag className="panel-title__icon" size={20} aria-hidden="true" />
+        Spending patterns
+      </h2>
       <p className="muted">
         Money customers paid out in the {period}: posted debits from accounts they hold as primary
         holder, excluding reversals and moves between their own accounts. Average spend is per
@@ -275,7 +283,10 @@ export function SpendingPanel({
 export function AffinityPanel({ panel, period }: { panel: Analytics["affinity"]; period: string }) {
   return (
     <section className="card" aria-labelledby="ba-affinity">
-      <h2 id="ba-affinity">Product affinity</h2>
+      <h2 id="ba-affinity" className="panel-title">
+        <Layers className="panel-title__icon" size={20} aria-hidden="true" />
+        Product affinity
+      </h2>
       <p className="muted">
         Share of each segment's customers holding a product today (an active account as holder or
         joint holder, an active loan), and clicks on recommended products in the {period}.
@@ -450,7 +461,10 @@ export function EngagementPanel({
   }));
   return (
     <section className="card" aria-labelledby="ba-engagement">
-      <h2 id="ba-engagement">Engagement</h2>
+      <h2 id="ba-engagement" className="panel-title">
+        <Activity className="panel-title__icon" size={20} aria-hidden="true" />
+        Engagement
+      </h2>
       <p className="muted">
         From app clickstream events in the {period}, of the customers who turned usage analytics on.
         A session is one browser visit of one customer, ended by 30 minutes without activity; its
@@ -646,7 +660,7 @@ export default function BehaviourAnalytics() {
   });
   if (!allowed) {
     return (
-      <div className="page">
+      <div className="page staff-page">
         <PageHeader title="Behavioural analytics" />
         <Alert tone="error">
           Access restricted: behavioural analytics need the Relationship Manager or Administrator
@@ -658,7 +672,7 @@ export default function BehaviourAnalytics() {
   const data = query.data;
   const period = `last ${countOf(Number(days), "day")}`;
   return (
-    <div className="page dashboard-page">
+    <div className="page staff-page dashboard-page">
       <PageHeader
         title="Behavioural analytics"
         description="How customer segments spend, which products they hold and click, and how they use the app. Aggregates only."

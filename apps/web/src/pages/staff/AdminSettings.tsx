@@ -1,3 +1,4 @@
+import { Settings2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import type { SyntheticEvent } from "react";
@@ -204,17 +205,19 @@ function SettingsTable({
                   <span className="muted">Never</span>
                 )}
               </td>
-              <td className="row-actions">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  aria-label={`Change ${setting.label.toLowerCase()}`}
-                  onClick={() => {
-                    onChange(setting);
-                  }}
-                >
-                  Change
-                </Button>
+              <td>
+                <div className="staff-row-actions">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    aria-label={`Change ${setting.label.toLowerCase()}`}
+                    onClick={() => {
+                      onChange(setting);
+                    }}
+                  >
+                    Change
+                  </Button>
+                </div>
               </td>
             </tr>
           ))}
@@ -233,7 +236,10 @@ export function RuntimeSettingsPanel() {
   const items = query.data?.items;
   return (
     <section className="card admin-panel" aria-labelledby="admin-settings">
-      <h2 id="admin-settings">Application settings</h2>
+      <h2 id="admin-settings" className="panel-title">
+        <Settings2 className="panel-title__icon" size={20} aria-hidden="true" />
+        Application settings
+      </h2>
       <p className="muted">
         Business limits that may change without a deployment. Secrets, sign-in and security settings
         are never configurable here. Every change is recorded in the audit log.

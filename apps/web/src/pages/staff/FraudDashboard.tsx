@@ -1,3 +1,11 @@
+import {
+  BellRing,
+  ChartColumn,
+  ChartColumnStacked,
+  Gauge,
+  Landmark,
+  ListOrdered,
+} from "lucide-react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router";
@@ -27,6 +35,7 @@ import type { FraudReason } from "./fraudFormat";
 import { DECISION_SERIES, bandLabel, dailyRows, formatRate, reasonLabel } from "./fraudStatsChart";
 import type { DayRow } from "./fraudStatsChart";
 import "./dashboards.css";
+import "./staff.css";
 
 /** The API caches each window for 60 seconds; polling faster would only re-read the cache. */
 const REFRESH_MS = 60_000;
@@ -52,7 +61,10 @@ export function HeadlinePanel({ stats }: { stats: FraudStats }) {
   const period = countOf(stats.window_days, "day");
   return (
     <section className="card" aria-labelledby="fd-headline">
-      <h2 id="fd-headline">Last {period} at a glance</h2>
+      <h2 id="fd-headline" className="panel-title">
+        <Gauge className="panel-title__icon" size={20} aria-hidden="true" />
+        Last {period} at a glance
+      </h2>
       <dl className="metric-grid">
         <Metric
           label="Payments scored"
@@ -150,7 +162,10 @@ export function DecisionsPanel({ stats }: { stats: FraudStats }) {
   const rateSummary = `Hold rate ${formatRate(stats.hold_rate)} and block rate ${formatRate(stats.block_rate)} over the period; daily values are in the table.`;
   return (
     <section className="card" aria-labelledby="fd-decisions">
-      <h2 id="fd-decisions">Decisions over time</h2>
+      <h2 id="fd-decisions" className="panel-title">
+        <ChartColumnStacked className="panel-title__icon" size={20} aria-hidden="true" />
+        Decisions over time
+      </h2>
       <p className="muted">{summary}</p>
       {stats.scored === 0 ? (
         <EmptyState message="No fraud decisions in this period." />
@@ -243,7 +258,10 @@ export function RiskBandsPanel({ stats }: { stats: FraudStats }) {
   const summary = `Payment decisions per risk band: ${rows.map((r) => `${r.band} ${String(r.count)}`).join(", ")}.`;
   return (
     <section className="card" aria-labelledby="fd-bands">
-      <h2 id="fd-bands">Risk score distribution</h2>
+      <h2 id="fd-bands" className="panel-title">
+        <ChartColumn className="panel-title__icon" size={20} aria-hidden="true" />
+        Risk score distribution
+      </h2>
       <p className="muted">
         Every payment gets a risk score from 0 to 100. From 30 the customer is asked for an
         authenticator code, from 60 the payment is held for an analyst, and from 85 it is blocked.
@@ -314,7 +332,10 @@ export function TopReasonsPanel({ stats }: { stats: FraudStats }) {
   const summary = `Most frequent reasons: ${rows.map((r) => `${r.label} ${String(r.count)}`).join(", ")}.`;
   return (
     <section className="card" aria-labelledby="fd-reasons">
-      <h2 id="fd-reasons">Top reasons</h2>
+      <h2 id="fd-reasons" className="panel-title">
+        <ListOrdered className="panel-title__icon" size={20} aria-hidden="true" />
+        Top reasons
+      </h2>
       <p className="muted">
         How often each rule, model or unusual-pattern reason contributed to a decision. One payment
         can have several reasons.
@@ -394,7 +415,10 @@ export function AlertsPanel({ stats }: { stats: FraudStats }) {
   const { OPEN, CONFIRMED_FRAUD, FALSE_POSITIVE } = stats.alerts;
   return (
     <section className="card" aria-labelledby="fd-alerts">
-      <h2 id="fd-alerts">Alerts raised in the period</h2>
+      <h2 id="fd-alerts" className="panel-title">
+        <BellRing className="panel-title__icon" size={20} aria-hidden="true" />
+        Alerts raised in the period
+      </h2>
       <p className="muted">Where the alerts raised in the period stand now.</p>
       <dl className="metric-grid">
         <Metric
@@ -424,7 +448,10 @@ export function AlertsPanel({ stats }: { stats: FraudStats }) {
 export function RiskyPayeesPanel({ stats }: { stats: FraudStats }) {
   return (
     <section className="card" aria-labelledby="fd-payees">
-      <h2 id="fd-payees">Destinations behind flagged payments</h2>
+      <h2 id="fd-payees" className="panel-title">
+        <Landmark className="panel-title__icon" size={20} aria-hidden="true" />
+        Destinations behind flagged payments
+      </h2>
       <p className="muted">
         Receiving accounts of payments scored 60 or more, across customers. Several customers paying
         one account can mean a money mule. Account numbers are masked.
@@ -484,7 +511,7 @@ export default function FraudDashboard() {
   });
   if (!allowed) {
     return (
-      <div className="page">
+      <div className="page staff-page">
         <PageHeader title="Fraud dashboard" />
         <Alert tone="error">
           Access restricted: the fraud dashboard needs the Fraud Analyst or Administrator role.
@@ -494,7 +521,7 @@ export default function FraudDashboard() {
   }
   const data = query.data;
   return (
-    <div className="page dashboard-page">
+    <div className="page staff-page dashboard-page">
       <PageHeader
         title="Fraud dashboard"
         description="How the fraud engine decided payments: trends, risk scores, reasons and alert outcomes. Aggregates only."
