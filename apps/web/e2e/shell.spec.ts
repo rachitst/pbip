@@ -29,7 +29,7 @@ test("URLs, reload, back, role areas and the skip link", async ({ page }) => {
   // Signing in on a deep link lands on that page, not on the home page.
   await signInAt(page, "/profile");
   await expect(page.getByRole("heading", { name: "Profile & security" })).toBeVisible();
-  await expect(page).toHaveTitle("Profile & security - PBIP");
+  await expect(page).toHaveTitle("Profile & security - Finora");
 
   await page.reload(); // the refresh cookie restores the session; the URL keeps the page
   await expect(page.getByRole("heading", { name: "Profile & security" })).toBeVisible();

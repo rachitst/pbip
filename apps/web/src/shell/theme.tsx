@@ -22,17 +22,6 @@ function savedTheme(): Theme | null {
   }
 }
 
-function systemTheme(): Theme {
-  try {
-    if (typeof window.matchMedia === "function") {
-      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    }
-  } catch {
-    // matchMedia can be missing in some environments (jsdom)
-  }
-  return "light";
-}
-
 interface ThemeContextValue {
   theme: Theme;
   toggleTheme: () => void;
@@ -41,9 +30,10 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 /** Owns the theme for the whole app, including the sign-in page, so it cannot flip after login.
- *  The OS preference is followed until the user toggles; only an explicit choice is saved. */
+ *  Light is the default (ADR-0063); dark applies once the user chooses it, and only an explicit
+ *  choice is saved. */
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => savedTheme() ?? systemTheme());
+  const [theme, setTheme] = useState<Theme>(() => savedTheme() ?? "light");
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);

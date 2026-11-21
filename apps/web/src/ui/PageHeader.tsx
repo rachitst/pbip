@@ -1,5 +1,6 @@
 import { useLayoutEffect } from "react";
 import type { ReactNode } from "react";
+import { BRAND } from "../brand/Logo";
 
 interface PageHeaderProps {
   title: string;
@@ -12,7 +13,7 @@ interface PageHeaderProps {
  * the tab title never lags the heading (a passive effect could, and a test caught it under load). */
 export function PageHeader({ title, description, actions }: PageHeaderProps) {
   useLayoutEffect(() => {
-    document.title = `${title} - PBIP`; // each page names the browser tab (WCAG 2.4.2)
+    document.title = `${title} - ${BRAND}`; // each page names the browser tab (WCAG 2.4.2)
   }, [title]);
   return (
     <div className="page-header">

@@ -65,7 +65,7 @@ describe("MFA enrolment (#201)", () => {
     expect(await screen.findByText("aaaa-1111")).toBeInTheDocument();
     expect(screen.getByText(/shown only once/)).toBeInTheDocument();
     expect(
-      screen.getByText(/From your next sign-in, PBIP will ask for a code/),
+      screen.getByText(/From your next sign-in, Finora will ask for a code/),
     ).toBeInTheDocument();
     const confirm = fetchMock.mock.calls.find(([input]) => urlOf(input).endsWith("/mfa/confirm"));
     expect(JSON.parse(confirm?.[1]?.body as string)).toEqual({ code: "123456" });

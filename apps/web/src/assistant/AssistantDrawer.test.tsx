@@ -80,10 +80,10 @@ describe("AssistantDrawer", () => {
 
   it("opens from the floating button and offers starter prompts", async () => {
     renderDrawer();
-    const fab = screen.getByRole("button", { name: "Ask the PBIP assistant" });
+    const fab = screen.getByRole("button", { name: "Ask the Finora assistant" });
     expect(fab).toHaveAttribute("aria-expanded", "false");
     await userEvent.click(fab);
-    const dialog = screen.getByRole("dialog", { name: "PBIP assistant" });
+    const dialog = screen.getByRole("dialog", { name: "Finora assistant" });
     expect(fab).toHaveAttribute("aria-expanded", "true");
     for (const prompt of STARTER_PROMPTS) {
       expect(await within(dialog).findByRole("button", { name: prompt })).toBeInTheDocument();
@@ -103,7 +103,7 @@ describe("AssistantDrawer", () => {
     ]);
     streamResponse = () => stream.response;
     renderDrawer();
-    await userEvent.click(screen.getByRole("button", { name: "Ask the PBIP assistant" }));
+    await userEvent.click(screen.getByRole("button", { name: "Ask the Finora assistant" }));
     const dialog = screen.getByRole("dialog");
     await userEvent.click(
       await within(dialog).findByRole("button", { name: "What's my balance?" }),
@@ -131,7 +131,7 @@ describe("AssistantDrawer", () => {
         headers: { "Content-Type": "application/problem+json" },
       });
     renderDrawer();
-    await userEvent.click(screen.getByRole("button", { name: "Ask the PBIP assistant" }));
+    await userEvent.click(screen.getByRole("button", { name: "Ask the Finora assistant" }));
     const input = screen.getByRole("textbox", { name: "Message" });
     await userEvent.type(input, "hello{Enter}");
     expect(await screen.findByRole("alert")).toHaveTextContent(/wait a minute/);
@@ -147,7 +147,7 @@ describe("AssistantDrawer", () => {
     ]);
     streamResponse = () => stream.response;
     renderDrawer();
-    await userEvent.click(screen.getByRole("button", { name: "Ask the PBIP assistant" }));
+    await userEvent.click(screen.getByRole("button", { name: "Ask the Finora assistant" }));
     await userEvent.type(
       screen.getByRole("textbox", { name: "Message" }),
       "send 500 to Bob{Enter}",
@@ -163,7 +163,7 @@ describe("AssistantDrawer", () => {
     ]);
     streamResponse = () => stream.response;
     renderDrawer();
-    await userEvent.click(screen.getByRole("button", { name: "Ask the PBIP assistant" }));
+    await userEvent.click(screen.getByRole("button", { name: "Ask the Finora assistant" }));
     await userEvent.type(
       screen.getByRole("textbox", { name: "Message" }),
       "how do I add a payee{Enter}",
@@ -188,7 +188,7 @@ describe("AssistantDrawer", () => {
     ]);
     streamResponse = () => stream.response;
     renderDrawer();
-    await userEvent.click(screen.getByRole("button", { name: "Ask the PBIP assistant" }));
+    await userEvent.click(screen.getByRole("button", { name: "Ask the Finora assistant" }));
     const dialog = screen.getByRole("dialog");
     await userEvent.type(
       within(dialog).getByRole("textbox", { name: "Message" }),
@@ -211,7 +211,7 @@ describe("AssistantDrawer", () => {
     const stream = controlledStream([frame("error", { detail: "Please try again shortly." })]);
     streamResponse = () => stream.response;
     renderDrawer();
-    await userEvent.click(screen.getByRole("button", { name: "Ask the PBIP assistant" }));
+    await userEvent.click(screen.getByRole("button", { name: "Ask the Finora assistant" }));
     await userEvent.type(screen.getByRole("textbox", { name: "Message" }), "hi{Enter}");
     stream.finish();
     expect(await screen.findByRole("alert")).toHaveTextContent("Please try again shortly.");
@@ -259,7 +259,7 @@ describe("unusual expenses replies (TASK-110)", () => {
 
 describe("FAQ, products and investment suggestions (TASK-105)", () => {
   it("label each new tool while it runs", () => {
-    expect(TOOL_LABELS.get_faq_answer).toBe("Looking up how PBIP works...");
+    expect(TOOL_LABELS.get_faq_answer).toBe("Looking up how Finora works...");
     expect(TOOL_LABELS.list_products).toBe("Checking the product catalogue...");
     expect(TOOL_LABELS.get_investment_suggestions).toBe("Matching options to your risk profile...");
   });

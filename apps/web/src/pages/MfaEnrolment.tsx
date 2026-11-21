@@ -17,7 +17,7 @@ function RecoveryCodes({ codes }: { codes: string[] }) {
   return (
     <>
       <Alert tone="success">
-        Authenticator app set up. From your next sign-in, PBIP will ask for a code from the app
+        Authenticator app set up. From your next sign-in, Finora will ask for a code from the app
         after your password.
       </Alert>
       <p>
