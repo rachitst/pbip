@@ -31,8 +31,15 @@ interface Screen {
   then?: (page: Page) => Promise<void>;
 }
 
+/** Waits for quiet network where the server allows it (a dev proxy can hold a connection open). */
+async function quiet(page: Page): Promise<void> {
+  await page
+    .waitForLoadState("networkidle", { timeout: 5_000 })
+    .catch(() => undefined);
+}
+
 async function settle(page: Page): Promise<void> {
-  await page.waitForLoadState("networkidle");
+  await quiet(page);
   await expect(page.locator("#main h1, main h1").first()).toBeVisible();
   await expect(page.getByText(/^Loading/)).toHaveCount(0, { timeout: 15_000 });
   await page.waitForTimeout(600); // charts and fonts finish painting
@@ -114,7 +121,7 @@ test("signed-out pages", async ({ page }) => {
       height: viewport.height,
     });
     await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await quiet(page);
     await shoot(page, "public-home", viewport.tag);
     await page.goto("/accounts");
     await expect(page.getByLabel("Email")).toBeVisible();
@@ -144,7 +151,7 @@ test("customer pages (Alice)", async ({ page }) => {
           .getByRole("button", { name: /transactions/i })
           .first()
           .click();
-        await p.waitForLoadState("networkidle");
+        await quiet(p);
       },
     },
     { name: "customer-payees", path: "/payees" },
@@ -163,7 +170,7 @@ test("customer pages (Alice)", async ({ page }) => {
       path: "/accounts",
       then: async (p) => {
         await p.getByRole("button", { name: /^Notifications/ }).click();
-        await p.waitForLoadState("networkidle");
+        await quiet(p);
       },
     },
     {
@@ -190,10 +197,13 @@ test("fraud analyst pages", async ({ page }) => {
       path: "/staff/fraud",
       then: async (p) => {
         await p.getByRole("button", { name: "All", exact: true }).click(); // the open queue may be empty
-        await p.waitForLoadState("networkidle");
+        await quiet(p);
         const first = p.getByRole("table").getByRole("link").first();
         if ((await first.count()) === 0) return; // an empty queue: the list screenshot says so
         await first.click();
+        await expect(
+          p.getByRole("heading", { level: 1, name: /^Risk \d+ of 100/ }),
+        ).toBeVisible();
         await settle(p);
       },
     },
