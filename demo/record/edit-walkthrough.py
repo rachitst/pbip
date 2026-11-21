@@ -156,12 +156,19 @@ def plan(timeline: dict[str, Any], highlights: bool = False, cap: float = 0.0) -
     return items
 
 
+def frames(item: Item) -> int:
+    """The whole number of frames an item is encoded to (at least one). The edited clock counts the
+    same frames, so captions and chapters stay on the picture; per-clip rounding used to add up to
+    about 3 s of drift by minute 8 of the walkthrough."""
+    return max(1, round(item.duration * FPS))
+
+
 def starts(items: Sequence[Item]) -> list[float]:
-    """Each item's start on the edited clock."""
-    out, t = [], 0.0
+    """Each item's start on the edited clock (whole frames, as encoded)."""
+    out, t = [], 0
     for item in items:
-        out.append(t)
-        t += item.duration
+        out.append(t / FPS)
+        t += frames(item)
     return out
 
 
@@ -206,7 +213,7 @@ def cues(timeline: dict[str, Any], items: Sequence[Item]) -> list[tuple[float, f
         if shown is not None:
             marks.append((shown, str(caption["text"])))
     marks.sort(key=lambda m: m[0])
-    end = sum(item.duration for item in items)
+    end = sum(frames(item) for item in items) / FPS
     out: list[tuple[float, float, str]] = []
     for i, (at, text) in enumerate(marks):
         until = marks[i + 1][0] if i + 1 < len(marks) else end
@@ -286,7 +293,9 @@ def clip_filter(clip: Clip) -> str:
         ]
     else:
         steps.append("scale=1920:1080")
-    return ",".join([*steps, "format=yuv420p"])
+    # A source span can come up a frame short after the rate change: hold its last frame, and the
+    # encoder's -frames:v cuts every part to exactly frames(item).
+    return ",".join([*steps, "tpad=stop_mode=clone:stop_duration=0.5", "format=yuv420p"])
 
 
 H264 = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p"]
@@ -313,7 +322,7 @@ def render_items(ffmpeg: str, raw: Path, items: Sequence[Item], work: Path, labe
             start = item.s - item.offset
             source = ["-ss", f"{start:.3f}", "-t", f"{item.e - item.s:.3f}", "-i", str(video)]
             vf = clip_filter(item)
-        _run(ffmpeg, [*source, "-vf", vf, *H264, name], work)
+        _run(ffmpeg, [*source, "-vf", vf, *H264, "-frames:v", str(frames(item)), name], work)
         names.append(name)
     (work / "list.txt").write_text("".join(f"file '{n}'\n" for n in names), encoding="utf-8")
     joined = work / "joined.mp4"

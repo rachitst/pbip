@@ -66,16 +66,15 @@ SHAP values for the model ([staff guide, section 4](staff-guide.md#4-review-an-a
 
 ## About the screenshots
 
-The screenshots were taken from the running application on a local development stack (Windows, light
-theme, 1280 px wide, plus three at 360 px for phones) with the seeded demo data and freshly registered test
-customers at `example.com`. Keep in mind:
+The screenshots show Finora v1.2 (21 November 2026). Most were saved by the recorded A-to-Z walkthrough
+(`demo/record/record-walkthrough.ts`, 1920x1080, light theme) on a freshly seeded local stack, as each screen
+went by; a few come from the page screenshots in `docs/design/screenshots/after/` (1440 px, or 360 px for
+phones). Keep in mind:
 
-- **Test data only.** Names such as "Asha Example" and "Vikram Example" are throwaway test customers.
-  Authenticator keys and recovery codes are blurred even though they belong to throwaway users.
-- **New customers have little history,** so the balance forecast and month-on-month trends show their "not
-  enough history yet" states. Their only credit is the opening deposit, which is not regular income, so
-  they have no income-based loan offer or product recommendation yet.
-- **The assistant** answered with its built-in, rule-based helper because no local language model was
-  running. With a model running, the facts are the same and the wording is more natural.
+- **Demo data only.** Alice, Bob and Carol are the seeded demo customers; "Priya Walkthrough" is a customer
+  the recording registers. Authenticator keys and recovery codes are blurred in the page before they are
+  drawn, so they never reach an image.
+- **The assistant** answered through a language model on Groq; without one it answers with its built-in,
+  rule-based helper: the facts are the same and the wording is plainer.
 - **The fraud model** was trained locally (`fraud-model` in the setup guide) so the alert screens show
   SHAP values. Without a trained model, Finora scores with bank rules only and says so on the alert.

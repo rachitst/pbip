@@ -64,9 +64,20 @@ test("customer slides (Alice)", async ({ page }) => {
   await page.getByRole("button", { name: "Send money" }).click();
   const held = page.getByRole("status").filter({ hasText: "being reviewed" });
   await expect(held).toBeVisible();
-  await held.scrollIntoViewIfNeeded();
+  await held.evaluate((el) => el.scrollIntoView({ block: "center" })); // the result, not the form
   await page.waitForTimeout(600);
   await slide(page, "transfer-review");
+
+  // MANUAL_DIR (optional): the user manual's "money on hold" image, which the walkthrough does not save.
+  const manual = process.env.MANUAL_DIR;
+  if (manual) {
+    await page.goto("/accounts");
+    await ready(page, "My accounts");
+    await page.screenshot({
+      path: join(manual, "14c-account-on-hold.png"),
+      animations: "disabled",
+    });
+  }
 
   await page.goto("/insights");
   await ready(page, /Spending/);

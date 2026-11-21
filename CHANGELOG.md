@@ -4,6 +4,29 @@ All notable changes to Finora (repository PBIP) are listed here. The format foll
 and the project uses [Semantic Versioning](https://semver.org/). Numbers in brackets are the pull requests that made
 each change. The plain-language summaries are in [`docs/release/`](docs/release/).
 
+## [1.2.2] - 2026-11-21
+
+### Fixed
+
+- **Recommendation cards:** an offer's figures ("You could borrow", the EMI range) now sit under their labels in
+  the narrow card instead of squeezing the amounts into a few characters per line.
+- **Demo editor:** each edited clip is encoded to a whole number of frames and the captions and chapters count the
+  same frames; the walkthrough's `.srt` had drifted about 3 s behind the picture by minute 8.
+
+### Changed
+
+- **User manual screenshots** replaced with the Finora UI (from the v1.2 walkthrough recording and the page
+  screenshots); `docs/design/ui-redesign-progress.md` closes with the final summary.
+
+## [1.2.1] - 2026-11-21
+
+### Fixed
+
+- **Deploy smoke test:** it looked for "PBIP" in the served page, so the v1.2.0 tag deploy failed it and rolled back
+  to v1.1.4 as designed; it now looks for "Finora" (#528).
+- **Accessibility (WCAG 2.5.3, label in name):** the assistant button's accessible name is "Ask Finora", its visible
+  label; the fraud lab's run buttons read "Run F1" ... "Run F6", the start of their names (#528).
+
 ## [1.2.0] - 2026-11-21
 
 The product is now **Finora** ("Smart personal banking", assistant "Ask Finora"), with a redesigned web app. The

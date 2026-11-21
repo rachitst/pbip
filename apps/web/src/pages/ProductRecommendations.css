@@ -39,3 +39,19 @@
 .recommendations > .muted {
   font-size: var(--text-xs);
 }
+/* Offer figures in a narrow card: each label sits above its value. The shared two-column .details
+   grid sized the label column to its text and squeezed amounts into a few characters per line. */
+.recommendation .details {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  margin-top: var(--space-2);
+}
+.recommendation .details dt {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+}
+.recommendation .details dd {
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: normal;
+}
