@@ -83,7 +83,7 @@ class EligibilityOut(BaseModel):
     )
     spending_with_loan_ratio: float = Field(
         default=0.0,
-        description="(Spending + active PBIP EMIs + proposed EMI) / income; limit 0.90",
+        description="(Spending + active Finora EMIs + proposed EMI) / income; limit 0.90",
     )
     rules_version: str = Field(
         default="loan-eligibility-v2", description="Version of the eligibility rules applied"

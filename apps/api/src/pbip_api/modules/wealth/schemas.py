@@ -28,7 +28,7 @@ class WealthProductOut(BaseModel):
     )
     apy_bps: int | None = Field(
         description="Annualised yield: quarterly compounding for deposits, the coupon for the gold "
-        "bond; None for market-linked funds (PBIP has no market data)"
+        "bond; None for market-linked funds (Finora has no market data)"
     )
     tenures_months: list[int] = Field(description="Empty for open-ended funds")
     min_lock_in_months: int
@@ -141,7 +141,7 @@ InsuranceTypeLiteral = Literal["TERM_LIFE", "HEALTH"]
 
 class IndicativePremiumOut(BaseModel):
     """ONE illustrative figure at a stated reference profile, never a quote for this customer
-    (PBIP does no underwriting, ADR-0028)."""
+    (Finora does no underwriting, ADR-0028)."""
 
     annual_premium_minor: int = Field(description="Indicative, simulated annual premium (paise)")
     reference_cover_minor: int = Field(description="Cover the premium is stated for")
@@ -185,7 +185,7 @@ class InsuranceProductOut(BaseModel):
 
 # ----------------------------------------------------------------- investing (ADR-0058)
 InstrumentKindLiteral = Literal["MUTUAL_FUND", "STOCK", "BOND"]
-PRICE_SOURCE_DESCRIPTION = "Always SIMULATED: PBIP's deterministic price model, not market data"
+PRICE_SOURCE_DESCRIPTION = "Always SIMULATED: Finora's deterministic price model, not market data"
 
 
 class InstrumentOut(BaseModel):
@@ -362,7 +362,7 @@ class InsuranceApplicationOut(BaseModel):
     age_band: AgeBandLiteral
     annual_premium_minor: int | None
     status: ApplicationStatusLiteral = Field(
-        description="SUBMITTED = referred (no insurer decides it in PBIP); APPROVED_SIMULATED = "
+        description="SUBMITTED = referred (no insurer decides it in Finora); APPROVED_SIMULATED = "
         "meets the simulated rules, no policy is issued; DECLINED"
     )
     decision_reason: str

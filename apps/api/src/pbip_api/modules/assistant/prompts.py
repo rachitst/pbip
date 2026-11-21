@@ -5,13 +5,13 @@ from functools import cache
 from pbip_api.modules.assistant.llm import NO_TOOL, strict_schema
 from pbip_api.modules.assistant.tools import REGISTRY
 
-_JSON_HEADER = """You are the routing step of PBIP Bank's assistant. You do not answer the customer.
+_JSON_HEADER = """You are the routing step of Finora's assistant. You do not answer the customer.
 You choose ONE approved tool for the customer's message and reply with JSON only:
 {"tool": "<name>", "arguments": {...}}.
 """
 # Function-calling providers (Groq, ADR-0037): the JSON-reply instruction above made GPT-OSS call a
 # non-existent function named "json" (measured 2026-11-03), so this header asks for a call instead.
-_FUNCTION_HEADER = """You are the routing step of PBIP Bank's assistant. You do not answer the
+_FUNCTION_HEADER = """You are the routing step of Finora's assistant. You do not answer the
 customer and you never reply with text. Call exactly ONE of the provided functions for the
 customer's message. Call the function named "none" for anything the other functions do not cover.
 """
