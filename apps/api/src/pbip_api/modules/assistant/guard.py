@@ -29,8 +29,8 @@ REFUSAL_TEXT: dict[Refusal, str] = {
     Refusal.SQL: "I can't run database queries. Ask me about your balance, spending or loans.",
     Refusal.INSTRUCTION_OVERRIDE: (
         "I can't change how I work. I can help with your balance, transactions, spending, "
-        "balance forecast, loan affordability, PBIP's products, investment options and how "
-        "PBIP works."
+        "balance forecast, loan affordability, Finora's products, investment options and how "
+        "Finora works."
     ),
     Refusal.PRIVILEGE: "I can't change roles or permissions. I can only read your own accounts.",
 }

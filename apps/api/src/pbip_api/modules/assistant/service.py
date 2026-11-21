@@ -66,7 +66,7 @@ _logger = structlog.get_logger(__name__)
 HELP_TEXT = (
     "I can tell you your balance, your recent transactions, what you spent this month or last "
     "month (by category too), any unusual expenses, a predicted balance up to 30 days ahead, "
-    "whether a loan is affordable, which loans, deposits and funds PBIP offers, investment "
+    "whether a loan is affordable, which loans, deposits and funds Finora offers, investment "
     "options that fit your risk profile, and how things like transfer limits, statements or "
     'two-factor sign-in work - for example: "Can I afford a 5 lakh car loan over 5 years?"'
 )

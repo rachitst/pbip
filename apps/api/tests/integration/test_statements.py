@@ -84,7 +84,7 @@ def test_pdf_has_the_bank_header_summary_and_balances(client: TestClient, funded
     body = response.content
     assert body.startswith(b"%PDF-1.4") and body.rstrip().endswith(b"%%EOF")
     for text in (
-        b"PBIP Bank",
+        b"Finora",
         b"Account statement",
         b"Opening balance",
         b"INR 0.00",

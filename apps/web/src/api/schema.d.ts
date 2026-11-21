@@ -3188,7 +3188,7 @@ export interface components {
             rules_version: string;
             /**
              * Spending With Loan Ratio
-             * @description (Spending + active PBIP EMIs + proposed EMI) / income; limit 0.90
+             * @description (Spending + active Finora EMIs + proposed EMI) / income; limit 0.90
              * @default 0
              */
             spending_with_loan_ratio: number;
@@ -3974,7 +3974,7 @@ export interface components {
             price_minor: number;
             /**
              * Price Source
-             * @description Always SIMULATED: PBIP's deterministic price model, not market data
+             * @description Always SIMULATED: Finora's deterministic price model, not market data
              * @constant
              */
             price_source: "SIMULATED";
@@ -3997,7 +3997,7 @@ export interface components {
         /**
          * IndicativePremiumOut
          * @description ONE illustrative figure at a stated reference profile, never a quote for this customer
-         *     (PBIP does no underwriting, ADR-0028).
+         *     (Finora does no underwriting, ADR-0028).
          */
         IndicativePremiumOut: {
             /**
@@ -4098,7 +4098,7 @@ export interface components {
             price_minor: number;
             /**
              * Price Source
-             * @description Always SIMULATED: PBIP's deterministic price model, not market data
+             * @description Always SIMULATED: Finora's deterministic price model, not market data
              * @constant
              */
             price_source: "SIMULATED";
@@ -4147,7 +4147,7 @@ export interface components {
             quote_version: string;
             /**
              * Status
-             * @description SUBMITTED = referred (no insurer decides it in PBIP); APPROVED_SIMULATED = meets the simulated rules, no policy is issued; DECLINED
+             * @description SUBMITTED = referred (no insurer decides it in Finora); APPROVED_SIMULATED = meets the simulated rules, no policy is issued; DECLINED
              * @enum {string}
              */
             status: "SUBMITTED" | "APPROVED_SIMULATED" | "DECLINED";
@@ -4959,7 +4959,7 @@ export interface components {
             price_minor: number;
             /**
              * Price Source
-             * @description Always SIMULATED: PBIP's deterministic price model, not market data
+             * @description Always SIMULATED: Finora's deterministic price model, not market data
              * @constant
              */
             price_source: "SIMULATED";
@@ -6434,7 +6434,7 @@ export interface components {
             annual_rate_bps: number | null;
             /**
              * Apy Bps
-             * @description Annualised yield: quarterly compounding for deposits, the coupon for the gold bond; None for market-linked funds (PBIP has no market data)
+             * @description Annualised yield: quarterly compounding for deposits, the coupon for the gold bond; None for market-linked funds (Finora has no market data)
              */
             apy_bps: number | null;
             /**
