@@ -164,7 +164,7 @@ export function AssistantDrawer() {
     <>
       <Button
         className="assistant-fab"
-        aria-label="Ask the Finora assistant"
+        aria-label="Ask Finora"
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => {

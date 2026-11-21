@@ -589,7 +589,7 @@ test("Finora fallback demo recording (TASK-093)", async ({ browser }) => {
     );
     await r.signOut();
     await r.signInCustomer(ALICE, true);
-    await page.getByRole("button", { name: "Ask the Finora assistant" }).click();
+    await page.getByRole("button", { name: "Ask Finora", exact: true }).click();
     const drawer = page.getByRole("dialog", { name: "Finora assistant" });
     await expect(drawer).toBeVisible();
     await r.pause(1500);

@@ -261,7 +261,7 @@ async function story(w: Walkthrough, page: Page, outDir: string): Promise<void> 
     w.chapter("Assistant still");
     await w.step("assistant still", {}, async () => {
       await w.signInWithCode(ALICE, "/", "My accounts");
-      await page.getByRole("button", { name: "Ask the Finora assistant" }).click();
+      await page.getByRole("button", { name: "Ask Finora", exact: true }).click();
       const drawer = page.getByRole("dialog", { name: "Finora assistant" });
       const before = await drawer.locator(".assistant-msg--assistant").count();
       await drawer
@@ -838,7 +838,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
   w.chapter("The Finora assistant on Groq", true);
   await w.step("assistant questions", { highlight: true }, async () => {
     await w.say("Ask Finora: read-only tools, answers worded by a model on Groq", 300);
-    await page.getByRole("button", { name: "Ask the Finora assistant" }).click();
+    await page.getByRole("button", { name: "Ask Finora", exact: true }).click();
     const drawer = page.getByRole("dialog", { name: "Finora assistant" });
     await expect(drawer).toBeVisible();
     const engines: string[] = [];
