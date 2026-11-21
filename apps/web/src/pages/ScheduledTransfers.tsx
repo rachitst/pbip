@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CalendarClock } from "lucide-react";
 import { useState } from "react";
 import type { SyntheticEvent } from "react";
 import { api } from "../api/client";
@@ -15,8 +16,10 @@ import { Dialog } from "../ui/Dialog";
 import { Field } from "../ui/Field";
 import { MoneyInput } from "../ui/MoneyInput";
 import { PageHeader } from "../ui/PageHeader";
-import { EmptyState, ErrorState, LoadingState } from "../ui/States";
+import { ErrorState, LoadingState } from "../ui/States";
+import { EmptyCard } from "./EmptyCard";
 import { StatusBadge } from "../ui/StatusBadge";
+import "./CustomerPage.css";
 
 type Frequency = ScheduledTransferOut["frequency"];
 const KEY = ["scheduled-transfers"];
@@ -430,10 +433,10 @@ export function ScheduledTransfers({ now }: { now?: number }) {
         />
       )}
       {orders.data && upcoming.length === 0 && (
-        <EmptyState message="No upcoming scheduled transfers." />
+        <EmptyCard icon={CalendarClock} message="No upcoming scheduled transfers." />
       )}
       {upcoming.length > 0 && (
-        <div className="entries">
+        <div className="entries table-card">
           <table>
             <caption className="sr-only">Upcoming scheduled transfers</caption>
             <thead>
@@ -466,7 +469,7 @@ export function ScheduledTransfers({ now }: { now?: number }) {
         </div>
       )}
       {past.length > 0 && (
-        <details className="history">
+        <details className="history history-card">
           <summary>Cancelled and finished ({past.length})</summary>
           <ul className="list">
             {past.map((o) => (

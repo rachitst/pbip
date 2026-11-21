@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Sparkles } from "lucide-react";
 import { useId, useState } from "react";
 import { useNavigate } from "react-router";
 import { api } from "../api/client";
@@ -14,6 +15,7 @@ import { Button } from "../ui/Button";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 import { StatusBadge } from "../ui/StatusBadge";
 import { formatRate } from "./Loans";
+import "./ProductRecommendations.css";
 
 interface ProductRecommendationsProps {
   /** Called when the customer follows a product's action, before navigating. The clickstream
@@ -35,7 +37,10 @@ export function ProductRecommendations({ onProductAction }: ProductRecommendatio
 
   return (
     <section className="recommendations" aria-labelledby={headingId}>
-      <h2 id={headingId}>Recommended for you</h2>
+      <h2 id={headingId} className="recommendations__title">
+        <Sparkles size={18} aria-hidden="true" focusable="false" />
+        Recommended for you
+      </h2>
       {recommendations.isPending && <LoadingState label="Loading recommendations..." />}
       {recommendations.isError && (
         <ErrorState

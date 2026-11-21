@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CalendarClock, LineChart } from "lucide-react";
 import { useState } from "react";
 import { api } from "../api/client";
 import type { AccountOut, HoldingOut, SipOut } from "../api/client";
@@ -15,7 +16,8 @@ import { formatMinor } from "../lib/money";
 import { Button } from "../ui/Button";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Field } from "../ui/Field";
-import { EmptyState, ErrorState, LoadingState } from "../ui/States";
+import { ErrorState, LoadingState } from "../ui/States";
+import { EmptyCard } from "./EmptyCard";
 
 const KIND: Record<HoldingOut["kind"], string> = {
   MUTUAL_FUND: "Fund",
@@ -159,10 +161,10 @@ export function HoldingsSection() {
     );
   }
   if (holdings.data.length === 0) {
-    return <EmptyState message="You hold no funds, stocks or bonds yet." />;
+    return <EmptyCard icon={LineChart} message="You hold no funds, stocks or bonds yet." />;
   }
   return (
-    <div className="entries">
+    <div className="entries table-card">
       <p className="muted">{SIMULATED_PRICE_NOTE}</p>
       <table>
         <caption className="sr-only">My fund, stock and bond holdings</caption>
@@ -295,9 +297,11 @@ export function SipsSection() {
     );
   }
   const active = sips.data.filter((s) => s.status === "ACTIVE");
-  if (active.length === 0) return <EmptyState message="You have no active SIPs." />;
+  if (active.length === 0) {
+    return <EmptyCard icon={CalendarClock} message="You have no active SIPs." />;
+  }
   return (
-    <div className="entries">
+    <div className="entries table-card">
       <table>
         <caption className="sr-only">My active monthly SIPs</caption>
         <thead>
