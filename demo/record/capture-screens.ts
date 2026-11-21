@@ -14,8 +14,7 @@ import { demoPassword } from "./walkthrough-kit";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "../..");
 const SET = process.env.SCREENS_SET ?? "after";
-const OUT =
-  process.env.SCREENS_DIR ?? join(REPO, "docs/design/screenshots", SET);
+const OUT = process.env.SCREENS_DIR ?? join(REPO, "docs/design/screenshots", SET);
 const PASSWORD = demoPassword(REPO);
 const MAX_HEIGHT = 3200; // long pages are cut here so the files stay small
 
@@ -33,9 +32,7 @@ interface Screen {
 
 /** Waits for quiet network where the server allows it (a dev proxy can hold a connection open). */
 async function quiet(page: Page): Promise<void> {
-  await page
-    .waitForLoadState("networkidle", { timeout: 5_000 })
-    .catch(() => undefined);
+  await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 }
 
 async function settle(page: Page): Promise<void> {
@@ -46,9 +43,7 @@ async function settle(page: Page): Promise<void> {
 }
 
 async function shoot(page: Page, name: string, tag: string): Promise<void> {
-  const height = await page.evaluate(
-    () => document.documentElement.scrollHeight,
-  );
+  const height = await page.evaluate(() => document.documentElement.scrollHeight);
   const width = page.viewportSize()?.width ?? 1440;
   await page.screenshot({
     path: join(OUT, `${name}--${tag}.png`),
@@ -76,11 +71,7 @@ async function capture(page: Page, screens: Screen[]): Promise<void> {
   }
 }
 
-async function signInAs(
-  page: Page,
-  email: string,
-  withCode: boolean,
-): Promise<void> {
+async function signInAs(page: Page, email: string, withCode: boolean): Promise<void> {
   await signIn(page, email, PASSWORD, "/");
   if (withCode) await enterSignInCode(page, staffCode(email));
   await expect(page.locator("#main h1").first()).toBeVisible();
@@ -131,9 +122,7 @@ test("signed-out pages", async ({ page }) => {
     await shoot(page, "public-register", viewport.tag);
     await page.goto("/accounts");
     await signIn(page, "alice@demo.pbip", PASSWORD, "/accounts");
-    await expect(
-      page.getByLabel("Authenticator or recovery code"),
-    ).toBeVisible();
+    await expect(page.getByLabel("Authenticator or recovery code")).toBeVisible();
     await shoot(page, "public-sign-in-code", viewport.tag);
   }
 });
@@ -201,9 +190,7 @@ test("fraud analyst pages", async ({ page }) => {
         const first = p.getByRole("table").getByRole("link").first();
         if ((await first.count()) === 0) return; // an empty queue: the list screenshot says so
         await first.click();
-        await expect(
-          p.getByRole("heading", { level: 1, name: /^Risk \d+ of 100/ }),
-        ).toBeVisible();
+        await expect(p.getByRole("heading", { level: 1, name: /^Risk \d+ of 100/ })).toBeVisible();
         await settle(p);
       },
     },
