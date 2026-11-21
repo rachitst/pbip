@@ -129,10 +129,11 @@ def main() -> int:
         status, _, _ = http_request(f"{base}/metrics")
         check("metrics not exposed publicly", 404, status)
 
-        if b"PBIP" in body:
+        # The product name in the page title (index.html); the product is Finora since v1.2.0.
+        if b"Finora" in body:
             sys.stdout.write("  ok   web page content\n")
         else:
-            sys.stdout.write("  FAIL web page content: missing 'PBIP'\n")
+            sys.stdout.write("  FAIL web page content: missing 'Finora'\n")
             failures += 1
 
     if failures > 0:

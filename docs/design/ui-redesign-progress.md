@@ -130,11 +130,10 @@ only) and merged in turn, updating the other branches by merging `main`.
     starts with the visible word (the test's name match still holds);
   - **notification bell:** the only visible text is the unread count, which the name contains ("Notifications
     (2 unread)"); axe's heuristic still flags it. Kept: the name and the badge text are asserted by tests;
-  - **"Ask Finora" button** (named "Ask the Finora assistant") and the fraud lab's **"Run scenario"** buttons (named
-    "Run F1 APP scam" ...): **not changed.** Fixing them changes an accessible name or a visible text that unit
-    tests, the E2E journey and the demo recorder assert, which the owner's rule 3 forbids without a decision. Open
-    for the owner: rename the assistant button to "Ask Finora" and the lab buttons' text to "Run F1"..., with the
-    matching test updates.
+  - **"Ask Finora" button** (was named "Ask the Finora assistant") and the fraud lab's **"Run scenario"** buttons
+    (named "Run F1 APP scam" ...): **fixed after the owner approved it (21 Nov)**: the button's name is now
+    "Ask Finora", its visible label; the lab buttons read "Run F1" ... "Run F6", the start of their names.
+    The tests and recorder selectors changed only for the new names (see "Tests changed").
 - **Keyboard and focus:** every control keeps a visible 2 px teal focus ring; the skip link, the Menu button, Esc on
   the menu, drawer and dialogs, and focus-to-heading after navigation are unchanged (E2E `shell.spec.ts`).
 - **360 px:** every page in the after set at 360 px has no horizontal page scroll; wide tables scroll inside their
@@ -155,6 +154,11 @@ only) and merged in turn, updating the other branches by merging `main`.
 | `apps/api/tests/integration/test_statements.py` | `b"PBIP Bank"` becomes `b"Finora"` | the PDF header's old display text (#519) |
 | `apps/api/tests/integration/test_assistant.py`, `apps/api/tests/unit/test_assistant_discovery.py` | the wealth footer says "simulated Finora rates", "simulated by Finora" | old display text (#519) |
 | `apps/api/tests/integration/test_assistant_adversarial.py` | FAQ snippets "Insurance in Finora", "...bonds in Finora are simulated" | old display text (#519) |
+
+| `src/assistant/AssistantDrawer.test.tsx`, `e2e/journey-assistant.spec.ts` | the button name "Ask the Finora assistant" becomes "Ask Finora" | WCAG 2.5.3 label in name, owner-approved (#528) |
+| `src/pages/staff/FraudDemoLab.test.tsx` | `getAllByText("Run scenario")` becomes `getAllByText(/^Run F\d$/)` (still 5 buttons) | the buttons' visible text, WCAG 2.5.3, owner-approved (#528) |
+| `demo/record/record-walkthrough.ts`, `record-demo.ts`, `capture-slides.ts`, `capture-screens.ts` | assistant button selector `{ name: "Ask Finora", exact: true }` | recorder selectors for the new name (#528) |
+| `scripts/smoke_test.py` | the served page must contain "Finora" (was "PBIP") | old display text; it failed the v1.2.0 deploy's smoke test, which rolled back to v1.1.4 (#528) |
 
 Added (no existing test changed): `src/pages/Landing.test.tsx` (4 tests, #524). Phases 3 and 4 changed no
 test.

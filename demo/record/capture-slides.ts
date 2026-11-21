@@ -74,7 +74,7 @@ test("customer slides (Alice)", async ({ page }) => {
 
   await page.goto("/accounts");
   await ready(page, "My accounts");
-  await page.getByRole("button", { name: "Ask the Finora assistant" }).click();
+  await page.getByRole("button", { name: "Ask Finora", exact: true }).click();
   const drawer = page.getByRole("dialog", { name: "Finora assistant" });
   await expect(drawer).toBeVisible();
   await drawer.getByRole("textbox", { name: "Message" }).fill("what's my balance?");

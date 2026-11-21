@@ -24,7 +24,7 @@ test("the assistant answers a balance question from the customer's own account",
   const lastFour = masked.replace(/\D/g, "").slice(-4);
   expect(lastFour).toMatch(/^\d{4}$/);
 
-  await page.getByRole("button", { name: "Ask the Finora assistant" }).click();
+  await page.getByRole("button", { name: "Ask Finora", exact: true }).click();
   const drawer = page.getByRole("dialog", { name: "Finora assistant" });
   await expect(drawer).toBeVisible();
   await expect(drawer).toContainText("can't move money");
@@ -52,5 +52,5 @@ test("the assistant answers a balance question from the customer's own account",
 
   await drawer.getByRole("button", { name: "Close assistant" }).click();
   await expect(drawer).toBeHidden();
-  await expect(page.getByRole("button", { name: "Ask the Finora assistant" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Ask Finora", exact: true })).toBeFocused();
 });

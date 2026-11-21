@@ -121,7 +121,7 @@ test("landing assets", async ({ page }) => {
   await saveWebp(page, "insights");
   await page.goto("/accounts");
   await settle(page);
-  await page.getByRole("button", { name: /^Ask the .* assistant$/ }).click();
+  await page.getByRole("button", { name: "Ask Finora", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await quiet(page);
   await saveWebp(page, "assistant");
@@ -227,7 +227,7 @@ test("customer pages (Alice)", async ({ page }) => {
       name: "customer-assistant",
       path: "/accounts",
       then: async (p) => {
-        await p.getByRole("button", { name: /^Ask the .* assistant$/ }).click();
+        await p.getByRole("button", { name: "Ask Finora", exact: true }).click();
         await expect(p.getByRole("dialog")).toBeVisible();
       },
     },

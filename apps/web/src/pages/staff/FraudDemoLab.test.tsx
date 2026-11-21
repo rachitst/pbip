@@ -211,7 +211,7 @@ describe("fraud demo lab (TASK-081)", () => {
       "F5 Amount anomaly",
       "F6 Mule pass-through",
     ]);
-    expect(screen.getAllByText("Run scenario")).toHaveLength(5); // every card but F4
+    expect(screen.getAllByText(/^Run F\d$/)).toHaveLength(5); // every card but F4
     expect(screen.getByText(/does not forge X-Forwarded-For/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Run F1 APP scam" })).toBeDisabled();
     await enterPassword();

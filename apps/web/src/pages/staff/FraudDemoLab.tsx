@@ -278,7 +278,7 @@ function ScenarioCard({ scenario, busy, running, ready, onRun }: CardProps) {
               onRun(scenario.code);
             }}
           >
-            {running ? "Running..." : "Run scenario"}
+            {running ? "Running..." : `Run ${scenario.code}`}
           </Button>
           {!ready && <span className="text-sm muted">Enter the customer password first.</span>}
         </div>
