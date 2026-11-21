@@ -1,3 +1,4 @@
+import { Scale, TriangleAlert } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import type { SyntheticEvent } from "react";
@@ -23,6 +24,7 @@ import { EmptyState, ErrorState, LoadingState } from "../../ui/States";
 import { StatusBadge } from "../../ui/StatusBadge";
 import { FilterSelect, Metric, PERIOD_OPTIONS } from "./dashboardParts";
 import "./dashboards.css";
+import "./staff.css";
 
 /** The compliance endpoints admit COMPLIANCE_OFFICER and ADMIN (with an MFA-verified session). */
 export function canManageCompliance(me: UserOut): boolean {
@@ -76,7 +78,10 @@ export function Indicators({ data }: { data: ComplianceExceptionsOut }) {
   const chain = data.audit_chain;
   return (
     <section className="card" aria-labelledby="compliance-indicators">
-      <h2 id="compliance-indicators">Regulatory monitoring</h2>
+      <h2 id="compliance-indicators" className="panel-title">
+        <Scale className="panel-title__icon" size={20} aria-hidden="true" />
+        Regulatory monitoring
+      </h2>
       <dl className="metric-grid">
         <Metric
           label="Unresolved exceptions"
@@ -269,28 +274,30 @@ export function ExceptionsTable({
               <td>
                 <Steps item={item} />
               </td>
-              <td className="row-actions">
-                {item.status === "OPEN" && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => {
-                      onAct(item, "acknowledge");
-                    }}
-                  >
-                    Acknowledge
-                  </Button>
-                )}
-                {item.status !== "RESOLVED" && (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      onAct(item, "resolve");
-                    }}
-                  >
-                    Resolve
-                  </Button>
-                )}
+              <td>
+                <div className="staff-row-actions">
+                  {item.status === "OPEN" && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        onAct(item, "acknowledge");
+                      }}
+                    >
+                      Acknowledge
+                    </Button>
+                  )}
+                  {item.status !== "RESOLVED" && (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        onAct(item, "resolve");
+                      }}
+                    >
+                      Resolve
+                    </Button>
+                  )}
+                </div>
               </td>
             </tr>
           ))}
@@ -387,7 +394,7 @@ export function ComplianceDashboard() {
   });
   if (!allowed) {
     return (
-      <div className="page">
+      <div className="page staff-page">
         <PageHeader title="Compliance & risk" />
         <Alert tone="error">
           Access restricted: the compliance dashboard needs the Compliance Officer or Administrator
@@ -398,7 +405,7 @@ export function ComplianceDashboard() {
   }
   const data = query.data;
   return (
-    <div className="page dashboard-page">
+    <div className="page staff-page dashboard-page">
       <PageHeader
         title="Compliance & risk"
         description="Blocked payments, sign-in lockouts, audit chain failures, undelivered notifications and failed scheduled transfers to acknowledge and resolve, with service-level indicators."
@@ -428,7 +435,10 @@ export function ComplianceDashboard() {
         <>
           <Indicators data={data} />
           <section className="card" aria-labelledby="compliance-exceptions">
-            <h2 id="compliance-exceptions">Exceptions</h2>
+            <h2 id="compliance-exceptions" className="panel-title">
+              <TriangleAlert className="panel-title__icon" size={20} aria-hidden="true" />
+              Exceptions
+            </h2>
             {data.indicators.oldest_review_at && data.indicators.reviews_past_sla > 0 && (
               <p className="muted">
                 The oldest open fraud review has waited{" "}
