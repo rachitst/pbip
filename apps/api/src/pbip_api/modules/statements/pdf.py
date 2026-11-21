@@ -83,7 +83,7 @@ class PdfDocument:
             stream = b"\n".join(page.ops)
             objects.append(b"<< /Length %d >>\nstream\n%s\nendstream" % (len(stream), stream))
         info_id = len(objects) + 1
-        objects.append(b"<< /Title (%s) /Producer (PBIP) >>" % _escape(self.title))
+        objects.append(b"<< /Title (%s) /Producer (Finora) >>" % _escape(self.title))
         return _serialise(objects, info_id)
 
 

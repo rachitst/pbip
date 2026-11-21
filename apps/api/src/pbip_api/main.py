@@ -81,9 +81,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     docs = settings.docs_enabled
     app = FastAPI(
-        title="PBIP API",
+        title="Finora API",
         version=__version__,
-        description="Personal Banking Intelligence Platform - backend API",
+        description="Finora - smart personal banking - backend API",
         docs_url="/docs" if docs else None,
         redoc_url=None,
         openapi_url="/openapi.json" if docs else None,
