@@ -54,6 +54,7 @@ const QUESTIONS: {
     text: "what's my balance?",
     caption: "Balance: a read-only tool answers",
     want: "answer",
+    still: "28-assistant",
   },
   {
     text: "how much did I spend last month?",
@@ -191,7 +192,7 @@ async function present(locator: Locator): Promise<boolean> {
   }
 }
 
-test("PBIP A-to-Z walkthrough recording (item 14)", async ({ browser }) => {
+test("Finora A-to-Z walkthrough recording (item 14)", async ({ browser }) => {
   test.setTimeout(60 * 60_000);
   const outDir = resolve(process.env.DEMO_VIDEO_DIR ?? join(HERE, "out"));
   mkdirSync(outDir, { recursive: true });
@@ -213,7 +214,7 @@ test("PBIP A-to-Z walkthrough recording (item 14)", async ({ browser }) => {
   } finally {
     const video = page.video();
     await context.close();
-    const name = `pbip-walkthrough-${stamp}${failed ? "-FAILED" : ""}`;
+    const name = `finora-walkthrough-${stamp}${failed ? "-FAILED" : ""}`;
     const webm = join(outDir, `${name}.webm`);
     if (video) {
       await video.saveAs(webm);
@@ -260,8 +261,8 @@ async function story(w: Walkthrough, page: Page, outDir: string): Promise<void> 
     w.chapter("Assistant still");
     await w.step("assistant still", {}, async () => {
       await w.signInWithCode(ALICE, "/", "My accounts");
-      await page.getByRole("button", { name: "Ask the PBIP assistant" }).click();
-      const drawer = page.getByRole("dialog", { name: "PBIP assistant" });
+      await page.getByRole("button", { name: "Ask the Finora assistant" }).click();
+      const drawer = page.getByRole("dialog", { name: "Finora assistant" });
       const before = await drawer.locator(".assistant-msg--assistant").count();
       await drawer
         .getByRole("textbox", { name: "Message" })
@@ -286,7 +287,7 @@ async function story(w: Walkthrough, page: Page, outDir: string): Promise<void> 
   if (wanted("model")) await modelAccuracy(w, page, outDir);
   if (wanted("grafana")) await grafana(w, page);
   await w.step("closing", {}, async () => {
-    await w.say("End of the PBIP walkthrough", 2500);
+    await w.say("End of the Finora walkthrough", 2500);
     return ["PASS", "end"];
   });
 }
@@ -311,6 +312,7 @@ async function onboarding(w: Walkthrough, page: Page): Promise<Newcomer> {
   await w.step("customer registration", {}, async () => {
     await w.dead(() => page.goto("/"));
     await w.say("A new customer opens an account online", 1200);
+    await w.still("01-sign-in"); // user manual image
     await page.getByRole("button", { name: "Create an account" }).click();
     await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();
     await w.fast(async () => {
@@ -320,6 +322,7 @@ async function onboarding(w: Walkthrough, page: Page): Promise<Newcomer> {
       await page.getByLabel("Confirm password").fill(who.password);
       await w.hold(600);
     });
+    await w.still("02-register"); // user manual image
     const { status } = await w.api("POST", "/api/v1/auth/register", () =>
       page.getByRole("button", { name: "Create account" }).click(),
     );
@@ -340,6 +343,7 @@ async function onboarding(w: Walkthrough, page: Page): Promise<Newcomer> {
     const key = await page.getByRole("main").locator("code.secret").textContent();
     who.app = new Authenticator((key ?? "").replace(/\s/g, ""));
     await w.say("The key is blurred for this recording; it is typed into the app", 2500);
+    await w.still("05-mfa-setup"); // user manual image
     await page.getByLabel("Code from the app").fill(who.app.code());
     await w.hold(500);
     await w.api("POST", "/api/v1/auth/mfa/confirm", () =>
@@ -349,6 +353,7 @@ async function onboarding(w: Walkthrough, page: Page): Promise<Newcomer> {
     const recovery = page.getByRole("list", { name: "Recovery codes" }).getByRole("listitem");
     await expect(recovery).toHaveCount(8);
     await w.say("Eight one-time recovery codes, shown once (blurred here)", 3000);
+    await w.still("06-mfa-recovery-codes"); // user manual image
     return ["PASS", "enrolled; 8 recovery codes"];
   });
 
@@ -370,6 +375,7 @@ async function onboarding(w: Walkthrough, page: Page): Promise<Newcomer> {
       );
       const codeBox = page.getByLabel("Authenticator or recovery code");
       await expect(codeBox).toBeVisible();
+      await w.still("03-sign-in-code"); // user manual image
       const good = who.app.code();
       const wrong = String((Number(good) + 500_000) % 1_000_000).padStart(6, "0");
       await codeBox.fill(wrong);
@@ -415,6 +421,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
     const summary = await w.apiGet<{ totals?: unknown[] }>("/api/v1/accounts/summary");
     await expect(page.getByRole("heading", { name: "Total balance" })).toBeVisible();
     await w.say("Total balance across her accounts: available, ledger and on hold", 3500);
+    await w.still("07-accounts"); // user manual image
     return ["PASS", `summary totals=${(summary.totals ?? []).length}`];
   });
 
@@ -438,6 +445,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
     );
     await expect(table.getByRole("row").filter({ hasText: "Salary" }).first()).toBeVisible();
     await w.say("Search 'Salary': only her salary credits", 2500);
+    await w.still("15-transactions-search"); // user manual image
     await page.getByLabel("Money in or out").selectOption({ index: 2 });
     await page.getByLabel("Search references").fill("");
     await w.api("GET", /^\/api\/v1\/accounts\/[^/]+\/transactions$/, () =>
@@ -462,6 +470,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
     if (!file.endsWith(".pdf")) throw new Error(`downloaded ${file}, not a PDF`);
     await expect(page.getByText(`Downloaded ${file}`)).toBeVisible();
     await w.say("Downloaded the PDF statement (and a security notification is sent)", 2500);
+    await w.still("20-statements"); // user manual image
     return ["PASS", `statement ${status} ${file}`];
   });
 
@@ -476,10 +485,12 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
       await page.getByLabel("Account number").fill(externalAccountNumber());
       await page.getByLabel("Bank code").fill("EXTB0001");
     });
+    await w.still("08-payee-add"); // user manual image
     await w.api("POST", "/api/v1/payees", () =>
       page.getByRole("button", { name: "Add and check name" }).click(),
     );
     await expect(page.getByText("This account is at another bank")).toBeVisible();
+    await w.still("09-payee-added"); // user manual image
     await w.hold(1800);
     const row = page.getByRole("row").filter({ hasText: payee });
     await w.say("Edit the name: the payee must be verified again", 300);
@@ -497,6 +508,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
     );
     await expect(row).toContainText("Verified");
     await w.hold(2000);
+    await w.still("10-payees"); // user manual image
     return ["PASS", "added, edited (not verified), verified"];
   });
 
@@ -506,6 +518,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
     await w.dead(() => w.go("/accounts", "My accounts"));
     await w.fast(() => reviewTransfer(page, payee, REVIEW_AMOUNT, `Invoice ${tag()}`));
     await w.say("Review: check the details before sending", 1800);
+    await w.still("12-transfer-review"); // user manual image
     const { body: t } = await w.api<TransferOut>(
       "POST",
       "/api/v1/transfers",
@@ -515,6 +528,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
     if (t.status === "PENDING_REVIEW") {
       held = t;
       await expect(page.getByRole("status").filter({ hasText: "being reviewed" })).toBeVisible();
+      await w.still("14b-transfer-held"); // user manual image
       await w.say(
         "Held for review: the money is on hold. She is never told the score or reasons",
         3500,
@@ -557,6 +571,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
     const dialog = page.getByRole("dialog", { name: "Confirm it's you" });
     await expect(dialog).toContainText(inr(amount));
     await w.say("Step-up: the bank asks for her authenticator code before any money moves", 2500);
+    await w.still("13-transfer-step-up"); // user manual image
     const code = await w.dead(() => Promise.resolve(staffCode(ALICE)));
     await dialog.getByLabel("Authenticator code").fill(code);
     const { body: after } = await w.api<TransferOut>("POST", /\/step-up$/, () =>
@@ -565,6 +580,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
     if (after.status !== "POSTED") throw new Error(`step-up gave ${after.status}`);
     await expect(page.getByRole("status").filter({ hasText: "Sent" })).toContainText(inr(amount));
     await w.say("Code accepted: posted to the ledger. This message is her receipt", 3500);
+    await w.still("14-transfer-sent"); // user manual image
     return ["PASS", `amount=${inr(amount)} PENDING_STEP_UP -> ${after.status}`];
   });
 
@@ -580,12 +596,14 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
     const dialog = page.getByRole("dialog", { name: "Check and confirm" });
     await expect(dialog).toBeVisible();
     await w.hold(1200);
+    await w.still("16-bill-review"); // user manual image
     const { body } = await w.api<{ status: string }>("POST", "/api/v1/bills/pay", () =>
       dialog.getByRole("button", { name: "Pay bill" }).click(),
     );
     if (body.status === "POSTED") {
       await expect(page.getByRole("heading", { name: "Bill paid" })).toBeVisible();
       await w.say("Bill paid: a receipt with the clearing reference", 2800);
+      await w.still("17-bill-paid"); // user manual image
       return ["PASS", "status=POSTED"];
     }
     if (body.status === "PENDING_REVIEW") {
@@ -610,6 +628,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
       await form.getByLabel("Reference (optional)").fill(`Gym ${tag()}`);
     });
     await w.hold(800);
+    await w.still("18-scheduled-new"); // user manual image
     const { status } = await w.api("POST", "/api/v1/transfers/scheduled", () =>
       form.getByRole("button", { name: "Schedule transfer" }).click(),
     );
@@ -617,6 +636,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
       page.getByRole("status").filter({ hasText: "The first payment is on" }),
     ).toBeVisible();
     await w.say("Scheduled monthly. It can be paused, resumed or cancelled", 2500);
+    await w.still("19-scheduled-list"); // user manual image
     return ["PASS", `scheduled ${status}`];
   });
 
@@ -627,6 +647,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
     await bell.click();
     const tray = page.getByRole("dialog", { name: "Notifications tray" });
     await expect(tray).toBeVisible();
+    await w.still("29-notifications"); // user manual image
     await w.hold(3000);
     const mark = tray.getByRole("button", { name: "Mark all as read" });
     if (await mark.isVisible()) {
@@ -650,6 +671,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
     );
     await w.reveal(page.getByRole("heading", { name: "Spending by Category" }));
     await w.say("Spending by category, and month-over-month trends", 2600);
+    await w.still("21-insights"); // user manual image
     await w.reveal(page.getByRole("heading", { name: "Month-over-Month Trends" }));
     await w.hold(1800);
     return ["PASS", `health score=${body.overall_score ?? "?"}`];
@@ -677,6 +699,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
     if (await w.dead(() => present(offers))) {
       await w.reveal(offers);
       await w.say("Loans for you: recommended from her balance and spending", 3000);
+      await w.still("22b-loans-for-you"); // user manual image
     } else {
       w.pending("loan recommendations (Loans for you)", "no 'Loans for you' section on this build");
     }
@@ -718,6 +741,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
     );
     await expect(page.getByRole("heading", { name: "Loan approved and disbursed" })).toBeVisible();
     await w.say("Approved and disbursed into her account at once", 2500);
+    await w.still("22-loans"); // user manual image
     const close = page.getByRole("button", { name: "Done" });
     if (await close.isVisible()) await close.click();
     await w.reveal(page.getByRole("heading", { name: "Your loans" }));
@@ -732,6 +756,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
   await w.step("fixed deposit booking", {}, async () => {
     await w.go("/wealth", "Wealth");
     await w.say("Wealth: her portfolio, fixed deposits and the product catalogue", 2500);
+    await w.still("23-wealth"); // user manual image
     const book = page.getByRole("button", { name: "Book this deposit" }).first();
     await w.reveal(book);
     await book.click();
@@ -742,11 +767,13 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
       expect(dialog.getByRole("region", { name: "Maturity preview" })).toBeVisible(),
     );
     await w.say("A live maturity preview: rate, maturity date and interest", 2500);
+    await w.still("24-fd-book"); // user manual image
     const { status } = await w.api("POST", "/api/v1/wealth/fixed-deposits/book", () =>
       dialog.getByRole("button", { name: "Confirm and book" }).click(),
     );
     await expect(page.getByRole("region", { name: "Booking receipt" })).toBeVisible();
     await w.say("Fixed deposit booked, with a reference", 2500);
+    await w.still("25-fd-booked"); // user manual image
     await page.getByRole("button", { name: "Done" }).click();
     return ["PASS", `booked ${status}`];
   });
@@ -782,6 +809,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
     await w.reveal(table);
     if (await table.getByText("Suits your risk band").count()) {
       await w.say("Including whether each product suits her risk band", 3000);
+      await w.still("26b-compare-suitability"); // user manual image
     } else {
       await w.hold(3000);
     }
@@ -793,6 +821,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
     const heading = page.getByRole("heading", { name: "Recommended for you" });
     await w.reveal(heading);
     await w.still("27b-carousel-loan-card");
+    await w.still("27b-recommendations-card-actions"); // user manual image
     const why = page.getByRole("button", {
       name: "Why this was recommended for you",
     });
@@ -802,14 +831,15 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
     }
     await why.first().click();
     await w.say("Recommendations always say why: the reasons come from her own data", 3500);
+    await w.still("27-recommendations"); // user manual image
     return ["PASS", `${await why.count()} recommendations`];
   });
 
-  w.chapter("The PBIP assistant on Groq", true);
+  w.chapter("The Finora assistant on Groq", true);
   await w.step("assistant questions", { highlight: true }, async () => {
-    await w.say("Ask PBIP: read-only tools, answers worded by a model on Groq", 300);
-    await page.getByRole("button", { name: "Ask the PBIP assistant" }).click();
-    const drawer = page.getByRole("dialog", { name: "PBIP assistant" });
+    await w.say("Ask Finora: read-only tools, answers worded by a model on Groq", 300);
+    await page.getByRole("button", { name: "Ask the Finora assistant" }).click();
+    const drawer = page.getByRole("dialog", { name: "Finora assistant" });
     await expect(drawer).toBeVisible();
     const engines: string[] = [];
     for (const q of QUESTIONS) {
@@ -847,6 +877,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
   await w.step("profile and security", {}, async () => {
     await w.go("/profile", "Profile & security");
     await w.say("Profile and security: details, two-step sign-in, devices, password", 2500);
+    await w.still("30-profile"); // user manual image
     await w.reveal(page.getByRole("heading", { name: "Your devices" }));
     await w.hold(2000);
     return ["PASS", "profile shown"];
@@ -882,6 +913,7 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
     if (await w.dead(() => present(analytics))) {
       await w.reveal(analytics);
       await w.say("And whether her app usage feeds the bank's analytics", 2800);
+      await w.still("30b-analytics-consent"); // user manual image
       return ["PASS", "recommendations and analytics consent shown"];
     }
     w.pending("analytics consent", "no 'App usage analytics' section on this build");
@@ -904,7 +936,9 @@ async function customerBanking(w: Walkthrough, page: Page): Promise<TransferOut 
   await w.step("phone layout (390x844)", { frame: PHONE }, async () => {
     await w.dead(() => w.go("/accounts", "My accounts"));
     await w.say("On a phone: one column, the menu folds away", 3000);
+    await w.still("m02-accounts"); // user manual image
     await page.getByRole("button", { name: "Menu" }).click();
+    await w.still("m03-menu"); // user manual image
     await w.hold(3000);
     await page.getByRole("button", { name: "Menu" }).click();
     await w.hold(1200);
@@ -961,6 +995,7 @@ async function investing(w: Walkthrough, page: Page): Promise<void> {
     const min = await hintAmount(page, "Amount");
     await page.getByLabel("Amount", { exact: true }).fill(Math.max(min, 5000).toFixed(2));
     await w.still("23b-invest");
+    await w.still("23b-wealth-invest"); // user manual image
     // A fund can also be bought every month: the SIP form sits under the order (the order's
     // receipt replaces both, so the SIP comes first).
     const sip = page.getByRole("heading", { name: "Start a monthly SIP" });
@@ -1022,6 +1057,7 @@ async function investing(w: Walkthrough, page: Page): Promise<void> {
     await w.reveal(holdings);
     await w.say("Her holdings, with today's value and gain or loss", 2500);
     await w.still("23c-holdings");
+    await w.still("23c-wealth-holdings"); // user manual image
     let detail = "holdings shown";
     if (sold.name) {
       const units = page.getByLabel(`Units of ${sold.name} to sell`);
@@ -1041,6 +1077,7 @@ async function investing(w: Walkthrough, page: Page): Promise<void> {
     await expect(page.getByRole("button", { name: "Cancel SIP" }).first()).toBeVisible();
     await w.say("Her SIPs: each can be cancelled; every monthly run is listed", 2500);
     await w.still("23d-sip");
+    await w.still("23e-fund-sip"); // user manual image
     return ["PASS", detail];
   });
 }
@@ -1074,6 +1111,7 @@ async function insuranceQuote(w: Walkthrough, page: Page): Promise<void> {
     );
     await expect(page.getByRole("heading", { name: "Application recorded" })).toBeVisible();
     await w.say("Application recorded (simulated: no policy is issued)", 2500);
+    await w.still("23d-insurance-apply"); // user manual image
     return ["PASS", `quote ${body.outcome ?? "?"}; applied`];
   });
 }
@@ -1132,6 +1170,7 @@ async function decide(
   await page.getByRole("button", { name: action, exact: true }).click();
   const confirm = page.getByRole("dialog");
   await expect(confirm).toBeVisible();
+  if (action === "Release") await w.still("45-fraud-release-confirm"); // user manual image
   await w.hold(900);
   await w.api("POST", /\/decision$/, () =>
     confirm.getByRole("button", { name: action, exact: true }).click(),
@@ -1158,6 +1197,7 @@ async function staffAnalyst(
       "Security monitoring: open investigations, login anomalies, high-risk customers",
       3000,
     );
+    await w.still("42-security-monitoring"); // user manual image
     await w.reveal(page.getByRole("heading", { name: "Login anomalies" }));
     await w.hold(2200);
     await w.reveal(page.getByRole("heading", { name: "Recent fraud events" }));
@@ -1173,6 +1213,7 @@ async function staffAnalyst(
       300,
     );
     await page.getByLabel("Customer password").fill(w.password);
+    await w.still("47-fraud-demo-lab"); // user manual image
     await w.say("F1, APP scam: a brand-new payee, then INR 30,000.00", 300);
     lab.F1 = await runLab(w, page, "F1", "APP scam", 1);
     const t = lab.F1.transfers[0];
@@ -1184,6 +1225,7 @@ async function staffAnalyst(
     if (!t || t.status !== "PENDING_REVIEW")
       throw new Error(`F1 gave ${t?.status ?? "no transfer"}`);
     await w.say("Held for review. The lab shows the score, decision and reasons", 3500);
+    await w.still("47b-fraud-demo-lab-result"); // user manual image
     return ["PASS", `F1 status=${t.status}`];
   });
 
@@ -1234,6 +1276,7 @@ async function staffAnalyst(
   await w.step("fraud alert queue", {}, async () => {
     await w.go("/staff/fraud", "Fraud alerts");
     await w.say("The alert queue: newest first, with the main reason and the risk", 3500);
+    await w.still("43-fraud-queue"); // user manual image
     return ["PASS", "queue shown"];
   });
 
@@ -1253,6 +1296,7 @@ async function staffAnalyst(
         );
         await w.reveal(page.getByRole("heading", { name: "Transaction" }));
         await w.say("Scored by: the exact model version, so the decision can be reproduced", 2500);
+        await w.still("44-fraud-alert"); // user manual image
         await w.reveal(page.getByRole("heading", { name: "Decision" }));
         await w.say("The customer did not recognise the payee: reject as fraud", 300);
         const status = await decide(
@@ -1293,6 +1337,7 @@ async function staffAnalyst(
     const status = await decide(w, page, alert, "Release", "customer confirmed by phone");
     if (status !== "POSTED") throw new Error(`after RELEASE the transfer is ${status}`);
     await w.say("Released: the held money is captured and the payment posted", 2200);
+    await w.still("46-fraud-alert-resolved"); // user manual image
     return ["PASS", `score=${alert.risk_score} reasons=${codes(alert)} -> ${status}`];
   });
 
@@ -1340,6 +1385,7 @@ async function staffAnalyst(
       w.go("/staff/fraud-dashboard", "Fraud dashboard"),
     );
     await w.say("The fraud dashboard: payments scored, hold and block rates, scoring time", 3000);
+    await w.still("42b-fraud-dashboard"); // user manual image
     await w.reveal(page.getByRole("heading", { name: "Decisions over time" }));
     await w.say("Decisions per day, and the hold and block rates", 2800);
     await w.reveal(page.getByRole("heading", { name: "Risk score distribution" }));
@@ -1366,6 +1412,7 @@ async function staffCompliance(w: Walkthrough, page: Page): Promise<void> {
       "Compliance & risk: regulatory monitoring tiles and the exceptions to decide",
       3500,
     );
+    await w.still("50-compliance-dashboard"); // user manual image
     const exceptions = page.getByRole("heading", { name: "Exceptions" });
     await w.reveal(exceptions);
     const ack = page.getByRole("button", { name: "Acknowledge" });
@@ -1381,6 +1428,7 @@ async function staffCompliance(w: Walkthrough, page: Page): Promise<void> {
       dialog.getByRole("button", { name: "Acknowledge" }).click(),
     );
     await w.say("Acknowledged with a reason: stored in the hash-chained audit log", 2500);
+    await w.still("51-compliance-acknowledge"); // user manual image
     const kind = page.getByLabel("Kind", { exact: true });
     const kinds = await kind.locator("option").allTextContents();
     if (
@@ -1390,6 +1438,7 @@ async function staffCompliance(w: Walkthrough, page: Page): Promise<void> {
       await w.dead(() => page.evaluate(() => window.scrollTo(0, 0)));
       await kind.selectOption({ label: "Scheduled transfer failure" });
       await w.say("New kinds: failed scheduled transfers and undelivered notifications", 2500);
+      await w.still("50b-compliance-system-exceptions"); // user manual image
       await kind.selectOption({ label: "Undelivered notification" });
       await w.hold(2000);
       await kind.selectOption({ index: 0 });
@@ -1413,6 +1462,7 @@ async function staffCompliance(w: Walkthrough, page: Page): Promise<void> {
     await expect(page.getByText("Hash chain intact.")).toBeVisible();
     if (!body.valid) throw new Error("the hash chain is not valid");
     await w.say(`Hash chain intact: ${body.checked} entries verified, no tampering`, 3500);
+    await w.still("52-audit-log-verified"); // user manual image
     return ["PASS", `valid=${body.valid} checked=${body.checked}`];
   });
   await w.signOut();
@@ -1430,17 +1480,20 @@ async function staffRelationshipManager(w: Walkthrough, page: Page): Promise<voi
 
   await w.step("RM insights with the outreach log", {}, async () => {
     await w.say("Customer insights: churn risk and the best product match, per customer", 3000);
+    await w.still("60-rm-insights"); // user manual image
     const open = page.getByRole("button", { name: /^Open / }).first();
     await w.api("GET", /^\/api\/v1\/insights\/customers\/[^/]+$/, () => open.click());
     const flyout = page.getByRole("dialog");
     await expect(flyout.getByRole("heading", { name: "Churn risk" })).toBeVisible();
     await w.say("Churn risk, financial health and eligible products, with reasons", 3000);
+    await w.still("61-rm-customer-flyout"); // user manual image
     const profile = flyout.getByRole("heading", {
       name: "Behavioural profile",
     });
     if (await w.dead(() => present(profile))) {
       await w.reveal(profile);
       await w.say("The behavioural profile: product interests from app usage (with consent)", 3000);
+      await w.still("61b-rm-behaviour-profile"); // user manual image
     } else {
       w.pending(
         "behaviour profile in the customer flyout",
@@ -1470,6 +1523,7 @@ async function staffRelationshipManager(w: Walkthrough, page: Page): Promise<voi
       "Behavioural analytics: segments, spending patterns, product affinity, engagement",
       3000,
     );
+    await w.still("62-behavioural-analytics"); // user manual image
     await w.reveal(page.getByRole("heading", { name: "Product affinity" }));
     await w.hold(1800);
     await w.reveal(page.getByRole("heading", { name: "Engagement" }));
@@ -1504,6 +1558,7 @@ async function staffAdmin(w: Walkthrough, page: Page, newcomer: Newcomer | null)
     );
     await expect(create.getByRole("status")).toContainText(`Created ${email} as Fraud analyst.`);
     await w.say("Created: they must set up an authenticator before using staff tools", 2500);
+    await w.still("70-administration"); // user manual image
     return ["PASS", `create ${status}`];
   });
 

@@ -96,9 +96,9 @@ def render(report: str) -> str:
         sections.append(f'<section id="{anchor}"><h2>{html.escape(title)}</h2>\n{body}</section>')
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
-        "<title>PBIP fraud model accuracy</title>"
+        "<title>Finora fraud model accuracy</title>"
         f"<style>{STYLE}</style></head><body><main>"
-        "<h1>PBIP fraud model accuracy</h1>"
+        "<h1>Finora fraud model accuracy</h1>"
         '<p class="lede">From docs/ml/model-evaluation-report-v1.md. All data is synthetic '
         "(seeded generator): the numbers show the models separate the planted patterns; they "
         "are not an estimate on real bank traffic.</p>"

@@ -74,21 +74,21 @@ cd ~/Desktop/Rachit/pbip/apps/web && npm ci && npx playwright install chromium
 
 ```bash
 cd ~/Desktop/Rachit/pbip
-OUT=~/Desktop/Rachit/pbip-video/raw
+OUT=~/Desktop/Rachit/finora-video/raw
 /tmp/pbip-video-tools/bin/python demo/record/render-model-report.py "$OUT"   # writes $OUT/model-report/
 
 cd apps/web
 DEMO_VIDEO_DIR="$OUT" npx playwright test -c ../../demo/record/walkthrough.config.ts
-# -> $OUT/pbip-walkthrough-<UTC time>.webm and .timeline.json; the run prints PASS/DIFF/PENDING/FAIL
+# -> $OUT/finora-walkthrough-<UTC time>.webm and .timeline.json; the run prints PASS/DIFF/PENDING/FAIL
 
 cd ../..
 /tmp/pbip-video-tools/bin/python demo/record/edit-walkthrough.py \
-  "$OUT"/pbip-walkthrough-<UTC time>.timeline.json --out ~/Desktop/Rachit/pbip-video
+  "$OUT"/finora-walkthrough-<UTC time>.timeline.json --out ~/Desktop/Rachit/finora-video
 ```
 
-The editor writes `pbip-walkthrough.mp4` (H.264), `.webm` (VP9), `.chapters.txt` (YouTube style) and `.srt`
+The editor writes `finora-walkthrough.mp4` (H.264), `.webm` (VP9), `.chapters.txt` (YouTube style) and `.srt`
 (the captions on the edited clock, usable as a voice-over script), and the same four files for
-`pbip-walkthrough-highlights`. `--plan-only` prints the lengths without encoding; `--no-webm` skips the slow
+`finora-walkthrough-highlights`. `--plan-only` prints the lengths without encoding; `--no-webm` skips the slow
 VP9 pass; `--highlight-cap` sets the most seconds one step may take in the highlights (default 22).
 
 Environment: `PBIP_DEMO_PASSWORD` (else the `APP_ENV=local` constant in `scripts/seed_dev.py`),
@@ -106,7 +106,7 @@ ranges by name:
 ```bash
 python demo/record/merge-takes.py "a.timeline.json::::fixed deposit booking" \
   "b.timeline.json::investing: a fund, a monthly SIP and a stock::" merged.timeline.json
-python demo/record/edit-walkthrough.py merged.timeline.json --out ~/Desktop/Rachit/pbip-video
+python demo/record/edit-walkthrough.py merged.timeline.json --out ~/Desktop/Rachit/finora-video
 ```
 
 The takes' videos must sit next to the merged timeline. `DEMO_STILLS_DIR` also saves the docs stills
@@ -136,3 +136,25 @@ demo script documents as an alternative (for example a transfer held instead of 
 assistant answering without the language model), and the run continues. The step-up amount is worked out
 from Alice's own 90-day transfer history, because every rehearsal moves the `AMOUNT_SPIKE` baseline.
 Passwords, codes, keys and tokens are never printed.
+
+## The demo cut and the slide screenshots (Finora, v1.2.0)
+
+- **User-manual images:** the walkthrough saves a still for each screen the user manual shows when
+  `DEMO_STILLS_DIR` is set (`w.still("<manual image name>")`, cut from the video). Copy them over
+  `docs/user-manual/images/` after a release recording.
+- **Demo cut:** `build-demo-cut.py` builds the 15-clip, 4:40.5 presentation cut from the edited walkthrough.
+  Each clip is found by its first and last caption in the walkthrough's `.srt`; a short clip holds its last
+  frame, a long one is trimmed; 0.25 s fades; 1920x1080 H.264, no audio; a `.json` lists every clip's
+  window in the source and its start in the cut.
+
+  ```bash
+  /tmp/pbip-video-tools/bin/python demo/record/build-demo-cut.py \
+    ~/Desktop/Rachit/finora-video/finora-walkthrough.mp4 --out ~/Desktop/Rachit/finora-video/finora-demo-cut.mp4
+  ```
+- **Slides:** `capture-slides.ts` (`slides.config.ts`) takes the six 1920x1080 slide screenshots (accounts,
+  the held-for-review result, the fraud alert with SHAP, the assistant answering a balance question,
+  spending and health, the verified audit log) into `SLIDES_DIR` (default
+  `~/Desktop/Rachit/finora-video/slides`). It sends one INR 35,000.00 transfer to a new payee for the
+  held-for-review slide.
+- **Before/after screenshots** of every page: `capture-screens.ts` (`capture.config.ts`, see
+  `docs/design/ui-redesign-progress.md`).
