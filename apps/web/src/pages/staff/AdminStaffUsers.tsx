@@ -1,3 +1,4 @@
+import { LockOpen, UserPlus } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import type { SyntheticEvent } from "react";
@@ -52,7 +53,10 @@ export function CreateStaffUser() {
 
   return (
     <section className="card admin-panel" aria-labelledby="admin-create-user">
-      <h2 id="admin-create-user">Create a staff user</h2>
+      <h2 id="admin-create-user" className="panel-title">
+        <UserPlus className="panel-title__icon" size={20} aria-hidden="true" />
+        Create a staff user
+      </h2>
       <form onSubmit={submit} noValidate>
         <div className="field-row">
           <Field label="Work e-mail">
@@ -215,7 +219,10 @@ export function LockoutPanel() {
   const data = status.data;
   return (
     <section className="card admin-panel" aria-labelledby="admin-lockout">
-      <h2 id="admin-lockout">Sign-in lockout</h2>
+      <h2 id="admin-lockout" className="panel-title">
+        <LockOpen className="panel-title__icon" size={20} aria-hidden="true" />
+        Sign-in lockout
+      </h2>
       <form onSubmit={inspect} className="admin-inline-form" noValidate>
         <Field label="User id" error={inputError}>
           {(control) => (

@@ -168,7 +168,7 @@ def _header(pdf: PdfDocument, s: Statement) -> float:
     def money(minor: int) -> str:
         return format_minor(minor, s.currency)
 
-    pdf.text(_LEFT, _TOP, "PBIP Bank", 18, "bold")
+    pdf.text(_LEFT, _TOP, "Finora", 18, "bold")
     pdf.text(_LEFT, _TOP - 16, "Account statement", 11)
     y = _TOP - 44
     for label, value in (
@@ -208,7 +208,7 @@ def _footer(pdf: PdfDocument, s: Statement, page: int) -> None:
 
 def render_pdf(statement: Statement) -> bytes:
     s = statement
-    pdf = PdfDocument(f"PBIP statement {s.account_masked} {s.start} to {s.end}")
+    pdf = PdfDocument(f"Finora statement {s.account_masked} {s.start} to {s.end}")
     pdf.add_page()
     page = 1
     y = _table_head(pdf, _header(pdf, s))

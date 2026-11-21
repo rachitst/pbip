@@ -111,8 +111,8 @@ def test_product_list_by_category_quotes_the_catalogues() -> None:
         "INR 500.00, can be bought online at a simulated price."
     ) in investments  # ADR-0058
     assert investments.endswith(
-        "Wealth catalogue 2026-11-v1, 2026-11-v2: rates are indicative, simulated PBIP rates. "
-        "Fund prices are simulated by PBIP, not market data. Products not sold online are "
+        "Wealth catalogue 2026-11-v1, 2026-11-v2: rates are indicative, simulated Finora rates. "
+        "Fund prices are simulated by Finora, not market data. Products not sold online are "
         "listed for comparison only."
     )
     deposits = discovery.product_list(ProductCategory.DEPOSITS, LOAN_PRODUCTS, wealth)

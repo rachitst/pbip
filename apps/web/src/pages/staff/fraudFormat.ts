@@ -40,6 +40,13 @@ export const SOURCE_LABEL: Record<FraudReason["source"], string> = {
   ANOMALY: "Unusual pattern",
 };
 
+/** How each source is drawn: its own badge and bar colour, always next to its label (not colour alone). */
+export const SOURCE_STYLE: Record<FraudReason["source"], { badge: string; meter: string }> = {
+  RULE: { badge: "info", meter: "info" },
+  MODEL: { badge: "model", meter: "accent" },
+  ANOMALY: { badge: "warning", meter: "warning" },
+};
+
 /** Feature names the anomaly explainer cites, in words an analyst reads at a glance. */
 const FEATURE_WORDS: Record<string, string> = {
   ratio_to_avg_amount: "Amount compared with the 30-day average",

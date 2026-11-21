@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { ArrowLeft, ArrowLeftRight, Gavel, ShieldAlert, UserRound } from "lucide-react";
 import { Link, useParams } from "react-router";
 import { api } from "../../api/client";
 import type { AlertDetail } from "../../api/client";
@@ -19,6 +20,7 @@ import {
   ALERT_STATUS_LABEL,
   DECISION_LABEL,
   SOURCE_LABEL,
+  SOURCE_STYLE,
   barWidths,
   contributionLabel,
   parseReasons,
@@ -27,6 +29,7 @@ import {
   riskTone,
 } from "./fraudFormat";
 import type { FraudReason } from "./fraudFormat";
+import "./staff.css";
 
 type Action = "RELEASE" | "REJECT";
 
@@ -50,7 +53,7 @@ function ReasonList({ reasons }: { reasons: FraudReason[] }) {
       {reasons.map((r) => (
         <li key={`${r.source}-${r.code}`} className="reason">
           <div className="reason__head">
-            <span className={`badge badge--${r.source === "RULE" ? "info" : "neutral"}`}>
+            <span className={`badge badge--${SOURCE_STYLE[r.source].badge}`}>
               {SOURCE_LABEL[r.source]}
             </span>
             <span className="reason__text">{plainMessage(r)}</span>
@@ -58,7 +61,7 @@ function ReasonList({ reasons }: { reasons: FraudReason[] }) {
           {r.contribution !== null && (
             <div className="reason__bar">
               <progress
-                className={`meter meter--${r.source === "RULE" ? "info" : "warning"}`}
+                className={`meter meter--${SOURCE_STYLE[r.source].meter}`}
                 max={100}
                 value={widths.get(r) ?? 0}
                 aria-label={`${plainMessage(r)}: ${contributionLabel(r)}`}
@@ -123,7 +126,7 @@ export function FraudAlert() {
 
   if (!allowed) {
     return (
-      <div className="page">
+      <div className="page staff-page">
         <PageHeader title="Fraud alert" />
         <Alert tone="error">
           Access restricted: fraud alerts need the Fraud Analyst or Administrator role.
@@ -134,7 +137,7 @@ export function FraudAlert() {
   if (alert.isPending) return <LoadingState label="Loading the alert..." />;
   if (alert.isError) {
     return (
-      <div className="page">
+      <div className="page staff-page">
         <ErrorState
           message={errorMessage(alert.error, "Could not load this alert.")}
           onRetry={() => {
@@ -150,25 +153,31 @@ export function FraudAlert() {
   const open = a.status === "OPEN";
   const status = ALERT_STATUS_LABEL[a.status] ?? { label: a.status, tone: "neutral" as const };
   return (
-    <div className="page">
+    <div className="page staff-page">
       <PageHeader
         title={`Risk ${a.risk_score} of 100: ${DECISION_LABEL[a.decision] ?? a.decision}`}
         description="Every point of the score is explained below."
         actions={<StatusBadge status={status} />}
       />
-      <p>
-        <Link to="/staff/fraud">← Back to alerts</Link>
-      </p>
+      <Link className="fraud-back" to="/staff/fraud">
+        <ArrowLeft size={16} aria-hidden="true" />
+        Back to alerts
+      </Link>
       {decide.isSuccess && <Alert tone="success">Decision recorded.</Alert>}
       <div className="fraud-grid">
         <section className="card fraud-panel" aria-labelledby="why">
-          <h2 id="why">Why it was flagged</h2>
-          <progress
-            className={`meter meter--${riskTone(a.risk_score)}`}
-            max={100}
-            value={a.risk_score}
-            aria-label={`Risk score ${a.risk_score} of 100`}
-          />
+          <h2 id="why" className="panel-title">
+            <ShieldAlert className="panel-title__icon" size={20} aria-hidden="true" />
+            Why it was flagged
+          </h2>
+          <div className="risk-scale">
+            <progress
+              className={`meter meter--${riskTone(a.risk_score)}`}
+              max={100}
+              value={a.risk_score}
+              aria-label={`Risk score ${a.risk_score} of 100`}
+            />
+          </div>
           {reasons.length === 0 ? (
             <p className="muted">No reasons were recorded for this decision.</p>
           ) : (
@@ -181,7 +190,10 @@ export function FraudAlert() {
         </section>
         <div className="fraud-stack">
           <section className="card fraud-panel" aria-labelledby="customer">
-            <h2 id="customer">Customer</h2>
+            <h2 id="customer" className="panel-title">
+              <UserRound className="panel-title__icon" size={20} aria-hidden="true" />
+              Customer
+            </h2>
             {a.customer ? (
               <dl className="details">
                 <dt>Name</dt>
@@ -198,14 +210,20 @@ export function FraudAlert() {
             )}
           </section>
           <section className="card fraud-panel" aria-labelledby="txn">
-            <h2 id="txn">Transaction</h2>
+            <h2 id="txn" className="panel-title">
+              <ArrowLeftRight className="panel-title__icon" size={20} aria-hidden="true" />
+              Transaction
+            </h2>
             <Context alert={a} />
           </section>
         </div>
       </div>
       {open ? (
         <section className="card fraud-panel fraud-decision" aria-labelledby="decide">
-          <h2 id="decide">Decision</h2>
+          <h2 id="decide" className="panel-title">
+            <Gavel className="panel-title__icon" size={20} aria-hidden="true" />
+            Decision
+          </h2>
           <Field label="Note (optional, kept in the audit trail)">
             {(control) => (
               <textarea

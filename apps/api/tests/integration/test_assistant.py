@@ -700,8 +700,8 @@ def test_products_are_listed_from_the_real_catalogues_with_their_exact_rates(
             "- “Sovereign gold bond (illustrative)”: moderate risk, fixed coupon 2.50% a year "
             "plus the gold price at redemption, 96 months, locked in for 60 months, not sold "
             "online.",
-            "Wealth catalogue 2026-11-v1, 2026-11-v2: rates are indicative, simulated PBIP "
-            "rates. Fund prices are simulated by PBIP, not market data. Products not sold "
+            "Wealth catalogue 2026-11-v1, 2026-11-v2: rates are indicative, simulated Finora "
+            "rates. Fund prices are simulated by Finora, not market data. Products not sold "
             "online are listed for comparison only.",
         ]
     )
