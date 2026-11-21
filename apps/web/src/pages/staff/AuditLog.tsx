@@ -1,3 +1,4 @@
+import { ShieldCheck } from "lucide-react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import { Fragment, useState } from "react";
 import { api } from "../../api/client";
@@ -9,6 +10,7 @@ import { Alert } from "../../ui/Alert";
 import { Button } from "../../ui/Button";
 import { PageHeader } from "../../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../../ui/States";
+import "./staff.css";
 
 /** Page size for the keyset-paginated log (newest first; `before_seq` fetches older pages). */
 export const AUDIT_PAGE_SIZE = 50;
@@ -103,7 +105,7 @@ export function AuditLog() {
 
   if (!hasComplianceRole) {
     return (
-      <div className="page">
+      <div className="page staff-page">
         <PageHeader title="Compliance audit log" />
         <Alert tone="error">
           Access restricted: The compliance audit log requires the Compliance Officer or
@@ -118,7 +120,7 @@ export function AuditLog() {
   const brokenEntryLoaded = brokenSeq !== null && items.some((entry) => entry.seq === brokenSeq);
 
   return (
-    <div className="page">
+    <div className="page staff-page">
       <PageHeader
         title="Compliance audit log"
         description="Tamper-evident chronological audit trail with SHA-256 cryptographic hash-chain verification."
@@ -130,6 +132,7 @@ export function AuditLog() {
               verifyMutation.mutate();
             }}
           >
+            <ShieldCheck size={16} aria-hidden="true" />
             Verify hash chain
           </Button>
         }
@@ -191,7 +194,7 @@ export function AuditLog() {
 
       {items.length > 0 && (
         <div
-          className="entries"
+          className="entries table-card"
           tabIndex={0}
           role="region"
           aria-label="Compliance audit logs table"
@@ -313,6 +316,7 @@ export function AuditLog() {
       {logsQuery.hasNextPage && (
         <Button
           variant="secondary"
+          className="staff-more"
           loading={logsQuery.isFetchingNextPage}
           onClick={() => {
             void logsQuery.fetchNextPage();
