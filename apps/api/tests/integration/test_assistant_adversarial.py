@@ -645,8 +645,8 @@ def test_cross_customer_sql_and_override_probes_around_insurance_are_refused(
 @pytest.mark.parametrize(
     ("message", "topic_text"),
     [
-        ("is insurance real or simulated?", "Insurance in PBIP"),
-        ("can I buy stocks here?", "Mutual funds, stocks and bonds in PBIP are simulated"),
+        ("is insurance real or simulated?", "Insurance in Finora"),
+        ("can I buy stocks here?", "Mutual funds, stocks and bonds in Finora are simulated"),
         ("what can you do?", "I only read"),
         ("how do I add a payee?", "Add a payee under Payees"),
     ],

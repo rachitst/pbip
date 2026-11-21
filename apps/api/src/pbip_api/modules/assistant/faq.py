@@ -209,7 +209,7 @@ def _loan_line(index: int) -> str:
 def _loans(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAnswer:
     offered = "; ".join(_loan_line(i) for i in range(len(LOAN_PRODUCTS)))
     return FaqAnswer(
-        f"PBIP offers a {offered}. Rates are indicative and subject to eligibility. Eligibility "
+        f"Finora offers a {offered}. Rates are indicative and subject to eligibility. Eligibility "
         "uses your own account history: your regular monthly income, your spending, your balance "
         f"and the loan repayments you already make. All repayments, including the new EMI, must "
         f"stay within {MAX_DTI:.0%} of your income, your spending plus the new EMI within "
@@ -248,7 +248,7 @@ def _fixed_deposits(_facts: FaqFacts, deposits: Sequence[WealthProductOut]) -> F
         + "; ".join(_deposit_line(p) for p in bookable)
         + ". "
         + early
-        + "Rates are indicative, simulated PBIP rates, not a real bank's offer.",
+        + "Rates are indicative, simulated Finora rates, not a real bank's offer.",
         "/wealth",
     )
 
@@ -266,7 +266,7 @@ def _accounts(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAns
 def _payees(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAnswer:
     return FaqAnswer(
         "Add a payee under Payees with their name exactly as on their bank account, their "
-        "account number and bank code. For an account at PBIP the name is checked against the "
+        "account number and bank code. For an account at Finora the name is checked against the "
         "account holder; an account at another bank is verified without a name check. You can "
         "pay a payee once it is verified, give it a nickname, edit it or remove it. A large "
         "payment to a payee you added recently may ask for a code from your authenticator app.",
@@ -298,7 +298,7 @@ def _bill_payments(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> F
 
 def _investments(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAnswer:
     return FaqAnswer(
-        "Mutual funds, stocks and bonds in PBIP are simulated: prices, returns and any holdings "
+        "Mutual funds, stocks and bonds in Finora are simulated: prices, returns and any holdings "
         "are illustrative, no real securities are bought or sold, and nothing is traded on a "
         "real market. The Wealth page shows what is offered and lets you compare products. "
         "Market-linked products can lose value. Answer the risk questionnaire under Profile & "
@@ -310,7 +310,7 @@ def _investments(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> Faq
 
 def _insurance(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAnswer:
     return FaqAnswer(
-        "Insurance in PBIP (term life and health cover) is simulated: no real insurer issues a "
+        "Insurance in Finora (term life and health cover) is simulated: no real insurer issues a "
         "policy and nothing is underwritten. The Wealth page lists the plans with their cover, "
         "terms and entry ages, and an indicative premium stated for one example customer, not a "
         "quote for you. Eligibility hints come from each plan's own entry ages; a real insurer "
@@ -334,7 +334,7 @@ def _account_security(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -
     return FaqAnswer(
         "Under Profile & security you can change your password, turn on two-factor sign-in and "
         "see the devices you sign in from; a new device is untrusted until it builds history. "
-        "PBIP never asks for your password or an authenticator code by phone, message or email, "
+        "Finora never asks for your password or an authenticator code by phone, message or email, "
         "and the assistant never needs them. If something looks wrong, change your password.",
         "/profile",
     )
@@ -352,7 +352,7 @@ def _settings(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAns
 
 def _consent(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAnswer:
     return FaqAnswer(
-        "PBIP asks for two separate, optional consents, and you can withdraw either at any time "
+        "Finora asks for two separate, optional consents, and you can withdraw either at any time "
         "under Profile & security. Recommendations: with your date of birth and consent, only "
         "your age band is used to offer products you are eligible for, such as senior-citizen "
         "deposit rates; it is never used to price credit, and staff and the assistant never see "
@@ -376,7 +376,7 @@ def _spending_insights(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) 
 def _assistant(_facts: FaqFacts, _deposits: Sequence[WealthProductOut]) -> FaqAnswer:
     return FaqAnswer(
         "I can read your own balances, transactions, spending and forecast, check loan "
-        "affordability, list the bank's products and answer questions about how PBIP works. I "
+        "affordability, list the bank's products and answer questions about how Finora works. I "
         "only read: I can't move money, pay bills, change settings or see anyone else's "
         "information. Messages are up to {MAX_MESSAGE_CHARS} characters. My answers come from "
         "the bank's own figures and are not personalised financial advice; when the language "

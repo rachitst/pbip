@@ -97,9 +97,11 @@ def _versions(products: Sequence[WealthProductOut]) -> str:
 def _wealth_footer(products: Sequence[WealthProductOut]) -> str:
     if not products:
         return ""
-    footer = f"Wealth catalogue {_versions(products)}: rates are indicative, simulated PBIP rates."
+    footer = (
+        f"Wealth catalogue {_versions(products)}: rates are indicative, simulated Finora rates."
+    )
     if any(p.investable for p in products):
-        footer += " Fund prices are simulated by PBIP, not market data."
+        footer += " Fund prices are simulated by Finora, not market data."
     if any(not p.bookable and not p.investable for p in products):
         footer += " Products not sold online are listed for comparison only."
     return footer

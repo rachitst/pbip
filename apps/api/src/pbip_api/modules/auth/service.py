@@ -529,7 +529,7 @@ class AuthService:
         secret = pyotp.random_base32()
         user.mfa_secret_enc = self.cipher.encrypt(secret)
         self.session.commit()
-        uri = pyotp.TOTP(secret).provisioning_uri(name=user.email, issuer_name="PBIP")
+        uri = pyotp.TOTP(secret).provisioning_uri(name=user.email, issuer_name="Finora")
         return MfaEnrollment(secret=secret, otpauth_uri=uri)
 
     def confirm_mfa_enrollment(self, user_id: UUID, code: str, meta: RequestMeta) -> list[str]:

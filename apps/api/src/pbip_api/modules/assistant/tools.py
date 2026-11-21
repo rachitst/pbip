@@ -530,7 +530,7 @@ REGISTRY: dict[ToolName, Tool] = {
         ),
         Tool(
             ToolName.FAQ_ANSWER,
-            "How PBIP works: accounts, payees, transfers, transfer limits, fraud holds, "
+            "How Finora works: accounts, payees, transfers, transfer limits, fraud holds, "
             "statements, scheduled transfers, bill payments, loans, fixed deposits, investments, "
             "insurance, notifications, two-factor sign-in, sign-in lockout, account security, "
             "settings, consent, spending insights, or what the assistant can do.",
