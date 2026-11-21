@@ -150,7 +150,7 @@ def plan(timeline: dict[str, Any], highlights: bool = False, cap: float = 0.0) -
     seconds = HIGHLIGHT_CARD_SECONDS if highlights else CARD_SECONDS
     items: list[Item] = []
     for number, chapter in enumerate(used, start=1):
-        title = chapters[chapter]["title"] if 0 <= chapter < len(chapters) else "PBIP"
+        title = chapters[chapter]["title"] if 0 <= chapter < len(chapters) else "Finora"
         items.append(Card(chapter, title, number, len(used), seconds))
         items.extend(by_chapter[chapter])
     return items
@@ -379,7 +379,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("timeline", type=Path, help="the .timeline.json the recorder wrote")
     parser.add_argument("--out", type=Path, help="output directory (default: next to the timeline)")
-    parser.add_argument("--name", default="pbip-walkthrough", help="base name of the outputs")
+    parser.add_argument("--name", default="finora-walkthrough", help="base name of the outputs")
     parser.add_argument("--ffmpeg", help="ffmpeg binary (default: FFMPEG, imageio-ffmpeg, PATH)")
     parser.add_argument(
         "--highlight-cap", type=float, default=22.0, help="max seconds per highlight step"
@@ -393,9 +393,9 @@ def main(argv: list[str] | None = None) -> int:
     raw = (args.timeline.parent / timeline["video"]).resolve()
     out = (args.out or args.timeline.parent).resolve()
     out.mkdir(parents=True, exist_ok=True)
-    cuts = [] if args.skip_full else [(args.name, plan(timeline), "PBIP walkthrough")]
+    cuts = [] if args.skip_full else [(args.name, plan(timeline), "Finora walkthrough")]
     cuts.append(
-        (f"{args.name}-highlights", plan(timeline, True, args.highlight_cap), "PBIP highlights")
+        (f"{args.name}-highlights", plan(timeline, True, args.highlight_cap), "Finora highlights")
     )
     for name, items, label in cuts:
         length = sum(item.duration for item in items)

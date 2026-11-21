@@ -186,7 +186,7 @@ export function HighRiskCustomersPanel({
                     {c.alert_id ? (
                       <Link
                         to={`/staff/fraud/${c.alert_id}`}
-                        aria-label={`Open the alert for customer ${c.customer_id.slice(0, 8)}`}
+                        aria-label={`${c.open_alerts > 0 ? "Review" : "View"}: Open the alert for customer ${c.customer_id.slice(0, 8)}`}
                       >
                         {c.open_alerts > 0 ? "Review" : "View"}
                       </Link>

@@ -1,7 +1,7 @@
 # Customer banking guide
 
-This guide is for people who bank with PBIP through the web app. It covers every page a customer can open
-today. PBIP is a simulated bank: all money, rates and products are for demonstration only.
+This guide is for people who bank with Finora through the web app. It covers every page a customer can open
+today. Finora is a simulated bank: all money, rates and products are for demonstration only.
 
 [Back to the user manual](README.md)
 
@@ -22,10 +22,10 @@ today. PBIP is a simulated bank: all money, rates and products are for demonstra
 13. [Compare investments and insurance](#13-compare-investments-and-insurance)
     - [13a. Insurance quote and application](#13a-insurance-quote-and-application)
 14. [Recommendations](#14-recommendations)
-15. [The PBIP assistant](#15-the-pbip-assistant)
+15. [The Finora assistant](#15-the-finora-assistant)
 16. [Notifications](#16-notifications)
 17. [Profile and security](#17-profile-and-security)
-18. [Using PBIP on a phone](#18-using-pbip-on-a-phone)
+18. [Using Finora on a phone](#18-using-finora-on-a-phone)
 19. [What each status means](#19-what-each-status-means)
 
 ## Finding your way around
@@ -36,17 +36,17 @@ Every customer page has the same frame:
   Spending & health, Profile & security. On a narrow screen it folds behind a **Menu** button.
 - **Top bar:** your name and e-mail with an **Active session** badge, the notification bell, a theme
   switch (**Dark** / **Light**) and **Sign out**.
-- **Ask PBIP:** the round button at the bottom right opens the assistant.
+- **Ask Finora:** the round button at the bottom right opens the assistant.
 
-If you reload the page or come back later, PBIP may ask you to sign in again. Always choose **Sign out**
+If you reload the page or come back later, Finora may ask you to sign in again. Always choose **Sign out**
 on a shared computer.
 
 ## 1. Create an account and sign in
 
-**What it is for:** opening your online banking profile. PBIP opens a savings account for you when you
+**What it is for:** opening your online banking profile. Finora opens a savings account for you when you
 register.
 
-There is no separate sign-in address. Any PBIP page shows **Sign in** when you are signed out. After you
+There is no separate sign-in address. Any Finora page shows **Sign in** when you are signed out. After you
 sign in, you land on the page you asked for.
 
 ![Sign in page](images/01-sign-in.png)
@@ -57,7 +57,7 @@ sign in, you land on the page you asked for.
 2. Enter your **Full name** (2 to 200 characters), **Email**, **Password** and **Confirm password**.
    The password must be at least 12 characters. The bank also refuses common or leaked passwords and tells
    you why.
-3. Choose **Create account**. PBIP signs you in straight away and opens **My accounts**.
+3. Choose **Create account**. Finora signs you in straight away and opens **My accounts**.
 
 ![Create your account](images/02-register.png)
 
@@ -79,32 +79,32 @@ from your app (or one of your recovery codes) and choose **Verify**.
 further failure doubles the wait, up to one hour. Wait, then try again. A staff administrator can also
 clear a lockout.
 
-> Demo logins for a local copy of PBIP (`alice@demo.pbip`, `bob@demo.pbip`, `carol@demo.pbip`) and where
+> Demo logins for a local copy of Finora (`alice@demo.pbip`, `bob@demo.pbip`, `carol@demo.pbip`) and where
 > their password comes from are listed in the [README](../../README.md). The password is never printed in
 > this manual. Alice has an authenticator, so she is asked for a code after her password
 > (`scripts/totp.py` prints it); Bob and Carol are not.
 
 ## 2. Turn on two-step sign-in (MFA)
 
-**What it is for:** a second check at sign-in, and the code PBIP asks for when a payment looks unusual
-(see [step-up](#step-up-confirm-its-you)). Without it, PBIP cannot ask you to confirm a risky payment, so
+**What it is for:** a second check at sign-in, and the code Finora asks for when a payment looks unusual
+(see [step-up](#step-up-confirm-its-you)). Without it, Finora cannot ask you to confirm a risky payment, so
 the payment is held for a staff review instead.
 
 **Steps:**
 
 1. Open **Profile & security**. Under **Two-step sign-in**, choose **Set up authenticator app**.
 2. In your authenticator app (for example Google Authenticator, Microsoft Authenticator or 1Password), add
-   an account and type the key PBIP shows in groups of four characters. On a phone you can tap the link to
-   open it directly in the app. PBIP shows a key, not a QR code.
+   an account and type the key Finora shows in groups of four characters. On a phone you can tap the link to
+   open it directly in the app. Finora shows a key, not a QR code.
 3. Type the 6-digit code the app now shows into **Code from the app** and choose **Confirm**.
-4. PBIP shows **8 recovery codes**. Save them somewhere safe now: they are shown only once. Each one works
+4. Finora shows **8 recovery codes**. Save them somewhere safe now: they are shown only once. Each one works
    a single time in place of an app code if you lose your phone.
 
 ![Setting up the authenticator (key blurred)](images/05-mfa-setup.png)
 
 ![Recovery codes, shown once (blurred here)](images/06-mfa-recovery-codes.png)
 
-**Outcome:** "Authenticator app set up." From your next sign-in, PBIP asks for a code after your password.
+**Outcome:** "Authenticator app set up." From your next sign-in, Finora asks for a code after your password.
 You also get a **Two-step verification turned on** notification. Two-step sign-in cannot be turned off,
 and recovery codes cannot be regenerated, in the app today.
 
@@ -132,9 +132,9 @@ the available balance, the ledger balance and the amount on hold. **Transactions
 
 1. Under **Open an account**, pick the **Account type** (Savings or Current (checking)).
 2. Choose **Open account**.
-3. PBIP confirms "Account XXXX opened." The account appears in the list at once with a zero balance.
+3. Finora confirms "Account XXXX opened." The account appears in the list at once with a zero balance.
 
-PBIP has no customer deposit screen. New money arrives as an opening balance or as a transfer from someone
+Finora has no customer deposit screen. New money arrives as an opening balance or as a transfer from someone
 else.
 
 ## 4. Payees
@@ -146,18 +146,18 @@ name is **Verified**.
 
 1. Open **Payees** and choose **Add payee**.
 2. Enter the **Payee name** exactly as it is on their bank account, the **Account number** (6 to 20
-   letters, digits or hyphens) and the **Bank code** (4 to 20 letters or digits; `PBIP0001` is PBIP
+   letters, digits or hyphens) and the **Bank code** (4 to 20 letters or digits; `PBIP0001` is Finora
    itself). A **Nickname** is optional.
-3. Choose **Add and check name**. PBIP checks the name against the account straight away (Confirmation of
+3. Choose **Add and check name**. Finora checks the name against the account straight away (Confirmation of
    Payee).
 
 ![Add a payee](images/08-payee-add.png)
 
 | Result of the name check | Meaning |
 |---|---|
-| "The name matches the account. You can now send money." | A PBIP account whose name matches. The payee is **Verified**. |
+| "The name matches the account. You can now send money." | A Finora account whose name matches. The payee is **Verified**. |
 | "The name you entered does not match the name on this account, so the payee is not verified." | Check the exact name with the person, then choose **Edit** or **Verify** again. |
-| "This account is at another bank, so its name cannot be checked. The payee is verified: make sure the details are right before you send money." | PBIP cannot see other banks' names. Double-check the details yourself. |
+| "This account is at another bank, so its name cannot be checked. The payee is verified: make sure the details are right before you send money." | Finora cannot see other banks' names. Double-check the details yourself. |
 
 ![A payee at another bank, verified](images/09-payee-added.png)
 
@@ -188,7 +188,7 @@ likely to need your authenticator code or a staff review.
 
 ![Check and confirm](images/12-transfer-review.png)
 
-Every transfer is checked by PBIP's fraud engine before any money moves. The result is one of four
+Every transfer is checked by Finora's fraud engine before any money moves. The result is one of four
 outcomes.
 
 **Sent (posted).** The payment went through:
@@ -201,7 +201,7 @@ payment also appears in the account's transactions and you get a **Transfer comp
 ![Transfer sent](images/14-transfer-sent.png)
 
 <a id="step-up-confirm-its-you"></a>**Step-up: "Confirm it's you".** If the payment looks unusual (for
-example a large amount to a new payee) and you have two-step sign-in, PBIP asks for a code before sending:
+example a large amount to a new payee) and you have two-step sign-in, Finora asks for a code before sending:
 
 1. Open your authenticator app.
 2. Type the 6-digit code into **Authenticator code** and choose **Confirm transfer**.
@@ -214,7 +214,7 @@ example a large amount to a new payee) and you have two-step sign-in, PBIP asks 
 - A wrong code shows "That code did not work. Check your authenticator app and try again."
 - After 3 wrong codes the payment is moved to a staff review (see below).
 
-**Held for review.** PBIP holds the money and a fraud analyst looks at the payment:
+**Held for review.** Finora holds the money and a fraud analyst looks at the payment:
 
 > "Your transfer of INR 25,000.00 to Sunil Traders (••••5285) is being reviewed for your protection. The
 > money is on hold, not sent, and we will notify you of the outcome."
@@ -225,7 +225,7 @@ The amount moves from **available** to **on hold**; your ledger balance does not
 
 ![Money on hold](images/14c-account-on-hold.png)
 
-This also happens when PBIP wanted to ask for a code but you have not set up two-step sign-in. When the
+This also happens when Finora wanted to ask for a code but you have not set up two-step sign-in. When the
 analyst decides, you get a notification:
 
 - **Released** (the analyst found it genuine): the held money is sent and the transfer shows as completed.
@@ -235,7 +235,7 @@ analyst decides, you get a notification:
 **Declined.** "We could not process your transfer of INR X. No money left your account. Contact support if
 you need help."
 
-PBIP never tells you why a payment was flagged or what its risk score was. This protects the checks from
+Finora never tells you why a payment was flagged or what its risk score was. This protects the checks from
 being gamed.
 
 **Limits** (bank defaults; an administrator can change them):
@@ -246,7 +246,7 @@ being gamed.
 | Total per day | INR 5,00,000 (sent, waiting for a code and held payments all count) |
 | Day resets at | 00:00 UTC (05:30 India time) |
 
-If your connection drops after you choose **Send money**, trying again is safe: PBIP recognises the repeat
+If your connection drops after you choose **Send money**, trying again is safe: Finora recognises the repeat
 and never sends the money twice.
 
 ## 6. Search your transactions
@@ -301,7 +301,7 @@ paid** or **Reversed**.
 2. Fill in **Pay from**, **Pay to** (a verified payee or one of your own accounts), **Amount (INR)**,
    **How often** (Every day / Every week / Every month), **First payment** (today up to one year ahead),
    an optional **Last date** and an optional **Reference**.
-3. Choose **Schedule transfer**. PBIP confirms "Scheduled. The first payment is on *date*."
+3. Choose **Schedule transfer**. Finora confirms "Scheduled. The first payment is on *date*."
 
 ![Schedule a transfer](images/18-scheduled-new.png)
 
@@ -334,12 +334,12 @@ notification instead.
    to today; the end date cannot be in the future).
 3. Choose the format: **PDF** (a formatted statement to read or print) or **CSV** (raw data for a
    spreadsheet).
-4. Choose **Download statement**. PBIP saves `pbip-statement-<start>-to-<end>.pdf` (or `.csv`) and
+4. Choose **Download statement**. Finora saves `pbip-statement-<start>-to-<end>.pdf` (or `.csv`) and
    shows "Downloaded *file name*."
 
 ![Statements](images/20-statements.png)
 
-A statement covers at most 366 days and 10,000 entries. For your security PBIP sends a **Statement
+A statement covers at most 366 days and 10,000 entries. For your security Finora sends a **Statement
 downloaded** notification every time a statement is downloaded: if you did not do it, change your
 password.
 
@@ -394,7 +394,7 @@ repayments. Open **Loans**.
 2. Move the **Loan amount** and **Tenure** sliders. The calculator shows the **Monthly EMI**, **Total
    interest** and **Total payable**.
 3. The **Eligibility pre-check** shows **Eligible** or **Not eligible**, the maximum you could borrow over
-   that tenure, your interest rate and the reasons. PBIP checks five things from your own account history:
+   that tenure, your interest rate and the reasons. Finora checks five things from your own account history:
    regular income; all your loan repayments including the new EMI within 50% of your income; your monthly
    spending plus all EMIs within 90% of your income; enough available balance for the first EMI; and no
    sign-in lockout in the last 90 days. The reasons quote your own income, spending and balance. Only regular income counts (see
@@ -420,12 +420,12 @@ eligible for, it says why.
 
 **Your loans** shows each loan's outstanding principal, monthly EMI, next EMI date, interest rate and
 progress ("N of M EMIs paid"). **Show upcoming EMIs** lists the next 6 with their status (Paid, Upcoming,
-Overdue). EMIs are collected automatically from the account on each due date. If one is overdue, PBIP
+Overdue). EMIs are collected automatically from the account on each due date. If one is overdue, Finora
 warns you and retries every day: keep enough money in the account.
 
 ## 12. Wealth and fixed deposits
 
-**What it is for:** your fixed deposits and the savings products PBIP offers. Open **Wealth**.
+**What it is for:** your fixed deposits and the savings products Finora offers. Open **Wealth**.
 
 ![Wealth](images/23-wealth.png)
 
@@ -452,11 +452,11 @@ warns you and retries every day: keep enough money in the account.
 
 ![Fixed deposit booked](images/25-fd-booked.png)
 
-**Invest in funds, stocks and bonds:** open **Invest** (or **Invest in this fund** on a fund). PBIP sells
+**Invest in funds, stocks and bonds:** open **Invest** (or **Invest in this fund** on a fund). Finora sells
 funds, fictional stocks and bonds at **Today's simulated price**: the price is the same all day, moves from
 day to day and is not market data.
 
-1. Choose the **Investment**. For a mutual fund enter an **Amount** (PBIP shows the **Units you get
+1. Choose the **Investment**. For a mutual fund enter an **Amount** (Finora shows the **Units you get
    (about)**); for a stock or bond enter **Whole units**.
 2. Choose the account to **Pay from** and **Confirm your order**.
 3. **Order executed** shows the investment, units, price, amount and a **Reference**. The money leaves your
@@ -477,7 +477,7 @@ next month (a missed month is not caught up).
 **Withdraw:** when a deposit has matured, choose **Withdraw** and then **Withdraw to my account**. A
 matured deposit earns no more interest.
 
-**Close early:** choose **Close early**. PBIP shows what you receive today against what you would receive
+**Close early:** choose **Close early**. Finora shows what you receive today against what you would receive
 at maturity. Early closure pays a reduced rate (the deposit rate less a penalty), and no interest at all in
 the first 7 days. Interest is compounded quarterly. Some deposits show "Locked until *date*" and cannot be
 closed before then.
@@ -531,7 +531,7 @@ your balance or spending pattern. The button takes you to the right place:
 | Index-fund SIP | **Invest in the index fund** | **Invest**, with the fund selected |
 | Other investments | **Invest** | **Invest** |
 | Family cover or other insurance | **Get a quote** | **Insurance** |
-| Rewards card | none | "PBIP does not issue cards yet, so there is nothing to apply for." |
+| Rewards card | none | "Finora does not issue cards yet, so there is nothing to apply for." |
 | Fixed deposit | **Book a fixed deposit** | **Wealth**, with the booking box open |
 
 Most products need a regular income (see
@@ -540,17 +540,17 @@ customer whose only credit is the opening deposit sees "No product recommendatio
 in the screenshot.
 
 Recommendations use your age band only if you gave consent, and your risk band if you answered the risk
-questions (see [Profile and security](#17-profile-and-security)): with a Low or Moderate risk band, PBIP does not
+questions (see [Profile and security](#17-profile-and-security)): with a Low or Moderate risk band, Finora does not
 suggest the high-risk index-fund SIP, and the last reason on an investment card names your band.
 
 ![Recommended for you, with each card's action](images/27b-recommendations-card-actions.png)
 
-## 15. The PBIP assistant
+## 15. The Finora assistant
 
 **What it is for:** quick answers about your own accounts in plain language. It is read-only: it can look
 at your accounts but cannot move money.
 
-1. Choose **Ask PBIP** at the bottom right of any page.
+1. Choose **Ask Finora** at the bottom right of any page.
 2. Pick a starter question or type your own (up to 500 characters) and press **Enter** or **Send**.
    **Shift+Enter** adds a new line.
 3. The answer appears in a few seconds. While it works you see what it is checking, for example "Checking
@@ -568,7 +568,7 @@ at your accounts but cannot move money.
 | Balance forecast (7, 14 or 30 days) | "What will my balance be next week?" |
 | Loan affordability | "Can I afford a personal loan of 2 lakh over 3 years?" |
 | Unusual spending | "Anything unusual in my spending?" |
-| How PBIP works | every feature: accounts, payees, transfers and their limits, held payments, bill payments, scheduled transfers, statements, loans, fixed deposits, investments, insurance, notifications, sign-in security and lockout, settings and consent, spending insights, and what the assistant can and cannot do |
+| How Finora works | every feature: accounts, payees, transfers and their limits, held payments, bill payments, scheduled transfers, statements, loans, fixed deposits, investments, insurance, notifications, sign-in security and lockout, settings and consent, spending insights, and what the assistant can and cannot do |
 | Products | "What fixed deposits do you have?", "What insurance plans do you offer?", "Suggest investments for me" (uses your risk profile) |
 
 **What it will not do:** move money ("I can't move money. Use Transfers or Bill payments ..."), look at
@@ -618,16 +618,16 @@ Open **Profile & security**.
 - **Your details:** name, e-mail, masked phone number, KYC status and customer-since date. These are read
   only; contact the bank to change them.
 - **Risk profile:** answer five questions (investment horizon, how you would react to a 20% fall, goal,
-  experience, emergency fund) and choose **Save my answers**. PBIP shows **Your risk band** (Low, Moderate
+  experience, emergency fund) and choose **Save my answers**. Finora shows **Your risk band** (Low, Moderate
   or High) and uses it for investment suggestions.
-- **Date of birth and recommendations consent:** optional. PBIP uses only your age band (for example
+- **Date of birth and recommendations consent:** optional. Finora uses only your age band (for example
   senior-citizen deposit rates), never for credit pricing. Staff and the assistant never see the date.
   **Give consent** / **Withdraw consent** controls whether it is used for recommendations; **Delete date of
   birth** removes it.
-- **App usage analytics:** off until you turn it on with **Turn on usage analytics**. When it is on, PBIP
+- **App usage analytics:** off until you turn it on with **Turn on usage analytics**. When it is on, Finora
   records which pages you visit, a few product clicks and how long you use the app, to build a usage profile
   (sessions and product interests) that the bank may use for insights. It never records what you type,
-  amounts or account numbers. **Turn off usage analytics** asks you to confirm (**Turn off and erase**): PBIP
+  amounts or account numbers. **Turn off usage analytics** asks you to confirm (**Turn off and erase**): Finora
   stops recording at once and erases the activity and profile it holds. The section shows when you decided
   and the policy version. If your browser sends the Global Privacy Control signal, nothing is sent from that
   browser whatever the setting says.
@@ -643,9 +643,9 @@ There is no "forgot password" link: contact the bank if you cannot sign in.
 
 ![App usage analytics](images/30b-analytics-consent.png)
 
-## 18. Using PBIP on a phone
+## 18. Using Finora on a phone
 
-PBIP works in a phone browser. Pages stack into one column and the navigation folds behind **Menu**.
+Finora works in a phone browser. Pages stack into one column and the navigation folds behind **Menu**.
 
 | Sign in | My accounts | Menu open |
 |---|---|---|

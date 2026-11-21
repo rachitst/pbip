@@ -137,7 +137,7 @@ The **Decision** panel appears while an alert is **Open**.
    write what you checked and why.
 2. Choose **Release** or **Reject**.
 3. The confirmation box shows the amount and the effect. Confirm with **Release** or **Reject**.
-4. PBIP shows "Decision recorded." and the alert says who resolved it and when, with your note.
+4. Finora shows "Decision recorded." and the alert says who resolved it and when, with your note.
 
 ![Release confirmation](images/45-fraud-release-confirm.png)
 
@@ -304,14 +304,14 @@ action is audited with your name. Open **Administration**.
 1. Enter the **Work e-mail**, **Full name** and an **Initial password** (it must pass the bank's password
    policy; share it through an approved channel).
 2. Tick at least one role: Relationship manager, Fraud analyst, Compliance officer, Administrator.
-3. Choose **Create user**. PBIP shows the new user id and reminds you that they must set up an
+3. Choose **Create user**. Finora shows the new user id and reminds you that they must set up an
    authenticator before using staff tools.
 
 Existing staff users cannot be listed, edited or deactivated in the app.
 
 **Clear a sign-in lockout:**
 
-1. Enter the person's **User id** and choose **Inspect**. PBIP shows whether they are locked, the failed
+1. Enter the person's **User id** and choose **Inspect**. Finora shows whether they are locked, the failed
    sign-ins, until when, and the last failure.
 2. Choose **Clear lockout** and confirm. This resets the failed sign-ins and the sign-in rate limit.
 

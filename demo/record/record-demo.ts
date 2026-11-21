@@ -376,7 +376,7 @@ function codes(alert: AlertDetail): string[] {
   return alert.reasons.map((r) => r.code ?? "?");
 }
 
-test("PBIP fallback demo recording (TASK-093)", async ({ browser }) => {
+test("Finora fallback demo recording (TASK-093)", async ({ browser }) => {
   const outDir = resolve(process.env.DEMO_VIDEO_DIR ?? join(HERE, "out"));
   mkdirSync(outDir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
@@ -401,7 +401,7 @@ test("PBIP fallback demo recording (TASK-093)", async ({ browser }) => {
   try {
     // ------------------------------------------------------------------- 1. Alice, review
     await page.goto("/");
-    await r.say("PBIP, a simulated retail bank with an explainable fraud engine", 3000);
+    await r.say("Finora, a simulated retail bank with an explainable fraud engine", 3000);
     await r.say("Alice signs in with her password, then her authenticator code", 1000);
     await step("alice sign-in with authenticator", async () => {
       await r.signInCustomer(ALICE, true);
@@ -584,13 +584,13 @@ test("PBIP fallback demo recording (TASK-093)", async ({ browser }) => {
 
     // ----------------------------------------------------------------- 5. the assistant
     await r.say(
-      "Back to Alice: Ask PBIP, the assistant (read-only tools, server-side answers)",
+      "Back to Alice: Ask Finora, the assistant (read-only tools, server-side answers)",
       1000,
     );
     await r.signOut();
     await r.signInCustomer(ALICE, true);
-    await page.getByRole("button", { name: "Ask the PBIP assistant" }).click();
-    const drawer = page.getByRole("dialog", { name: "PBIP assistant" });
+    await page.getByRole("button", { name: "Ask the Finora assistant" }).click();
+    const drawer = page.getByRole("dialog", { name: "Finora assistant" });
     await expect(drawer).toBeVisible();
     await r.pause(1500);
     for (const q of QUESTIONS) {
@@ -656,7 +656,7 @@ test("PBIP fallback demo recording (TASK-093)", async ({ browser }) => {
       if (!body.valid) throw new Error("the hash chain is not valid");
       return ["PASS", `valid=${body.valid} checked=${body.checked}`];
     });
-    await r.say("End of the PBIP demo", 3000);
+    await r.say("End of the Finora demo", 3000);
   } catch (error) {
     failed = error;
   } finally {

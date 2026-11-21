@@ -1,8 +1,45 @@
 # Changelog
 
-All notable changes to PBIP are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+All notable changes to Finora (repository PBIP) are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project uses [Semantic Versioning](https://semver.org/). Numbers in brackets are the pull requests that made
 each change. The plain-language summaries are in [`docs/release/`](docs/release/).
+
+## [1.2.0] - 2026-11-21
+
+The product is now **Finora** ("Smart personal banking", assistant "Ask Finora"), with a redesigned web app. The
+summary is in [`docs/release/v1.2.0.md`](docs/release/v1.2.0.md); the design system, the decisions, every test changed
+and every backend file whose text changed are in
+[`docs/design/ui-redesign-progress.md`](docs/design/ui-redesign-progress.md).
+
+### Changed
+
+- **Brand and design system:** Finora name, original SVG logo and favicon, new tokens (navy primary, one teal accent,
+  status colours with soft backgrounds; contrast checked in light and dark), Inter self-hosted, lucide icons, cards,
+  stat tiles, segmented filters and a new app shell with sidebar navigation for customers and staff; light theme by
+  default with the dark toggle kept (ADR-0063, #518, #521).
+- **Every page redesigned:** sign-in, registration and MFA (#524); customer accounts, payments, payees, bills,
+  scheduled transfers, statements, insights, loans, wealth and recommendations (#525); the staff console (alerts,
+  dashboards, lab, monitoring, compliance, audit log, customer insights, behavioural analytics, administration)
+  (#523). Markup, styling and display text only: routes, hooks, API calls, validation and the auth flow are
+  unchanged.
+- **User-facing backend text** says Finora: statement PDF header and title, TOTP issuer label, assistant prompts,
+  refusals and FAQ answers, OpenAPI title and descriptions (string literals only, #519).
+- **Docs:** README and user manual use the product name Finora; the code, repository, domain, packages and service
+  names keep PBIP.
+
+### Added
+
+- **Landing page** at `/` for signed-out visitors, with the sign-in form, real product screenshots and figures only
+  from the test and model reports (#524).
+- **Demo tooling:** before/after page screenshots (`demo/record/capture-screens.ts`), user-manual stills from the
+  walkthrough, the 15-clip demo-cut builder and the slide capture.
+
+### Fixed
+
+- **CI:** the backup drill runs `pg_dump`/`pg_restore` inside the PostgreSQL 16 service container (the runner's newer
+  client wrote a setting 16 rejects); dnspython 2.9.2 and tornado 6.6.1 for CVE-2026-128089 and CVE-2026-126347
+  (#520).
+- **Accessibility:** the security-monitoring alert links' accessible names start with their visible text.
 
 ## [1.1.4] - 2026-11-08
 

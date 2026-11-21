@@ -248,8 +248,10 @@ test("fraud analyst pages", async ({ page }) => {
       then: async (p) => {
         await p.getByRole("button", { name: "All", exact: true }).click(); // the open queue may be empty
         await quiet(p);
+        // Wait for the list to settle: a table of alerts, or the empty state (then the list is shown).
+        await p.getByRole("table").or(p.getByText("No alerts.")).first().waitFor();
         const first = p.getByRole("table").getByRole("link").first();
-        if ((await first.count()) === 0) return; // an empty queue: the list screenshot says so
+        if ((await first.count()) === 0) return;
         await first.click();
         await expect(p.getByRole("heading", { level: 1, name: /^Risk \d+ of 100/ })).toBeVisible();
         await settle(p);
