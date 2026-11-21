@@ -125,7 +125,7 @@ The live demo script and its fallback plan are in [`demo/demo-script.md`](demo/d
 
 ## Releases
 
-The latest release is **[v1.2.0](https://github.com/rachitst/pbip/releases/tag/v1.2.0)** (21 November 2026): the
+The latest release is **[v1.2.2](https://github.com/rachitst/pbip/releases/tag/v1.2.2)** (21 November 2026): v1.2's
 product renamed **Finora** with a redesigned web app and a landing page, on top of v1.1.4's deploys
 that replace the API rolling, so it keeps answering (v1.1.3, with v1.1.4's fix for a retired replica's address), on
 top of v1.1.2's staging over HTTPS, the trained models on the

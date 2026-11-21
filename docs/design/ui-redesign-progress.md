@@ -31,8 +31,40 @@ system is in [ui-design-system.md](ui-design-system.md).
 | 3 Customer pages | done | #525 |
 | 4 Staff pages | done | #523 |
 | 4b Backend display text | done | #519 |
-| 5 Polish, accessibility, `make check`, docs, v1.2.0, deploy | in progress | this PR |
-| Re-record walkthrough, demo cut, slide screenshots | - | - |
+| 5 Polish, accessibility, `make check`, docs, v1.2.0, deploy | done | #527, #528, this PR |
+| Re-record walkthrough, demo cut, slide screenshots | done | this PR (tooling), files outside the repo |
+
+## Final summary (21 Nov 2026)
+
+**Merged:** #518 (audit, design system, ADR-0063, before screenshots), #520 (CI repair: backup drill and two
+CVEs), #521 (foundation), #523 (staff pages), #519 (backend display text), #525 (customer pages), #524 (landing,
+sign-in, MFA, profile, assistant), #527 (polish, after screenshots, docs, demo tooling), #528 (smoke test, label in
+name), and this PR (card layout fix, frame-exact editor, user-manual screenshots, this summary).
+
+**Checks:** `make check` on the tree of v1.2.0: 2,919 passed, 12 skipped, coverage 96.43% (target: at least the
+96.4% of before), web 470 tests in 52 files, all static checks green; every PR's CI Gate green and up to date before
+its squash merge.
+
+**Releases and deploys:**
+- `v1.2.0`: the tag deploy installed the release, then its smoke test failed on one check (it looked for "PBIP" in
+  the page) and the pipeline rolled back to v1.1.4 as designed (run 44898486154).
+- `v1.2.1`: smoke test and label-in-name fixes; tag deploy succeeded, smoke test passed (run 44903592445).
+- `v1.2.2`: this PR's fixes; deployed the same way (run listed on the release).
+- **Live check** (https://pbip.duckdns.org): title "Finora - Smart personal banking", the Finora favicon, the landing
+  page with the embedded sign-in form, readiness OK, and `scripts/smoke_test.py` passes against it.
+
+**Recordings** (outside the repo, in `~/Desktop/Rachit/finora-video/`; the videos are attached to the v1.2.0
+release):
+- `finora-walkthrough.mp4` (11:31, H.264), `.srt`, `.chapters.txt`: the A-to-Z walkthrough re-recorded on a fresh
+  seed with the existing recorder, same story, steps and pages; captions changed only where they said PBIP. Take 2
+  (on the v1.2.1 UI) ran 59 PASS and 1 DIFF: its assistant answered with the rule-based fallback because Groq did
+  not answer, so the assistant chapter is take 1's (same UI, model answers), merged with `merge-takes.py`; every
+  step of the merged film is PASS. `finora-walkthrough-highlights.mp4` (3:02) too. MP4 only (owner's decision).
+- `finora-demo-cut.mp4` and `finora-demo-cut.json`: the owner's 15-clip cut, 4:40.5, 1920x1080, H.264, no audio,
+  0.25 s fades, built by `demo/record/build-demo-cut.py`; each clip found by its captions, short clips hold their
+  last frame, long ones are trimmed; the Grafana clip shows the API panel only.
+- `slides/` (1920x1080, demo data, fresh seed): `accounts.png`, `transfer-review.png`, `fraud-alert.png`,
+  `assistant.png`, `insights.png`, `audit-log.png`.
 
 ## Phase 0 (21 Nov 2026)
 
@@ -191,3 +223,6 @@ test.
 - **Grafana dashboards** keep their PBIP titles: an operators' tool outside the product UI, provisioned by
   file and uid.
 - **The repository README** names the product Finora and says the code keeps the project name PBIP.
+- **Authenticator apps enrolled before v1.2** keep their "PBIP" account label (stored in the app); new enrolments
+  show "Finora".
+- **Skipped:** the VP9 `.webm` versions of the videos (owner's decision); no other item of the brief was skipped.
