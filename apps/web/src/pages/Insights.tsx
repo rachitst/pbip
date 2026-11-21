@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { HeartPulse, PieChart as PieChartIcon, TrendingUp } from "lucide-react";
 import { useState } from "react";
 import {
   Bar,
@@ -30,6 +31,7 @@ import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 import { BalanceForecastSection } from "./BalanceForecastSection";
 import { TOOLTIP_STYLE, categoryTooltip, donutSlices, formatShare } from "./insightsChart";
+import "./Insights.css";
 
 const TITLE = "Spending & Financial Health";
 
@@ -170,7 +172,12 @@ function FinancialHealthSection({ health }: { health: FinancialHealthScoreRespon
     <section aria-labelledby="health-score-heading" className="insights-section">
       <div className="insights-section__header">
         <div>
-          <h2 id="health-score-heading">Financial Health Score</h2>
+          <h2 id="health-score-heading" className="insights-title">
+            <span className="insights-title__icon">
+              <HeartPulse size={16} aria-hidden="true" focusable="false" />
+            </span>
+            Financial Health Score
+          </h2>
           <p className="muted insights-section__summary">
             Computed from {health.months_observed} observed{" "}
             {health.months_observed === 1 ? "month" : "months"} of banking history.
@@ -286,7 +293,12 @@ function CategorySpendingSection({ spending }: { spending: SpendingBreakdownResp
     <section aria-labelledby="category-spending-heading" className="insights-section">
       <div className="insights-section__header">
         <div>
-          <h2 id="category-spending-heading">Spending by Category</h2>
+          <h2 id="category-spending-heading" className="insights-title">
+            <span className="insights-title__icon">
+              <PieChartIcon size={16} aria-hidden="true" focusable="false" />
+            </span>
+            Spending by Category
+          </h2>
           <p className="muted insights-section__summary">{summaryText}</p>
         </div>
         <div className="insights-total">
@@ -461,7 +473,12 @@ function SpendingTrendsSection({ trends }: { trends: SpendingTrendsResponse }) {
     <section aria-labelledby="spending-trends-heading" className="insights-section">
       <div className="insights-section__header">
         <div>
-          <h2 id="spending-trends-heading">Month-over-Month Trends</h2>
+          <h2 id="spending-trends-heading" className="insights-title">
+            <span className="insights-title__icon">
+              <TrendingUp size={16} aria-hidden="true" focusable="false" />
+            </span>
+            Month-over-Month Trends
+          </h2>
           <p className="muted insights-section__summary">
             Monthly comparison between {previous ? previous.period : "prior cycle"} and{" "}
             {current.period}.

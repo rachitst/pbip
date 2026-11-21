@@ -14,6 +14,7 @@ import { Field } from "../ui/Field";
 import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 import { StatusBadge } from "../ui/StatusBadge";
+import "./CustomerPage.css";
 
 /** PBIP's own bank code (Settings.internal_bank_code): only these payees get a name check. */
 export const INTERNAL_BANK_CODE = "PBIP0001";
@@ -274,8 +275,15 @@ function PayeeRow({
   return (
     <tr>
       <td>
-        {payee.name}
-        {payee.nickname && <span className="muted"> ({payee.nickname})</span>}
+        <span className="name-cell">
+          <span className="avatar" aria-hidden="true">
+            {payee.name.trim().charAt(0).toUpperCase()}
+          </span>
+          <span>
+            {payee.name}
+            {payee.nickname && <span className="muted"> ({payee.nickname})</span>}
+          </span>
+        </span>
       </td>
       <td>
         {payee.account_number_masked} · {payee.bank_code}
@@ -362,7 +370,7 @@ export function Payees() {
       )}
       {payees.data?.length === 0 && <EmptyState message="You have no payees yet." />}
       {payees.data && payees.data.length > 0 && (
-        <div className="entries">
+        <div className="entries table-card">
           <table>
             <caption className="sr-only">Your payees</caption>
             <thead>

@@ -1,0 +1,261 @@
+/* Finora customer pages (accounts, payments, insights, loans, wealth): the section-card pattern
+   they share. Imported by each of those pages (they are lazy-loaded separately). Tokens only. */
+
+/* A page section drawn as a card with an icon, a title and an optional description. */
+.panel {
+  margin-top: var(--space-5);
+  padding: var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.panel > :last-child {
+  margin-bottom: 0;
+}
+.panel__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.panel__head h2,
+.panel__head h3 {
+  margin: 0;
+}
+.panel__head p {
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.panel__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+}
+/* A section title with a small leading icon, for sections that are not cards themselves. */
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.section-title .icon {
+  color: var(--accent);
+}
+
+/* A table inside a card: the card draws the edge, the table runs to it. */
+.table-card {
+  margin-top: var(--space-4);
+  overflow-x: auto; /* the table scrolls inside the card on phones; the radius still clips */
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.table-card .entries {
+  margin-top: 0;
+}
+.table-card thead th:first-child,
+.table-card thead th:last-child {
+  border-radius: 0;
+}
+.table-card th:first-child,
+.table-card td:first-child {
+  padding-left: var(--space-5);
+}
+.table-card th:last-child,
+.table-card td:last-child {
+  padding-right: var(--space-5);
+}
+.table-card tbody tr:last-child td {
+  border-bottom: 0;
+}
+.table-card > .state {
+  margin: var(--space-4);
+}
+
+/* A form that would stretch across the whole content width reads better in a narrower column. */
+.form-column {
+  max-width: 40rem;
+}
+
+/* A round initial beside a name (decorative: the name is the text next to it). */
+.avatar {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  color: var(--brand);
+  background: var(--brand-soft);
+  border-radius: 50%;
+}
+.name-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* A calm result card (OutcomeCard.tsx): icon, short title and the full message, in the status
+   colour with text, never colour alone. */
+.outcome {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+}
+.outcome__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  color: var(--surface);
+  border-radius: 50%;
+}
+.outcome__title {
+  margin: 0 0 var(--space-1);
+  font-weight: var(--weight-strong);
+}
+.outcome__text {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.outcome--success {
+  background: var(--ok-soft);
+  border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+}
+.outcome--success .outcome__icon {
+  background: var(--ok);
+}
+.outcome--success .outcome__title {
+  color: var(--ok);
+}
+.outcome--warning {
+  background: var(--warn-soft);
+  border-color: color-mix(in srgb, var(--warn) 35%, transparent);
+}
+.outcome--warning .outcome__icon {
+  background: var(--warn);
+}
+.outcome--warning .outcome__title {
+  color: var(--warn);
+}
+.outcome--error {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
+.outcome--error .outcome__icon {
+  background: var(--danger);
+}
+.outcome--error .outcome__title {
+  color: var(--danger);
+}
+.outcome--info {
+  background: var(--info-soft);
+  border-color: color-mix(in srgb, var(--info) 35%, transparent);
+}
+.outcome--info .outcome__icon {
+  background: var(--info);
+}
+.outcome--info .outcome__title {
+  color: var(--info);
+}
+/* An empty list drawn as a quiet card with an icon above the message. */
+.empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding: var(--space-5) var(--space-4);
+  text-align: center;
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+}
+.empty-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 50%;
+}
+.empty-card .state {
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+}
+/* A collapsed history list in a card. */
+.history-card {
+  padding: var(--space-3) var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.history-card .list {
+  margin-bottom: 0;
+}
+.history-card .list li:last-child {
+  border-bottom: 0;
+}
+
+/* A receipt (bill paid, loan disbursed, order executed): a success mark beside the title and the
+   figures as label/value rows. */
+.receipt-card {
+  border-top: 3px solid var(--ok);
+}
+.receipt-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.receipt-card__head h2,
+.receipt-card__head h3 {
+  margin: 0;
+}
+.receipt-card__icon {
+  flex: none;
+  display: inline-flex;
+  color: var(--ok);
+}
+.receipt-card .details dd {
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .avatar {
+    display: none;
+  }
+  .panel {
+    padding: var(--space-4);
+  }
+  .table-card th:first-child,
+  .table-card td:first-child {
+    padding-left: var(--space-3);
+  }
+  .table-card th:last-child,
+  .table-card td:last-child {
+    padding-right: var(--space-3);
+  }
+}

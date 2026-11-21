@@ -1,0 +1,41 @@
+/* Product recommendations (Finora): cards with a type eyebrow, the reasons toggle and one action.
+   The scroll-then-grid layout stays in styles.css (TASK-062). Tokens only. */
+.recommendations__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.recommendations__title svg {
+  color: var(--accent);
+}
+.recommendation {
+  padding: var(--space-5);
+  box-shadow: var(--shadow-sm);
+  transition:
+    box-shadow var(--duration),
+    border-color var(--duration);
+}
+.recommendation:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow);
+}
+.recommendation__type.muted {
+  display: inline-flex;
+  padding: 0.0625rem var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-strong);
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius-pill);
+}
+.recommendation__description {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.recommendation__action {
+  padding-top: var(--space-2);
+}
+.recommendations > .muted {
+  font-size: var(--text-xs);
+}

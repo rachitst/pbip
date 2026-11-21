@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { BellRing, FileText } from "lucide-react";
 import { useState } from "react";
 import type { SyntheticEvent } from "react";
 import { api } from "../api/client";
@@ -10,6 +11,8 @@ import { Field } from "../ui/Field";
 import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 import "./ChoiceGroup.css";
+import "./CustomerPage.css";
+import "./Statements.css";
 
 type Format = "pdf" | "csv";
 const MAX_DAYS = 366;
@@ -99,7 +102,16 @@ export function Statements({ now }: { now?: number }) {
       )}
       {accounts.data?.length === 0 && <EmptyState message="You have no accounts yet." />}
       {accounts.data && accounts.data.length > 0 && (
-        <form className="card" onSubmit={(event) => void submit(event)}>
+        <form className="card statement-form" onSubmit={(event) => void submit(event)}>
+          <div className="panel__head">
+            <span className="panel__icon">
+              <FileText size={18} aria-hidden="true" focusable="false" />
+            </span>
+            <div>
+              <h2>Download a statement</h2>
+              <p>Choose the account, the period and a format.</p>
+            </div>
+          </div>
           <Field label="Account">
             {(control) => (
               <select
@@ -147,7 +159,7 @@ export function Statements({ now }: { now?: number }) {
               )}
             </Field>
           </div>
-          <fieldset className="choice-group">
+          <fieldset className="choice-group statement-formats">
             <legend>Format</legend>
             <label>
               <input
@@ -179,7 +191,8 @@ export function Statements({ now }: { now?: number }) {
           <Button type="submit" loading={busy}>
             Download statement
           </Button>
-          <p className="muted">
+          <p className="muted statement-form__note">
+            <BellRing size={14} aria-hidden="true" focusable="false" />
             For your security we send you a notification each time a statement is downloaded.
           </p>
         </form>

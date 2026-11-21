@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { Send, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import type { SyntheticEvent } from "react";
 import { ApiError, api } from "../api/client";
@@ -13,6 +14,9 @@ import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Dialog } from "../ui/Dialog";
 import { Field } from "../ui/Field";
 import { MoneyInput } from "../ui/MoneyInput";
+import "./Accounts.css";
+import "./CustomerPage.css";
+import { OutcomeCard } from "./OutcomeCard";
 
 interface Draft {
   from: AccountOut;
@@ -28,30 +32,34 @@ function Outcome({ transfer, payee }: { transfer: TransferOut; payee: PayeeOut |
   const to = payee ? ` to ${payee.name} (${payee.account_number_masked})` : "";
   if (transfer.status === "POSTED") {
     return (
-      <Alert tone="success">
+      <OutcomeCard tone="success" title="Transfer complete">
         Sent {amount}
         {to}. Reference {transfer.id.slice(0, 8).toUpperCase()}. Your balance is updated above.
-      </Alert>
+      </OutcomeCard>
     );
   }
   if (transfer.status === "PENDING_REVIEW") {
     return (
-      <Alert tone="warning">
+      <OutcomeCard tone="warning" title="Held for review">
         Your transfer of {amount}
         {to} is being reviewed for your protection. The money is on hold, not sent, and we will
         notify you of the outcome.
-      </Alert>
+      </OutcomeCard>
     );
   }
   if (transfer.status === "DECLINED") {
     return (
-      <Alert tone="error">
+      <OutcomeCard tone="error" title="Transfer not processed">
         We could not process your transfer of {amount}. No money left your account. Contact support
         if you need help.
-      </Alert>
+      </OutcomeCard>
     );
   }
-  return <Alert tone="info">{transfer.message}</Alert>;
+  return (
+    <OutcomeCard tone="info" title="Transfer update">
+      {transfer.message}
+    </OutcomeCard>
+  );
 }
 
 interface StepUpProps {
@@ -95,10 +103,15 @@ function StepUpDialog({ transfer, onDone, onCancel }: StepUpProps) {
 
   return (
     <Dialog open title="Confirm it's you" onClose={busy ? () => undefined : onCancel}>
-      <p>
-        For your protection, enter the 6-digit code from your authenticator app to send{" "}
-        {formatMinor(transfer.amount_minor, transfer.currency)}.
-      </p>
+      <div className="step-up__lead">
+        <span className="panel__icon">
+          <ShieldCheck size={18} aria-hidden="true" focusable="false" />
+        </span>
+        <p>
+          For your protection, enter the 6-digit code from your authenticator app to send{" "}
+          {formatMinor(transfer.amount_minor, transfer.currency)}.
+        </p>
+      </div>
       <form onSubmit={(event) => void submit(event)}>
         <Field label="Authenticator code" error={error}>
           {(control) => (
@@ -204,14 +217,22 @@ export function SendMoney({ accounts, payees }: SendMoneyProps) {
 
   const chosenPayee = payees.find((p) => p.id === (outcome?.payee_id ?? payeeId)) ?? null;
   return (
-    <section>
-      <h2>Send money</h2>
+    <section className="panel send-money" aria-labelledby="send-money-title">
+      <div className="panel__head">
+        <span className="panel__icon">
+          <Send size={18} aria-hidden="true" focusable="false" />
+        </span>
+        <div>
+          <h2 id="send-money-title">Send money</h2>
+          <p>To a verified payee. You check the details before anything is sent.</p>
+        </div>
+      </div>
       {payees.length === 0 ? (
         <p className="muted">
           Add and verify a payee first; you can send money once one is verified.
         </p>
       ) : (
-        <form onSubmit={review}>
+        <form className="form-column" onSubmit={review}>
           <Field label="From account">
             {(control) => (
               <select

@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { BadgePercent, Calculator as CalculatorIcon, CheckCircle2, Landmark } from "lucide-react";
 import { useEffect, useId, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { api } from "../api/client";
@@ -22,8 +23,11 @@ import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Field } from "../ui/Field";
 import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
+import { EmptyCard } from "./EmptyCard";
 import { StatusBadge } from "../ui/StatusBadge";
 import "./LoanCard.css";
+import "./CustomerPage.css";
+import "./Loans.css";
 
 /** Slider step for the principal: INR 5,000 in paise. Every catalogue bound is a multiple. */
 export const AMOUNT_STEP_MINOR = 5_000_00;
@@ -129,8 +133,13 @@ function LoanCard({ loan }: { loan: LoanSummaryOut }) {
   const headingId = useId();
   const repaid = loan.principal_minor - loan.outstanding_principal_minor;
   return (
-    <section className="loan-card" aria-labelledby={headingId}>
-      <h3 id={headingId}>{loan.product_name}</h3>
+    <section className="loan-card loan-card--active" aria-labelledby={headingId}>
+      <div className="loan-card__head">
+        <span className="panel__icon">
+          <Landmark size={18} aria-hidden="true" focusable="false" />
+        </span>
+        <h3 id={headingId}>{loan.product_name}</h3>
+      </div>
       {loan.overdue_instalments > 0 && (
         <Alert tone="warning">
           {loan.overdue_instalments === 1
@@ -200,7 +209,9 @@ function ActiveLoans() {
       />
     );
   }
-  if (loans.data.length === 0) return <EmptyState message="You have no active loans." />;
+  if (loans.data.length === 0) {
+    return <EmptyCard icon={Landmark} message="You have no active loans." />;
+  }
   return (
     <div className="loan-list">
       {loans.data.map((loan) => (
@@ -235,7 +246,7 @@ function LoanOffers() {
         spending of {formatMinor(offers.data.monthly_spend_minor, "INR")} a month and balance of{" "}
         {formatMinor(offers.data.available_balance_minor, "INR")}.
       </p>
-      <div className="loan-list">
+      <div className="loan-list loan-list--offers">
         {offers.data.offers.map((offer) => (
           <LoanOfferCard key={offer.product_id} offer={offer} />
         ))}
@@ -248,15 +259,17 @@ function LoanOfferCard({ offer }: { offer: LoanOfferOut }) {
   const headingId = useId();
   const eligible = offer.status === "ELIGIBLE";
   return (
-    <section className="loan-card" aria-labelledby={headingId}>
-      <h3 id={headingId}>{offer.name}</h3>
-      <StatusBadge
-        status={
-          eligible
-            ? { label: "Eligible", tone: "success" }
-            : { label: "Not eligible", tone: "danger" }
-        }
-      />
+    <section className="loan-card loan-card--offer" aria-labelledby={headingId}>
+      <div className="loan-card__head">
+        <h3 id={headingId}>{offer.name}</h3>
+        <StatusBadge
+          status={
+            eligible
+              ? { label: "Eligible", tone: "success" }
+              : { label: "Not eligible", tone: "danger" }
+          }
+        />
+      </div>
       <dl className="details">
         {eligible && (
           <>
@@ -280,7 +293,7 @@ function LoanOfferCard({ offer }: { offer: LoanOfferOut }) {
           <dd>from {formatRate(offer.annual_rate_bps)}</dd>
         </div>
       </dl>
-      <ul>
+      <ul className="loan-reasons">
         {offer.reasons.map((reason) => (
           <li key={reason}>{reason}</li>
         ))}
@@ -301,7 +314,7 @@ function EmiSummary({ terms }: { terms: Terms }) {
     return <ErrorState message={errorMessage(emi.error, "Could not calculate the EMI.")} />;
   }
   return (
-    <section className="loan-card" aria-label="EMI estimate">
+    <section className="loan-card loan-card--estimate" aria-label="EMI estimate">
       <dl className="details">
         <div className="details__row">
           <dt>Monthly EMI</dt>
@@ -330,14 +343,16 @@ function EligibilityCard({
   const eligible = eligibility.status === "ELIGIBLE";
   return (
     <section className="loan-card" aria-labelledby="eligibility-title">
-      <h3 id="eligibility-title">Eligibility pre-check</h3>
-      <StatusBadge
-        status={
-          eligible
-            ? { label: "Eligible", tone: "success" }
-            : { label: "Not eligible", tone: "danger" }
-        }
-      />
+      <div className="loan-card__head">
+        <h3 id="eligibility-title">Eligibility pre-check</h3>
+        <StatusBadge
+          status={
+            eligible
+              ? { label: "Eligible", tone: "success" }
+              : { label: "Not eligible", tone: "danger" }
+          }
+        />
+      </div>
       <dl className="details">
         <div className="details__row">
           <dt>Maximum over {eligibility.tenure_months} months</dt>
@@ -348,7 +363,7 @@ function EligibilityCard({
           <dd>{formatRate(product.annual_rate_bps)}</dd>
         </div>
       </dl>
-      <ul>
+      <ul className="loan-reasons">
         {eligibility.reasons.map((reason) => (
           <li key={reason}>{reason}</li>
         ))}
@@ -360,8 +375,13 @@ function EligibilityCard({
 function Receipt({ loan, account }: { loan: LoanOut; account: AccountOut | undefined }) {
   const first = loan.instalments[0];
   return (
-    <section className="card receipt" aria-labelledby="loan-receipt-title">
-      <h2 id="loan-receipt-title">Loan approved and disbursed</h2>
+    <section className="card receipt receipt-card" aria-labelledby="loan-receipt-title">
+      <div className="receipt-card__head">
+        <span className="receipt-card__icon">
+          <CheckCircle2 size={22} aria-hidden="true" focusable="false" />
+        </span>
+        <h2 id="loan-receipt-title">Loan approved and disbursed</h2>
+      </div>
       <dl className="details">
         <div className="details__row">
           <dt>Amount credited</dt>
@@ -482,103 +502,111 @@ function Calculator({
 
   return (
     <>
-      <Field label="Loan product">
-        {(control) => (
-          <select
-            {...control}
-            value={product.id}
-            onChange={(e) => {
-              chooseProduct(e.target.value);
-            }}
+      <div className="loan-apply">
+        <div className="loan-apply__inputs">
+          <Field label="Loan product">
+            {(control) => (
+              <select
+                {...control}
+                value={product.id}
+                onChange={(e) => {
+                  chooseProduct(e.target.value);
+                }}
+              >
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} · from {formatRate(p.annual_rate_bps)}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+          <Field
+            label="Loan amount"
+            hint={`${formatMinor(product.min_amount_minor, "INR")} to ${formatMinor(product.max_amount_minor, "INR")}`}
           >
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} · from {formatRate(p.annual_rate_bps)}
-              </option>
-            ))}
-          </select>
-        )}
-      </Field>
-      <Field
-        label="Loan amount"
-        hint={`${formatMinor(product.min_amount_minor, "INR")} to ${formatMinor(product.max_amount_minor, "INR")}`}
-      >
-        {(control) => (
-          <input
-            {...control}
-            type="range"
-            min={product.min_amount_minor}
-            max={product.max_amount_minor}
-            step={AMOUNT_STEP_MINOR}
-            value={amountMinor}
-            aria-valuetext={formatMinor(amountMinor, "INR")}
-            onChange={(e) => {
-              setAmountMinor(Number.parseInt(e.target.value, 10));
-              setReceipt(null);
-            }}
-          />
-        )}
-      </Field>
-      <p className="loan-value" aria-live="polite">
-        {formatMinor(amountMinor, "INR")}
-      </p>
-      <Field label="Tenure">
-        {(control) => (
-          <input
-            {...control}
-            type="range"
-            min={0}
-            max={product.tenures_months.length - 1}
-            step={1}
-            value={tenureIndex}
-            aria-valuetext={`${String(tenureMonths)} months`}
-            onChange={(e) => {
-              setTenureIndex(Number.parseInt(e.target.value, 10));
-              setReceipt(null);
-            }}
-          />
-        )}
-      </Field>
-      <p className="loan-value" aria-live="polite">
-        {tenureMonths} months
-      </p>
-      <EmiSummary terms={settled} />
-      {eligibility.isPending && <LoadingState label="Checking your eligibility..." />}
-      {eligibility.isError && (
-        <ErrorState
-          message={errorMessage(eligibility.error, "Could not check your eligibility.")}
-          onRetry={() => {
-            void eligibility.refetch();
+            {(control) => (
+              <input
+                {...control}
+                type="range"
+                min={product.min_amount_minor}
+                max={product.max_amount_minor}
+                step={AMOUNT_STEP_MINOR}
+                value={amountMinor}
+                aria-valuetext={formatMinor(amountMinor, "INR")}
+                onChange={(e) => {
+                  setAmountMinor(Number.parseInt(e.target.value, 10));
+                  setReceipt(null);
+                }}
+              />
+            )}
+          </Field>
+          <p className="loan-value" aria-live="polite">
+            {formatMinor(amountMinor, "INR")}
+          </p>
+          <Field label="Tenure">
+            {(control) => (
+              <input
+                {...control}
+                type="range"
+                min={0}
+                max={product.tenures_months.length - 1}
+                step={1}
+                value={tenureIndex}
+                aria-valuetext={`${String(tenureMonths)} months`}
+                onChange={(e) => {
+                  setTenureIndex(Number.parseInt(e.target.value, 10));
+                  setReceipt(null);
+                }}
+              />
+            )}
+          </Field>
+          <p className="loan-value" aria-live="polite">
+            {tenureMonths} months
+          </p>
+        </div>
+        <div className="loan-apply__summary">
+          <EmiSummary terms={settled} />
+          {eligibility.isPending && <LoadingState label="Checking your eligibility..." />}
+          {eligibility.isError && (
+            <ErrorState
+              message={errorMessage(eligibility.error, "Could not check your eligibility.")}
+              onRetry={() => {
+                void eligibility.refetch();
+              }}
+            />
+          )}
+          {eligibility.data && <EligibilityCard product={product} eligibility={eligibility.data} />}
+        </div>
+      </div>
+      <div className="loan-apply__submit">
+        <Field label="Pay into and repay from">
+          {(control) => (
+            <select
+              {...control}
+              value={accountId}
+              onChange={(e) => {
+                setAccountId(e.target.value);
+              }}
+            >
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {accountLabel(a)}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+        <Button
+          disabled={!canApply}
+          onClick={() => {
+            setApplyError(null);
+            setReviewing(true);
           }}
-        />
-      )}
-      {eligibility.data && <EligibilityCard product={product} eligibility={eligibility.data} />}
-      <Field label="Pay into and repay from">
-        {(control) => (
-          <select
-            {...control}
-            value={accountId}
-            onChange={(e) => {
-              setAccountId(e.target.value);
-            }}
-          >
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {accountLabel(a)}
-              </option>
-            ))}
-          </select>
-        )}
-      </Field>
-      <Button
-        disabled={!canApply}
-        onClick={() => {
-          setApplyError(null);
-          setReviewing(true);
-        }}
-      >
-        Apply for this loan
-      </Button>
+        >
+          Apply for this loan
+        </Button>
+      </div>
       {receipt && <Receipt loan={receipt} account={account} />}
       <ConfirmDialog
         open={reviewing}
@@ -660,15 +688,29 @@ export function Loans() {
         description="Check what a loan would cost, whether you are eligible, and track your repayments."
       />
       <section aria-labelledby="active-loans-title">
-        <h2 id="active-loans-title">Your loans</h2>
+        <h2 id="active-loans-title" className="section-title">
+          <Landmark size={18} aria-hidden="true" focusable="false" />
+          Your loans
+        </h2>
         <ActiveLoans />
       </section>
       <section aria-labelledby="loan-offers-title">
-        <h2 id="loan-offers-title">Loans for you</h2>
+        <h2 id="loan-offers-title" className="section-title">
+          <BadgePercent size={18} aria-hidden="true" focusable="false" />
+          Loans for you
+        </h2>
         <LoanOffers />
       </section>
-      <section aria-labelledby="apply-title">
-        <h2 id="apply-title">Apply for a loan</h2>
+      <section className="panel" aria-labelledby="apply-title">
+        <div className="panel__head">
+          <span className="panel__icon">
+            <CalculatorIcon size={18} aria-hidden="true" focusable="false" />
+          </span>
+          <div>
+            <h2 id="apply-title">Apply for a loan</h2>
+            <p>Move the sliders to see the EMI and whether you are eligible, then apply.</p>
+          </div>
+        </div>
         <ApplySection />
       </section>
     </div>

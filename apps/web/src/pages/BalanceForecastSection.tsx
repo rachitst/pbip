@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { LineChart as LineChartIcon } from "lucide-react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import {
   Area,
@@ -19,6 +20,7 @@ import { Alert } from "../ui/Alert";
 import { Amount } from "../ui/Amount";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
 import { TOOLTIP_STYLE } from "./insightsChart";
+import "./Insights.css";
 import {
   axisAmount,
   forecastRows,
@@ -40,7 +42,12 @@ export function BalanceForecastSection({ accountId }: { accountId: string }) {
     <section aria-labelledby="forecast-heading" className="insights-section">
       <div className="insights-section__header">
         <div>
-          <h2 id="forecast-heading">Balance Forecast</h2>
+          <h2 id="forecast-heading" className="insights-title">
+            <span className="insights-title__icon">
+              <LineChartIcon size={16} aria-hidden="true" focusable="false" />
+            </span>
+            Balance Forecast
+          </h2>
           <p className="muted insights-section__summary">
             Your balance over the last 30 days and projected for the next 30, including your
             scheduled payments.

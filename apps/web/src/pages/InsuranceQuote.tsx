@@ -19,6 +19,8 @@ import { Field } from "../ui/Field";
 import { MoneyInput } from "../ui/MoneyInput";
 import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
+import "./CustomerPage.css";
+import "./Wealth.css";
 import { StatusBadge } from "../ui/StatusBadge";
 
 type AgeBand = InsuranceQuoteRequest["age_band"];
@@ -38,7 +40,7 @@ export const REFERRED_NOTE =
 
 function QuoteResult({ quote }: { quote: InsuranceQuoteOut }) {
   return (
-    <section className="loan-card" aria-label="Quote">
+    <section className="loan-card quote-result" aria-label="Quote">
       <p>
         <StatusBadge status={STATUS[quote.outcome]} />
       </p>
@@ -80,7 +82,7 @@ function Applications() {
     return <EmptyState message="You have not applied for any insurance yet." />;
   }
   return (
-    <div className="entries">
+    <div className="entries table-card">
       <table>
         <caption className="sr-only">My insurance applications, newest first</caption>
         <thead>
@@ -184,7 +186,7 @@ function QuoteForm({ products }: { products: InsuranceProductOut[] }) {
 
   if (applied) {
     return (
-      <section className="loan-card" aria-label="Application received">
+      <section className="loan-card receipt-card" aria-label="Application received">
         <h2>Application recorded</h2>
         <p>
           <StatusBadge status={STATUS[applied.status]} /> {applied.decision_reason}
@@ -204,7 +206,7 @@ function QuoteForm({ products }: { products: InsuranceProductOut[] }) {
   }
 
   return (
-    <section className="loan-card" aria-label="Insurance quote">
+    <section className="loan-card form-card" aria-label="Insurance quote">
       <Field label="Plan">
         {(control) => (
           <select

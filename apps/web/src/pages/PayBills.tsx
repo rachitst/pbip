@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CheckCircle2, History as HistoryIcon, ReceiptText } from "lucide-react";
 import { useState } from "react";
 import type { SyntheticEvent } from "react";
 import { api } from "../api/client";
@@ -15,7 +16,10 @@ import { Field } from "../ui/Field";
 import { MoneyInput } from "../ui/MoneyInput";
 import { PageHeader } from "../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
+import { EmptyCard } from "./EmptyCard";
 import { StatusBadge } from "../ui/StatusBadge";
+import "./CustomerPage.css";
+import { OutcomeCard } from "./OutcomeCard";
 
 const CATEGORY: Record<string, string> = {
   ELECTRICITY: "Electricity",
@@ -45,23 +49,28 @@ export function Receipt({ payment }: { payment: BillPaymentOut }) {
   const amount = formatMinor(payment.amount_minor, payment.currency);
   if (payment.status === "PENDING_REVIEW") {
     return (
-      <Alert tone="warning">
+      <OutcomeCard tone="warning" title="Held for review">
         Your payment of {amount} to {payment.biller_name} is being reviewed for your protection. The
         money is on hold, not paid, and we will notify you of the outcome.
-      </Alert>
+      </OutcomeCard>
     );
   }
   if (payment.status !== "POSTED") {
     return (
-      <Alert tone="error">
+      <OutcomeCard tone="error" title="Bill not paid">
         We could not pay {payment.biller_name}. No money left your account. Contact support if you
         need help.
-      </Alert>
+      </OutcomeCard>
     );
   }
   return (
-    <section className="card receipt" aria-labelledby="receipt-title">
-      <h2 id="receipt-title">Bill paid</h2>
+    <section className="card receipt receipt-card" aria-labelledby="receipt-title">
+      <div className="receipt-card__head">
+        <span className="receipt-card__icon">
+          <CheckCircle2 size={22} aria-hidden="true" focusable="false" />
+        </span>
+        <h2 id="receipt-title">Bill paid</h2>
+      </div>
       <dl className="details">
         <div className="details__row">
           <dt>Amount debited</dt>
@@ -107,9 +116,11 @@ function History() {
       />
     );
   }
-  if (payments.data.length === 0) return <EmptyState message="No bill payments yet." />;
+  if (payments.data.length === 0) {
+    return <EmptyCard icon={ReceiptText} message="No bill payments yet." />;
+  }
   return (
-    <div className="entries">
+    <div className="entries table-card">
       <table>
         <caption className="sr-only">Your recent bill payments, newest first</caption>
         <thead>
@@ -208,7 +219,7 @@ function PayForm({ accounts, billers }: { accounts: AccountOut[]; billers: Bille
 
   return (
     <>
-      <form onSubmit={review}>
+      <form className="form-column" onSubmit={review}>
         <Field label="From account">
           {(control) => (
             <select
@@ -326,12 +337,24 @@ export function PayBills() {
         <EmptyState message="No billers are available right now." />
       )}
       {accounts.data && billers.data && usable.length > 0 && billers.data.length > 0 && (
-        <section>
+        <section className="panel" aria-labelledby="pay-bill-title">
+          <div className="panel__head">
+            <span className="panel__icon">
+              <ReceiptText size={18} aria-hidden="true" focusable="false" />
+            </span>
+            <div>
+              <h2 id="pay-bill-title">Pay a bill</h2>
+              <p>Choose the biller and enter the consumer number printed on your bill.</p>
+            </div>
+          </div>
           <PayForm accounts={usable} billers={billers.data} />
         </section>
       )}
       <section>
-        <h2>Recent bill payments</h2>
+        <h2 className="section-title">
+          <HistoryIcon size={18} aria-hidden="true" focusable="false" />
+          Recent bill payments
+        </h2>
         <History />
       </section>
     </div>
