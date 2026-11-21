@@ -35,6 +35,9 @@ class Clip:
     first: str  # regex for the clip's first caption
     last: str  # regex for the clip's last caption
     seconds: float
+    # Seconds cut from the end of the caption window when the next step's page appears before
+    # the next caption does (the hold then repeats the clip's own last frame instead).
+    end_trim: float = 0.0
 
 
 CLIPS: tuple[Clip, ...] = (
@@ -98,6 +101,7 @@ CLIPS: tuple[Clip, ...] = (
         r"^The alert queue",
         r"^Released: the held money",
         35,
+        end_trim=2.0,  # the next alert starts loading before the next caption
     ),
     Clip("Fraud dashboard", r"^The fraud dashboard", r"^The reasons behind them", 13),
     Clip(
@@ -167,7 +171,7 @@ def locate(captions: list[Caption], clips: tuple[Clip, ...]) -> list[tuple[Clip,
         )
         if last is None:
             raise SystemExit(f"no caption matches {clip.last!r} after {clip.first!r}")
-        found.append((clip, captions[first].start, captions[last].end))
+        found.append((clip, captions[first].start, captions[last].end - clip.end_trim))
         cursor = last + 1
     return found
 
