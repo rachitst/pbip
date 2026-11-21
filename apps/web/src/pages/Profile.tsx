@@ -17,11 +17,15 @@ import { DemographicsSection } from "./DemographicsSection";
 import { MfaEnrolment } from "./MfaEnrolment";
 import { PhoneSection } from "./PhoneSection";
 import { RiskProfileSection } from "./RiskProfileSection";
+import "./Profile.css";
 
 export function Profile() {
   return (
-    <div className="page">
-      <PageHeader title="Profile & security" />
+    <div className="page profile-page">
+      <PageHeader
+        title="Profile & security"
+        description="Your details, sign-in security, devices and the choices you have made."
+      />
       <ProfileDetails />
       <PhoneSection />
       <RiskProfileSection />
@@ -92,7 +96,7 @@ function Devices() {
         />
       )}
       {devices.data?.length === 0 && <EmptyState message="No devices registered yet." />}
-      <ul className="list">
+      <ul className="list profile-devices">
         {devices.data?.map((device) => (
           <li key={device.id} className="row">
             <div>
@@ -102,7 +106,7 @@ function Devices() {
                 {formatDate(device.last_seen_at)}
               </div>
             </div>
-            <span className={device.trusted ? "ok" : "muted"}>
+            <span className={`badge ${device.trusted ? "badge--success" : "badge--neutral"}`}>
               {device.trusted ? "Trusted" : `New (${device.device_age_days} days)`}
             </span>
           </li>

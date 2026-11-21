@@ -1,0 +1,48 @@
+/* Profile & security (Profile.tsx and its sections): each section is a card. Page-level only;
+   the sections keep their own markup (the recorder finds them by <section> and heading). */
+.profile-page > section {
+  margin-top: var(--space-5);
+  padding: var(--space-5) var(--space-6);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.profile-page > section > h2 {
+  margin-bottom: var(--space-2);
+  font-size: var(--text-lg);
+}
+.profile-page > section > h2 + .muted {
+  margin-bottom: var(--space-4);
+}
+.profile-page > section > :last-child {
+  margin-bottom: 0;
+}
+.profile-page > section .field {
+  max-width: 28rem;
+}
+.profile-page .details {
+  padding: var(--space-4);
+  background: var(--surface-sunken);
+  border-radius: var(--radius);
+}
+.profile-devices li {
+  align-items: center;
+  gap: var(--space-3);
+}
+.profile-devices li:last-child {
+  border-bottom: 0;
+}
+
+@media (max-width: 30rem) {
+  .profile-page > section {
+    padding: var(--space-4);
+  }
+  .profile-page .details {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .profile-page .details dd {
+    margin-bottom: var(--space-2);
+  }
+}

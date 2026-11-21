@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import type { SyntheticEvent } from "react";
 import { api } from "../api/client";
@@ -7,6 +8,7 @@ import { useCurrentUser } from "../shell/MeContext";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
+import "./MfaEnrolment.css";
 
 /** "JBSWY3DPEHPK3PXP" -> "JBSW Y3DP EHPK 3PXP": easier to type into an authenticator app. */
 export function groupSecret(secret: string): string {
@@ -123,8 +125,11 @@ export function MfaEnrolment() {
     );
   }
   return (
-    <section aria-labelledby="mfa-heading">
-      <h2 id="mfa-heading">Two-step sign-in</h2>
+    <section className="mfa" aria-labelledby="mfa-heading">
+      <h2 id="mfa-heading" className="mfa__title">
+        <ShieldCheck size={20} aria-hidden="true" focusable="false" />
+        Two-step sign-in
+      </h2>
       {body}
     </section>
   );

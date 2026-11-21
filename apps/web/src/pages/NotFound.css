@@ -1,0 +1,38 @@
+/* Not found (NotFound.tsx): a centred panel with one way home. */
+.page.not-found {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 32rem;
+  margin: var(--space-7) auto 0;
+  padding: var(--space-7) var(--space-5);
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.not-found__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin-bottom: var(--space-4);
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius-pill);
+}
+.not-found .page-header {
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: var(--space-5);
+}
+.not-found .page-header__description {
+  margin-left: auto;
+  margin-right: auto;
+}
+.not-found__home,
+.not-found__home:hover {
+  color: var(--brand-contrast);
+}
