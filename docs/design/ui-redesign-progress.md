@@ -31,7 +31,7 @@ system is in [ui-design-system.md](ui-design-system.md).
 | 3 Customer pages | done | #525 |
 | 4 Staff pages | done | #523 |
 | 4b Backend display text | done | #519 |
-| 5 Polish, accessibility, `make check`, docs, v1.2.0, deploy | - | - |
+| 5 Polish, accessibility, `make check`, docs, v1.2.0, deploy | in progress | this PR |
 | Re-record walkthrough, demo cut, slide screenshots | - | - |
 
 ## Phase 0 (21 Nov 2026)
@@ -117,6 +117,31 @@ only) and merged in turn, updating the other branches by merging `main`.
   the rules the CSS-reading tests name stay where the tests read them.
 - **Selectors the recorders and E2E rely on** were kept, including the secret blur targets
   (`code.secret`, `ul.recovery-codes`, `a[href^="otpauth:"]`) so MFA keys never reach a recording.
+
+## Phase 5 (21 Nov 2026): polish, accessibility, docs
+
+- **After screenshots:** `docs/design/screenshots/after/`, the same 32 screens x 2 widths and file names as the
+  before set, taken on a freshly seeded stack built from `main` with the fraud lab's F1, F2 and F5 run first.
+  The landing page's product screenshots were re-taken on the final UI ("landing assets").
+- **axe-core 4.14 (WCAG 2.0/2.1 A and AA rules), 31 views x light and dark = 62 scans** on the local stack (axe
+  installed in a scratch folder, not a project dependency): **no colour-contrast violations** in either theme;
+  30 scans clean. One rule, *label in name* (2.5.3), was reported on four controls:
+  - security-monitoring "Review"/"View" links (named "Open the alert for customer ..."): **fixed**, the name now
+    starts with the visible word (the test's name match still holds);
+  - **notification bell:** the only visible text is the unread count, which the name contains ("Notifications
+    (2 unread)"); axe's heuristic still flags it. Kept: the name and the badge text are asserted by tests;
+  - **"Ask Finora" button** (named "Ask the Finora assistant") and the fraud lab's **"Run scenario"** buttons (named
+    "Run F1 APP scam" ...): **not changed.** Fixing them changes an accessible name or a visible text that unit
+    tests, the E2E journey and the demo recorder assert, which the owner's rule 3 forbids without a decision. Open
+    for the owner: rename the assistant button to "Ask Finora" and the lab buttons' text to "Run F1"..., with the
+    matching test updates.
+- **Keyboard and focus:** every control keeps a visible 2 px teal focus ring; the skip link, the Menu button, Esc on
+  the menu, drawer and dialogs, and focus-to-heading after navigation are unchanged (E2E `shell.spec.ts`).
+- **360 px:** every page in the after set at 360 px has no horizontal page scroll; wide tables scroll inside their
+  card.
+- **Docs:** README product name and latest release, the user manual (customer, staff and compliance guides) renamed
+  to Finora; CHANGELOG `[1.2.0]` and `docs/release/v1.2.0.md`. The user-manual screenshots are replaced from the
+  walkthrough re-recording after v1.2.0.
 
 ## Tests changed
 
