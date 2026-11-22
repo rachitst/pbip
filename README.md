@@ -5,6 +5,8 @@
 [![Performance](https://github.com/rachitst/pbip/actions/workflows/perf.yml/badge.svg?branch=main)](https://github.com/rachitst/pbip/actions/workflows/perf.yml)
 [![Latest release](https://img.shields.io/github/v/release/rachitst/pbip?sort=semver)](https://github.com/rachitst/pbip/releases/latest)
 
+**Live demo:** [pbip.duckdns.org](https://pbip.duckdns.org) (synthetic demo data only)
+
 Finora is a simulated retail bank with a fraud, analytics and AI layer (the repository and code keep the project name
 PBIP, Personal Banking Intelligence Platform), engineered to the standards of a regulated
 financial product. Customers open accounts, manage payees, send money, pay bills, set up standing orders, download
